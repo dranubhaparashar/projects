@@ -43,7 +43,6 @@ export const navBarConfig: NavBarConfig = {
 	links: [
 		LinkPreset.Home,
 		LinkPreset.Archive,
-		LinkPreset.About,
 		{
 			name: "Website",
 			url: "https://anubhaparashar.github.io/", // Internal links should not include the base path, as it is automatically added
