@@ -1,52 +1,103 @@
 ---
-title: "MCP 2.0"
+title: "MCP 2.0 — Full Feature Showcase Post"
 published: 2026-06-03
-description: "A polished walkthrough of MCP 2.0, its design goals, architecture, and implementation files."
-tags: [MCP, Protocols, AI Infrastructure, gRPC, Protobuf, Agents]
+description: "A polished MCP 2.0 post that uses normal markdown, guide-style sections, expressive code blocks, GitHub repo cards, tables, checklists, and video embedding."
+tags: [MCP, Protocols, AI Infrastructure, gRPC, Protobuf, Agents, Demo]
 category: Guides
 draft: false
 ---
 
 ## Introduction
 
-This is my first technical post on the blog, and I wanted it to showcase a project that thinks beyond implementation details and asks a more important question:
+This post is designed to showcase the different kinds of content display supported by this blog theme in one place.
 
-**What should the next generation of AI-to-tool communication look like?**
+It combines:
 
-That is exactly what **MCP 2.0** explores.
+- normal markdown writing
+- guide-style technical explanation
+- expressive code blocks
+- a GitHub repository card
+- tables and checklists
+- an embedded video
 
-Built as a concept project, MCP 2.0 reimagines the Model Context Protocol as something faster, more strongly typed, more stream-friendly, easier to discover, and better suited for secure multi-agent systems.
+The project featured here is **MCP 2.0**, a concept that explores what a stronger, more production-ready Model Context Protocol could look like.
 
 ---
 
-## Project Repository
+## Project Repository Card
 
 ::github{repo="anubhaparashar/MCP2.0"}
 
 ---
 
-## Why MCP 2.0 Matters
+## Why This Project Matters
 
-The current MCP model is useful, but as AI systems become more complex, several practical limitations start to appear:
+As AI systems become more complex, protocol design starts to matter more.
 
-- JSON-RPC introduces parsing overhead and weak typing
-- streaming support is limited and often awkward
-- service discovery is not built in
-- security is too broad and not capability-specific
-- multimodal and event-driven interactions are weakly represented
-- cross-agent chaining requires custom glue logic
+MCP 2.0 explores how AI-to-tool communication can become:
 
-The MCP2.0 repository frames these as the main motivation for redesigning the protocol around typed RPC, native streaming, discovery, fine-grained security, middleware, and delegation. citeturn200492view0
+- more strongly typed
+- more stream-friendly
+- easier to discover
+- more secure
+- more reusable across agents
+
+> The main value of this project is not just implementation.  
+> It is the systems thinking behind the protocol design.
 
 ---
 
-## Core Vision
+## Guide-Style Walkthrough
 
-At a high level, MCP 2.0 aims to move from a loosely typed request-response model into a **typed, discoverable, stream-native protocol layer** for modern AI systems.
+### What problem is it solving?
 
-> The goal is not just to connect an LLM to a tool.
-> 
-> The goal is to make that connection reliable, secure, observable, composable, and production-ready.
+Traditional tool-calling and context-sharing approaches often become fragile at scale.
+
+Common pain points include:
+
+1. weak typing
+2. awkward streaming support
+3. no native service discovery
+4. broad security scopes
+5. custom integration glue for every workflow
+
+### What does MCP 2.0 propose?
+
+MCP 2.0 pushes the protocol toward a more structured model with:
+
+- typed RPC
+- capability-based security
+- middleware hooks
+- discovery services
+- multi-agent delegation
+- event-driven interaction patterns
+
+---
+
+## Markdown Elements Showcase
+
+### Checklist
+
+- [x] Add frontmatter
+- [x] Add GitHub repo card
+- [x] Add expressive code block
+- [x] Add architecture diagram
+- [x] Add video embed
+- [ ] Add custom cover image later
+
+### Table
+
+| Area | MCP Today | MCP 2.0 Direction |
+|---|---|---|
+| Typing | Looser | Stronger typed contracts |
+| Streaming | Limited | First-class |
+| Discovery | Manual | Dynamic |
+| Security | Broad scopes | Capability-based |
+| Agent chaining | Ad hoc | Protocol-aware |
+
+### Quote
+
+> Good protocol design reduces integration friction before it becomes a platform problem.
 
 ---
 
@@ -76,13 +127,12 @@ Core Services
 Databases / APIs / Enterprise Tools / Other Agents
 ```
 
-This captures the spirit of the project: MCP 2.0 is not only about transport, but about making AI-system interactions manageable at scale.
+This view shows that MCP 2.0 is not only a transport idea.  
+It is trying to become a protocol layer for governed, scalable AI interactions.
 
 ---
 
 ## Repository Structure
-
-The repository contains the following key files and folders: `README.md`, `auth.py`, `client_example.py`, `context_tool_server.py`, `event_bus_server.py`, `init_db.sql`, `middleware.py`, `protos/`, `registry_server.py`, and `requirements.txt`. citeturn200492view0
 
 ```text
 MCP2.0/
@@ -99,46 +149,24 @@ MCP2.0/
 └── requirements.txt
 ```
 
-### File walkthrough
+### File Walkthrough
 
-- **`README.md`** — explains the motivation, limitations of MCP, and the vision for MCP 2.0
-- **`auth.py`** — handles authentication and access control concepts
-- **`middleware.py`** — supports reusable cross-cutting behaviors such as observability and retries
-- **`registry_server.py`** — models service registration and discovery
-- **`context_tool_server.py`** — represents the tool/context interaction surface
-- **`event_bus_server.py`** — supports event-driven and streaming-style communication
-- **`client_example.py`** — shows how a client may interact with the protocol
-- **`init_db.sql`** — initializes database-side setup
-- **`requirements.txt`** — captures the Python dependencies
-- **`protos/mcp2.proto`** — defines the typed protocol contract in Protocol Buffers
-
----
-
-## The Problems It Tries to Solve
-
-### 1. Typed communication instead of schema guessing
-The README highlights JSON-RPC overhead and lack of strong typing as a key limitation. MCP 2.0 proposes a binary, schema-driven transport to reduce runtime mismatches. citeturn200492view0
-
-### 2. Built-in streaming
-The project explicitly calls out weak native streaming in current MCP implementations and proposes first-class support for unary, server-stream, client-stream, and bidirectional streaming. citeturn200492view0
-
-### 3. Dynamic service discovery
-The README proposes a dedicated **Discovery** service with methods such as `Register(...)` and `Lookup(...)`, along with service cards describing capabilities and requirements. citeturn200492view0
-
-### 4. Fine-grained capability security
-Rather than broad “read/write” scopes, the project proposes object-capability-style tokens that can restrict methods and even allowed parameters. citeturn200492view0
-
-### 5. Middleware hooks
-The design also includes pluggable support for telemetry, caching, retries, and circuit breakers so those concerns become consistent and reusable. citeturn200492view0
-
-### 6. Multi-agent chaining
-The README discusses delegation between agents through restricted derived tokens and invocation proofs, so protocol-level cooperation becomes possible without ad hoc bridges. citeturn200492view0
+- **README.md** — explains the motivation and protocol vision
+- **auth.py** — auth and access control concepts
+- **middleware.py** — reusable cross-cutting protocol behavior
+- **registry_server.py** — service registration and lookup
+- **context_tool_server.py** — context and tool interaction layer
+- **event_bus_server.py** — event-driven communication support
+- **client_example.py** — client-side usage example
+- **init_db.sql** — setup script
+- **requirements.txt** — dependencies
+- **protos/mcp2.proto** — typed protocol contract
 
 ---
 
-## A Glimpse of the Protocol
+## Expressive Code Block Showcase
 
-The repository README includes a gRPC + Protobuf proposal and shows a `Discovery` service with `Register` and `Lookup` methods. citeturn200492view0
+The blog theme styles fenced code blocks automatically.
 
 ```proto
 syntax = "proto3";
@@ -151,88 +179,69 @@ service Discovery {
 }
 ```
 
-That shift is significant.
+And here is a Python example:
 
-Instead of every implementation inventing contracts informally, the protocol moves toward a versioned and typed interface.
+```python
+class CapabilityToken:
+    def __init__(self, subject, allowed_methods):
+        self.subject = subject
+        self.allowed_methods = allowed_methods
 
----
+    def can_call(self, method_name: str) -> bool:
+        return method_name in self.allowed_methods
 
-## Design Goals of MCP 2.0
 
-The core design goals described in the repository are:
-
-- **low-latency, typed RPC**
-- **built-in streaming and multimodal channels**
-- **dynamic service discovery and capability broadcasting**
-- **fine-grained, capability-based security**
-- **pluggable middleware for observability, caching, and retries**
-- **native support for composite agent-to-agent chaining** citeturn200492view0
-
-These goals make MCP 2.0 feel less like a thin integration protocol and more like a foundation for serious AI infrastructure.
+token = CapabilityToken("agent-a", ["lookup", "register"])
+print(token.can_call("lookup"))
+```
 
 ---
 
-## Why This Is Interesting
+## Design Goals
 
-What I like about MCP 2.0 is that it does not simply say, “MCP has problems.”
+The main design goals of MCP 2.0 can be summarized as:
 
-It goes further and asks:
+- **typed RPC**
+- **native streaming**
+- **dynamic discovery**
+- **fine-grained capability security**
+- **pluggable middleware**
+- **multi-agent delegation**
 
-- How should tools be discovered?
-- How should secure delegation work?
-- How should streams be transported?
-- How should protocol contracts be typed?
-- How should observability be built in from the beginning?
-
-That makes the project interesting not only as code, but as a systems design exercise.
-
----
-
-## Where It Can Be Useful
-
-A protocol like MCP 2.0 could be valuable for:
-
-- enterprise copilots connecting to many internal services
-- multimodal AI systems dealing with text, image, audio, and binary streams
-- governed tool ecosystems with auditable access control
-- agent-to-agent orchestration workflows
-- production AI gateways where retries, tracing, and discovery matter
+This makes the project interesting not only as code, but as a protocol design exercise.
 
 ---
 
 ## Suggested Demo Flow
 
-If I were demoing this project, I would structure the walkthrough like this:
+If you were presenting this project live, the walkthrough could be:
 
-1. explain the limitations of traditional MCP
-2. show the proposed typed architecture
-3. walk through the repository files
-4. highlight the Discovery service in the proto contract
-5. explain security and delegation ideas
-6. show how a client could register, discover, and invoke services
-
-That would make the project understandable for both technical and non-technical viewers.
+1. explain why traditional MCP becomes limiting
+2. show the typed protocol direction
+3. walk through the repo files
+4. explain discovery and security
+5. show example code
+6. demonstrate a live registration or lookup flow
 
 ---
 
-## Final Thoughts
+## Video Section
 
-MCP 2.0 is a strong concept project because it treats protocol design as a first-class problem in AI systems.
+You can embed a demo video directly inside the post.
 
-It pushes the conversation from simple tool calling toward something much more complete:
+Replace `YOUR_VIDEO_ID` with your actual YouTube video id:
 
-- typed
-- stream-native
-- secure
-- discoverable
-- middleware-aware
-- multi-agent ready
-
-For a first blog post, it is a great project to feature because it shows both implementation thinking and architectural depth.
-
----
+```html
+<iframe width="100%" height="420"
+src="https://www.youtube.com/embed/YOUR_VIDEO_ID"
+title="MCP 2.0 Demo"
+frameborder="0"
+allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+allowfullscreen>
+</iframe>
+```
 
 ## References
 
 - Repository: `anubhaparashar/MCP2.0`
-- Key files: `auth.py`, `client_example.py`, `context_tool_server.py`, `event_bus_server.py`, `init_db.sql`, `middleware.py`, `protos/mcp2.proto`, `registry_server.py`, `requirements.txt`
+- Key files: `README.md`, `auth.py`, `client_example.py`, `context_tool_server.py`, `event_bus_server.py`, `init_db.sql`, `middleware.py`, `protos/mcp2.proto`, `registry_server.py`, `requirements.txt`
