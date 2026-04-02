@@ -13,6 +13,16 @@ draft: false
 
 ---
 
+
+::github{repo="dranubhaparashar/Pole-Detection"}
+
+# AI-Powered Pole Validation
+
+> Building an AI system that doesn’t just **detect poles** — but **validates and decides**.
+
+---
+
+
 ## Vision
 
 Modern infrastructure validation is slow, manual, and error-prone.
