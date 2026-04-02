@@ -18,17 +18,17 @@ draft: false
 
 ---
 
-## Post Attributes
+## Project Attributes
 
 | Attribute | Description |
 |---|---|
-| `title` | The title of the post. |
-| `published` | The date the post was published. |
-| `description` | A short description of the post. Displayed on index page. |
-| `image` | The cover image path of the post. Use `./cover.png` when the image is placed beside the MDX file. |
-| `tags` | The tags of the post. |
-| `category` | The category of the post. |
-| `draft` | If this post is still a draft, it will not be displayed. |
+| `title` | Name of the solution or case study: `AI-Powered Pole Validation`. |
+| `published` | Date this project article was published on the site. |
+| `description` | Brief explanation of the solution: AI-powered pole validation using GIS coordinates, field imagery, OCR, and multi-source data reconciliation. |
+| `image` | Hero/cover image representing the project. Recommended path: `./cover.png`. |
+| `tags` | Technical themes used in the project, for example: `AI`, `YOLO`, `GIS`, `OCR`, `Computer Vision`, `Decision Intelligence`. |
+| `category` | Broad grouping for the post, such as `Guides`, `Projects`, or `Case Study`. |
+| `draft` | Publishing flag. `false` makes the post live; `true` keeps it hidden while editing. |
 
 ---
 
