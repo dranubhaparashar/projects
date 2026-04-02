@@ -9,7 +9,7 @@ draft: false
 
 > Exploring a training-free approach to improve memory-efficient LLM inference with dynamic low-rank residual correction.
 
-::github{repo="dranubhaparashar/-DACR-Q-ATraining-Free-Framework-for-Memory-Efficient-LLM-Inference"}
+::github{repo="https://github.com/dranubhaparashar/-DACR-Q-ATraining-Free-Framework-for-Memory-Efficient-LLM-Inference"}
 
 > Cover image source: AI-generated project illustration
 
