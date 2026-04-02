@@ -7,13 +7,13 @@ category: Guides
 draft: false
 ---
 
-# 🚀 AI-Powered Pole Validation
+# AI-Powered Pole Validation
 
 > Building an AI system that doesn’t just **detect poles** — but **validates and decides**.
 
 ---
 
-## 🎯 Vision
+## Vision
 
 Modern infrastructure validation is slow, manual, and error-prone.
 
@@ -25,7 +25,7 @@ This project introduces an **AI-powered validation framework** that:
 
 ---
 
-## ⚡ Why This Matters
+## Why This Matters
 
 :::note
 Manual validation involves **13+ checks across multiple systems**.
@@ -41,7 +41,7 @@ AI enables **confidence-based automated decisions**
 
 ---
 
-## 🧠 What This System Does
+## What This System Does
 
 ```mermaid
 flowchart TD
@@ -55,7 +55,7 @@ flowchart TD
 
 ---
 
-## 🧩 Core Capabilities
+## Core Capabilities
 
 - Pole detection (YOLO26n)
 - Ownership verification (AEP / Frontier DB)
@@ -66,7 +66,7 @@ flowchart TD
 
 ---
 
-## 🧱 Bento Overview
+## Bento Overview
 
 | Capability | Description |
 |----------|------------|
@@ -78,22 +78,22 @@ flowchart TD
 
 ---
 
-## 🔍 YOLO26n Detection Engine
+## YOLO26n Detection Engine
 
-### 📌 Model Details
+### Model Details
 - Layers: 260  
 - Parameters: 2.5M  
 - Classes: 36  
 - Framework: Ultralytics YOLO  
 
-### ⚙️ Training Setup
+### Training Setup
 - Epochs: 100  
 - Batch: 16  
 - Image Size: 640  
 
 ---
 
-## 💻 Inference Example
+## Inference Example
 
 ```python
 from ultralytics import YOLO
@@ -108,7 +108,7 @@ for r in results:
 
 ---
 
-## 🧠 Confidence Engine
+## Confidence Engine
 
 ```python
 def confidence_score(pole, ownership, geo, structure):
@@ -122,7 +122,7 @@ def confidence_score(pole, ownership, geo, structure):
 
 ---
 
-## 🎯 Decision Logic
+## Decision Logic
 
 ```python
 def decision(score):
@@ -136,7 +136,7 @@ def decision(score):
 
 ---
 
-## 📊 Performance Snapshot
+## Performance Snapshot
 
 | Metric | Value |
 |------|------|
@@ -150,7 +150,7 @@ Low recall indicates **dataset limitation and class imbalance**
 
 ---
 
-## ⚠️ Current Challenges
+## Current Challenges
 
 - Small dataset  
 - Class imbalance  
@@ -158,7 +158,7 @@ Low recall indicates **dataset limitation and class imbalance**
 
 ---
 
-## 🚀 Next Improvements
+## Next Improvements
 
 - Increase dataset size  
 - Improve labeling  
@@ -167,7 +167,7 @@ Low recall indicates **dataset limitation and class imbalance**
 
 ---
 
-## 🎥 Demo Videos
+## Demo Videos
 
 ### Detection Demo
 <iframe width="100%" height="400" src="https://www.youtube.com/embed/8ryD2qsKwbg"></iframe>
@@ -177,7 +177,7 @@ Low recall indicates **dataset limitation and class imbalance**
 
 ---
 
-## 💡 Key Innovation
+## Key Innovation
 
 :::important
 This is not just object detection —  
@@ -186,7 +186,7 @@ it is **Decision Intelligence for Infrastructure**
 
 ---
 
-## 🏁 Conclusion
+## Conclusion
 
 This project transforms:
 
@@ -198,6 +198,6 @@ This project transforms:
 
 ---
 
-## ✨ Final Thought
+## Final Thought
 
 > From **detecting poles** → to **understanding and deciding infrastructure**
