@@ -45,12 +45,37 @@ AI enables **confidence-based automated decisions**
 
 ```mermaid
 flowchart TD
-    A[Portal Data] --> B[GIS Coordinates]
-    B --> C[YOLO Detection]
-    C --> D[DB Cross Validation]
-    D --> E[Pattern Matching]
-    E --> F[Confidence Engine]
-    F --> G[Decision Output]
+    A[Internal Portal / Job Request] --> B[Candidate Pole Context]
+    B --> C[GIS Coordinates & Route Alignment]
+    B --> D[Field / Street / Inspection Imagery]
+    B --> E[Frontier Database]
+    B --> F[AEP / External Utility Records]
+    B --> G[OnPath / Workflow History]
+
+    D --> H[YOLO26n Detection]
+    D --> I[OCR / Tag Extraction]
+    C --> J[Geo-Matching Engine]
+    E --> K[Ownership & Structural Signals]
+    F --> K
+    G --> L[Design Context Signals]
+
+    H --> M[Evidence Fusion Layer]
+    I --> M
+    J --> M
+    K --> M
+    L --> M
+
+    M --> N[Rule Engine]
+    N --> O[Confidence Scoring Engine]
+    O --> P{Decision Engine}
+
+    P -->|High confidence| Q[Auto-Approve]
+    P -->|Conflicting evidence| R[Manual Review]
+    P -->|Low confidence| S[Reject / Rework]
+
+    R --> T[Reviewer Feedback]
+    T --> U[Audit Store]
+    T --> V[Threshold Tuning / Future Improvement]
 ```
 
 ---
