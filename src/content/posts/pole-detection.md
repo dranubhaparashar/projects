@@ -17,6 +17,47 @@ draft: false
 ---
 
 
+> Cover image source: [Source](https://github.com/dranubhaparashar/Pole-Detection)
+
+---
+
+## Post Attributes
+
+| Attribute | Description |
+|---|---|
+| `title` | The title of the post. |
+| `published` | The date the post was published. |
+| `description` | A short description of the post. Displayed on index page. |
+| `image` | The cover image path of the post. Use `./cover.png` when the image is placed beside the MDX file. |
+| `tags` | The tags of the post. |
+| `category` | The category of the post. |
+| `draft` | If this post is still a draft, it will not be displayed. |
+
+---
+
+## Post Files
+
+
+```plaintext title="Project + Blog Structure"
+src/content/posts/
+└── pole-detection/
+    ├── cover.png
+    └── index.mdx
+
+GitHub Repo: dranubhaparashar/Pole-Detection/
+├── dataset/
+├── runs/
+│   └── detect/
+├── 001_png.rf.72b75e71c8e9e08119e23830becb46ea.jpg
+├── 001_png.rf.72b75e71c8e9e08119e23830becb46ea.txt
+├── 1.ipynb
+├── 1.py
+├── README.md
+├── app.py
+├── data.yaml
+└── yolo26n.pt
+
+
 ## Vision
 
 Modern infrastructure validation is slow, manual, and error-prone.
