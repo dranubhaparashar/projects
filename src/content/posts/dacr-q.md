@@ -164,10 +164,10 @@ This is the central idea of the repo: combine **quantized weights** with a **dyn
 
 ## What I Would Add Next
 
-- Benchmark tables against plain quantized inference
-- Latency and memory comparisons
-- Quality comparisons on representative LLM tasks
-- A minimal usage example showing how to wrap a linear layer in practice
+- Benchmark tables against plain quantized inference.
+- Latency and memory comparisons.
+- Quality comparisons on representative LLM tasks.
+- A minimal usage example showing how to wrap a linear layer in practice.
 
 These are recommendations based on what is currently missing from the public repo.
 
