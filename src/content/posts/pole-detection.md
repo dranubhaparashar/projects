@@ -32,7 +32,6 @@ This project introduces an **AI-powered validation framework** that:
 
 ---
 
-## Project Attributes
 
 ## Project Attributes
 
@@ -303,9 +302,9 @@ This project transforms:
 
 **Manual Validation → AI-Assisted Decision System**
 
-- Combines vision + data + reasoning  
-- Provides explainable decisions  
-- Enables faster approvals  
+- Combines vision + data + reasoning.
+- Provides explainable decisions.
+- Enables faster approvals.
 
 ---
 
