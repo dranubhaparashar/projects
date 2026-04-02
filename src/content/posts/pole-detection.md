@@ -11,9 +11,6 @@ draft: false
 
 ::github{repo="dranubhaparashar/Pole-Detection"}
 
-
-
-
 ---
 
 
@@ -57,6 +54,7 @@ GitHub Repo: dranubhaparashar/Pole-Detection/
 ├── data.yaml
 └── yolo26n.pt
 
+---
 
 ## Vision
 
@@ -171,7 +169,7 @@ flowchart TD
 
 ---
 
-## Inference Example
+## Inference 
 
 ```python title="inference.py" {"Import model":1} {"Load weights":3} ins={"Run inference":5} {"Inspect predictions":7-8}
 from ultralytics import YOLO
