@@ -5,7 +5,7 @@ description: A lightweight project exploring dynamic low-rank residual correctio
 image: "./cover.png"
 tags: [LLM Inference, Quantization, Low-Rank Adaptation, PyTorch, Memory Efficiency, Edge AI]
 category: Guides
-draft: true
+draft: false
 ---
 
 > Exploring a training-free approach to improve memory-efficient LLM inference with dynamic low-rank residual correction.
