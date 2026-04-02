@@ -1,7 +1,7 @@
 ---
-title: My New Post
+title: AI-Powered Pole Validation
 published: 2026-03-31
-description: This is my new post.
+description: AI-powered pole validation using GIS, imagery, OCR, and multi-system data reconciliation.
 tags: [AI, Portfolio]
 category: Guides
 draft: false
