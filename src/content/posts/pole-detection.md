@@ -53,7 +53,7 @@ GitHub Repo: dranubhaparashar/Pole-Detection/
 ├── app.py
 ├── data.yaml
 └── yolo26n.pt
-
+```
 ---
 
 ## Vision
