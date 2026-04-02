@@ -237,4 +237,5 @@ This project transforms:
 
 ## Final Thought
 
-> From **detecting poles** → to **understanding and deciding infrastructure**
+> From **detecting poles** → to **understanding and deciding infrastructure** 
+The final recommendation is :spoiler[AI-assisted, not fully autonomous].
