@@ -7,11 +7,6 @@ category: Guides
 draft: false
 ---
 
-# AI-Powered Pole Validation
-
-> Building an AI system that doesn’t just **detect poles** — but **validates and decides**.
-
----
 
 
 ::github{repo="dranubhaparashar/Pole-Detection"}
