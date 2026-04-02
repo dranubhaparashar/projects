@@ -17,19 +17,37 @@ draft: false
 
 > Cover image source: [Source](https://github.com/dranubhaparashar/Pole-Detection)
 
+
 ---
+
+## Vision
+
+Modern infrastructure validation is slow, manual, and error-prone.
+
+This project introduces an **AI-powered validation framework** that:
+- Detects poles  
+- Verifies ownership  
+- Assesses structure  
+- Provides decision-ready outputs  
+
+---
+
+## Project Attributes
 
 ## Project Attributes
 
 | Attribute | Description |
 |---|---|
-| `title` | Name of the solution or case study: `AI-Powered Pole Validation`. |
-| `published` | Date this project article was published on the site. |
-| `description` | Brief explanation of the solution: AI-powered pole validation using GIS coordinates, field imagery, OCR, and multi-source data reconciliation. |
-| `image` | Hero/cover image representing the project. Recommended path: `./cover.png`. |
-| `tags` | Technical themes used in the project, for example: `AI`, `YOLO`, `GIS`, `OCR`, `Computer Vision`, `Decision Intelligence`. |
-| `category` | Broad grouping for the post, such as `Guides`, `Projects`, or `Case Study`. |
-| `draft` | Publishing flag. `false` makes the post live; `true` keeps it hidden while editing. |
+| `problem-statement` | Manual pole validation is slow, fragmented, and dependent on multiple disconnected systems. |
+| `primary-objective` | Build an AI-assisted framework to detect poles, validate ownership, assess suitability, and support decision-making. |
+| `core-technologies` | YOLO, Computer Vision, GIS, OCR, and multi-source data reconciliation. |
+| `validation-sources` | Internal portal data, field imagery, GIS coordinates, Frontier database, AEP records, and workflow history. |
+| `key-capabilities` | Pole detection, ownership verification, structural assessment, ambiguity detection, and confidence-based decision support. |
+| `decision-engine` | Produces outcomes such as Auto-Approve, Manual Review, or Reject / Rework based on fused evidence. |
+| `business-impact` | Reduces manual effort, improves validation consistency, and speeds up infrastructure approval workflows. |
+| `current-limitations` | Small dataset, class imbalance, and low recall in the current detection setup. |
+| `future-improvements` | Expand dataset, improve labeling quality, reduce class complexity, and strengthen active learning. |
+| `human-in-the-loop` | Final decisions should remain reviewer-supported until the model reaches stronger validation reliability. |
 
 ---
 
@@ -55,17 +73,6 @@ GitHub Repo: dranubhaparashar/Pole-Detection/
 ├── data.yaml
 └── yolo26n.pt
 ```
----
-
-## Vision
-
-Modern infrastructure validation is slow, manual, and error-prone.
-
-This project introduces an **AI-powered validation framework** that:
-- Detects poles  
-- Verifies ownership  
-- Assesses structure  
-- Provides decision-ready outputs  
 
 ---
 
