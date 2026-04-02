@@ -39,6 +39,14 @@ Wrong validation → **cost impact + safety risks + delays**
 AI enables **confidence-based automated decisions**
 :::
 
+:::warning
+Low recall indicates **dataset limitation and class imbalance**
+:::
+
+:::caution
+Decisions should not be fully automated until model recall and validation coverage improve.
+:::
+
 ---
 
 ## What This System Does
