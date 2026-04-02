@@ -132,7 +132,7 @@ flowchart TD
 
 ## Inference Example
 
-```python
+```python title="inference.py" {"Import model":1} {"Load weights":3} ins={"Run inference":5} {"Inspect predictions":7-8}
 from ultralytics import YOLO
 
 model = YOLO("best.pt")
@@ -147,7 +147,7 @@ for r in results:
 
 ## Confidence Engine
 
-```python
+```python title="confidence_engine.py" {"Weighted confidence logic":1-7} ins={"Reusable scoring":1-7}
 def confidence_score(pole, ownership, geo, structure):
     return (
         pole * 0.3 +
@@ -161,7 +161,7 @@ def confidence_score(pole, ownership, geo, structure):
 
 ## Decision Logic
 
-```python
+```python title="decision_logic.py" {"High-confidence path":2-3} ins={"Manual review band":4-5} {"Reject fallback":6-7}
 def decision(score):
     if score > 0.85:
         return "Auto-Approve"
@@ -173,6 +173,29 @@ def decision(score):
 
 ---
 
+## Example Threshold Update
+
+```diff title="threshold-update.diff"
+- AUTO_APPROVE_THRESHOLD = 0.90
+- MANUAL_REVIEW_THRESHOLD = 0.60
++ AUTO_APPROVE_THRESHOLD = 0.85
++ MANUAL_REVIEW_THRESHOLD = 0.55
+  REJECT_THRESHOLD = 0.00
+```
+
+---
+
+## Runtime Example
+
+```bash title="run-validation.sh"
+python train.py --model yolo26n.pt --data data.yaml --epochs 100 --batch 16 --imgsz 640
+python infer.py --weights best.pt --source pole.jpg
+python evaluate.py --predictions outputs/results.json
+```
+
+---
+
+
 ## Performance Snapshot
 
 | Metric | Value |
@@ -183,6 +206,10 @@ def decision(score):
 
 :::warning
 Low recall indicates **dataset limitation and class imbalance**
+:::
+
+:::caution
+This system should remain human-assisted until model recall and evidence consistency improve.
 :::
 
 ---
