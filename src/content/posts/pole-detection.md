@@ -1,11 +1,14 @@
+```md
 ---
 title: AI-Powered Pole Validation
 published: 2026-03-31
 description: AI-powered pole validation using GIS, imagery, OCR, and multi-system data reconciliation.
+image: ./cover.png
 tags: [AI, Portfolio]
 category: Guides
 draft: false
 ---
+```
 
 > Building an AI system that doesn’t just **detect poles** — but **validates and decides**.
 
