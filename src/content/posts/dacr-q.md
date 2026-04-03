@@ -1,6 +1,6 @@
 ---
 title: "DACR-Q: A Training-Free Framework for Memory-Efficient LLM Inference"
-published: 2026-04-02
+published: 2025-10-14
 description: A lightweight project exploring dynamic low-rank residual correction for memory-efficient LLM inference on quantized weights.
 tags: [LLM Inference, Quantization, Low-Rank Adaptation, PyTorch, Memory Efficiency, Edge AI]
 category: Guides

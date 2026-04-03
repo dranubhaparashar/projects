@@ -1,6 +1,6 @@
 ---
 title: "Vehicle-Scale LLMs: Low-Rank Residuals + 4-Bit Quantization for In-Vehicle AI"
-published: 2026-04-02
+published: 2025-08-22
 description: A project walkthrough of DAC+Q4-ITS, a minimal reproducible starter for INT4 quantization and low-rank adapter compensation for vehicle-scale LLM inference.
 tags: [LLM Inference, INT4 Quantization, Low-Rank Adapters, Edge AI, Automotive AI, PyTorch]
 category: Guides
