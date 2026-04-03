@@ -11,31 +11,69 @@ const elId = `gcviews-${Math.random().toString(36).slice(2)}`;
 <span id={elId} class={className}>0 views</span>
 
 <script is:inline define:vars={{ elId, path }}>
-  (function () {
-    async function loadViews() {
-      const el = document.getElementById(elId);
-      if (!el) return;
+	(function () {
+		function normalizePath(p) {
+			if (!p) return "/";
+			if (p.length > 1 && p.endsWith("/")) return p.slice(0, -1);
+			return p;
+		}
 
-      try {
-        const endpoint =
-          "https://anubhaparashar.goatcounter.com/counter/" +
-          encodeURIComponent(path) +
-          ".json";
+		async function fetchCount(candidatePath) {
+			const endpoint =
+				"https://anubhaparashar.goatcounter.com/counter/" +
+				encodeURIComponent(candidatePath) +
+				".json";
 
-        const res = await fetch(endpoint);
-        if (!res.ok) return;
+			const res = await fetch(endpoint);
+			if (!res.ok) return null;
 
-        const data = await res.json();
-        el.textContent = `${data.count} views`;
-      } catch (e) {
-        // leave fallback text
-      }
-    }
+			const data = await res.json();
+			if (typeof data.count !== "number") return null;
+			return data.count;
+		}
 
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", loadViews, { once: true });
-    } else {
-      loadViews();
-    }
-  })();
+		async function loadViews() {
+			const el = document.getElementById(elId);
+			if (!el) return;
+
+			const exactPath = path;
+			const normalizedPath = normalizePath(path);
+			const candidates = Array.from(new Set([exactPath, normalizedPath]));
+
+			let count = null;
+
+			for (let attempt = 0; attempt < 5; attempt++) {
+				for (const candidate of candidates) {
+					try {
+						const result = await fetchCount(candidate);
+						if (typeof result === "number") {
+							count = result;
+							break;
+						}
+					} catch (e) {
+						// try next candidate
+					}
+				}
+
+				if (typeof count === "number") break;
+				await new Promise((resolve) => setTimeout(resolve, 1200));
+			}
+
+			if (typeof count === "number") {
+				el.textContent = `${count} views`;
+			}
+		}
+
+		function refreshViews() {
+			loadViews();
+		}
+
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", refreshViews, { once: true });
+		} else {
+			refreshViews();
+		}
+
+		window.addEventListener("goatcounter:updated", refreshViews);
+	})();
 </script>
