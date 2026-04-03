@@ -5,6 +5,14 @@ description: "A polished MCP 2.0 post that uses normal markdown, guide-style sec
 tags: [MCP, Protocols, AI Infrastructure, gRPC, Protobuf, Agents, Demo]
 category: Self Project
 draft: false
+
+---
+
+## Project Repository Card
+
+::github{repo="anubhaparashar/MCP2.0"}
+
+
 ---
 
 ## Introduction
@@ -22,11 +30,6 @@ It combines:
 
 The project featured here is **MCP 2.0**, a concept that explores what a stronger, more production-ready Model Context Protocol could look like.
 
----
-
-## Project Repository Card
-
-::github{repo="anubhaparashar/MCP2.0"}
 
 ---
 
