@@ -399,7 +399,6 @@ A public Hugging Face Space provides a lightweight demo surface while the primar
   allowfullscreen>
 </iframe>
 
-<iframe width="100%" height="400" src="https://www.youtube.com/embed/NlkDRsZflk4"></iframe>
 
 
 ## Engineering Value
