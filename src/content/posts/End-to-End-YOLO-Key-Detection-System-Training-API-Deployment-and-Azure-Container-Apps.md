@@ -389,7 +389,15 @@ A public Hugging Face Space provides a lightweight demo surface while the primar
 
 ---
 ## Demo Video
-<iframe width="100%" height="400" src="https://youtu.be/1zjIFHmvf2g"></iframe>
+<iframe
+  width="100%"
+  height="400"
+  src="https://www.youtube.com/embed/1zjIFHmvf2g"
+  title="Key Detection Demo Video"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowfullscreen>
+</iframe>
 
 ## Engineering Value
 
