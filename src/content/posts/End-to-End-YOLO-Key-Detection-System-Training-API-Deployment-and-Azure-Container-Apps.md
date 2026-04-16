@@ -14,8 +14,7 @@ draft: false
 ---
 
 > Live demo: [Hugging Face Space](https://huggingface.co/spaces/AnubhaParashar/Key-detection)
-- **Repository:** [GitHub Project](https://github.com/dranubhaparashar/End-to-End-YOLO-Key-Detection-System-Training-API-Deployment-and-Azure-Container-Apps)
-- **Video Demo:** `https://youtu.be/1zjIFHmvf2g`
+
 ---
 
 ## Vision
@@ -391,13 +390,9 @@ A public Hugging Face Space provides a lightweight demo surface while the primar
 ---
 ## Demo Video
 
-Once you have a public video URL, you can embed it here.
 
-### YouTube Embed
-
-```html
 <iframe width="100%" height="420" src="https://youtu.be/1zjIFHmvf2g <VIDEO_ID>" title="YOLO Key Detection Demo" frameborder="0" allowfullscreen></iframe>
-```
+
 
 
 ## Engineering Value
