@@ -577,8 +577,8 @@ graph LR
         ES[Esri ArcGIS]
     end
 
-    CP -.->|Hard TW · 100% assign · Zero violations| WIN[Production-grade]
-    META -.->|Hard TW (most) · Slow · Custom rules| MIX[Specialized use]
+    CP -.->|Hard TW · 100 percent assign · Zero violations| WIN[Production-grade]
+    META -.->|Hard TW mostly · Slow · Custom rules| MIX[Specialized use]
     GR -.->|TW in cost only · Fast · Violations| BASE[Baseline only]
     CL -.->|Soft TW · Drops orders · Real roads| ENT[Enterprise GIS]
 
