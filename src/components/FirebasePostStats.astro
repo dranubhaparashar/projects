@@ -1,4 +1,5 @@
 ---
+import { normalizePostId } from "@utils/post-id";
 import { Icon } from "astro-icon/components";
 
 interface Props {
@@ -26,6 +27,7 @@ const {
 	class:list={["firebase-post-stats inline-flex flex-wrap items-center gap-4", className]}
 	data-firebase-post-stats
 	data-post-id={postId}
+	data-normalized-post-id={normalizePostId(path || postId || "")}
 	data-path={path}
 	data-title={title}
 	data-increment-views={String(incrementViews)}
@@ -49,8 +51,8 @@ const {
 			<span class="meta-icon">
 				<Icon name="material-symbols:favorite-outline-rounded" class="text-xl"></Icon>
 			</span>
-			<span data-stat-likes class="text-50 text-sm font-medium">0 likes</span>
-		</button>
+		<span data-stat-likes class="text-50 text-sm font-medium">likes unavailable</span>
+	</button>
 	)}
 
 	{showCommentsCount && (
@@ -122,6 +124,13 @@ const {
 		}
 	}
 
+	function showUnavailable(root: HTMLElement, message = "likes unavailable") {
+		const likesEl = root.querySelector<HTMLElement>("[data-stat-likes]");
+		if (likesEl) likesEl.textContent = message;
+		const commentsEl = root.querySelector<HTMLElement>("[data-stat-comments]");
+		if (commentsEl) commentsEl.textContent = "comments unavailable";
+	}
+
 	async function ensurePostDocument(postRef: ReturnType<typeof doc>, root: HTMLElement) {
 		if (!db) return;
 		const snapshot = await getDoc(postRef);
@@ -132,7 +141,7 @@ const {
 				{
 					title: root.dataset.title || "",
 					path: root.dataset.path || "",
-					slug: root.dataset.postId || "",
+					slug: root.dataset.normalizedPostId || root.dataset.postId || "",
 					baseViews: 0,
 					views: 0,
 					baseLikes: 0,
@@ -170,7 +179,7 @@ const {
 		if (!db) return;
 		if (root.dataset.incrementViews !== "true") return;
 
-		const postId = root.dataset.postId || "";
+		const postId = root.dataset.normalizedPostId || root.dataset.postId || "";
 		const storageKey = `firebase-post-viewed:${postId}`;
 		if (!postId || sessionStorage.getItem(storageKey) === "1") return;
 
@@ -186,7 +195,7 @@ const {
 		const button = root.querySelector<HTMLButtonElement>("[data-like-button]");
 		if (!button) return;
 
-		const postId = root.dataset.postId || "";
+		const postId = root.dataset.normalizedPostId || root.dataset.postId || "";
 		const storageKey = `firebase-post-liked:${postId}`;
 		const liked = postId && localStorage.getItem(storageKey) === "1";
 
@@ -217,10 +226,17 @@ const {
 		if (root.dataset.firebaseInitialized === "true") return;
 		root.dataset.firebaseInitialized = "true";
 
-		const postId = root.dataset.postId;
+		const postId = root.dataset.normalizedPostId || root.dataset.postId || "";
 		if (!postId) return;
+		console.debug("[FirebasePostStats] init", {
+			firebaseReady: Boolean(db),
+			postId,
+			path: root.dataset.path || "",
+			docPath: `${collectionName}/${postId}`,
+		});
 		if (!db) {
 			await showGoatCounterFallback(root);
+			showUnavailable(root);
 			return;
 		}
 
@@ -234,11 +250,13 @@ const {
 				postRef,
 				(snapshot) => {
 					if (snapshot.exists()) void renderStats(root, snapshot.data());
+					else showUnavailable(root);
 				},
 				(error) => {
 					console.warn("Firebase stats read failed", error);
 					const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
 					if (viewsEl) viewsEl.textContent = "views unavailable";
+					showUnavailable(root);
 				},
 			);
 
@@ -246,6 +264,7 @@ const {
 		} catch (error) {
 			console.warn("Firebase stats unavailable", error);
 			await showGoatCounterFallback(root);
+			showUnavailable(root);
 		}
 	}
 
