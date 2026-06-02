@@ -45,14 +45,15 @@ const {
 		<button
 			type="button"
 			data-like-button
+			data-reaction-key="heart"
 			class="inline-flex items-center transition hover:text-[var(--primary)] disabled:cursor-default disabled:hover:text-inherit"
 			aria-label="Like this post"
 		>
 			<span class="meta-icon">
 				<Icon name="material-symbols:favorite-outline-rounded" class="text-xl"></Icon>
 			</span>
-		<span data-stat-likes class="text-50 text-sm font-medium">likes unavailable</span>
-	</button>
+			<span data-stat-likes class="text-50 text-sm font-medium">0 likes</span>
+		</button>
 	)}
 
 	{showCommentsCount && (
@@ -124,11 +125,25 @@ const {
 		}
 	}
 
-	function showUnavailable(root: HTMLElement, message = "likes unavailable") {
+	function showLikesFallback(root: HTMLElement) {
 		const likesEl = root.querySelector<HTMLElement>("[data-stat-likes]");
-		if (likesEl) likesEl.textContent = message;
-		const commentsEl = root.querySelector<HTMLElement>("[data-stat-comments]");
-		if (commentsEl) commentsEl.textContent = "comments unavailable";
+		if (likesEl) likesEl.textContent = "0 likes";
+	}
+
+	function readStorage(key: string): string | null {
+		try {
+			return localStorage.getItem(key);
+		} catch {
+			return null;
+		}
+	}
+
+	function writeStorage(key: string, value: string): void {
+		try {
+			localStorage.setItem(key, value);
+		} catch {
+			// Ignore storage failures.
+		}
 	}
 
 	async function ensurePostDocument(postRef: ReturnType<typeof doc>, root: HTMLElement) {
@@ -146,6 +161,8 @@ const {
 					views: 0,
 					baseLikes: 0,
 					likes: 0,
+					baseReactions: {},
+					reactions: {},
 					baseCommentsCount: 0,
 					commentsCount: 0,
 					createdAt: serverTimestamp(),
@@ -163,8 +180,6 @@ const {
 			(baseViews > 0 ? baseViews : await fetchGoatCounterCount(root.dataset.path || "")) +
 			firebaseViews;
 		const totalLikes = numberValue(data.baseLikes) + numberValue(data.likes);
-		const totalComments =
-			numberValue(data.baseCommentsCount) + numberValue(data.commentsCount);
 
 		const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
 		const likesEl = root.querySelector<HTMLElement>("[data-stat-likes]");
@@ -172,7 +187,11 @@ const {
 
 		if (viewsEl) viewsEl.textContent = plural(totalViews, "view", "views");
 		if (likesEl) likesEl.textContent = plural(totalLikes, "like", "likes");
-		if (commentsEl) commentsEl.textContent = plural(totalComments, "comment", "comments");
+		if (commentsEl) {
+			const totalComments =
+				numberValue(data.baseCommentsCount) + numberValue(data.commentsCount);
+			commentsEl.textContent = plural(totalComments, "comment", "comments");
+		}
 	}
 
 	async function incrementViewsOnce(root: HTMLElement, postRef: ReturnType<typeof doc>) {
@@ -196,8 +215,8 @@ const {
 		if (!button) return;
 
 		const postId = root.dataset.normalizedPostId || root.dataset.postId || "";
-		const storageKey = `firebase-post-liked:${postId}`;
-		const liked = postId && localStorage.getItem(storageKey) === "1";
+		const storageKey = `firebase-post-reacted:${postId}:heart`;
+		const liked = postId && readStorage(storageKey) === "1";
 
 		if (liked) {
 			button.disabled = true;
@@ -211,9 +230,10 @@ const {
 			try {
 				await updateDoc(postRef, {
 					likes: increment(1),
+					"reactions.heart": increment(1),
 					updatedAt: serverTimestamp(),
 				});
-				localStorage.setItem(storageKey, "1");
+				writeStorage(storageKey, "1");
 				button.setAttribute("aria-label", "Post already liked");
 			} catch (error) {
 				button.disabled = false;
@@ -236,7 +256,7 @@ const {
 		});
 		if (!db) {
 			await showGoatCounterFallback(root);
-			showUnavailable(root);
+			showLikesFallback(root);
 			return;
 		}
 
@@ -250,13 +270,13 @@ const {
 				postRef,
 				(snapshot) => {
 					if (snapshot.exists()) void renderStats(root, snapshot.data());
-					else showUnavailable(root);
+					else showLikesFallback(root);
 				},
 				(error) => {
 					console.warn("Firebase stats read failed", error);
 					const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
 					if (viewsEl) viewsEl.textContent = "views unavailable";
-					showUnavailable(root);
+					showLikesFallback(root);
 				},
 			);
 
@@ -264,7 +284,7 @@ const {
 		} catch (error) {
 			console.warn("Firebase stats unavailable", error);
 			await showGoatCounterFallback(root);
-			showUnavailable(root);
+			showLikesFallback(root);
 		}
 	}
 

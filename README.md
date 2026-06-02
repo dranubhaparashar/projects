@@ -160,8 +160,76 @@ All commands are run from the root of the project, from a terminal:
 | `pnpm check` | Run checks for errors in your code |
 | `pnpm format` | Format your code using Biome |
 | `pnpm new-post <filename>` | Create a new post |
+| `pnpm migrate:github-comments` | Import GitHub comments into Firestore |
+| `pnpm migrate:github-reactions` | Import GitHub reactions/likes into Firestore |
 | `pnpm astro ...` | Run CLI commands like `astro add`, `astro check` |
 | `pnpm astro --help` | Get help using the Astro CLI |
+
+## Firebase Data
+
+The live interaction data is stored in Firestore and uses the normalized post ID derived from the post path.
+
+Current structure:
+
+```text
+projectPosts/{postId}
+  baseViews
+  views
+  baseLikes
+  likes
+  baseReactions
+  reactions
+  commentsCount
+
+projectPosts/{postId}/comments/{commentId}
+  name
+  authorName
+  authorAvatarUrl
+  body
+  message
+  source
+  sourceCommentId
+  importedAt
+
+projectPosts/{postId}/reactionImports/{sourceReactionId}
+  source: "github"
+  sourceReactionId
+  sourceCommentId
+  sourceDiscussionNumber
+  reactionKey
+  reactionLabel
+  emoji
+  count
+  importedAt
+```
+
+`projectPosts/{postId}` is the single visible stats document used by the post meta and reaction UI. Imported GitHub reactions are stored separately under `reactionImports` so the migration can be rerun without duplicating counts.
+
+## Firestore Rules
+
+The app currently expects public reads for post content and public writes for the interaction flow already exposed by the UI. A practical rules baseline is:
+
+```js
+match /databases/{database}/documents {
+  match /projectPosts/{postId} {
+    allow read: if true;
+    allow update: if true; // tighten with Auth/App Check if you add it later
+
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
+    match /reactionImports/{reactionId} {
+      allow read: if true;
+      allow write: if false; // Admin SDK migration only
+    }
+  }
+}
+```
+
+If you later move to authenticated writes or App Check, tighten the update/create rules accordingly.
 
 ## Content Management
 

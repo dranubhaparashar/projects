@@ -1,0 +1,264 @@
+---
+import { normalizePostId } from "@utils/post-id";
+
+interface Props {
+	postId: string;
+	path: string;
+	title: string;
+	class?: string;
+}
+
+const {
+	postId,
+	path,
+	title,
+	class: className = "",
+} = Astro.props;
+
+const reactionCatalog = [
+	{ key: "thumbsUp", emoji: "👍", label: "Thumbs up" },
+	{ key: "thumbsDown", emoji: "👎", label: "Thumbs down" },
+	{ key: "heart", emoji: "❤️", label: "Heart" },
+	{ key: "rocket", emoji: "🚀", label: "Rocket" },
+	{ key: "clap", emoji: "👏", label: "Clap" },
+	{ key: "fire", emoji: "🔥", label: "Fire" },
+	{ key: "idea", emoji: "💡", label: "Idea" },
+	{ key: "laugh", emoji: "😄", label: "Laugh" },
+	{ key: "confused", emoji: "😕", label: "Confused" },
+	{ key: "eyes", emoji: "👀", label: "Eyes" },
+] as const;
+---
+
+<section
+	class:list={["firebase-reactions card-base rounded-xl p-5 mb-4", className]}
+	data-firebase-reactions
+	data-post-id={postId}
+	data-normalized-post-id={normalizePostId(path || postId || "")}
+	data-path={path}
+	data-title={title}
+>
+	<div class="flex items-center justify-between gap-3 mb-4">
+		<h2 class="text-xl font-bold text-90">Reactions</h2>
+		<span data-reaction-total class="text-sm font-medium text-neutral-500 dark:text-neutral-400">0 reactions</span>
+	</div>
+
+	<div class="flex flex-wrap gap-2" data-reaction-list>
+		{reactionCatalog.map((reaction) => (
+			<button
+				type="button"
+				data-reaction-button
+				data-reaction-key={reaction.key}
+				data-reaction-emoji={reaction.emoji}
+				data-reaction-label={reaction.label}
+				class="inline-flex items-center gap-2 rounded-full bg-black/5 px-3 py-2 text-sm font-medium text-70 transition hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] disabled:cursor-default disabled:opacity-60 dark:bg-white/10"
+				aria-label={`React with ${reaction.label}`}
+			>
+				<span class="text-base leading-none">{reaction.emoji}</span>
+				<span data-reaction-count>0</span>
+			</button>
+		))}
+	</div>
+</section>
+
+<script>
+	import { db } from "../lib/firebase";
+	import { doc, getDoc, increment, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+
+	const collectionName = "projectPosts";
+	const reactionCatalog = [
+		{ key: "thumbsUp", emoji: "👍", label: "Thumbs up" },
+		{ key: "thumbsDown", emoji: "👎", label: "Thumbs down" },
+		{ key: "heart", emoji: "❤️", label: "Heart" },
+		{ key: "rocket", emoji: "🚀", label: "Rocket" },
+		{ key: "clap", emoji: "👏", label: "Clap" },
+		{ key: "fire", emoji: "🔥", label: "Fire" },
+		{ key: "idea", emoji: "💡", label: "Idea" },
+		{ key: "laugh", emoji: "😄", label: "Laugh" },
+		{ key: "confused", emoji: "😕", label: "Confused" },
+		{ key: "eyes", emoji: "👀", label: "Eyes" },
+	];
+
+	function numberValue(value: unknown): number {
+		return typeof value === "number" && Number.isFinite(value) ? value : 0;
+	}
+
+	function mapValue(value: unknown): Record<string, number> {
+		if (!value || typeof value !== "object") return {};
+		const result: Record<string, number> = {};
+		for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+			const count = numberValue(raw);
+			if (count > 0) result[key] = count;
+		}
+		return result;
+	}
+
+	function plural(value: number, singular: string, pluralLabel: string): string {
+		return `${value.toLocaleString()} ${value === 1 ? singular : pluralLabel}`;
+	}
+
+	function reactionStorageKey(postId: string, reactionKey: string): string {
+		return `firebase-post-reacted:${postId}:${reactionKey}`;
+	}
+
+	function readStorage(key: string): string | null {
+		try {
+			return localStorage.getItem(key);
+		} catch {
+			return null;
+		}
+	}
+
+	function writeStorage(key: string, value: string): void {
+		try {
+			localStorage.setItem(key, value);
+		} catch {
+			// Ignore storage failures.
+		}
+	}
+
+	function ensurePostDocument(postRef: ReturnType<typeof doc>, root: HTMLElement) {
+		if (!db) return Promise.resolve();
+		return getDoc(postRef).then((snapshot) => {
+			if (snapshot.exists()) return;
+
+			return setDoc(
+				postRef,
+				{
+					title: root.dataset.title || "",
+					path: root.dataset.path || "",
+					slug: root.dataset.normalizedPostId || root.dataset.postId || "",
+					baseViews: 0,
+					views: 0,
+					baseLikes: 0,
+					likes: 0,
+					baseReactions: {},
+					reactions: {},
+					baseCommentsCount: 0,
+					commentsCount: 0,
+					createdAt: serverTimestamp(),
+					updatedAt: serverTimestamp(),
+				},
+				{ merge: true },
+			);
+		});
+	}
+
+	function renderReactionState(root: HTMLElement, data: Record<string, unknown>) {
+		const baseLikes = numberValue(data.baseLikes);
+		const likes = numberValue(data.likes);
+		const total = baseLikes + likes;
+		const baseReactions = mapValue(data.baseReactions);
+		const reactions = mapValue(data.reactions);
+		const list = root.querySelector<HTMLElement>("[data-reaction-list]");
+		const totalEl = root.querySelector<HTMLElement>("[data-reaction-total]");
+
+		if (totalEl) totalEl.textContent = plural(total, "reaction", "reactions");
+
+		if (!list) return;
+
+		const countsByKey = new Map<string, number>();
+		for (const reaction of reactionCatalog) {
+			const count = numberValue(baseReactions[reaction.key]) + numberValue(reactions[reaction.key]);
+			countsByKey.set(reaction.key, count);
+		}
+
+		list.querySelectorAll<HTMLElement>("[data-reaction-button]").forEach((button) => {
+			const key = button.dataset.reactionKey || "";
+			const countEl = button.querySelector<HTMLElement>("[data-reaction-count]");
+			const count = countsByKey.get(key) || 0;
+			if (countEl) countEl.textContent = String(count);
+
+			const reacted = readStorage(
+				reactionStorageKey(root.dataset.normalizedPostId || root.dataset.postId || "", key),
+			) === "1";
+			button.disabled = reacted;
+			button.setAttribute("aria-pressed", reacted ? "true" : "false");
+		});
+	}
+
+	async function initFirebaseReactions(root: HTMLElement) {
+		if (root.dataset.firebaseReactionsInitialized === "true") return;
+		root.dataset.firebaseReactionsInitialized = "true";
+
+		const postId = root.dataset.normalizedPostId || root.dataset.postId || "";
+		if (!postId) return;
+		console.debug("[FirebaseReactions] init", {
+			firebaseReady: Boolean(db),
+			postId,
+			path: root.dataset.path || "",
+			docPath: `${collectionName}/${postId}`,
+		});
+
+		if (!db) {
+			const totalEl = root.querySelector<HTMLElement>("[data-reaction-total]");
+			if (totalEl) totalEl.textContent = "0 reactions";
+			root.querySelectorAll<HTMLButtonElement>("[data-reaction-button]").forEach((button) => {
+				button.disabled = true;
+			});
+			return;
+		}
+
+		try {
+			const postRef = doc(db, collectionName, postId);
+			await ensurePostDocument(postRef, root);
+
+			onSnapshot(
+				postRef,
+				(snapshot) => {
+					if (snapshot.exists()) renderReactionState(root, snapshot.data());
+				},
+				(error) => {
+					console.warn("Firebase reactions read failed", error);
+				},
+			);
+
+			root.querySelectorAll<HTMLButtonElement>("[data-reaction-button]").forEach((button) => {
+				const reactionKey = button.dataset.reactionKey || "";
+				const storageKey = reactionStorageKey(postId, reactionKey);
+				const reacted = readStorage(storageKey) === "1";
+
+				if (reacted) {
+					button.disabled = true;
+					button.setAttribute("aria-pressed", "true");
+				}
+
+				button.addEventListener("click", async () => {
+					if (!reactionKey || button.disabled) return;
+					button.disabled = true;
+
+					try {
+						await updateDoc(postRef, {
+							likes: increment(1),
+							[`reactions.${reactionKey}`]: increment(1),
+							updatedAt: serverTimestamp(),
+						});
+						writeStorage(storageKey, "1");
+						button.setAttribute("aria-pressed", "true");
+					} catch (error) {
+						button.disabled = false;
+						button.setAttribute("aria-pressed", "false");
+						console.warn("Firebase reaction failed", error);
+					}
+				});
+			});
+		} catch (error) {
+			console.warn("Firebase reactions unavailable", error);
+		}
+	}
+
+	function initAllFirebaseReactions() {
+		document.querySelectorAll<HTMLElement>("[data-firebase-reactions]").forEach((root) => {
+			void initFirebaseReactions(root);
+		});
+	}
+
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", initAllFirebaseReactions, { once: true });
+	} else {
+		initAllFirebaseReactions();
+	}
+
+	document.addEventListener("astro:page-load", initAllFirebaseReactions);
+	document.addEventListener("swup:contentReplaced", initAllFirebaseReactions);
+	document.addEventListener("swup:page:view", initAllFirebaseReactions);
+</script>
