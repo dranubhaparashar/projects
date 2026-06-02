@@ -43,14 +43,44 @@ const className = Astro.props.class;
 const hasCover = image !== undefined && image !== null && image !== "";
 const normalizedPostId = normalizePostId(entry.slug);
 const { remarkPluginFrontmatter } = await entry.render();
+const coverBasePath = path.join("content/posts/", getDir(entry.id));
+const isLocalCover = hasCover && !(
+	image.startsWith("/") ||
+	image.startsWith("http") ||
+	image.startsWith("https") ||
+	image.startsWith("data:")
+);
+
+let coverWidth = 16;
+let coverHeight = 9;
+
+if (isLocalCover) {
+	const files = import.meta.glob<ImageMetadata>("../**", {
+		import: "default",
+	});
+	const normalizedPath = path
+		.normalize(path.join("../", coverBasePath, image))
+		.replace(/\\/g, "/");
+	const file = files[normalizedPath];
+	if (file) {
+		const cover = await file();
+		coverWidth = cover.width;
+		coverHeight = cover.height;
+	}
+}
+
+const isPortraitCover = coverHeight > coverWidth;
+const coverMaxWidth = isPortraitCover ? 180 : 320;
+const coverMaxHeight = 220;
+const coverFrameStyle = `max-width: ${coverMaxWidth}px; max-height: ${coverMaxHeight}px;`;
 ---
 
 <div
 	class:list={[
 		"card-base grid w-full rounded-[var(--radius-large)] overflow-hidden relative",
 		hasCover
-			? "grid-cols-1 md:grid-cols-[minmax(0,1fr)_260px_3.25rem] lg:grid-cols-[minmax(0,1fr)_320px_3.25rem] md:gap-5 lg:gap-6"
-			: "grid-cols-1 md:grid-cols-[minmax(0,1fr)_3.25rem] md:gap-5",
+			? "grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_44px] md:gap-5 lg:gap-6 items-stretch"
+			: "grid-cols-1 md:grid-cols-[minmax(0,1fr)_44px] md:gap-5 items-stretch",
 		className,
 	]}
 	style={style}
@@ -58,7 +88,7 @@ const { remarkPluginFrontmatter } = await entry.render();
 	<div
 		class:list={[
 			"min-w-0 overflow-visible px-6 md:pl-9 pt-6 md:pt-7 pb-6 relative",
-			hasCover ? "md:pr-0 col-span-full md:col-span-1" : "md:pr-0",
+			hasCover ? "md:pr-0 md:col-start-1" : "md:pr-0 md:col-start-1",
 		]}
 	>
 		<a
@@ -104,8 +134,10 @@ const { remarkPluginFrontmatter } = await entry.render();
 			aria-label={title}
 			class:list={[
 				"group",
-				"relative mx-4 mb-4 aspect-[16/9] overflow-hidden rounded-xl bg-white active:scale-95 md:mx-0 md:my-4 md:h-auto md:max-h-[230px] md:w-[260px] md:justify-self-end lg:w-[320px]",
+				"relative mb-4 overflow-hidden rounded-xl bg-white active:scale-95 w-fit max-w-full md:mb-0 md:my-4 md:justify-self-center md:col-start-2",
+				isPortraitCover ? "mx-auto" : "mx-auto",
 			]}
+			style={coverFrameStyle}
 		>
 			<div class="absolute pointer-events-none z-10 w-full h-full group-hover:bg-black/20 group-active:bg-black/30 transition"></div>
 			<div class="absolute pointer-events-none z-20 w-full h-full flex items-center justify-center">
@@ -116,9 +148,12 @@ const { remarkPluginFrontmatter } = await entry.render();
 			</div>
 			<ImageWrapper
 				src={image}
-				basePath={path.join("content/posts/", getDir(entry.id))}
+				basePath={coverBasePath}
 				alt="Cover Image of the Post"
-				class="post-card-cover w-full h-full bg-white"
+				class="post-card-cover post-card-image-frame w-fit max-w-full bg-white"
+				imgClass="post-card-image"
+				fit="contain"
+				overlay={false}
 			>
 			</ImageWrapper>
 		</a>
@@ -127,8 +162,8 @@ const { remarkPluginFrontmatter } = await entry.render();
 	<a
 		href={url}
 		aria-label={title}
-		class="!hidden md:!flex btn-regular my-3 mr-3 rounded-xl bg-[var(--enter-btn-bg)]
-         hover:bg-[var(--enter-btn-bg-hover)] active:bg-[var(--enter-btn-bg-active)] active:scale-95 self-stretch"
+		class="!hidden md:!flex btn-regular my-3 md:m-0 rounded-xl bg-[var(--enter-btn-bg)]
+         hover:bg-[var(--enter-btn-bg-hover)] active:bg-[var(--enter-btn-bg-active)] active:scale-95 self-stretch md:col-start-3 md:justify-self-stretch md:h-full md:w-11"
 	>
 		<Icon
 			name="material-symbols:chevron-right-rounded"
@@ -140,9 +175,21 @@ const { remarkPluginFrontmatter } = await entry.render();
 <div class="transition border-t-[1px] border-dashed mx-6 border-black/10 dark:border-white/[0.15] last:border-t-0 md:hidden"></div>
 
 <style>
-	:global(.post-card-cover img) {
+	:global(.post-card-image-frame) {
+		display: inline-flex;
+		align-self: center;
+	}
+
+	:global(.post-card-image-frame img),
+	:global(.post-card-image-frame picture) {
+		display: block;
+	}
+
+	:global(.post-card-image) {
 		object-fit: contain;
 		object-position: center;
+		max-width: 100%;
+		max-height: 100%;
 		background: white;
 	}
 </style>
