@@ -1,9 +1,21 @@
-# Anubha Parashar GitHub Pages Site
+# AI Projects Portfolio
 
-Personal blog and project portfolio built with Astro and Tailwind CSS.
+[![Portfolio](https://img.shields.io/badge/Portfolio-Projects-blue?style=for-the-badge)](https://dranubhaparashar.github.io/projects/)
+[![Website](https://img.shields.io/badge/Website-dranubhaparashar.github.io-black?style=for-the-badge)](https://dranubhaparashar.github.io/)
+[![Built with Astro](https://img.shields.io/badge/Built%20with-Astro-orange?style=for-the-badge&logo=astro)](https://astro.build)
+[![Tailwind CSS](https://img.shields.io/badge/Styled%20with-Tailwind%20CSS-38BDF8?style=for-the-badge&logo=tailwindcss)](https://tailwindcss.com)
 
-- Live site: [https://anubhaparashar.github.io/](https://anubhaparashar.github.io/)
-- GitHub repository: [https://github.com/anubhaparashar/anubhaparashar.github.io](https://github.com/anubhaparashar/anubhaparashar.github.io)
+## Overview
+
+This repository powers the **AI Projects Portfolio** hosted at:
+
+```text
+https://dranubhaparashar.github.io/projects/
+```
+
+The website is a modern, responsive project and blog-style portfolio built to showcase AI, machine learning, GenAI, Agentic AI, computer vision, MLOps, DevSecOps, and research-oriented engineering work.
+
+Project details are intentionally **not hard-coded in this README** because the project list will continue to grow and change over time. The latest projects, posts, categories, tags, and updates should be managed directly inside the website content files.
 
 ## ✨ Features
 
@@ -17,25 +29,90 @@ Personal blog and project portfolio built with Astro and Tailwind CSS.
 - [x] Table of contents
 - [x] RSS feed
 
-## 🚀 Getting Started
+## Technology Used
+
+| Area | Technologies |
+|---|---|
+| Framework | Astro |
+| Styling | Tailwind CSS |
+| Language | TypeScript, JavaScript |
+| Content | Markdown, YAML frontmatter |
+| Search | Pagefind |
+| Package Manager | pnpm |
+| Formatting / Code Quality | Biome |
+| Deployment | GitHub Pages, Vercel, Netlify, or any static hosting platform supported by Astro |
+| UI Features | Responsive layout, light/dark mode, animations, page transitions, table of contents |
+| Feed | RSS |
+| Content Type | AI project posts, research posts, technical blogs, portfolio updates |
+
+## Portfolio Focus Areas
+
+The portfolio is designed for dynamic technical content across:
+
+- Generative AI
+- Agentic AI
+- LLM applications
+- Computer vision
+- Deep learning
+- MLOps and DevSecOps
+- Cloud AI deployment
+- Industrial AI systems
+- Research engineering
+- Data science and analytics
+- AI infrastructure
+- Automation and intelligent systems
+
+## Getting Started
 
 1. Create your blog repository:
-    - [Generate a new repository](https://github.com/saicaca/fuwari/generate) from this template or fork this repository.
-    - Or run one of the following commands:
-       ```sh
-       npm create fuwari@latest
-       yarn create fuwari
-       pnpm create fuwari@latest
-       bun create fuwari@latest
-       deno run -A npm:create-fuwari@latest
-       ```
-2. To edit your blog locally, clone your repository, run `pnpm install` to install dependencies.
-    - Install [pnpm](https://pnpm.io) `npm install -g pnpm` if you haven't.
-3. Edit the config file `src/config.ts` to customize your blog.
-4. Run `pnpm new-post <filename>` to create a new post and edit it in `src/content/posts/`.
-5. Deploy your blog to Vercel, Netlify, GitHub Pages, etc. following [the guides](https://docs.astro.build/en/guides/deploy/). You need to edit the site configuration in `astro.config.mjs` before deployment.
+   - [Generate a new repository](https://github.com/saicaca/fuwari/generate) from this template or fork this repository.
+   - Or run one of the following commands:
 
-## 📝 Frontmatter of Posts
+     ```sh
+     npm create fuwari@latest
+     yarn create fuwari
+     pnpm create fuwari@latest
+     bun create fuwari@latest
+     deno run -A npm:create-fuwari@latest
+     ```
+
+2. To edit your blog locally, clone your repository and run `pnpm install` to install dependencies.
+
+   Install [pnpm](https://pnpm.io) if you have not installed it yet:
+
+   ```sh
+   npm install -g pnpm
+   ```
+
+3. Edit the config file to customize your blog:
+
+   ```text
+   src/config.ts
+   ```
+
+4. Create a new post:
+
+   ```sh
+   pnpm new-post <filename>
+   ```
+
+5. Edit the post inside:
+
+   ```text
+   src/content/posts/
+   ```
+
+6. Deploy your blog to Vercel, Netlify, GitHub Pages, or another static hosting platform by following the [Astro deployment guides](https://docs.astro.build/en/guides/deploy/).
+
+   Before deployment, update the site configuration in:
+
+   ```text
+   astro.config.mjs
+   ```
+
+## Frontmatter of Posts
+
+Each project or blog post can be defined using frontmatter.
 
 ```yaml
 ---
@@ -43,10 +120,30 @@ title: My First Blog Post
 published: 2023-09-09
 description: This is the first post of my new Astro blog.
 image: ./cover.jpg
-tags: 
+tags:
 category: Front-end
 draft: false
 lang: jp      # Set only if the post's language differs from the site's language in `config.ts`
+---
+```
+
+### Recommended Project Post Frontmatter
+
+For AI project posts, the following structure is recommended:
+
+```yaml
+---
+title: AI Project Title
+published: 2026-01-01
+description: Short summary of the project, problem, approach, and outcome.
+image: ./cover.jpg
+tags:
+  - AI
+  - Machine Learning
+  - Computer Vision
+  - GenAI
+category: Projects
+draft: false
 ---
 ```
 
@@ -54,43 +151,111 @@ lang: jp      # Set only if the post's language differs from the site's language
 
 All commands are run from the root of the project, from a terminal:
 
-| Command                    | Action                                              |
-|:---------------------------|:----------------------------------------------------|
-| `pnpm install`             | Installs dependencies                               |
-| `pnpm dev`                 | Starts local dev server at `localhost:4321`         |
-| `pnpm build`               | Build your production site to `./dist/`             |
-| `pnpm preview`             | Preview your build locally, before deploying        |
-| `pnpm check`               | Run checks for errors in your code                  |
-| `pnpm format`              | Format your code using Biome                        |
-| `pnpm new-post <filename>` | Create a new post                                   |
-| `pnpm astro ...`           | Run CLI commands like `astro add`, `astro check`    |
-| `pnpm astro --help`        | Get help using the Astro CLI                        |
+| Command | Action |
+|:---|:---|
+| `pnpm install` | Installs dependencies |
+| `pnpm dev` | Starts local dev server at `localhost:4321` |
+| `pnpm build` | Build your production site to `./dist/` |
+| `pnpm preview` | Preview your build locally, before deploying |
+| `pnpm check` | Run checks for errors in your code |
+| `pnpm format` | Format your code using Biome |
+| `pnpm new-post <filename>` | Create a new post |
+| `pnpm astro ...` | Run CLI commands like `astro add`, `astro check` |
+| `pnpm astro --help` | Get help using the Astro CLI |
 
-## Firebase views, likes, and comments
+## Content Management
 
-Project post stats are stored in the Firestore `projectPosts` collection. Documents are created automatically when a post card or post page is opened, so no manual Firestore document creation is needed for each post.
+Project details should be added as individual Markdown posts instead of being written directly in this README.
 
-Counters are split so historical data is preserved:
+Recommended content location:
 
-- GoatCounter historical views are imported into `baseViews`.
-- New Firebase page views are stored in `views`.
-- Displayed views are `baseViews + views`.
-- Preserved/imported likes belong in `baseLikes`; new Firebase likes are stored in `likes`.
-- Displayed likes are `baseLikes + likes`.
-- Preserved/imported comment counts belong in `baseCommentsCount`; new Firebase comments increment `commentsCount`.
-- Displayed comment counts are `baseCommentsCount + commentsCount`.
-
-Run the GoatCounter migration only from a trusted local machine or CI environment with secrets in environment variables:
-
-```sh
-pnpm node scripts/migrate-goatcounter-to-firestore.mjs
+```text
+src/content/posts/
 ```
 
-If the GoatCounter API export is not available, edit `scripts/base-views.json` and run:
+Recommended content types:
 
-```sh
-pnpm node scripts/import-base-views-from-json.mjs
+```text
+AI project posts
+Research posts
+Technical implementation notes
+Case-study style articles
+Deployment walkthroughs
+Architecture explanations
 ```
 
-The Firebase service account key is only for migration scripts. Never commit `serviceAccountKey.json`, `FIREBASE_SERVICE_ACCOUNT_JSON`, GoatCounter API tokens, or any private API token to the repository or frontend code.
+## Suggested Folder Structure
 
+```text
+project-portfolio/
+├── public/
+│   ├── favicon/
+│   └── images/
+├── src/
+│   ├── assets/
+│   ├── components/
+│   ├── content/
+│   │   └── posts/
+│   ├── layouts/
+│   ├── pages/
+│   ├── styles/
+│   └── config.ts
+├── astro.config.mjs
+├── package.json
+├── pnpm-lock.yaml
+├── README.md
+└── tsconfig.json
+```
+
+## Deployment Notes
+
+For GitHub Pages deployment, make sure the Astro configuration contains the correct site URL and base path.
+
+Example:
+
+```js
+export default defineConfig({
+  site: "https://dranubhaparashar.github.io",
+  base: "/projects/",
+});
+```
+
+For Vercel or Netlify, configure the build command and output directory:
+
+```text
+Build command: pnpm build
+Output directory: dist
+```
+
+## Why This Portfolio Exists
+
+This portfolio is maintained to present AI and research work in a professional, searchable, and scalable format. It is suitable for:
+
+- AI/ML job applications
+- Research collaborations
+- Technical portfolio review
+- Industry project demonstrations
+- Client-facing project showcases
+- Publication and project credibility building
+- Startup or consulting profile presentation
+
+## Author
+
+**Dr. Anubha Parashar**  
+AI Developer · GenAI Specialist · Agentic AI Builder · Computer Vision Researcher · MLOps Practitioner
+
+Website:
+
+```text
+https://dranubhaparashar.github.io/
+```
+
+Projects:
+
+```text
+https://dranubhaparashar.github.io/projects/
+```
+
+## License and Usage
+
+This README is intended for documenting the AI Projects Portfolio. Project descriptions, images, research content, posts, and personal portfolio material should not be reused without permission.
