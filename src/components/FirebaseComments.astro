@@ -1,0 +1,213 @@
+---
+interface Props {
+	postId: string;
+	path: string;
+	title: string;
+}
+
+const { postId, path, title } = Astro.props;
+---
+
+<section
+	class="firebase-comments card-base rounded-xl p-5 mb-4"
+	data-firebase-comments
+	data-post-id={postId}
+	data-path={path}
+	data-title={title}
+>
+	<h2 class="text-xl font-bold text-90 mb-4">Comments</h2>
+	<form data-comment-form class="flex flex-col gap-3 mb-5">
+		<input
+			data-comment-name
+			type="text"
+			maxlength="80"
+			placeholder="Name"
+			class="w-full rounded-lg bg-black/5 dark:bg-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-[var(--primary)]"
+		/>
+		<textarea
+			data-comment-message
+			maxlength="1000"
+			rows="4"
+			placeholder="Comment"
+			class="w-full rounded-lg bg-black/5 dark:bg-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-[var(--primary)]"
+		></textarea>
+		<div class="flex items-center justify-between gap-3">
+			<p data-comment-status class="text-sm text-neutral-500 dark:text-neutral-400"></p>
+			<button type="submit" class="btn-regular px-4 py-2 rounded-lg font-medium">
+				Post comment
+			</button>
+		</div>
+	</form>
+	<div data-comments-list class="flex flex-col gap-3"></div>
+</section>
+
+<script>
+	import { db } from "../lib/firebase";
+	import {
+		addDoc,
+		collection,
+		doc,
+		getDoc,
+		increment,
+		onSnapshot,
+		orderBy,
+		query,
+		serverTimestamp,
+		setDoc,
+		updateDoc,
+	} from "firebase/firestore";
+
+	const collectionName = "projectPosts";
+
+	function escapeHtml(value: string): string {
+		return value.replace(/[&<>"']/g, (char) => {
+			const entities: Record<string, string> = {
+				"&": "&amp;",
+				"<": "&lt;",
+				">": "&gt;",
+				'"': "&quot;",
+				"'": "&#039;",
+			};
+			return entities[char] || char;
+		});
+	}
+
+	async function ensurePostDocument(postRef: ReturnType<typeof doc>, root: HTMLElement) {
+		if (!db) return;
+		const snapshot = await getDoc(postRef);
+		if (snapshot.exists()) return;
+
+		await setDoc(
+			postRef,
+			{
+				title: root.dataset.title || "",
+				path: root.dataset.path || "",
+				slug: root.dataset.postId || "",
+				baseViews: 0,
+				views: 0,
+				baseLikes: 0,
+				likes: 0,
+				baseCommentsCount: 0,
+				commentsCount: 0,
+				createdAt: serverTimestamp(),
+				updatedAt: serverTimestamp(),
+			},
+			{ merge: true },
+		);
+	}
+
+	function renderComments(root: HTMLElement, docs: Array<{ data: () => Record<string, unknown> }>) {
+		const list = root.querySelector<HTMLElement>("[data-comments-list]");
+		if (!list) return;
+
+		if (docs.length === 0) {
+			list.innerHTML = `<p class="text-sm text-neutral-500 dark:text-neutral-400">No comments yet.</p>`;
+			return;
+		}
+
+		list.innerHTML = docs
+			.map((item) => {
+				const data = item.data();
+				const name = typeof data.name === "string" ? data.name : "Anonymous";
+				const message = typeof data.message === "string" ? data.message : "";
+				return `
+					<article class="rounded-lg bg-black/5 dark:bg-white/10 px-4 py-3">
+						<div class="font-medium text-90 mb-1">${escapeHtml(name)}</div>
+						<p class="text-75 whitespace-pre-wrap break-words">${escapeHtml(message)}</p>
+					</article>
+				`;
+			})
+			.join("");
+	}
+
+	async function initFirebaseComments(root: HTMLElement) {
+		if (root.dataset.firebaseCommentsInitialized === "true") return;
+		root.dataset.firebaseCommentsInitialized = "true";
+
+		const postId = root.dataset.postId;
+		if (!postId) return;
+		if (!db) return;
+
+		const postRef = doc(db, collectionName, postId);
+		const commentsRef = collection(postRef, "comments");
+		const status = root.querySelector<HTMLElement>("[data-comment-status]");
+		const form = root.querySelector<HTMLFormElement>("[data-comment-form]");
+		const nameInput = root.querySelector<HTMLInputElement>("[data-comment-name]");
+		const messageInput = root.querySelector<HTMLTextAreaElement>("[data-comment-message]");
+
+		try {
+			await ensurePostDocument(postRef, root);
+
+			onSnapshot(
+				query(commentsRef, orderBy("createdAt", "asc")),
+				(snapshot) => renderComments(root, snapshot.docs),
+				(error) => {
+					console.warn("Firebase comments read failed", error);
+					if (status) status.textContent = "Comments unavailable.";
+				},
+			);
+		} catch (error) {
+			console.warn("Firebase comments unavailable", error);
+			if (status) status.textContent = "Comments unavailable.";
+		}
+
+		form?.addEventListener("submit", async (event) => {
+			event.preventDefault();
+
+			const name = nameInput?.value.trim() || "";
+			const message = messageInput?.value.trim() || "";
+
+			if (!name || !message) {
+				if (status) status.textContent = "Name and comment are required.";
+				return;
+			}
+
+			if (name.length > 80 || message.length > 1000) {
+				if (status) status.textContent = "Comment is too long.";
+				return;
+			}
+
+			const button = form.querySelector<HTMLButtonElement>("button[type='submit']");
+			if (button) button.disabled = true;
+			if (status) status.textContent = "";
+
+			try {
+				await ensurePostDocument(postRef, root);
+				await addDoc(commentsRef, {
+					name,
+					message,
+					createdAt: serverTimestamp(),
+				});
+				await updateDoc(postRef, {
+					commentsCount: increment(1),
+					updatedAt: serverTimestamp(),
+				});
+
+				if (nameInput) nameInput.value = "";
+				if (messageInput) messageInput.value = "";
+				if (status) status.textContent = "Comment posted.";
+			} catch (error) {
+				console.warn("Firebase comment write failed", error);
+				if (status) status.textContent = "Could not post comment.";
+			} finally {
+				if (button) button.disabled = false;
+			}
+		});
+	}
+
+	function initAllFirebaseComments() {
+		document.querySelectorAll<HTMLElement>("[data-firebase-comments]").forEach((root) => {
+			void initFirebaseComments(root);
+		});
+	}
+
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", initAllFirebaseComments, { once: true });
+	} else {
+		initAllFirebaseComments();
+	}
+
+	document.addEventListener("astro:page-load", initAllFirebaseComments);
+	document.addEventListener("swup:contentReplaced", initAllFirebaseComments);
+	document.addEventListener("swup:page:view", initAllFirebaseComments);
+</script>

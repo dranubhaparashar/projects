@@ -1,0 +1,224 @@
+---
+import { Icon } from "astro-icon/components";
+
+interface Props {
+	postId: string;
+	path: string;
+	title: string;
+	incrementViews?: boolean;
+	showLike?: boolean;
+	showCommentsCount?: boolean;
+	class?: string;
+}
+
+const {
+	postId,
+	path,
+	title,
+	incrementViews = false,
+	showLike = false,
+	showCommentsCount = false,
+	class: className = "",
+} = Astro.props;
+---
+
+<span
+	class:list={["firebase-post-stats inline-flex flex-wrap items-center gap-4", className]}
+	data-firebase-post-stats
+	data-post-id={postId}
+	data-path={path}
+	data-title={title}
+	data-increment-views={String(incrementViews)}
+	data-show-like={String(showLike)}
+	data-show-comments-count={String(showCommentsCount)}
+>
+	<span class="inline-flex items-center">
+		<span class="meta-icon">
+			<Icon name="material-symbols:visibility-outline-rounded" class="text-xl"></Icon>
+		</span>
+		<span data-stat-views class="text-50 text-sm font-medium">views unavailable</span>
+	</span>
+
+	{showLike && (
+		<button
+			type="button"
+			data-like-button
+			class="inline-flex items-center transition hover:text-[var(--primary)] disabled:cursor-default disabled:hover:text-inherit"
+			aria-label="Like this post"
+		>
+			<span class="meta-icon">
+				<Icon name="material-symbols:favorite-outline-rounded" class="text-xl"></Icon>
+			</span>
+			<span data-stat-likes class="text-50 text-sm font-medium">0 likes</span>
+		</button>
+	)}
+
+	{showCommentsCount && (
+		<span class="inline-flex items-center">
+			<span class="meta-icon">
+				<Icon name="material-symbols:comment-outline-rounded" class="text-xl"></Icon>
+			</span>
+			<span data-stat-comments class="text-50 text-sm font-medium">0 comments</span>
+		</span>
+	)}
+</span>
+
+<script>
+	import { db } from "../lib/firebase";
+	import {
+		doc,
+		getDoc,
+		increment,
+		onSnapshot,
+		serverTimestamp,
+		setDoc,
+		updateDoc,
+	} from "firebase/firestore";
+
+	const collectionName = "projectPosts";
+
+	function numberValue(value: unknown): number {
+		return typeof value === "number" && Number.isFinite(value) ? value : 0;
+	}
+
+	function plural(value: number, singular: string, pluralLabel: string): string {
+		return `${value.toLocaleString()} ${value === 1 ? singular : pluralLabel}`;
+	}
+
+	async function ensurePostDocument(postRef: ReturnType<typeof doc>, root: HTMLElement) {
+		if (!db) return;
+		const snapshot = await getDoc(postRef);
+
+		if (!snapshot.exists()) {
+			await setDoc(
+				postRef,
+				{
+					title: root.dataset.title || "",
+					path: root.dataset.path || "",
+					slug: root.dataset.postId || "",
+					baseViews: 0,
+					views: 0,
+					baseLikes: 0,
+					likes: 0,
+					baseCommentsCount: 0,
+					commentsCount: 0,
+					createdAt: serverTimestamp(),
+					updatedAt: serverTimestamp(),
+				},
+				{ merge: true },
+			);
+		}
+	}
+
+	function renderStats(root: HTMLElement, data: Record<string, unknown>) {
+		const totalViews = numberValue(data.baseViews) + numberValue(data.views);
+		const totalLikes = numberValue(data.baseLikes) + numberValue(data.likes);
+		const totalComments =
+			numberValue(data.baseCommentsCount) + numberValue(data.commentsCount);
+
+		const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
+		const likesEl = root.querySelector<HTMLElement>("[data-stat-likes]");
+		const commentsEl = root.querySelector<HTMLElement>("[data-stat-comments]");
+
+		if (viewsEl) viewsEl.textContent = plural(totalViews, "view", "views");
+		if (likesEl) likesEl.textContent = plural(totalLikes, "like", "likes");
+		if (commentsEl) commentsEl.textContent = plural(totalComments, "comment", "comments");
+	}
+
+	async function incrementViewsOnce(root: HTMLElement, postRef: ReturnType<typeof doc>) {
+		if (!db) return;
+		if (root.dataset.incrementViews !== "true") return;
+
+		const postId = root.dataset.postId || "";
+		const storageKey = `firebase-post-viewed:${postId}`;
+		if (!postId || sessionStorage.getItem(storageKey) === "1") return;
+
+		await updateDoc(postRef, {
+			views: increment(1),
+			updatedAt: serverTimestamp(),
+		});
+		sessionStorage.setItem(storageKey, "1");
+	}
+
+	function setupLike(root: HTMLElement, postRef: ReturnType<typeof doc>) {
+		if (!db) return;
+		const button = root.querySelector<HTMLButtonElement>("[data-like-button]");
+		if (!button) return;
+
+		const postId = root.dataset.postId || "";
+		const storageKey = `firebase-post-liked:${postId}`;
+		const liked = postId && localStorage.getItem(storageKey) === "1";
+
+		if (liked) {
+			button.disabled = true;
+			button.setAttribute("aria-label", "Post already liked");
+		}
+
+		button.addEventListener("click", async () => {
+			if (!postId || button.disabled) return;
+			button.disabled = true;
+
+			try {
+				await updateDoc(postRef, {
+					likes: increment(1),
+					updatedAt: serverTimestamp(),
+				});
+				localStorage.setItem(storageKey, "1");
+				button.setAttribute("aria-label", "Post already liked");
+			} catch (error) {
+				button.disabled = false;
+				console.warn("Firebase like failed", error);
+			}
+		});
+	}
+
+	async function initFirebasePostStats(root: HTMLElement) {
+		if (root.dataset.firebaseInitialized === "true") return;
+		root.dataset.firebaseInitialized = "true";
+
+		const postId = root.dataset.postId;
+		if (!postId) return;
+		if (!db) return;
+
+		const postRef = doc(db, collectionName, postId);
+
+		try {
+			await ensurePostDocument(postRef, root);
+			await incrementViewsOnce(root, postRef);
+
+			onSnapshot(
+				postRef,
+				(snapshot) => {
+					if (snapshot.exists()) renderStats(root, snapshot.data());
+				},
+				(error) => {
+					console.warn("Firebase stats read failed", error);
+				},
+			);
+
+			setupLike(root, postRef);
+		} catch (error) {
+			console.warn("Firebase stats unavailable", error);
+			const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
+			if (viewsEl) viewsEl.textContent = "views unavailable";
+		}
+	}
+
+	function initAllFirebasePostStats() {
+		document
+			.querySelectorAll<HTMLElement>("[data-firebase-post-stats]")
+			.forEach((root) => {
+				void initFirebasePostStats(root);
+			});
+	}
+
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", initAllFirebasePostStats, { once: true });
+	} else {
+		initAllFirebasePostStats();
+	}
+
+	document.addEventListener("astro:page-load", initAllFirebasePostStats);
+	document.addEventListener("swup:contentReplaced", initAllFirebasePostStats);
+	document.addEventListener("swup:page:view", initAllFirebasePostStats);
+</script>

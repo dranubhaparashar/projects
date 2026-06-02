@@ -1,0 +1,89 @@
+---
+interface Props {
+	path: string;
+	class?: string;
+}
+
+const { path, class: className = "" } = Astro.props;
+const elId = `gcviews-${Math.random().toString(36).slice(2)}`;
+---
+
+<span id={elId} class={className}>0 views</span>
+
+<script is:inline define:vars={{ elId, path }}>
+	(function () {
+		function normalizePath(p) {
+			if (!p) return "/";
+			if (p.length > 1 && p.endsWith("/")) return p.slice(0, -1);
+			return p;
+		}
+
+		async function fetchCount(candidatePath) {
+			const endpoint =
+				"https://anubhaparashar.goatcounter.com/counter/" +
+				encodeURIComponent(candidatePath) +
+				".json";
+
+			const res = await fetch(endpoint);
+			if (!res.ok) return null;
+
+			const data = await res.json();
+
+			// GoatCounter returns count as a formatted string
+			if (typeof data.count === "string" && data.count.trim() !== "") {
+				return data.count;
+			}
+
+			// fallback if it ever comes back as number
+			if (typeof data.count === "number") {
+				return String(data.count);
+			}
+
+			return null;
+		}
+
+		async function loadViews() {
+			const el = document.getElementById(elId);
+			if (!el) return;
+
+			const exactPath = path;
+			const normalizedPath = normalizePath(path);
+			const candidates = Array.from(new Set([exactPath, normalizedPath]));
+
+			let count = null;
+
+			for (let attempt = 0; attempt < 12; attempt++) {
+				for (const candidate of candidates) {
+					try {
+						const result = await fetchCount(candidate);
+						if (result !== null) {
+							count = result;
+							break;
+						}
+					} catch (e) {
+						// try next candidate
+					}
+				}
+
+				if (count !== null) break;
+				await new Promise((resolve) => setTimeout(resolve, 1500));
+			}
+
+			if (count !== null) {
+				el.textContent = `${count} views`;
+			}
+		}
+
+		function refreshViews() {
+			loadViews();
+		}
+
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", refreshViews, { once: true });
+		} else {
+			refreshViews();
+		}
+
+		window.addEventListener("goatcounter:updated", refreshViews);
+	})();
+</script>

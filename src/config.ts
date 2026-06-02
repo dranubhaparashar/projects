@@ -1,0 +1,78 @@
+import type {
+	ExpressiveCodeConfig,
+	LicenseConfig,
+	NavBarConfig,
+	ProfileConfig,
+	SiteConfig,
+} from "./types/config";
+import { LinkPreset } from "./types/config";
+
+export const siteConfig: SiteConfig = {
+	title: "Anubha",
+	subtitle: "Demo Site",
+	lang: "en",
+	themeColor: {
+		hue: 250,
+		fixed: false,
+	},
+	banner: {
+		enable: true,
+		src: "assets/images/demo-banner.png",
+		position: "center",
+		credit: {
+			enable: false,
+			text: "",
+			url: "",
+		},
+	},
+	toc: {
+		enable: true,
+		depth: 2,
+	},
+	favicon: [],
+};
+
+export const navBarConfig: NavBarConfig = {
+	links: [
+		LinkPreset.Home,
+		LinkPreset.Archive,
+		{
+			name: "Website",
+			url: "https://anubhaparashar.github.io/",
+			external: true,
+		},
+	],
+};
+
+export const profileConfig: ProfileConfig = {
+	avatar: "assets/images/demo-avatar.jpg",
+	name: "Anubha Parashar",
+	bio: "AI Developer specializing in GenAI, Agentic AI, and intelligent automation. Builds scalable LLM-powered systems, RAG pipelines, and multi-agent architectures. Focused on solving real-world problems with practical, production-ready AI solutions. Continuously exploring cutting-edge AI to create impactful, high-value applications.",
+	links: [
+		{
+			name: "LinkedIn",
+			icon: "fa6-brands:linkedin",
+			url: "https://www.linkedin.com/in/anubhaparashar/",
+		},
+		{
+			name: "GitHub",
+			icon: "fa6-brands:github",
+			url: "https://github.com/dranubhaparashar/",
+		},
+		{
+			name: "GitHub Personal",
+			icon: "fa6-brands:github",
+			url: "https://github.com/anubhaparashar",
+		},
+	],
+};
+
+export const licenseConfig: LicenseConfig = {
+	enable: true,
+	name: "CC BY-NC-SA 4.0",
+	url: "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+};
+
+export const expressiveCodeConfig: ExpressiveCodeConfig = {
+	theme: "github-dark",
+};
