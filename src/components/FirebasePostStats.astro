@@ -76,6 +76,7 @@ const {
 	} from "firebase/firestore";
 
 	const collectionName = "projectPosts";
+	const goatCounterBaseUrl = "https://anubhaparashar.goatcounter.com/counter/";
 
 	function numberValue(value: unknown): number {
 		return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -83,6 +84,30 @@ const {
 
 	function plural(value: number, singular: string, pluralLabel: string): string {
 		return `${value.toLocaleString()} ${value === 1 ? singular : pluralLabel}`;
+	}
+
+	function normalizePath(p: string): string {
+		if (!p) return "/";
+		if (p.length > 1 && p.endsWith("/")) return p.slice(0, -1);
+		return p;
+	}
+
+	async function fetchGoatCounterCount(path: string): Promise<number> {
+		const candidates = Array.from(new Set([path, normalizePath(path)]));
+
+		for (const candidate of candidates) {
+			try {
+				const response = await fetch(goatCounterBaseUrl + encodeURIComponent(candidate) + ".json");
+				if (!response.ok) continue;
+				const data = await response.json();
+				const count = typeof data.count === "number" ? data.count : Number.parseInt(data.count, 10);
+				if (Number.isFinite(count)) return count;
+			} catch (error) {
+				console.warn("GoatCounter fallback failed", error);
+			}
+		}
+
+		return 0;
 	}
 
 	async function ensurePostDocument(postRef: ReturnType<typeof doc>, root: HTMLElement) {
@@ -110,8 +135,12 @@ const {
 		}
 	}
 
-	function renderStats(root: HTMLElement, data: Record<string, unknown>) {
-		const totalViews = numberValue(data.baseViews) + numberValue(data.views);
+	async function renderStats(root: HTMLElement, data: Record<string, unknown>) {
+		const baseViews = numberValue(data.baseViews);
+		const firebaseViews = numberValue(data.views);
+		const totalViews =
+			(baseViews > 0 ? baseViews : await fetchGoatCounterCount(root.dataset.path || "")) +
+			firebaseViews;
 		const totalLikes = numberValue(data.baseLikes) + numberValue(data.likes);
 		const totalComments =
 			numberValue(data.baseCommentsCount) + numberValue(data.commentsCount);
@@ -189,10 +218,12 @@ const {
 			onSnapshot(
 				postRef,
 				(snapshot) => {
-					if (snapshot.exists()) renderStats(root, snapshot.data());
+					if (snapshot.exists()) void renderStats(root, snapshot.data());
 				},
 				(error) => {
 					console.warn("Firebase stats read failed", error);
+					const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
+					if (viewsEl) viewsEl.textContent = "views unavailable";
 				},
 			);
 
