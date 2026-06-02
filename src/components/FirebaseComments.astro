@@ -72,6 +72,15 @@ const { postId, path, title } = Astro.props;
 		});
 	}
 
+	function stringValue(value: unknown): string {
+		return typeof value === "string" ? value.trim() : "";
+	}
+
+	function commentSourceLabel(source: string): string {
+		if (source === "github") return "Imported from GitHub";
+		return "Firebase";
+	}
+
 	async function ensurePostDocument(postRef: ReturnType<typeof doc>, root: HTMLElement) {
 		if (!db) return;
 		const snapshot = await getDoc(postRef);
@@ -108,12 +117,26 @@ const { postId, path, title } = Astro.props;
 		list.innerHTML = docs
 			.map((item) => {
 				const data = item.data();
-				const name = typeof data.name === "string" ? data.name : "Anonymous";
-				const message = typeof data.message === "string" ? data.message : "";
+				const name =
+					stringValue(data.authorName) || stringValue(data.name) || "Anonymous";
+				const message =
+					stringValue(data.body) || stringValue(data.message);
+				const avatarUrl = stringValue(data.authorAvatarUrl);
+				const source = stringValue(data.source) || "firebase";
+				const sourceId =
+					stringValue(data.sourceCommentId) || stringValue(data.id);
 				return `
-					<article class="rounded-lg bg-black/5 dark:bg-white/10 px-4 py-3">
-						<div class="font-medium text-90 mb-1">${escapeHtml(name)}</div>
-						<p class="text-75 whitespace-pre-wrap break-words">${escapeHtml(message)}</p>
+					<article class="rounded-lg bg-black/5 dark:bg-white/10 px-4 py-3" data-comment-source="${escapeHtml(source)}" data-source-comment-id="${escapeHtml(sourceId)}">
+						<div class="flex items-start gap-3">
+							${avatarUrl ? `<img src="${escapeHtml(avatarUrl)}" alt="" class="w-9 h-9 rounded-full object-cover shrink-0 bg-black/10 dark:bg-white/10" loading="lazy" />` : ""}
+							<div class="min-w-0 flex-1">
+								<div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+									<div class="font-medium text-90">${escapeHtml(name)}</div>
+									${source === "github" ? `<span class="text-[0.7rem] uppercase tracking-wide text-neutral-500 dark:text-neutral-400">${escapeHtml(commentSourceLabel(source))}</span>` : ""}
+								</div>
+								<p class="text-75 whitespace-pre-wrap break-words">${escapeHtml(message)}</p>
+							</div>
+						</div>
 					</article>
 				`;
 			})
@@ -173,10 +196,22 @@ const { postId, path, title } = Astro.props;
 
 			try {
 				await ensurePostDocument(postRef, root);
+				const commentId =
+					globalThis.crypto?.randomUUID?.() ||
+					`firebase-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 				await addDoc(commentsRef, {
+					id: commentId,
+					postSlug: postId,
 					name,
+					authorName: name,
+					authorAvatarUrl: "",
 					message,
+					body: message,
+					source: "firebase",
+					sourceCommentId: null,
+					importedAt: null,
 					createdAt: serverTimestamp(),
+					updatedAt: serverTimestamp(),
 				});
 				await updateDoc(postRef, {
 					commentsCount: increment(1),
