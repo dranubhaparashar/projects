@@ -84,6 +84,18 @@ service cloud.firestore {
       }
     }
 
+    match /projectPosts/{postId} {
+      allow read: if true;
+
+      match /comments/{commentId} {
+        allow read: if true;
+      }
+
+      match /reactionImports/{reactionId} {
+        allow read: if true;
+      }
+    }
+
     match /giscusArchive/{discussionId} {
       allow read, write: if false;
     }
