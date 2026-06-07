@@ -48,6 +48,7 @@ const { postId, path, title } = Astro.props;
 		collection,
 		doc,
 		getDoc,
+		getDocs,
 		increment,
 		onSnapshot,
 		orderBy,
@@ -78,6 +79,35 @@ const { postId, path, title } = Astro.props;
 		if (source === "giscus") return "Imported from Giscus";
 		if (source === "github") return "Imported from GitHub";
 		return "Firebase";
+	}
+
+	function mergeCommentDocs(
+		currentDocs: Array<{ data: () => Record<string, unknown> }>,
+		legacyDocs: Array<{ data: () => Record<string, unknown> }>,
+	) {
+		const merged = new Map<string, { data: () => Record<string, unknown> }>();
+
+		for (const item of currentDocs) {
+			const data = item.data();
+			const key = stringValue(data.sourceCommentId) || stringValue(data.id);
+			if (key) merged.set(key, item);
+		}
+
+		for (const item of legacyDocs) {
+			const data = item.data();
+			const key = stringValue(data.sourceCommentId) || stringValue(data.id);
+			if (key && !merged.has(key)) merged.set(key, item);
+		}
+
+		return Array.from(merged.values());
+	}
+
+	async function readLegacyComments(postId: string) {
+		if (!db) return [];
+
+		const legacyRef = collection(db, "projectPosts", postId, "comments");
+		const snapshot = await getDocs(query(legacyRef, orderBy("createdAt", "asc")));
+		return snapshot.docs;
 	}
 
 	async function ensurePostStatsDocument(statsRef: ReturnType<typeof doc>, root: HTMLElement) {
@@ -159,19 +189,23 @@ const { postId, path, title } = Astro.props;
 
 		try {
 			await ensurePostStatsDocument(statsRef, root);
+			const legacyDocs = await readLegacyComments(postId);
 
 			onSnapshot(
 				query(commentsRef, orderBy("createdAt", "asc")),
-				(snapshot) => renderComments(root, snapshot.docs),
+				(snapshot) => {
+					renderComments(root, mergeCommentDocs(snapshot.docs, legacyDocs));
+				},
 				(error) => {
 					console.warn("Firebase comments read failed", error);
-					renderComments(root, []);
+					renderComments(root, legacyDocs);
 					if (status) status.textContent = "";
 				},
 			);
 		} catch (error) {
 			console.warn("Firebase comments unavailable", error);
-			renderComments(root, []);
+			const legacyDocs = await readLegacyComments(postId);
+			renderComments(root, legacyDocs);
 			if (status) status.textContent = "";
 		}
 

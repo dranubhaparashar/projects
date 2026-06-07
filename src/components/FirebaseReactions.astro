@@ -58,7 +58,17 @@ const reactionCatalog = [
 
 <script>
 	import { db } from "../lib/firebase";
-	import { doc, getDoc, increment, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+	import {
+		collection,
+		doc,
+		getDoc,
+		getDocs,
+		increment,
+		onSnapshot,
+		serverTimestamp,
+		setDoc,
+		updateDoc,
+	} from "firebase/firestore";
 
 	const reactionCatalog = [
 		{ key: "thumbsUp", label: "Thumbs up" },
@@ -82,6 +92,36 @@ const reactionCatalog = [
 			if (count > 0) result[key] = count;
 		}
 		return result;
+	}
+
+	function isAllZero(counts: Record<string, unknown>): boolean {
+		return reactionCatalog.every((reaction) => numberValue(counts[reaction.key]) === 0);
+	}
+
+	async function readLegacyReactions(postId: string): Promise<Record<string, number> | null> {
+		if (!db) return null;
+		const snapshot = await getDocs(collection(db, "projectPosts", postId, "reactionImports"));
+		if (snapshot.empty) return null;
+
+		const legacyCounts: Record<string, number> = {
+			thumbsUp: 0,
+			heart: 0,
+			rocket: 0,
+			hooray: 0,
+			laugh: 0,
+			confused: 0,
+			eyes: 0,
+		};
+
+		for (const docSnapshot of snapshot.docs) {
+			const data = docSnapshot.data() as Record<string, unknown>;
+			const key = String(data.reactionKey || "").trim();
+			if (key in legacyCounts) {
+				legacyCounts[key as keyof typeof legacyCounts] += numberValue(data.count);
+			}
+		}
+
+		return legacyCounts;
 	}
 
 	function plural(value: number, singular: string, pluralLabel: string): string {
@@ -155,7 +195,11 @@ const reactionCatalog = [
 		);
 	}
 
-	function renderReactionState(root: HTMLElement, data: Record<string, unknown>) {
+	function renderReactionState(
+		root: HTMLElement,
+		data: Record<string, unknown>,
+		legacyReactions: Record<string, number> | null = null,
+	) {
 		const importedReactions = mapValue(data.importedGiscusReactions);
 		const list = root.querySelector<HTMLElement>("[data-reaction-list]");
 		const totalEl = root.querySelector<HTMLElement>("[data-reaction-total]");
@@ -165,7 +209,10 @@ const reactionCatalog = [
 		let total = 0;
 
 		for (const reaction of reactionCatalog) {
-			const count = numberValue(importedReactions[reaction.key]) + numberValue(data[reaction.key]);
+			const count =
+				numberValue(importedReactions[reaction.key]) +
+				numberValue(data[reaction.key]) +
+				numberValue(legacyReactions?.[reaction.key]);
 			countsByKey.set(reaction.key, count);
 			total += count;
 		}
@@ -202,16 +249,28 @@ const reactionCatalog = [
 		try {
 			const reactionsRef = doc(db, "postReactions", postId);
 			const statsRef = doc(db, "postStats", postId);
+			const legacyReactions = await readLegacyReactions(postId);
 			await ensureReactionDocument(reactionsRef);
 			await ensureStatsDocument(statsRef, root);
 
 			onSnapshot(
 				reactionsRef,
 				(snapshot) => {
-					if (snapshot.exists()) renderReactionState(root, snapshot.data());
+					const data = snapshot.exists() ? snapshot.data() : null;
+					if (data && !isAllZero(data)) {
+						renderReactionState(root, data, legacyReactions);
+						return;
+					}
+
+					if (legacyReactions) {
+						renderReactionState(root, { importedGiscusReactions: legacyReactions });
+					}
 				},
 				(error) => {
 					console.warn("Firebase reactions read failed", error);
+					if (legacyReactions) {
+						renderReactionState(root, { importedGiscusReactions: legacyReactions });
+					}
 				},
 			);
 

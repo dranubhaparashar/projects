@@ -170,11 +170,32 @@ const {
 		}
 	}
 
-	async function renderStats(root: HTMLElement, data: Record<string, unknown>) {
-		const importedLegacyViews = numberValue(data.importedLegacyViews);
+	async function readLegacyStats(postId: string) {
+		if (!db) return null;
+		const snapshot = await getDoc(doc(db, "projectPosts", postId));
+		return snapshot.exists() ? snapshot.data() : null;
+	}
+
+	function renderStats(
+		root: HTMLElement,
+		data: Record<string, unknown>,
+		legacyData: Record<string, unknown> | null = null,
+	) {
+		const importedLegacyViews =
+			numberValue(data.importedLegacyViews) ||
+			numberValue(legacyData?.baseViews) ||
+			numberValue(legacyData?.views);
 		const firebaseViews = numberValue(data.views);
 		const totalViews = importedLegacyViews + firebaseViews;
-		const totalLikes = numberValue(data.importedGiscusLikes) + numberValue(data.likes);
+		const importedLikes =
+			numberValue(data.importedGiscusLikes) ||
+			numberValue(legacyData?.baseLikes) ||
+			numberValue(legacyData?.likes);
+		const totalLikes = importedLikes + numberValue(data.likes);
+		const importedComments =
+			numberValue(data.importedGiscusComments) ||
+			numberValue(legacyData?.commentsCount) ||
+			numberValue(legacyData?.comments);
 
 		const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
 		const likesEl = root.querySelector<HTMLElement>("[data-stat-likes]");
@@ -183,9 +204,11 @@ const {
 		if (viewsEl) viewsEl.textContent = plural(totalViews, "view", "views");
 		if (likesEl) likesEl.textContent = plural(totalLikes, "like", "likes");
 		if (commentsEl) {
-			const totalComments =
-				numberValue(data.importedGiscusComments) + numberValue(data.comments);
-			commentsEl.textContent = plural(totalComments, "comment", "comments");
+			commentsEl.textContent = plural(
+				importedComments + numberValue(data.comments),
+				"comment",
+				"comments",
+			);
 		}
 	}
 
@@ -263,6 +286,12 @@ const {
 		}
 
 		const postRef = doc(db, "postStats", postId);
+		const legacyData = await readLegacyStats(postId);
+		console.debug("[FirebasePostStats] resolved", {
+			postId,
+			legacyDocPath: `projectPosts/${postId}`,
+			legacyDocExists: Boolean(legacyData),
+		});
 
 		try {
 			await ensurePostDocument(postRef, root);
@@ -271,14 +300,19 @@ const {
 			onSnapshot(
 				postRef,
 				(snapshot) => {
-					if (snapshot.exists()) void renderStats(root, snapshot.data());
+					if (snapshot.exists()) renderStats(root, snapshot.data(), legacyData);
+					else if (legacyData) renderStats(root, legacyData, legacyData);
 					else showLikesFallback(root);
 				},
 				(error) => {
 					console.warn("Firebase stats read failed", error);
-					const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
-					if (viewsEl) viewsEl.textContent = "0 views";
-					showLikesFallback(root);
+					if (legacyData) {
+						renderStats(root, legacyData, legacyData);
+					} else {
+						const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
+						if (viewsEl) viewsEl.textContent = "0 views";
+						showLikesFallback(root);
+					}
 				},
 			);
 
