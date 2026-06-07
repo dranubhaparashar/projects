@@ -181,21 +181,15 @@ const {
 		data: Record<string, unknown>,
 		legacyData: Record<string, unknown> | null = null,
 	) {
-		const importedLegacyViews =
-			numberValue(data.importedLegacyViews) ||
-			numberValue(legacyData?.baseViews) ||
-			numberValue(legacyData?.views);
+		const importedLegacyViews = numberValue(data.importedLegacyViews);
+		const legacyViews = legacyData ? numberValue(legacyData.baseViews) || numberValue(legacyData.views) : 0;
 		const firebaseViews = numberValue(data.views);
-		const totalViews = importedLegacyViews + firebaseViews;
-		const importedLikes =
-			numberValue(data.importedGiscusLikes) ||
-			numberValue(legacyData?.baseLikes) ||
-			numberValue(legacyData?.likes);
-		const totalLikes = importedLikes + numberValue(data.likes);
-		const importedComments =
-			numberValue(data.importedGiscusComments) ||
-			numberValue(legacyData?.commentsCount) ||
-			numberValue(legacyData?.comments);
+		const totalViews = importedLegacyViews > 0 ? importedLegacyViews + firebaseViews : firebaseViews + legacyViews;
+		const importedLikes = numberValue(data.importedGiscusLikes);
+		const legacyLikes = legacyData ? numberValue(legacyData.baseLikes) || numberValue(legacyData.likes) : 0;
+		const totalLikes = importedLikes > 0 ? importedLikes + numberValue(data.likes) : numberValue(data.likes) + legacyLikes;
+		const importedComments = numberValue(data.importedGiscusComments);
+		const legacyComments = legacyData ? numberValue(legacyData.commentsCount) || numberValue(legacyData.comments) : 0;
 
 		const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
 		const likesEl = root.querySelector<HTMLElement>("[data-stat-likes]");
@@ -204,11 +198,8 @@ const {
 		if (viewsEl) viewsEl.textContent = plural(totalViews, "view", "views");
 		if (likesEl) likesEl.textContent = plural(totalLikes, "like", "likes");
 		if (commentsEl) {
-			commentsEl.textContent = plural(
-				importedComments + numberValue(data.comments),
-				"comment",
-				"comments",
-			);
+			const totalComments = importedComments > 0 ? importedComments + numberValue(data.comments) : numberValue(data.comments) + legacyComments;
+			commentsEl.textContent = plural(totalComments, "comment", "comments");
 		}
 	}
 
@@ -273,12 +264,6 @@ const {
 
 		const postId = root.dataset.normalizedPostId || root.dataset.postId || "";
 		if (!postId) return;
-		console.debug("[FirebasePostStats] init", {
-			firebaseReady: Boolean(db),
-			postId,
-			path: root.dataset.path || "",
-			docPath: `postStats/${postId}`,
-		});
 		if (!db) {
 			await showGoatCounterFallback(root);
 			showLikesFallback(root);
@@ -287,11 +272,6 @@ const {
 
 		const postRef = doc(db, "postStats", postId);
 		const legacyData = await readLegacyStats(postId);
-		console.debug("[FirebasePostStats] resolved", {
-			postId,
-			legacyDocPath: `projectPosts/${postId}`,
-			legacyDocExists: Boolean(legacyData),
-		});
 
 		try {
 			await ensurePostDocument(postRef, root);

@@ -94,10 +94,6 @@ const reactionCatalog = [
 		return result;
 	}
 
-	function isAllZero(counts: Record<string, unknown>): boolean {
-		return reactionCatalog.every((reaction) => numberValue(counts[reaction.key]) === 0);
-	}
-
 	async function readLegacyReactions(postId: string): Promise<Record<string, number> | null> {
 		if (!db) return null;
 		const snapshot = await getDocs(collection(db, "projectPosts", postId, "reactionImports"));
@@ -201,6 +197,7 @@ const reactionCatalog = [
 		legacyReactions: Record<string, number> | null = null,
 	) {
 		const importedReactions = mapValue(data.importedGiscusReactions);
+		const hasImportedReactions = Object.keys(importedReactions).length > 0;
 		const list = root.querySelector<HTMLElement>("[data-reaction-list]");
 		const totalEl = root.querySelector<HTMLElement>("[data-reaction-total]");
 		if (!list) return;
@@ -209,10 +206,9 @@ const reactionCatalog = [
 		let total = 0;
 
 		for (const reaction of reactionCatalog) {
-			const count =
-				numberValue(importedReactions[reaction.key]) +
-				numberValue(data[reaction.key]) +
-				numberValue(legacyReactions?.[reaction.key]);
+			const importedCount = numberValue(importedReactions[reaction.key]) + numberValue(data[reaction.key]);
+			const legacyCount = numberValue(legacyReactions?.[reaction.key]);
+			const count = hasImportedReactions ? importedCount : importedCount + legacyCount;
 			countsByKey.set(reaction.key, count);
 			total += count;
 		}
@@ -256,20 +252,13 @@ const reactionCatalog = [
 			onSnapshot(
 				reactionsRef,
 				(snapshot) => {
-					const data = snapshot.exists() ? snapshot.data() : null;
-					if (data && !isAllZero(data)) {
-						renderReactionState(root, data, legacyReactions);
-						return;
-					}
-
-					if (legacyReactions) {
-						renderReactionState(root, { importedGiscusReactions: legacyReactions });
-					}
+					const data = snapshot.exists() ? snapshot.data() : {};
+					renderReactionState(root, data, legacyReactions);
 				},
 				(error) => {
 					console.warn("Firebase reactions read failed", error);
 					if (legacyReactions) {
-						renderReactionState(root, { importedGiscusReactions: legacyReactions });
+						renderReactionState(root, {}, legacyReactions);
 					}
 				},
 			);
