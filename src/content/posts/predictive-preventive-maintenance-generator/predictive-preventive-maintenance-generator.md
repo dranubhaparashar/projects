@@ -5,6 +5,7 @@ description: A full-stack analytics and ML dashboard that measures PM effectiven
 image: ./cover.png
 tags: [AI, Predictive Maintenance, Machine Learning, Streamlit, Scikit-learn, Generator Reliability, MLOps, Hugging Face, Snowflake, Python]
 category: Industrial Project
+pdf: /downloads/predictive-preventive-maintenance-generator-project-details.pdf
 draft: false
 ---
 

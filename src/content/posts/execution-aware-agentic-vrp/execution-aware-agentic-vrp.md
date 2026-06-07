@@ -5,6 +5,7 @@ description: Production-grade Vehicle Routing Problem solver with 8 solver backe
 image: ./cover.png
 tags: [AI, VRP, Vehicle Routing, OR-Tools, PyVRP, Agentic AI, Gemini, Streamlit, Optimization, MLOps, Hugging Face]
 category: Industrial Project
+pdf: /downloads/execution-aware-agentic-vrp-project-details.pdf
 draft: false
 ---
 
