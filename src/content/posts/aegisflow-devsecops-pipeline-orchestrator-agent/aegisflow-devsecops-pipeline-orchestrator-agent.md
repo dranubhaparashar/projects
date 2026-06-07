@@ -2,7 +2,6 @@
 title: "AegisFlow: DevSecOps Pipeline Orchestrator Agent"
 published: 2026-05-31
 description: "An agentic DevSecOps cockpit for Azure Function and Python API repositories that validates CI/CD readiness, runs quality and security gates, explains failures, proposes human-approved fixes, and generates downloadable audit-ready evidence packs."
-image: ./cover.png
 tags: ["AI Agent", "DevSecOps", "CI/CD", "Azure DevOps", "Azure Functions", "Streamlit", "SonarQube", "Security", "MLOps", "Python", "Hugging Face", "Evidence Pack"]
 category: "Industrial Project"
 draft: false
