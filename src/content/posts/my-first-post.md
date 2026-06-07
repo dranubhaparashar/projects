@@ -216,35 +216,6 @@ This makes the project interesting not only as code, but as a protocol design ex
 
 ---
 
-## Suggested Demo Flow
-
-If you were presenting this project live, the walkthrough could be:
-
-1. explain why traditional MCP becomes limiting
-2. show the typed protocol direction
-3. walk through the repo files
-4. explain discovery and security
-5. show example code
-6. demonstrate a live registration or lookup flow
-
----
-
-## Video Section
-
-You can embed a demo video directly inside the post.
-
-Replace `YOUR_VIDEO_ID` with your actual YouTube video id:
-
-```html
-<iframe width="100%" height="420"
-src="https://www.youtube.com/embed/YOUR_VIDEO_ID"
-title="MCP 2.0 Demo"
-frameborder="0"
-allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-allowfullscreen>
-</iframe>
-```
-
 ## References
 
 - Repository: `anubhaparashar/MCP2.0`
