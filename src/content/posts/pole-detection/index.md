@@ -5,6 +5,7 @@ description: AI-powered pole validation using GIS, imagery, OCR, and multi-syste
 image: ./cover.png
 tags: [AI, Computer Vision, YOLO, GIS, OCR, Pole Validation, Infrastructure]
 category: Industrial Project
+pdf: /downloads/ai-powered-pole-validation-project-details.pdf
 draft: false
 ---
 

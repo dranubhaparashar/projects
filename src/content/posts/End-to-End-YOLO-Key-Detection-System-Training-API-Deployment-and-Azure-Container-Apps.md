@@ -4,6 +4,7 @@ published: 2026-04-16
 description: End-to-end key detection using YOLO, FastAPI, Docker, Hugging Face Spaces, and Azure Container Apps for production-ready inference deployment.
 tags: [AI, Computer Vision, YOLO, FastAPI, Docker, Azure, Azure Container Apps, Hugging Face, MLOps]
 category: Industrial Project
+pdf: /downloads/end-to-end-yolo-key-detection-system-project-details.pdf
 draft: false
 ---
 

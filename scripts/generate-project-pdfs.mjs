@@ -14,6 +14,30 @@ const projects = [
 		output: "aegisflow-project-details.pdf",
 	},
 	{
+		slug: "End-to-End-YOLO-Key-Detection-System-Training-API-Deployment-and-Azure-Container-Apps",
+		output: "end-to-end-yolo-key-detection-system-project-details.pdf",
+	},
+	{
+		slug: "pole-detection",
+		output: "ai-powered-pole-validation-project-details.pdf",
+	},
+	{
+		slug: "dacr-q",
+		output: "dacr-q-project-details.pdf",
+	},
+	{
+		slug: "Vehicle-Scale-LLMs",
+		output: "vehicle-scale-llms-project-details.pdf",
+	},
+	{
+		slug: "LLM-Agents",
+		output: "autonomous-microservice-composition-mcp-control-plane-project-details.pdf",
+	},
+	{
+		slug: "my-first-post",
+		output: "mcp-2-full-feature-showcase-post-project-details.pdf",
+	},
+	{
 		slug: "predictive-preventive-maintenance-generator",
 		output: "predictive-preventive-maintenance-generator-project-details.pdf",
 	},
@@ -99,7 +123,13 @@ async function findPostFile(slug) {
 	return files.find((file) => {
 		const relative = path.relative(postsRoot, file).replace(/\\/g, "/").toLowerCase();
 		const base = path.basename(file, path.extname(file)).toLowerCase();
-		return relative.includes(`/${normalizedSlug}/`) || base === normalizedSlug;
+		return (
+			relative === `${normalizedSlug}.md` ||
+			relative === `${normalizedSlug}.mdx` ||
+			relative.startsWith(`${normalizedSlug}/`) ||
+			relative.includes(`/${normalizedSlug}/`) ||
+			base === normalizedSlug
+		);
 	});
 }
 

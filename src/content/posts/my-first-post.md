@@ -4,6 +4,7 @@ published: 2025-06-03
 description: "A polished MCP 2.0 post that uses normal markdown, guide-style sections, expressive code blocks, GitHub repo cards, tables, checklists, and video embedding."
 tags: [MCP, Protocols, AI Infrastructure, gRPC, Protobuf, Agents, Demo]
 category: Self Project
+pdf: /downloads/mcp-2-full-feature-showcase-post-project-details.pdf
 draft: false
 
 ---

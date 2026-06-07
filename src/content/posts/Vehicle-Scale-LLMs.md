@@ -4,6 +4,7 @@ published: 2025-08-22
 description: A project walkthrough of DAC+Q4-ITS, a minimal reproducible starter for INT4 quantization and low-rank adapter compensation for vehicle-scale LLM inference.
 tags: [LLM Inference, INT4 Quantization, Low-Rank Adapters, Edge AI, Automotive AI, PyTorch]
 category: Self Project
+pdf: /downloads/vehicle-scale-llms-project-details.pdf
 draft: false
 ---
 
