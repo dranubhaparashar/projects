@@ -1,0 +1,702 @@
+---
+import { Icon } from "astro-icon/components";
+import path from "node:path";
+import BackToTop from "../components/control/BackToTop.astro";
+import FirebasePostStats from "../components/FirebasePostStats.astro";
+import Footer from "../components/Footer.astro";
+import ImageWrapper from "../components/misc/ImageWrapper.astro";
+import Navbar from "../components/Navbar.astro";
+import { siteConfig } from "../config";
+import Layout from "../layouts/Layout.astro";
+import { getSortedPosts } from "../utils/content-utils";
+import { formatDateToYYYYMMDD } from "../utils/date-utils";
+import { normalizePostId } from "../utils/post-id";
+import { getDir, getPostUrlBySlug } from "../utils/url-utils";
+
+const allPosts = await getSortedPosts();
+const projects = allPosts.filter((entry) =>
+	(entry.data.category || "").toLowerCase().includes("project"),
+);
+
+const priorityTitles = [
+	"AegisFlow: DevSecOps Pipeline Orchestrator Agent",
+	"Predictive & Preventive Maintenance for Generator Reliability",
+	"Execution-Aware Agentic VRP Solver and Benchmark Studio",
+];
+
+projects.sort((a, b) => {
+	const aIndex = priorityTitles.indexOf(a.data.title);
+	const bIndex = priorityTitles.indexOf(b.data.title);
+	if (aIndex !== -1 || bIndex !== -1) {
+		return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
+	}
+	return new Date(b.data.published).getTime() - new Date(a.data.published).getTime();
+});
+
+const visibleTagCount = 6;
+---
+
+<Layout
+	title="Projects"
+	description="AI, MLOps, DevSecOps, Computer Vision, Optimization, and Research Engineering projects by Anubha Parashar."
+>
+	<div class="projects-page">
+		<header class="projects-nav-wrap">
+			<div class="projects-nav-inner">
+				<Navbar />
+			</div>
+		</header>
+
+		<section class="projects-hero" aria-labelledby="projects-title">
+			<ImageWrapper
+				src={siteConfig.banner.src}
+				alt="Mountain landscape representing ambition, journey, and research growth"
+				class="projects-hero-image"
+				imgClass="projects-hero-img"
+				position={siteConfig.banner.position || "center"}
+				overlay={false}
+			/>
+			<div class="projects-hero-overlay"></div>
+			<div class="projects-hero-content onload-animation">
+				<p class="projects-hero-kicker">Research Engineering Portfolio</p>
+				<h1 id="projects-title">Projects</h1>
+				<p class="projects-hero-subtitle">
+					AI, MLOps, DevSecOps, Computer Vision, Optimization, and Research Engineering
+				</p>
+			</div>
+		</section>
+
+		<section class="projects-technical-section" aria-label="Project showcase">
+			<div class="tech-mesh tech-mesh-one"></div>
+			<div class="tech-mesh tech-mesh-two"></div>
+
+			<div class="projects-section-inner">
+				<div class="projects-section-heading onload-animation">
+					<p>Selected Systems</p>
+					<h2>Applied AI systems with production-oriented engineering depth.</h2>
+				</div>
+
+				<div class="projects-grid">
+					{projects.map((entry, index) => {
+						const postUrl = getPostUrlBySlug(entry.slug);
+						const coverBasePath = path.join("content/posts/", getDir(entry.id));
+						const tags = entry.data.tags || [];
+						const visibleTags = tags.slice(0, visibleTagCount);
+						const hiddenTagCount = Math.max(tags.length - visibleTags.length, 0);
+						const normalizedPostId = normalizePostId(entry.slug);
+						const cardKey = `${entry.data.title} ${entry.slug}`.toLowerCase();
+						const useContainImage =
+							cardKey.includes("vrp") ||
+							cardKey.includes("aegisflow") ||
+							cardKey.includes("predictive");
+						const pdf = entry.data.pdf;
+
+						return (
+							<article
+								class:list={[
+									"project-card onload-animation",
+									cardKey.includes("vrp") ? "project-card-vrp" : "",
+									cardKey.includes("aegisflow") ? "project-card-aegis" : "",
+									cardKey.includes("predictive") ? "project-card-maintenance" : "",
+								]}
+								style={`animation-delay: calc(var(--content-delay) + ${index * 70}ms);`}
+							>
+								<a href={postUrl} class="project-card-image" aria-label={entry.data.title}>
+									{entry.data.image ? (
+										<ImageWrapper
+											src={entry.data.image}
+											basePath={coverBasePath}
+											alt={`Cover image for ${entry.data.title}`}
+											class="project-cover-frame"
+											imgClass="project-cover-img"
+											fit={useContainImage ? "contain" : "cover"}
+											overlay={false}
+										/>
+									) : (
+										<div class="project-cover-placeholder">
+											<Icon name="material-symbols:account-tree-outline-rounded" />
+										</div>
+									)}
+								</a>
+
+								<div class="project-card-content">
+									<div class="project-card-meta">
+										<span>
+											<Icon name="material-symbols:calendar-today-outline-rounded" />
+											{formatDateToYYYYMMDD(entry.data.published)}
+										</span>
+										<span>
+											<Icon name="material-symbols:category-outline-rounded" />
+											{entry.data.category || "Project"}
+										</span>
+									</div>
+
+									<h3>
+										<a href={postUrl}>{entry.data.title}</a>
+									</h3>
+
+									<p class="project-card-description">
+										{entry.data.description}
+									</p>
+
+									<div class="project-card-tags" aria-label="Project tags">
+										{visibleTags.map((tag) => <span>{tag}</span>)}
+										{hiddenTagCount > 0 && <span class="project-tag-more">+{hiddenTagCount} more</span>}
+									</div>
+
+									<div class="project-card-stats">
+										<FirebasePostStats
+											postId={normalizedPostId}
+											path={postUrl}
+											title={entry.data.title}
+											incrementViews={false}
+											showLike={true}
+											showCommentsCount={true}
+										/>
+									</div>
+
+									<div class="project-card-footer">
+										<a href={postUrl} class="project-view-link">
+											View Project
+											<Icon name="material-symbols:arrow-forward-rounded" />
+										</a>
+										{pdf && (
+											<a href={pdf} class="project-pdf-link">
+												<Icon name="material-symbols:download-rounded" />
+												Download PDF
+											</a>
+										)}
+									</div>
+								</div>
+							</article>
+						);
+					})}
+				</div>
+			</div>
+		</section>
+
+		<div class="projects-footer">
+			<Footer />
+		</div>
+		<BackToTop />
+	</div>
+</Layout>
+
+<style>
+	@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&family=Sora:wght@600;700;800&display=swap");
+
+	.projects-page {
+		min-height: 100vh;
+		background: #030712;
+		color: #f8fafc;
+		font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+	}
+
+	.projects-nav-wrap {
+		position: fixed;
+		inset: 0 0 auto;
+		z-index: 60;
+		pointer-events: none;
+	}
+
+	.projects-nav-inner {
+		max-width: var(--page-width);
+		margin: 0 auto;
+		padding: 0 1rem;
+		pointer-events: auto;
+	}
+
+	.projects-hero {
+		position: relative;
+		min-height: 52vh;
+		display: flex;
+		align-items: flex-end;
+		overflow: hidden;
+		isolation: isolate;
+	}
+
+	.projects-hero-image,
+	.projects-hero-image :global(picture),
+	.projects-hero-image :global(img) {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+	}
+
+	.projects-hero-img {
+		filter: brightness(1.08) contrast(1.04) saturate(1.05);
+		object-fit: cover;
+		object-position: 42% center;
+		transform: scale(1.03);
+	}
+
+	.projects-hero-overlay {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		background:
+			linear-gradient(180deg, rgba(2, 6, 23, 0.42) 0%, rgba(3, 7, 18, 0.66) 58%, #030712 100%),
+			linear-gradient(115deg, rgba(3, 7, 18, 0.78) 0%, rgba(15, 23, 42, 0.58) 42%, rgba(37, 99, 235, 0.28) 100%);
+	}
+
+	.projects-hero-content {
+		position: relative;
+		z-index: 2;
+		width: min(100%, var(--page-width));
+		margin: 0 auto;
+		padding: 8.5rem 1rem 5rem;
+	}
+
+	.projects-hero-kicker,
+	.projects-section-heading p {
+		margin: 0 0 0.9rem;
+		font-family: "JetBrains Mono", ui-monospace, monospace;
+		font-size: 0.78rem;
+		font-weight: 700;
+		letter-spacing: 0;
+		text-transform: uppercase;
+		color: #67e8f9;
+	}
+
+	.projects-hero h1 {
+		margin: 0;
+		font-family: "Sora", "Inter", ui-sans-serif, system-ui, sans-serif;
+		font-size: clamp(3.8rem, 9vw, 7.4rem);
+		line-height: 0.9;
+		letter-spacing: 0;
+		color: #ffffff;
+		text-shadow: 0 26px 70px rgba(0, 0, 0, 0.55);
+	}
+
+	.projects-hero-subtitle {
+		max-width: 58rem;
+		margin: 1.35rem 0 0;
+		font-size: clamp(1.05rem, 2.2vw, 1.45rem);
+		line-height: 1.55;
+		font-weight: 600;
+		color: rgba(226, 232, 240, 0.94);
+	}
+
+	.projects-technical-section {
+		position: relative;
+		overflow: hidden;
+		background:
+			radial-gradient(circle at 12% 12%, rgba(56, 189, 248, 0.22), transparent 30%),
+			radial-gradient(circle at 86% 18%, rgba(124, 58, 237, 0.24), transparent 32%),
+			radial-gradient(circle at 50% 90%, rgba(37, 99, 235, 0.18), transparent 36%),
+			linear-gradient(135deg, #030712 0%, #07111f 42%, #0f172a 100%);
+	}
+
+	.projects-technical-section::before,
+	.projects-technical-section::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+
+	.projects-technical-section::before {
+		background-image:
+			linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+			linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px);
+		background-size: 44px 44px;
+		animation: projectGridMove 22s linear infinite;
+		opacity: 0.65;
+	}
+
+	.projects-technical-section::after {
+		background-image:
+			linear-gradient(120deg, transparent 0 34px, rgba(125, 211, 252, 0.08) 35px, transparent 36px),
+			radial-gradient(circle at 24% 34%, rgba(56, 189, 248, 0.14), transparent 18rem),
+			radial-gradient(circle at 78% 72%, rgba(124, 58, 237, 0.18), transparent 20rem);
+		background-size: 88px 88px, auto, auto;
+		opacity: 0.75;
+	}
+
+	.tech-mesh {
+		position: absolute;
+		border-radius: 999px;
+		filter: blur(34px);
+		pointer-events: none;
+		mix-blend-mode: screen;
+	}
+
+	.tech-mesh-one {
+		top: 8rem;
+		left: -5rem;
+		width: 18rem;
+		height: 18rem;
+		background: rgba(56, 189, 248, 0.28);
+		animation: projectGlowFloat 15s ease-in-out infinite alternate;
+	}
+
+	.tech-mesh-two {
+		right: -6rem;
+		bottom: 10rem;
+		width: 22rem;
+		height: 22rem;
+		background: rgba(124, 58, 237, 0.24);
+		animation: projectGlowFloat 18s ease-in-out infinite alternate-reverse;
+	}
+
+	.projects-section-inner {
+		position: relative;
+		z-index: 1;
+		width: min(100%, var(--page-width));
+		margin: 0 auto;
+		padding: 4.7rem 1rem 5.5rem;
+	}
+
+	.projects-section-heading {
+		max-width: 52rem;
+		margin-bottom: 2rem;
+	}
+
+	.projects-section-heading h2 {
+		margin: 0;
+		font-family: "Sora", "Inter", ui-sans-serif, system-ui, sans-serif;
+		font-size: clamp(1.75rem, 4vw, 3.15rem);
+		line-height: 1.08;
+		letter-spacing: 0;
+		color: #f8fafc;
+	}
+
+	.projects-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 1.35rem;
+		align-items: stretch;
+	}
+
+	.project-card {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		overflow: hidden;
+		border: 1px solid rgba(148, 163, 184, 0.25);
+		border-radius: 24px;
+		background: rgba(255, 255, 255, 0.96);
+		box-shadow: 0 28px 70px rgba(2, 6, 23, 0.34);
+		color: #0f172a;
+		backdrop-filter: blur(18px);
+	}
+
+	.project-card-image {
+		position: relative;
+		display: block;
+		width: 100%;
+		height: 230px;
+		overflow: hidden;
+		background:
+			radial-gradient(circle at 20% 18%, rgba(56, 189, 248, 0.18), transparent 30%),
+			#020617;
+	}
+
+	.project-cover-frame,
+	.project-cover-frame :global(picture),
+	.project-cover-frame :global(img) {
+		width: 100%;
+		height: 100%;
+	}
+
+	.project-cover-img {
+		background: #020617;
+		transition: transform 500ms ease;
+	}
+
+	.project-card:hover .project-cover-img {
+		transform: scale(1.035);
+	}
+
+	.project-card-vrp .project-cover-img,
+	.project-card-aegis .project-cover-img,
+	.project-card-maintenance .project-cover-img {
+		padding: 0.75rem;
+		object-position: center;
+	}
+
+	.project-cover-placeholder {
+		display: flex;
+		width: 100%;
+		height: 100%;
+		align-items: center;
+		justify-content: center;
+		color: rgba(125, 211, 252, 0.9);
+		font-size: 4rem;
+	}
+
+	.project-card-content {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		padding: 22px;
+	}
+
+	.project-card-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem 0.9rem;
+		margin-bottom: 0.9rem;
+		font-family: "JetBrains Mono", ui-monospace, monospace;
+		font-size: 0.74rem;
+		font-weight: 700;
+		line-height: 1.25;
+		color: #475569;
+	}
+
+	.project-card-meta span,
+	.project-card-stats :global(.firebase-post-stats > span),
+	.project-card-stats :global(.firebase-post-stats button) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+
+	.project-card-meta :global(svg),
+	.project-card-stats :global(svg) {
+		width: 1rem;
+		height: 1rem;
+		color: #2563eb;
+	}
+
+	.project-card h3 {
+		margin: 0;
+		font-family: "Sora", "Inter", ui-sans-serif, system-ui, sans-serif;
+		font-size: 1.35rem;
+		line-height: 1.18;
+		letter-spacing: 0;
+		color: #020617;
+	}
+
+	.project-card h3 a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.project-card h3 a:hover {
+		color: #2563eb;
+	}
+
+	.project-card-description {
+		display: -webkit-box;
+		min-height: 4.9rem;
+		margin: 0.9rem 0 1rem;
+		overflow: hidden;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		color: #475569;
+		font-size: 0.94rem;
+		line-height: 1.55;
+	}
+
+	.project-card-tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		max-height: 64px;
+		margin-bottom: 1rem;
+		overflow: hidden;
+		font-family: "JetBrains Mono", ui-monospace, monospace;
+	}
+
+	.project-card-tags span {
+		max-width: 100%;
+		overflow: hidden;
+		border: 1px solid rgba(37, 99, 235, 0.17);
+		border-radius: 999px;
+		background: rgba(37, 99, 235, 0.07);
+		color: #1d4ed8;
+		font-size: 0.7rem;
+		font-weight: 700;
+		line-height: 1.15;
+		padding: 0.42rem 0.62rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.project-card-tags .project-tag-more {
+		border-color: rgba(124, 58, 237, 0.22);
+		background: rgba(124, 58, 237, 0.08);
+		color: #6d28d9;
+	}
+
+	.project-card-stats {
+		margin-top: auto;
+		margin-bottom: 1rem;
+		font-family: "JetBrains Mono", ui-monospace, monospace;
+		font-size: 0.72rem;
+		color: #64748b;
+	}
+
+	.project-card-stats :global(.firebase-post-stats) {
+		gap: 0.7rem;
+	}
+
+	.project-card-stats :global(.meta-icon) {
+		width: auto;
+		height: auto;
+		margin: 0;
+		background: transparent;
+		color: #2563eb;
+	}
+
+	.project-card-stats :global(.text-50) {
+		color: #64748b;
+		font-size: 0.72rem;
+	}
+
+	.project-card-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding-top: 1rem;
+		border-top: 1px solid rgba(148, 163, 184, 0.22);
+	}
+
+	.project-view-link,
+	.project-pdf-link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.45rem;
+		border-radius: 999px;
+		font-weight: 800;
+		text-decoration: none;
+		white-space: nowrap;
+	}
+
+	.project-view-link {
+		min-height: 2.55rem;
+		padding: 0.72rem 1rem;
+		background: #020617;
+		color: #ffffff;
+		box-shadow: 0 12px 28px rgba(2, 6, 23, 0.2);
+	}
+
+	.project-view-link:hover {
+		background: #1d4ed8;
+	}
+
+	.project-pdf-link {
+		min-height: 2.55rem;
+		padding: 0.7rem 0.9rem;
+		border: 1px solid rgba(37, 99, 235, 0.18);
+		color: #1d4ed8;
+	}
+
+	.project-view-link :global(svg),
+	.project-pdf-link :global(svg) {
+		width: 1.15rem;
+		height: 1.15rem;
+	}
+
+	.projects-footer {
+		background: #030712;
+	}
+
+	.projects-footer :global(.footer) {
+		margin: 0;
+	}
+
+	@keyframes projectGridMove {
+		from {
+			background-position: 0 0;
+		}
+		to {
+			background-position: 44px 44px;
+		}
+	}
+
+	@keyframes projectGlowFloat {
+		from {
+			transform: translate3d(-0.8rem, 0.6rem, 0) scale(1);
+			opacity: 0.72;
+		}
+		to {
+			transform: translate3d(1.1rem, -0.9rem, 0) scale(1.08);
+			opacity: 1;
+		}
+	}
+
+	@media (max-width: 1100px) {
+		.projects-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
+	@media (max-width: 720px) {
+		.projects-nav-inner {
+			padding: 0;
+		}
+
+		.projects-hero {
+			min-height: 58vh;
+		}
+
+		.projects-hero-img {
+			filter: brightness(1.22) contrast(1.06) saturate(1.08);
+			object-position: 22% center;
+		}
+
+		.projects-hero-overlay {
+			background:
+				linear-gradient(180deg, rgba(2, 6, 23, 0.2) 0%, rgba(3, 7, 18, 0.48) 48%, #030712 100%),
+				linear-gradient(115deg, rgba(3, 7, 18, 0.56) 0%, rgba(15, 23, 42, 0.44) 44%, rgba(37, 99, 235, 0.2) 100%);
+		}
+
+		.projects-hero-content {
+			padding: 7.5rem 1rem 3.2rem;
+		}
+
+		.projects-hero h1 {
+			font-size: clamp(3.2rem, 17vw, 5.2rem);
+		}
+
+		.projects-section-inner {
+			padding: 3.5rem 1rem 4rem;
+		}
+
+		.projects-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.project-card {
+			border-radius: 20px;
+		}
+
+		.project-card-image {
+			height: 220px;
+		}
+
+		.project-card-content {
+			padding: 19px;
+		}
+
+		.project-card-description {
+			min-height: 0;
+		}
+	}
+
+	@media (max-width: 430px) {
+		.project-card-footer {
+			align-items: stretch;
+			flex-direction: column;
+		}
+
+		.project-view-link,
+		.project-pdf-link {
+			width: 100%;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.projects-technical-section::before,
+		.tech-mesh,
+		.project-cover-img {
+			animation: none;
+			transition: none;
+		}
+	}
+</style>

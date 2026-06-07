@@ -57,8 +57,6 @@ const { postId, path, title } = Astro.props;
 		updateDoc,
 	} from "firebase/firestore";
 
-	const collectionName = "projectPosts";
-
 	function escapeHtml(value: string): string {
 		return value.replace(/[&<>"']/g, (char) => {
 			const entities: Record<string, string> = {
@@ -77,27 +75,27 @@ const { postId, path, title } = Astro.props;
 	}
 
 	function commentSourceLabel(source: string): string {
+		if (source === "giscus") return "Imported from Giscus";
 		if (source === "github") return "Imported from GitHub";
 		return "Firebase";
 	}
 
-	async function ensurePostDocument(postRef: ReturnType<typeof doc>, root: HTMLElement) {
+	async function ensurePostStatsDocument(statsRef: ReturnType<typeof doc>, root: HTMLElement) {
 		if (!db) return;
-		const snapshot = await getDoc(postRef);
+		const snapshot = await getDoc(statsRef);
 		if (snapshot.exists()) return;
 
 		await setDoc(
-			postRef,
+			statsRef,
 			{
 				title: root.dataset.title || "",
 				path: root.dataset.path || "",
 				slug: root.dataset.postId || "",
-				baseViews: 0,
 				views: 0,
-				baseLikes: 0,
 				likes: 0,
-				baseCommentsCount: 0,
-				commentsCount: 0,
+				comments: 0,
+				importedGiscusLikes: 0,
+				importedGiscusComments: 0,
 				createdAt: serverTimestamp(),
 				updatedAt: serverTimestamp(),
 			},
@@ -132,7 +130,7 @@ const { postId, path, title } = Astro.props;
 							<div class="min-w-0 flex-1">
 								<div class="flex flex-wrap items-center justify-between gap-2 mb-1">
 									<div class="font-medium text-90">${escapeHtml(name)}</div>
-									${source === "github" ? `<span class="text-[0.7rem] uppercase tracking-wide text-neutral-500 dark:text-neutral-400">${escapeHtml(commentSourceLabel(source))}</span>` : ""}
+									${source === "giscus" || source === "github" ? `<span class="text-[0.7rem] uppercase tracking-wide text-neutral-500 dark:text-neutral-400">${escapeHtml(commentSourceLabel(source))}</span>` : ""}
 								</div>
 								<p class="text-75 whitespace-pre-wrap break-words">${escapeHtml(message)}</p>
 							</div>
@@ -151,27 +149,29 @@ const { postId, path, title } = Astro.props;
 		if (!postId) return;
 		if (!db) return;
 
-		const postRef = doc(db, collectionName, postId);
-		const commentsRef = collection(postRef, "comments");
+		const statsRef = doc(db, "postStats", postId);
+		const commentsRef = collection(db, "postComments", postId, "comments");
 		const status = root.querySelector<HTMLElement>("[data-comment-status]");
 		const form = root.querySelector<HTMLFormElement>("[data-comment-form]");
 		const nameInput = root.querySelector<HTMLInputElement>("[data-comment-name]");
 		const messageInput = root.querySelector<HTMLTextAreaElement>("[data-comment-message]");
 
 		try {
-			await ensurePostDocument(postRef, root);
+			await ensurePostStatsDocument(statsRef, root);
 
 			onSnapshot(
 				query(commentsRef, orderBy("createdAt", "asc")),
 				(snapshot) => renderComments(root, snapshot.docs),
 				(error) => {
 					console.warn("Firebase comments read failed", error);
-					if (status) status.textContent = "Comments unavailable.";
+					renderComments(root, []);
+					if (status) status.textContent = "";
 				},
 			);
 		} catch (error) {
 			console.warn("Firebase comments unavailable", error);
-			if (status) status.textContent = "Comments unavailable.";
+			renderComments(root, []);
+			if (status) status.textContent = "";
 		}
 
 		form?.addEventListener("submit", async (event) => {
@@ -195,7 +195,7 @@ const { postId, path, title } = Astro.props;
 			if (status) status.textContent = "";
 
 			try {
-				await ensurePostDocument(postRef, root);
+				await ensurePostStatsDocument(statsRef, root);
 				const commentId =
 					globalThis.crypto?.randomUUID?.() ||
 					`firebase-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -213,8 +213,8 @@ const { postId, path, title } = Astro.props;
 					createdAt: serverTimestamp(),
 					updatedAt: serverTimestamp(),
 				});
-				await updateDoc(postRef, {
-					commentsCount: increment(1),
+				await updateDoc(statsRef, {
+					comments: increment(1),
 					updatedAt: serverTimestamp(),
 				});
 

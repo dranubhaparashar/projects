@@ -78,7 +78,6 @@ const {
 		updateDoc,
 	} from "firebase/firestore";
 
-	const collectionName = "projectPosts";
 	const goatCounterBaseUrl = "https://anubhaparashar.goatcounter.com/counter/";
 
 	function numberValue(value: unknown): number {
@@ -157,14 +156,11 @@ const {
 					title: root.dataset.title || "",
 					path: root.dataset.path || "",
 					slug: root.dataset.normalizedPostId || root.dataset.postId || "",
-					baseViews: 0,
 					views: 0,
-					baseLikes: 0,
 					likes: 0,
-					baseReactions: {},
-					reactions: {},
-					baseCommentsCount: 0,
-					commentsCount: 0,
+					comments: 0,
+					importedGiscusLikes: 0,
+					importedGiscusComments: 0,
 					createdAt: serverTimestamp(),
 					updatedAt: serverTimestamp(),
 				},
@@ -174,12 +170,9 @@ const {
 	}
 
 	async function renderStats(root: HTMLElement, data: Record<string, unknown>) {
-		const baseViews = numberValue(data.baseViews);
 		const firebaseViews = numberValue(data.views);
-		const totalViews =
-			(baseViews > 0 ? baseViews : await fetchGoatCounterCount(root.dataset.path || "")) +
-			firebaseViews;
-		const totalLikes = numberValue(data.baseLikes) + numberValue(data.likes);
+		const totalViews = firebaseViews;
+		const totalLikes = numberValue(data.importedGiscusLikes) + numberValue(data.likes);
 
 		const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
 		const likesEl = root.querySelector<HTMLElement>("[data-stat-likes]");
@@ -189,7 +182,7 @@ const {
 		if (likesEl) likesEl.textContent = plural(totalLikes, "like", "likes");
 		if (commentsEl) {
 			const totalComments =
-				numberValue(data.baseCommentsCount) + numberValue(data.commentsCount);
+				numberValue(data.importedGiscusComments) + numberValue(data.comments);
 			commentsEl.textContent = plural(totalComments, "comment", "comments");
 		}
 	}
@@ -230,9 +223,16 @@ const {
 			try {
 				await updateDoc(postRef, {
 					likes: increment(1),
-					"reactions.heart": increment(1),
 					updatedAt: serverTimestamp(),
 				});
+				await setDoc(
+					doc(db, "postReactions", postId),
+					{
+						heart: increment(1),
+						updatedAt: serverTimestamp(),
+					},
+					{ merge: true },
+				);
 				writeStorage(storageKey, "1");
 				button.setAttribute("aria-label", "Post already liked");
 			} catch (error) {
@@ -252,7 +252,7 @@ const {
 			firebaseReady: Boolean(db),
 			postId,
 			path: root.dataset.path || "",
-			docPath: `${collectionName}/${postId}`,
+			docPath: `postStats/${postId}`,
 		});
 		if (!db) {
 			await showGoatCounterFallback(root);
@@ -260,7 +260,7 @@ const {
 			return;
 		}
 
-		const postRef = doc(db, collectionName, postId);
+		const postRef = doc(db, "postStats", postId);
 
 		try {
 			await ensurePostDocument(postRef, root);
