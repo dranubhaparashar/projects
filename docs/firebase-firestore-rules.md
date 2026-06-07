@@ -18,6 +18,7 @@ service cloud.firestore {
         'views',
         'likes',
         'comments',
+        'importedLegacyViews',
         'importedGiscusLikes',
         'importedGiscusComments',
         'createdAt',
@@ -25,7 +26,7 @@ service cloud.firestore {
       ]);
 
       allow update: if request.resource.data.diff(resource.data).changedKeys()
-        .hasOnly(['views', 'likes', 'comments', 'updatedAt']);
+        .hasOnly(['views', 'likes', 'comments', 'importedLegacyViews', 'updatedAt']);
 
       allow delete: if false;
     }
