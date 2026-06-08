@@ -7,15 +7,30 @@ import {
 import { expressiveCodeConfig } from "@/config";
 import type { LIGHT_DARK_MODE } from "@/types/config";
 
+const DEFAULT_THEME_HUE = 230;
+
+function normalizeHue(value: string | null | undefined): number {
+	if (value == null) {
+		return DEFAULT_THEME_HUE;
+	}
+
+	const parsed = Number.parseInt(value, 10);
+	if (!Number.isFinite(parsed) || parsed < 0 || parsed > 360) {
+		return DEFAULT_THEME_HUE;
+	}
+
+	return parsed;
+}
+
 export function getDefaultHue(): number {
-	const fallback = "250";
+	const fallback = String(DEFAULT_THEME_HUE);
 	const configCarrier = document.getElementById("config-carrier");
-	return Number.parseInt(configCarrier?.dataset.hue || fallback, 10);
+	return normalizeHue(configCarrier?.dataset.hue || fallback);
 }
 
 export function getHue(): number {
 	const stored = localStorage.getItem("hue");
-	return stored ? Number.parseInt(stored, 10) : getDefaultHue();
+	return normalizeHue(stored);
 }
 
 export function setHue(hue: number): void {
