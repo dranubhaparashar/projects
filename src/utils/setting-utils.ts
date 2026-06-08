@@ -10,11 +10,11 @@ import type { LIGHT_DARK_MODE } from "@/types/config";
 const DEFAULT_THEME_HUE = 230;
 
 function normalizeHue(value: string | null | undefined): number {
-	if (value == null) {
+	if (value == null || value.trim() === "") {
 		return DEFAULT_THEME_HUE;
 	}
 
-	const parsed = Number.parseInt(value, 10);
+	const parsed = Number(value);
 	if (!Number.isFinite(parsed) || parsed < 0 || parsed > 360) {
 		return DEFAULT_THEME_HUE;
 	}
@@ -34,12 +34,13 @@ export function getHue(): number {
 }
 
 export function setHue(hue: number): void {
-	localStorage.setItem("hue", String(hue));
+	const normalizedHue = normalizeHue(String(hue));
+	localStorage.setItem("hue", String(normalizedHue));
 	const r = document.querySelector(":root") as HTMLElement;
 	if (!r) {
 		return;
 	}
-	r.style.setProperty("--hue", String(hue));
+	r.style.setProperty("--hue", String(normalizedHue));
 }
 
 export function applyThemeToDocument(theme: LIGHT_DARK_MODE) {
