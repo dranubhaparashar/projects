@@ -12,7 +12,7 @@ export const siteConfig: SiteConfig = {
 	subtitle: "Demo Site",
 	lang: "en",
 	themeColor: {
-		hue: 220,
+		hue: 250,
 		fixed: false,
 	},
 	banner: {

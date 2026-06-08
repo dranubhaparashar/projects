@@ -37,7 +37,7 @@ $: if (hue || hue === 0) {
             </div>
         </div>
     </div>
-    <div class="w-full h-6 px-1 rounded select-none bg-[linear-gradient(90deg,rgba(37,99,235,0.22),rgba(8,145,178,0.18),rgba(124,58,237,0.18))] dark:bg-[linear-gradient(90deg,rgba(37,99,235,0.28),rgba(8,145,178,0.20),rgba(124,58,237,0.22))]">
+    <div class="w-full h-6 px-1 bg-[oklch(0.80_0.10_0)] dark:bg-[oklch(0.70_0.10_0)] rounded select-none">
         <input aria-label={i18n(I18nKey.themeColor)} type="range" min="0" max="360" bind:value={hue}
                class="slider" id="colorSlider" step="5" style="width: 100%">
     </div>
@@ -58,12 +58,12 @@ $: if (hue || hue === 0) {
           height 1rem
           width 0.5rem
           border-radius 0.125rem
-          background rgba(255, 255, 255, 0.92)
-          box-shadow 0 0 0 1px rgba(15, 23, 42, 0.08)
+          background rgba(255, 255, 255, 0.7)
+          box-shadow none
           &:hover
-            background rgba(255, 255, 255, 0.96)
+            background rgba(255, 255, 255, 0.8)
           &:active
-            background rgba(255, 255, 255, 0.84)
+            background rgba(255, 255, 255, 0.6)
 
         &::-moz-range-thumb
           -webkit-appearance none
@@ -71,23 +71,23 @@ $: if (hue || hue === 0) {
           width 0.5rem
           border-radius 0.125rem
           border-width 0
-          background rgba(255, 255, 255, 0.92)
-          box-shadow 0 0 0 1px rgba(15, 23, 42, 0.08)
+          background rgba(255, 255, 255, 0.7)
+          box-shadow none
           &:hover
-            background rgba(255, 255, 255, 0.96)
+            background rgba(255, 255, 255, 0.8)
           &:active
-            background rgba(255, 255, 255, 0.84)
+            background rgba(255, 255, 255, 0.6)
 
         &::-ms-thumb
           -webkit-appearance none
           height 1rem
           width 0.5rem
           border-radius 0.125rem
-          background rgba(255, 255, 255, 0.92)
-          box-shadow 0 0 0 1px rgba(15, 23, 42, 0.08)
+          background rgba(255, 255, 255, 0.7)
+          box-shadow none
           &:hover
-            background rgba(255, 255, 255, 0.96)
+            background rgba(255, 255, 255, 0.8)
           &:active
-            background rgba(255, 255, 255, 0.84)
+            background rgba(255, 255, 255, 0.6)
 
 </style>
