@@ -8,8 +8,8 @@ import type {
 import { LinkPreset } from "./types/config";
 
 export const siteConfig: SiteConfig = {
-	title: "Anubha",
-	subtitle: "Demo Site",
+	title: "Anubha Parashar",
+	subtitle: "AI Projects",
 	lang: "en",
 	themeColor: {
 		hue: 230,

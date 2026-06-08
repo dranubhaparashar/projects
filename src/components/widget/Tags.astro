@@ -9,9 +9,9 @@ import WidgetLayout from "./WidgetLayout.astro";
 
 const tags = await getTagList();
 
-const COLLAPSED_HEIGHT = "7.5rem";
+const VISIBLE_TAG_COUNT = 28;
 
-const isCollapsed = tags.length >= 20;
+const hasHiddenTags = tags.length > VISIBLE_TAG_COUNT;
 
 interface Props {
 	class?: string;
@@ -20,12 +20,50 @@ interface Props {
 const className = Astro.props.class;
 const style = Astro.props.style;
 ---
-<WidgetLayout name={i18n(I18nKey.tags)} id="tags" isCollapsed={isCollapsed} collapsedHeight={COLLAPSED_HEIGHT} class={className} style={style}>
-    <div class="tag-cloud flex flex-wrap items-start gap-x-[0.22rem] gap-y-[0.18rem]">
-        {tags.map(t => (
-            <ButtonTag href={getTagUrl(t.name)} label={`View all posts with the ${t.name.trim()} tag`}>
+<WidgetLayout name={i18n(I18nKey.tags)} id="tags" isCollapsed={false} class={className} style={style}>
+    <div class="tag-cloud flex flex-wrap items-start gap-x-[0.22rem] gap-y-[0.18rem]" data-tag-cloud>
+        {tags.map((t, index) => (
+            <span class:list={[{ "hidden": index >= VISIBLE_TAG_COUNT }, { "extra-tag": index >= VISIBLE_TAG_COUNT }]}>
+                <ButtonTag href={getTagUrl(t.name)} label={`View all posts with the ${t.name.trim()} tag`}>
                 {t.name.trim()}
-            </ButtonTag>
+                </ButtonTag>
+            </span>
         ))}
     </div>
+    {hasHiddenTags && (
+        <button
+            type="button"
+            class="tag-toggle btn-plain mt-2 h-7 w-full rounded-lg text-xs font-semibold"
+            data-tag-toggle
+            data-more-label="More"
+            data-less-label="Less"
+            aria-expanded="false"
+        >
+            More
+        </button>
+    )}
 </WidgetLayout>
+
+<script>
+    function initTagToggles() {
+        document.querySelectorAll<HTMLButtonElement>("[data-tag-toggle]").forEach((button) => {
+            if (button.dataset.initialized === "true") return;
+            button.dataset.initialized = "true";
+
+            button.addEventListener("click", () => {
+                const wrapper = button.closest("widget-layout");
+                const tags = wrapper?.querySelectorAll<HTMLElement>(".extra-tag");
+                const expanded = button.getAttribute("aria-expanded") === "true";
+
+                tags?.forEach((tag) => tag.classList.toggle("hidden", expanded));
+                button.setAttribute("aria-expanded", String(!expanded));
+                button.textContent = expanded ? button.dataset.moreLabel || "More" : button.dataset.lessLabel || "Less";
+            });
+        });
+    }
+
+    initTagToggles();
+    document.addEventListener("astro:page-load", initTagToggles);
+    document.addEventListener("swup:contentReplaced", initTagToggles);
+    document.addEventListener("swup:page:view", initTagToggles);
+</script>

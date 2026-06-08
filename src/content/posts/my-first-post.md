@@ -1,7 +1,7 @@
 ---
 title: "MCP 2.0 — Full Feature Showcase Post"
 published: 2025-06-03
-description: "A polished MCP 2.0 post that uses normal markdown, guide-style sections, expressive code blocks, GitHub repo cards, tables, checklists, and video embedding."
+description: "A polished MCP 2.0 post that uses normal markdown, guide-style sections, expressive code blocks, GitHub repo cards, tables, and checklists."
 tags: [MCP, Protocols, AI Infrastructure, gRPC, Protobuf, Agents, Demo]
 category: Self Project
 pdf: /downloads/mcp-2-full-feature-showcase-post-project-details.pdf
@@ -27,7 +27,6 @@ It combines:
 - expressive code blocks
 - a GitHub repository card
 - tables and checklists
-- an embedded video
 
 The project featured here is **MCP 2.0**, a concept that explores what a stronger, more production-ready Model Context Protocol could look like.
 

@@ -111,6 +111,17 @@ const {
 		return p;
 	}
 
+	function normalizeLegacyId(value: string): string {
+		return value
+			.split("?")[0]
+			.replace(/^\/+|\/+$/g, "")
+			.toLowerCase()
+			.normalize("NFKD")
+			.replace(/[\u0300-\u036f]/g, "")
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "");
+	}
+
 	async function fetchGoatCounterCount(path: string): Promise<number> {
 		const candidates = Array.from(new Set([path, normalizePath(path)]));
 
@@ -187,13 +198,36 @@ const {
 		}
 	}
 
-	async function readLegacyStats(postId: string) {
+	async function readFirstDocument(collectionName: string, candidates: string[]) {
 		if (!db) return null;
-		const snapshot = await getDoc(doc(db, "projectPosts", postId));
-		return snapshot.exists() ? snapshot.data() : null;
+		for (const candidate of candidates) {
+			if (!candidate) continue;
+			const snapshot = await getDoc(doc(db, collectionName, candidate));
+			if (snapshot.exists()) return snapshot.data();
+		}
+		return null;
 	}
 
-	function renderStats(
+	async function readLegacyStats(root: HTMLElement) {
+		const postId = root.dataset.normalizedPostId || root.dataset.postId || "";
+		const path = root.dataset.path || "";
+		const candidates = Array.from(
+			new Set([
+				postId,
+				root.dataset.postId || "",
+				normalizeLegacyId(postId),
+				normalizeLegacyId(path),
+				normalizeLegacyId(normalizePath(path)),
+			]),
+		);
+
+		return (
+			(await readFirstDocument("projectPosts", candidates)) ||
+			(await readFirstDocument("postStats", candidates.filter((candidate) => candidate !== postId)))
+		);
+	}
+
+	async function renderStats(
 		root: HTMLElement,
 		data: Record<string, unknown>,
 		legacyData: Record<string, unknown> | null = null,
@@ -221,7 +255,14 @@ const {
 			finalDisplayedViews: totalViews,
 		});
 
-		if (viewsEl) viewsEl.textContent = plural(totalViews, "view", "views");
+		if (viewsEl) {
+			if (totalViews > 0) {
+				viewsEl.textContent = plural(totalViews, "view", "views");
+			} else {
+				const goatCounterViews = await fetchGoatCounterCount(root.dataset.path || "");
+				viewsEl.textContent = plural(goatCounterViews, "view", "views");
+			}
+		}
 		if (likesEl) likesEl.textContent = plural(totalLikes, "like", "likes");
 		if (commentsEl) {
 			const totalComments = importedComments > 0 ? importedComments + numberValue(data.comments) : numberValue(data.comments) + legacyComments;
@@ -297,7 +338,7 @@ const {
 		}
 
 		const postRef = doc(db, "postStats", postId);
-		const legacyData = await readLegacyStats(postId);
+		const legacyData = await readLegacyStats(root);
 
 		try {
 			await ensurePostDocument(postRef, root);
@@ -306,14 +347,14 @@ const {
 			onSnapshot(
 				postRef,
 				(snapshot) => {
-					if (snapshot.exists()) renderStats(root, snapshot.data(), legacyData);
-					else if (legacyData) renderStats(root, legacyData, legacyData);
+					if (snapshot.exists()) void renderStats(root, snapshot.data(), legacyData);
+					else if (legacyData) void renderStats(root, legacyData, legacyData);
 					else showLikesFallback(root);
 				},
 				(error) => {
 					console.warn("Firebase stats read failed", error);
 					if (legacyData) {
-						renderStats(root, legacyData, legacyData);
+						void renderStats(root, legacyData, legacyData);
 					} else {
 						const viewsEl = root.querySelector<HTMLElement>("[data-stat-views]");
 						if (viewsEl) viewsEl.textContent = "0 views";
