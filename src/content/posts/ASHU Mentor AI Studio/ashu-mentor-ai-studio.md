@@ -2,7 +2,6 @@
 title: "ASHU Mentor AI Studio: End-to-End AI Interview, Evaluation, Adaptive Training, and Digital-Human Lecture Platform"
 published: 2026-06-16
 description: "A local-first AI mentor studio for resume-aware interviews, JD-based assessment, candidate evidence capture, adaptive learning, consent-based voice generation, and digital-human lecture rendering."
-image: "./ashu-mentor-ai-studio-architecture.png"
 tags:
   - AI Agent
   - GenAI
