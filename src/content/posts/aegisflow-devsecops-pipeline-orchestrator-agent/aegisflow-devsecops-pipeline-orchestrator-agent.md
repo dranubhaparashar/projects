@@ -22,6 +22,20 @@ draft: false
 
 ---
 
+## Demo Video
+
+<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:16px;margin:1rem 0;">
+  <iframe
+    src="https://www.youtube.com/embed/l_R8OV8VF8g"
+    title="AegisFlow DevSecOps Pipeline Orchestrator Agent Demo"
+    style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowfullscreen>
+  </iframe>
+</div>
+
+---
+
 ## Vision
 
 Modern software teams often have mature CI/CD pipelines, but the developer experience around pipeline readiness is still fragmented.
