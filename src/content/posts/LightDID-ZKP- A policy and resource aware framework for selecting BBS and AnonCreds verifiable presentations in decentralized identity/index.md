@@ -19,12 +19,11 @@ draft: false
 
 > LightDID-ZKP is a policy- and resource-aware framework for selecting the correct privacy-preserving verifiable presentation backend in decentralized identity systems. It focuses on choosing between BBS selective-disclosure presentations and AnonCreds predicate presentations without allowing unsafe privacy downgrades or cost-only fallback decisions.
 
-[GitHub Repository](https://github.com/dranubhaparashar/LightDID-ZKP)
+::github{repo="dranubhaparashar/LightDID-ZKP"}
 
 ---
 
-> Project repository: [dranubhaparashar/LightDID-ZKP](https://github.com/dranubhaparashar/LightDID-ZKP)
->
+
 > Wiki documentation: [Home](https://github.com/dranubhaparashar/LightDID-ZKP/wiki) · [Architecture](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Architecture-and-Design) · [CAPS-ZK Selection Logic](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/CAPS-ZK-Selection-Logic) · [Policy Model](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Policy-Model) · [Experiment Protocol](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Experiment-Protocol) · [Results and Figures](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Results-and-Figures)
 >
 > Reproducibility: [Reproducing the Paper Tables](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Reproducing-the-Paper-Tables) · [Optional Real-Backend Benchmarks](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Optional-Real-Backend-Benchmarks)
@@ -67,7 +66,7 @@ LightDID-ZKP addresses this decision problem. It introduces a selector that does
 | Main Users | DID wallet developers, identity researchers, privacy engineers, academic reviewers, ZKP learners |
 | Input | Verifier policy, holder capabilities, credential metadata, privacy requirement, resource profile |
 | Output | Selected presentation mechanism, rejection reason, cost score, policy-safety explanation |
-| Main Repository | [LightDID-ZKP](https://github.com/dranubhaparashar/LightDID-ZKP) |
+| Main Repository | `dranubhaparashar/LightDID-ZKP` |
 | Documentation Surface | GitHub README and Wiki pages |
 | Claim Boundary | Research prototype, not a production DID wallet or new cryptographic primitive |
 
@@ -456,6 +455,20 @@ Reason: Verifier policy requires credential-backed predicate proof; AnonCreds sa
 
 ---
 
+## Project Links
+
+::github{repo="dranubhaparashar/LightDID-ZKP"}
+
+- **Wiki Home:** [LightDID-ZKP Wiki](https://github.com/dranubhaparashar/LightDID-ZKP/wiki)
+- **Architecture:** [Architecture and Design](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Architecture-and-Design)
+- **CAPS-ZK Logic:** [CAPS-ZK Selection Logic](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/CAPS-ZK-Selection-Logic)
+- **Policy Model:** [Policy Model](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Policy-Model)
+- **Experiments:** [Experiment Protocol](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Experiment-Protocol)
+- **Results:** [Results and Figures](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Results-and-Figures)
+- **Claim Boundary:** [Security, Privacy, and Claim Boundary](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Security,-Privacy-and-Claim-Boundary)
+
+---
+
 ## Documentation and Wiki Links
 
 Because this project does not currently have a YouTube walkthrough, the Wiki is the main public explanation surface.
@@ -484,11 +497,11 @@ The repository includes project diagrams under `assets/diagrams/`.
 
 | Diagram | Link |
 |---|---|
-| LightDID-ZKP Banner | [lightdid_banner.svg](https://github.com/dranubhaparashar/LightDID-ZKP/blob/main/assets/diagrams/lightdid_banner.svg) |
-| Layered Architecture | [lightdid_layered_architecture.svg](https://github.com/dranubhaparashar/LightDID-ZKP/blob/main/assets/diagrams/lightdid_layered_architecture.svg) |
-| CAPS-ZK Selection Flow | [caps_zk_selection_flow.svg](https://github.com/dranubhaparashar/LightDID-ZKP/blob/main/assets/diagrams/caps_zk_selection_flow.svg) |
-| Experiment Pipeline | [experiment_pipeline.svg](https://github.com/dranubhaparashar/LightDID-ZKP/blob/main/assets/diagrams/experiment_pipeline.svg) |
-| Verifier Metadata Guard | [verifier_metadata_guard.svg](https://github.com/dranubhaparashar/LightDID-ZKP/blob/main/assets/diagrams/verifier_metadata_guard.svg) |
+| LightDID-ZKP Banner | `assets/diagrams/lightdid_banner.svg` |
+| Layered Architecture | `assets/diagrams/lightdid_layered_architecture.svg` |
+| CAPS-ZK Selection Flow | `assets/diagrams/caps_zk_selection_flow.svg` |
+| Experiment Pipeline | `assets/diagrams/experiment_pipeline.svg` |
+| Verifier Metadata Guard | `assets/diagrams/verifier_metadata_guard.svg` |
 
 ---
 
