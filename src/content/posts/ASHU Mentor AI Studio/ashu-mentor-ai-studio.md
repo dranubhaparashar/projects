@@ -1,78 +1,66 @@
 ---
-title: "ASHU Mentor AI Studio: End-to-End AI Interview, Evaluation, Adaptive Training, and Digital-Human Lecture Platform"
-published: 2026-06-16
-description: "ASHU Mentor AI Studio is a local-first AI mentor platform that connects resume-aware interviews, JD-based evaluation, adaptive training, evidence capture, consent-based voice generation, and digital-human lecture rendering into one complete learning workflow."
+title: "LightDID-ZKP: Policy- and Resource-Aware Selection of BBS and AnonCreds Verifiable Presentations"
+published: 2026-06-23
+description: "LightDID-ZKP is a self research project that introduces CAPS-ZK, a policy- and resource-aware selector for choosing between BBS selective-disclosure presentations and AnonCreds predicate presentations in privacy-preserving decentralized identity systems."
 tags:
-  - AI Agent
-  - GenAI
-  - LLM Agents
-  - Streamlit
-  - Hugging Face
-  - Interview AI
-  - Digital Human
-  - Voice AI
-  - XTTS
-  - Wav2Lip
-  - SadTalker
-  - Education AI
-  - Training
-  - Evidence Pack
+  - Decentralized Identity
+  - Verifiable Credentials
+  - Zero-Knowledge Proofs
+  - BBS
+  - AnonCreds
+  - Selective Disclosure
+  - Privacy-Preserving Identity
+  - CAPS-ZK
   - Python
-category: "Self Project"
+  - Research Prototype
+category: Self Project
 draft: false
 ---
 
-> **ASHU Mentor AI Studio** — **Adaptive Smart Human-like Unit Mentor AI Studio** — is an end-to-end AI mentor platform that moves beyond simple mock interviews. It reads a candidate profile, understands the target role, asks structured questions, evaluates responses, identifies learning gaps, recommends personalized training, and can convert training content into a digital-human lecture with consent-aware voice and lip-sync generation.
+> LightDID-ZKP is a policy- and resource-aware framework for selecting the correct privacy-preserving verifiable presentation backend in decentralized identity systems. It focuses on choosing between BBS selective-disclosure presentations and AnonCreds predicate presentations without allowing unsafe privacy downgrades or cost-only fallback decisions.
 
-[GitHub Repository](https://github.com/dranubhaparashar/ASHU-Mentor-AI-Studio)
+> 📦 **GitHub repository:** [dranubhaparashar/LightDID-ZKP](https://github.com/dranubhaparashar/LightDID-ZKP)
+>
+> 📚 **Wiki documentation:** [Home · Architecture · CAPS-ZK Selection Logic · Policy Model · Experiment Protocol · Results](https://github.com/dranubhaparashar/LightDID-ZKP/wiki)
+>
+> 🧪 **Reproducibility guide:** [Reproducing the Paper Tables](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Reproducing-the-Paper-Tables)
+>
+> 🔬 **Optional backend benchmarks:** [Optional Real-Backend Benchmarks](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Optional-Real-Backend-Benchmarks)
+>
+> 🔐 **Security and claim boundary:** [Security, Privacy, and Claim Boundary](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Security,-Privacy-and-Claim-Boundary)
 
 ---
 
-> 🎥 **Live demo video:** [youtube.com/watch?v=2XXnTbtjREs](https://www.youtube.com/watch?v=2XXnTbtjREs)
->
-> 🚀 **Try it live:** [Hugging Face Space](https://huggingface.co/spaces/AnubhaParashar/ASHU)
->
-> 📦 **GitHub repository:** [dranubhaparashar/ASHU-Mentor-AI-Studio](https://github.com/dranubhaparashar/ASHU-Mentor-AI-Studio)
->
-> 📚 **Wiki documentation:** [Architecture · Technical Specification · Security Governance](https://github.com/dranubhaparashar/ASHU-Mentor-AI-Studio/wiki)
-
 ---
 
-## Demo Video
 
-<iframe
-  width="100%"
-  height="420"
-  src="https://www.youtube.com/embed/2XXnTbtjREs"
-  title="ASHU Mentor AI Studio Demo"
-  frameBorder="0"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-  allowFullScreen>
-</iframe>
+> Wiki documentation: [Home](https://github.com/dranubhaparashar/LightDID-ZKP/wiki) · [Architecture](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Architecture-and-Design) · [CAPS-ZK Selection Logic](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/CAPS-ZK-Selection-Logic) · [Policy Model](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Policy-Model) · [Experiment Protocol](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Experiment-Protocol) · [Results and Figures](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Results-and-Figures)
+>
+> Reproducibility: [Reproducing the Paper Tables](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Reproducing-the-Paper-Tables) · [Optional Real-Backend Benchmarks](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Optional-Real-Backend-Benchmarks)
+>
+> Claim boundary: [Security, Privacy, and Claim Boundary](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Security,-Privacy-and-Claim-Boundary)
 
 ---
 
 ## One-Line Idea
 
-**ASHU Mentor AI Studio turns a resume, job description, training topic, and candidate interaction into a complete AI mentoring cycle: interview → evaluation → learning gaps → adaptive training → digital-human lecture → evidence-backed report.**
+LightDID-ZKP selects the right privacy-preserving presentation mechanism by checking verifier policy semantics, privacy requirements, credential-backed predicate needs, and device resource limits before applying cost scoring.
 
-Most interview tools stop at question generation. ASHU Mentor AI Studio is designed as a complete workflow platform where assessment, training, generated media, and documentation remain connected.
+The core idea is simple:
+
+**Do not choose the cheapest proof first. Choose only from mechanisms that satisfy the verifier policy and privacy semantics, then optimize for cost.**
 
 ---
 
 ## Why This Project Exists
 
-Interview preparation, candidate screening, and technical training are usually fragmented across multiple tools:
+Decentralized identity systems increasingly support privacy-preserving verifiable presentations. A holder wallet may support more than one presentation mechanism, but each mechanism is suitable for a different kind of verifier request.
 
-- one tool generates questions,
-- another records candidate answers,
-- another gives generic feedback,
-- another prepares training material,
-- and a completely separate pipeline is needed to create voice or video-based learning content.
+For example, a verifier may ask for selected attributes such as name, degree, institution, or membership status. In such cases, a BBS-style selective-disclosure presentation can reveal only the required fields while hiding the rest.
 
-This fragmentation creates a gap: the system may ask questions, but it rarely converts the answer quality into a meaningful training pathway. It may generate lessons, but the lessons are not always linked to the candidate’s actual weaknesses. It may create videos, but the video generation workflow is often disconnected from consent, evidence, and evaluation.
+Another verifier may ask for a predicate such as age greater than 18, income above a threshold, eligibility status, or another credential-backed condition. In that case, simple selective disclosure is not enough because the verifier needs proof that a hidden predicate is satisfied.
 
-**ASHU Mentor AI Studio solves this by joining the full chain into one local-first AI mentor studio.**
+LightDID-ZKP addresses this decision problem. It introduces a selector that does not treat all proof systems as interchangeable. Instead, it checks the policy, privacy level, predicate requirement, issuer binding, freshness rule, status-policy requirement, and device constraints before selecting the presentation backend.
 
 ---
 
@@ -80,85 +68,149 @@ This fragmentation creates a gap: the system may ask questions, but it rarely co
 
 | Area | Description |
 |---|---|
-| **Full Form** | Adaptive Smart Human-like Unit Mentor AI Studio |
-| **Primary Goal** | Build an AI mentor that can conduct structured interviews, evaluate answers, recommend training, and generate digital-human teaching content. |
-| **Main Users** | Students, job seekers, interview coaches, training teams, educators, HR reviewers, AI product demonstrators. |
-| **Core Interface** | Streamlit dashboard with interview, evaluation, training, digital presenter, media, and report modules. |
-| **AI Layer** | Local LLM orchestration for question generation, evaluation reasoning, training scripts, and feedback. |
-| **Media Layer** | XTTS/Coqui voice generation, SadTalker/Wav2Lip lip-sync, FFmpeg browser-safe MP4 conversion. |
-| **Evidence Layer** | Reports, transcripts, scores, logs, generated media manifest, and candidate evidence bundle. |
-| **Deployment Surface** | GitHub repository, Hugging Face Space, YouTube demo, and GitHub Wiki documentation. |
-| **Design Principle** | Candidate evidence and presenter assets are separated through explicit consent boundaries. |
+| Full Form | Lightweight Decentralized Identity Zero-Knowledge Presentation Selector |
+| Project Type | Self research project and reproducible prototype |
+| Primary Goal | Select between BBS and AnonCreds verifiable presentation backends using policy and resource constraints |
+| Core Selector | CAPS-ZK: Capability- and Policy-Safe Zero-Knowledge selector |
+| Main Mechanisms | BBS selective disclosure and AnonCreds predicate presentation |
+| Main Users | DID wallet developers, identity researchers, privacy engineers, academic reviewers, ZKP learners |
+| Input | Verifier policy, holder capabilities, credential metadata, privacy requirement, resource profile |
+| Output | Selected presentation mechanism, rejection reason, cost score, policy-safety explanation |
+| Main Repository | `dranubhaparashar/LightDID-ZKP` |
+| Documentation Surface | GitHub README and Wiki pages |
+| Claim Boundary | Research prototype, not a production DID wallet or new cryptographic primitive |
 
 ---
 
-## What Makes ASHU Different
+## What Makes LightDID-ZKP Different
 
-> [!IMPORTANT]
-> ASHU Mentor AI Studio is not just an LLM wrapper. It is a connected workflow where each output becomes useful for the next stage.
+> **Important**
+>
+> LightDID-ZKP is not a new cryptographic proof primitive. It is a selector and orchestration layer above existing presentation mechanisms.
 
-| Ordinary Tool | ASHU Mentor AI Studio |
+| Ordinary Cost-First Choice | LightDID-ZKP Approach |
 |---|---|
-| Generates generic interview questions | Generates resume-aware and JD-aware questions |
-| Gives basic feedback | Produces structured score, role-fit reasoning, and learning-gap analysis |
-| Ends after mock interview | Converts weak areas into adaptive training modules |
-| Produces static text | Can generate digital-human lecture output |
-| Treats media generation separately | Connects training script, voice, lip-sync, cache, and final MP4 playback |
-| Lacks evidence structure | Exports candidate reports, transcripts, logs, scores, and media manifests |
-| Ignores consent boundaries | Separates candidate evidence, presenter source, and authorized voice assets |
+| Chooses the lowest latency backend | First checks whether the backend satisfies verifier policy semantics |
+| Treats disclosure and predicate proof as interchangeable | Distinguishes selective disclosure from credential-backed predicates |
+| Falls back to a cheaper proof even when semantics differ | Rejects unsafe fallback |
+| Optimizes only for size or speed | Balances policy fit, privacy level, latency, VP size, verification cost, and memory |
+| Gives weak explanation for backend choice | Produces a reasoned selector decision |
+| Ignores claim boundary | Clearly states what the prototype does and does not prove |
 
 ---
 
 ## Reader Walkthrough
 
-A reader reviewing this project can understand it in four steps:
+A reader can understand LightDID-ZKP in five steps:
 
-1. **Input** — upload or paste a resume, job description, candidate details, and training topic.
-2. **Interview** — the system generates structured role-aware questions and captures candidate responses.
-3. **Evaluation** — answers are scored with strengths, weaknesses, role fit, readiness, and learning gaps.
-4. **Training Output** — the platform converts gaps into learning material and can render a digital-human teaching video.
-
-The result is not only a score. It is a complete learning and evidence package.
+1. **Verifier sends a presentation request** containing required attributes, predicate needs, issuer requirements, freshness expectations, status-policy rules, and resource constraints.
+2. **CAPS-ZK parses the policy** and identifies whether the request requires selective disclosure, credential-backed predicates, or both.
+3. **Candidate mechanisms are filtered** using semantic, privacy, predicate, issuer-binding, freshness, status-policy, and resource checks.
+4. **Only safe mechanisms are scored** using latency, proof size, verification cost, and memory indicators.
+5. **The selected backend is returned** with a reason. If no backend satisfies the policy safely, the selector rejects the request instead of downgrading privacy or semantics.
 
 ---
 
 ## System Architecture
 
-![ASHU Mentor AI Studio System Architecture](./ashu-mentor-ai-studio-architecture.png)
-
-ASHU Mentor AI Studio follows a **local-first, consent-aware, multi-stage architecture**. The platform starts from user inputs such as a resume, job description, training topic, candidate answers, and optional presenter or voice assets. The Streamlit interface routes these inputs into the workflow orchestrator, which coordinates LLM reasoning, evaluation, training generation, media creation, caching, and report export.
-
-The architecture has four major boundaries:
-
-1. **Candidate boundary** — candidate responses, transcript, scores, and interview evidence are used for assessment and feedback.
-2. **Presenter boundary** — presenter image or video is used only for digital-human rendering when explicitly authorized.
-3. **Voice boundary** — XTTS voice generation requires an authorized voice sample or approved fallback voice.
-4. **Deployment boundary** — heavy media rendering works best locally, while Hugging Face provides a public demo surface.
-
 ```mermaid
 flowchart LR
-    U[User Inputs] --> UI[Streamlit App UI]
-    CAP[Candidate Capture] --> ORCH[Workflow Orchestrator]
-    CONSENT[Consent Boundary] --> STORE[Cache and Manifest Store]
+    I[Issuer] --> C[Verifiable Credential]
+    C --> W[Holder Wallet]
 
-    UI --> ORCH
-    UI --> LLM[Local LLM Engine]
-    ORCH --> EVAL[Evaluation Engine]
-    LLM --> EVAL
-    EVAL --> TRAIN[Training Content Engine]
+    W --> P[Verifier Policy Parser]
+    P --> S[CAPS-ZK Selector]
 
-    TRAIN --> VOICE[XTTS Voice Generation]
-    VOICE --> LIP[Lip-Sync Rendering]
-    LIP --> VIDEO[Browser-Safe Video Layer]
+    S --> BBS[BBS Selective Disclosure]
+    S --> AC[AnonCreds Predicate Presentation]
 
-    STORE --> TRAIN
-    STORE --> VIDEO
+    BBS --> VP[Verifiable Presentation]
+    AC --> VP
 
-    EVAL --> OUT[Candidate Report and Evidence]
-    TRAIN --> OUT
-    VIDEO --> OUT
-    OUT --> DEPLOY[YouTube Demo + Hugging Face + GitHub + Wiki]
+    VP --> V[Verifier]
+    V --> R[Policy-Compliant Decision]
 ```
+
+LightDID-ZKP separates credential issuance, holder-side decision logic, backend selection, cryptographic presentation generation, and verifier-side policy checking.
+
+CAPS-ZK does not replace BBS or AnonCreds. It decides when each mechanism is appropriate and prevents unsafe substitutions.
+
+---
+
+## CAPS-ZK Selection Workflow
+
+```mermaid
+flowchart TD
+    A[Presentation Request] --> B[Read Verifier Policy]
+    B --> C{Credential-backed predicate required?}
+
+    C -->|Yes| D[Check AnonCreds support]
+    C -->|No| E[Check BBS selective disclosure]
+
+    D --> F{Policy semantics satisfied?}
+    E --> F
+
+    F -->|No| G[Reject unsafe mechanism]
+    F -->|Yes| H[Check privacy and issuer constraints]
+
+    H --> I[Check freshness and status policy]
+    I --> J[Check holder resource profile]
+    J --> K[Score latency, VP size, verification cost, memory]
+    K --> L[Select policy-safe mechanism]
+    L --> M[Return decision and reason]
+```
+
+The workflow is intentionally policy-first. Resource optimization is applied only after the mechanism passes the safety and semantics checks.
+
+---
+
+## Core Modules
+
+### 1. Policy Model
+
+The policy model represents what the verifier is actually asking for. It includes attribute disclosure requirements, predicate requirements, issuer binding, freshness rules, credential status rules, privacy level, and domain binding.
+
+The goal is to make the selector understand the difference between:
+
+- revealing a selected attribute, and
+- proving a hidden predicate about an attribute.
+
+This distinction is important because selective disclosure should not be used as an unsafe substitute for a required hidden predicate.
+
+### 2. Capability Model
+
+The capability layer describes what each backend can support. BBS is modeled for selective disclosure. AnonCreds is modeled for credential-backed predicates. CAPS-ZK checks these capabilities before using a backend.
+
+### 3. Privacy-Level Abstraction
+
+The selector assigns a privacy meaning to each mechanism. A presentation that reveals an attribute is not privacy-equivalent to a predicate proof that keeps the attribute hidden.
+
+This allows LightDID-ZKP to prevent privacy downgrades.
+
+### 4. Resource Profiler
+
+The resource profile captures holder-side constraints such as latency budget, available memory, verification cost tolerance, and maximum acceptable verifiable presentation size.
+
+This is useful for wallets running on constrained devices or mobile-like environments.
+
+### 5. Cost Scorer
+
+After unsafe mechanisms are removed, the remaining candidates are scored using measured or configured cost indicators. The cost scorer helps pick the most practical valid backend.
+
+### 6. Backend Adapter Layer
+
+The backend adapter layer keeps the selector independent from specific cryptographic implementation details. The repository includes optional real-backend templates so the framework can be extended with concrete BBS or AnonCreds libraries.
+
+---
+
+## Presentation Profiles
+
+| Profile | Main Purpose | Typical Selection Case |
+|---|---|---|
+| BBS selective disclosure | Reveal selected attributes from a signed credential | Attribute disclosure without hidden predicate proof |
+| AnonCreds predicate presentation | Prove credential-backed predicates | Age, threshold, eligibility, or range-style requirements |
+| CAPS-ZK selector | Select the correct presentation backend | Policy-aware and resource-aware wallet decision |
+| Policy-safe rejection | Refuse unsafe fallback | No backend satisfies required semantics safely |
 
 ---
 
@@ -166,289 +218,420 @@ flowchart LR
 
 | Stage | What Happens | Output |
 |---|---|---|
-| **1. Setup** | User provides resume, job description, topic, role, difficulty, and optional presenter/voice assets. | Structured candidate and training context |
-| **2. Question Generation** | LLM generates resume-aware, JD-aware, technical, behavioral, and coding questions. | Interview question set |
-| **3. Candidate Capture** | Candidate answers are captured with optional transcript and evidence metadata. | Candidate response record |
-| **4. Evaluation** | Evaluation engine scores answer quality, clarity, role fit, confidence, and readiness. | Scorecard, strengths, weaknesses |
-| **5. Gap Analysis** | Weak areas are converted into learning objectives. | Personalized training gaps |
-| **6. Training Plan** | Training content engine creates modules, explanations, checkpoints, and scripts. | Adaptive training plan |
-| **7. Voice Generation** | XTTS/Coqui generates speech from authorized voice or approved fallback. | Teaching audio file |
-| **8. Lip-Sync Rendering** | SadTalker or Wav2Lip generates digital-human lecture video. | Rendered MP4 |
-| **9. Browser-Safe Conversion** | FFmpeg converts output to reliable browser playback format. | H.264/AAC MP4 |
-| **10. Evidence Export** | Reports, transcripts, scores, logs, and media manifest are packaged. | Evidence bundle |
+| 1. Presentation Request | Verifier requests disclosure or predicate proof | Policy object |
+| 2. Policy Parsing | Selector extracts semantic and privacy requirements | Normalized verifier policy |
+| 3. Capability Filtering | Backends that cannot satisfy the request are removed | Valid candidate set |
+| 4. Privacy Filtering | Mechanisms that downgrade privacy are rejected | Privacy-safe candidate set |
+| 5. Issuer and Freshness Checks | Issuer, status, and freshness rules are validated | Policy-compliant candidate set |
+| 6. Resource Filtering | Device limits are checked | Runtime-feasible candidates |
+| 7. Cost Scoring | Latency, VP size, verification time, and memory are compared | Ranked backend list |
+| 8. Selection or Rejection | Best safe backend is selected, or request is rejected | Decision and reason |
+| 9. Presentation Generation | Chosen backend generates the VP | Verifiable presentation |
+| 10. Verifier Decision | Verifier checks the VP and policy compliance | Accept/reject result |
 
 ---
 
-## Core Modules
+## Example Decision Cases
 
-### 1. Interview Intelligence
+### Case A: Selective Attribute Disclosure
 
-The interview engine uses the candidate resume and job description to produce targeted questions. Instead of generic prompts, it can focus on role expectations, project history, technical skills, behavioral readiness, and coding-style reasoning.
+A verifier asks the holder to reveal only:
 
-### 2. Evaluation Engine
+- name,
+- degree,
+- institution.
 
-The evaluation module scores responses and explains the reasoning behind the score. It can summarize strengths, identify weak areas, and convert gaps into actionable learning tasks.
+No hidden predicate is required.
 
-### 3. Adaptive Training Planner
+**Expected selector behavior:** choose BBS selective disclosure if it satisfies the issuer, freshness, status, and resource constraints.
 
-The training planner converts interview weaknesses into modules, explanations, checkpoint questions, and a teaching script. This makes the system useful not only for screening but also for improvement.
+### Case B: Age Predicate
 
-### 4. Digital Presenter Pipeline
+A verifier asks the holder to prove:
 
-The digital presenter layer connects generated teaching scripts with voice synthesis and lip-sync rendering. This allows the system to create a teaching assistant experience rather than only producing text.
+- age is greater than or equal to 18,
+- without revealing the exact date of birth.
 
-### 5. Evidence Pack Generator
+**Expected selector behavior:** choose AnonCreds predicate presentation if credential-backed predicate proof is required.
 
-The evidence layer makes the workflow auditable. It can export transcripts, evaluation summaries, JSON score records, training plans, generated audio/video manifests, and logs.
+### Case C: Unsafe Cost-First Fallback
 
----
+A cheaper backend exists, but it cannot prove the required predicate.
 
-## Digital Presenter Voice and Lip-Sync Pipeline
-
-The digital presenter workflow is intentionally separated from the interview workflow. Candidate evidence should not automatically become presenter media. Presenter image/video and voice samples are separate assets and require explicit authorization.
-
-```mermaid
-flowchart TD
-    A[Training Script Generated] --> B{Authorized Voice Available?}
-    B -->|Yes| C[XTTS Voice Generation]
-    B -->|No or Approved Fallback| D[Default Voice Output]
-    C --> E[Generated tts_audio.wav]
-    D --> E
-
-    E --> F[Create Lip-Sync Package]
-    F --> G{Presenter Source Type}
-    G -->|Photo Presenter| H[SadTalker Renderer]
-    G -->|Video Presenter| I[Wav2Lip Renderer]
-
-    H --> J[Rendered MP4]
-    I --> J
-    J --> K[Browser-Safe MP4 Conversion]
-    K --> L[Teaching Assistant Player]
-    K --> M[Download Final Lecture]
-```
-
-> [!WARNING]
-> Candidate face, voice, or identity should not be reused as digital presenter material unless the user has explicitly provided separate consent for that purpose.
+**Expected selector behavior:** reject unsafe fallback. LightDID-ZKP should not replace a hidden predicate proof with simple disclosure just because it is cheaper.
 
 ---
 
-## Dashboard Experience
+## Experiment Protocol
 
-| Dashboard Area | Reader Value |
+The experiment package follows a manuscript-style reproducibility setup.
+
+| Item | Configuration |
 |---|---|
-| **Interview Setup** | Shows how resume, JD, role, and difficulty are configured. |
-| **Interview Session** | Demonstrates question generation and response capture. |
-| **Coding Round** | Supports technical or coding-style evaluation. |
-| **Evaluation Dashboard** | Provides score, strengths, weaknesses, and readiness summary. |
-| **Training Hub** | Converts gaps into personalized lessons and practice checkpoints. |
-| **Digital Presenter** | Shows generated teaching script, voice options, presenter selection, and video preview. |
-| **Media Player** | Plays generated browser-safe MP4 lectures. |
-| **Report Downloads** | Allows export of candidate feedback, evidence, transcripts, and generated outputs. |
-| **Architecture Docs** | Documents the complete workflow inside the app for reviewers. |
+| Warmup runs | 5 |
+| Measured runs | 50 |
+| Attribute counts | 4, 8, 16, 32, 64 |
+| Mechanisms | BBS and AnonCreds |
+| Main metrics | Proving latency, verification latency, VP size, RSS memory, coefficient of variation |
+| Supporting studies | Selector decisions, ablation, resource sensitivity |
+| Outputs | Tables, figures, CSV summaries, decision logs |
+
+The repository contains benchmark summaries, selector decisions, ablation results, resource-sensitivity outputs, and generated figures.
 
 ---
 
-## Evidence Pack Structure
+## Repository Structure
 
-A strong AI system should not only produce an answer. It should also produce evidence. ASHU Mentor AI Studio is designed to package outputs for review, reproducibility, and demonstration.
-
-```text title="report_exports"
-report_exports/
-  candidate_report_<timestamp>.md
-  candidate_report_<timestamp>.json
-  transcript_<timestamp>.txt
-  interview_scores_<timestamp>.json
-  training_plan_<timestamp>.md
-  generated_teaching_script_<timestamp>.txt
-  media_manifest_<timestamp>.json
-  generated_audio/
-    tts_audio.wav
-  generated_video/
-    final_lecture_browser_safe.mp4
-  logs/
-    app_log.txt
-    voice_generation_log.txt
-    lipsync_render_log.txt
+```text
+LightDID-ZKP
+├── assets/
+│   └── diagrams/
+│       ├── lightdid_banner.svg
+│       ├── lightdid_layered_architecture.svg
+│       ├── caps_zk_selection_flow.svg
+│       ├── experiment_pipeline.svg
+│       └── verifier_metadata_guard.svg
+│
+├── benchmarks/
+│   ├── lightdid_benchmark_summary.csv
+│   ├── selector_decisions.csv
+│   ├── resource_sensitivity.csv
+│   └── ablation_cost_first_fallback.csv
+│
+├── configs/
+│   ├── policies.yaml
+│   ├── device_profiles.yaml
+│   └── experiment_config.yaml
+│
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── DEVELOPER_GUIDE.md
+│   ├── REVIEWER_NOTES.md
+│   └── GITHUB_ABOUT.md
+│
+├── experiments/
+│   ├── run_all.py
+│   ├── generate_tables.py
+│   ├── plot_results.py
+│   └── optional_real_backend_templates/
+│
+├── results/
+│   ├── figures/
+│   └── tables/
+│
+├── src/
+│   └── lightdid_zkp/
+│       ├── selector.py
+│       ├── policy.py
+│       ├── profiles.py
+│       ├── metrics.py
+│       └── utils.py
+│
+├── tests/
+│   └── test_selector.py
+│
+├── README.md
+├── requirements.txt
+├── pyproject.toml
+├── CITATION.cff
+└── LICENSE
 ```
 
-The evidence package supports:
-
-- candidate readiness review,
-- technical interview coaching,
-- learning-gap tracking,
-- training recommendation,
-- generated lecture replay,
-- consent audit for presenter and voice assets,
-- project demonstration through GitHub, Hugging Face, and YouTube.
-
 ---
 
-## Safety and Governance Model
+## Important Project Paths
 
-| Area | Safety Behavior |
+| Component | Path |
 |---|---|
-| **Candidate capture** | Used only for interview evidence, evaluation, and reporting. |
-| **Presenter source** | Must be separately authorized before digital-human rendering. |
-| **Voice sample** | XTTS voice generation must use an authorized sample or approved fallback. |
-| **Candidate identity** | Candidate face/voice is not reused as presenter unless separately authorized. |
-| **Fallback audio** | Automated fallback voice requires user approval. |
-| **Generated media** | Final lecture output is labeled as generated training content. |
-| **Reports** | Candidate reports are evidence-backed and should not be treated as final hiring decisions without human review. |
-| **Deployment** | Public demo surfaces should avoid private candidate data and unauthorized voice/presenter assets. |
-
-> **Candidate evidence is for evaluation. Presenter assets are for generated teaching. The two should never be mixed without explicit authorization.**
+| Main selector code | `src/lightdid_zkp/selector.py` |
+| Policy model | `src/lightdid_zkp/policy.py` |
+| Device profiles | `src/lightdid_zkp/profiles.py` |
+| Experiment runner | `experiments/run_all.py` |
+| Table generation | `experiments/generate_tables.py` |
+| Plot generation | `experiments/plot_results.py` |
+| Policy configs | `configs/policies.yaml` |
+| Device configs | `configs/device_profiles.yaml` |
+| Benchmark CSV files | `benchmarks/` |
+| Result tables | `results/tables/` |
+| Result figures | `results/figures/` |
+| Architecture diagrams | `assets/diagrams/` |
+| Developer notes | `docs/` |
+| Tests | `tests/` |
 
 ---
 
-## Runtime Example
+## Local Run Command
 
-```bash title="run-locally.sh"
-# Clone the repository
-git clone https://github.com/dranubhaparashar/ASHU-Mentor-AI-Studio.git
-cd ASHU-Mentor-AI-Studio
+Create and activate a Python environment:
 
-# Activate the main app environment
-conda activate chatbot
-
-# Run the dashboard
-ASHU_VOICE_ENV=voice \
-COQUI_TOS_AGREED=1 \
-PYTHONNOUSERSITE=1 \
-python -m streamlit run app.py --server.fileWatcherType none
+```bash
+python -m venv .venv
 ```
 
-For voice environment validation:
+Windows:
 
-```bash title="validate-voice-env.sh"
-conda activate voice
+```bash
+.venv\Scripts\activate
+```
 
-PYTHONNOUSERSITE=1 python -c "import numpy, scipy, torch; print('numpy', numpy.__version__); print('scipy', scipy.__version__); print('torch', torch.__version__)"
+macOS/Linux:
 
-COQUI_TOS_AGREED=1 PYTHONNOUSERSITE=1 python -c "from TTS.api import TTS; TTS('tts_models/multilingual/multi-dataset/xtts_v2'); print('XTTS model load OK')"
+```bash
+source .venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run the full experiment pipeline:
+
+```bash
+python experiments/run_all.py
+```
+
+Run tests:
+
+```bash
+pytest -q
 ```
 
 ---
 
-## Hugging Face Space Deployment
+## Reproduce Tables and Figures
 
-For Hugging Face deployment, keep the Space configuration at the top of `README.md` and keep `requirements.txt` as a clean package list.
+Generate manuscript-style tables:
 
-```yaml title="README.md Space Header"
----
-title: ASHU Mentor AI Studio
-emoji: 🎓
-colorFrom: blue
-colorTo: indigo
-sdk: streamlit
-sdk_version: "1.25.0"
-app_file: app.py
-pinned: false
----
+```bash
+python experiments/generate_tables.py
 ```
 
-The Hugging Face Space is useful for public UI demonstration, project showcasing, and live walkthroughs. Full local voice cloning, private file paths, and heavy lip-sync rendering may work better in local WSL/Conda environments.
+Generate result figures:
+
+```bash
+python experiments/plot_results.py
+```
+
+Outputs are saved in:
+
+```text
+results/tables/
+results/figures/
+```
 
 ---
 
-## Public Demo Surfaces
+## Example Selector Usage
 
-| Surface | Purpose |
+```python
+from lightdid_zkp.selector import select_presentation
+from lightdid_zkp.policy import VerifierPolicy
+from lightdid_zkp.profiles import DeviceProfile
+
+policy = VerifierPolicy(
+    required_attributes=["name", "degree", "institution"],
+    predicate_requirements=[],
+    max_vp_size_kb=32,
+    require_credential_backed_predicate=False,
+)
+
+device = DeviceProfile(
+    name="mobile_like",
+    max_latency_ms=500,
+    max_memory_mb=512,
+)
+
+decision = select_presentation(policy=policy, device=device)
+
+print("Selected mechanism:", decision.mechanism)
+print("Reason:", decision.reason)
+```
+
+Example output for selective disclosure:
+
+```text
+Selected mechanism: BBS
+Reason: Policy requires selective disclosure only; BBS satisfies disclosure constraints with lower estimated presentation size.
+```
+
+Example output for predicate-heavy policies:
+
+```text
+Selected mechanism: AnonCreds
+Reason: Verifier policy requires credential-backed predicate proof; AnonCreds satisfies predicate semantics.
+```
+
+---
+
+## Project Links
+
+
+- **Wiki Home:** [LightDID-ZKP Wiki](https://github.com/dranubhaparashar/LightDID-ZKP/wiki)
+- **Architecture:** [Architecture and Design](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Architecture-and-Design)
+- **CAPS-ZK Logic:** [CAPS-ZK Selection Logic](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/CAPS-ZK-Selection-Logic)
+- **Policy Model:** [Policy Model](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Policy-Model)
+- **Experiments:** [Experiment Protocol](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Experiment-Protocol)
+- **Results:** [Results and Figures](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Results-and-Figures)
+- **Claim Boundary:** [Security, Privacy, and Claim Boundary](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Security,-Privacy-and-Claim-Boundary)
+
+---
+
+## Documentation and Wiki Links
+
+Because this project does not currently have a YouTube walkthrough, the Wiki is the main public explanation surface.
+
+| Wiki Page | Purpose |
 |---|---|
-| **Live App** | Public browser-based demo of the Streamlit interface. |
-| **YouTube Demo** | Walkthrough for reviewers, recruiters, collaborators, and readers. |
-| **GitHub Repository** | Source code, app structure, technical assets, and deployment instructions. |
-| **GitHub Wiki** | Architecture, technical specification, security governance, and user documentation. |
+| [Home](https://github.com/dranubhaparashar/LightDID-ZKP/wiki) | Main entry point for the project |
+| [About LightDID-ZKP](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/About-LightDID-ZKP) | Short overview and motivation |
+| [Architecture and Design](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Architecture-and-Design) | System design and component view |
+| [CAPS-ZK Selection Logic](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/CAPS-ZK-Selection-Logic) | Selector logic and filtering sequence |
+| [Policy Model](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Policy-Model) | Formal policy inputs and constraints |
+| [Experiment Protocol](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Experiment-Protocol) | Benchmarking and evaluation setup |
+| [Results and Figures](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Results-and-Figures) | Output tables and generated figures |
+| [Reproducing the Paper Tables](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Reproducing-the-Paper-Tables) | Steps for reproducibility |
+| [Optional Real-Backend Benchmarks](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Optional-Real-Backend-Benchmarks) | Notes for real BBS/AnonCreds backend experiments |
+| [Repository Structure](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Repository-Structure) | File and folder explanation |
+| [Security, Privacy, and Claim Boundary](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Security,-Privacy-and-Claim-Boundary) | What the project does and does not claim |
+| [Developer Guide](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Developer-Guide) | Developer notes and extension points |
+| [Quick Links](https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Quick-Links) | Fast navigation page |
 
-### Demo Links
+---
 
-- **🚀 Live App:** [ASHU Mentor AI Studio on Hugging Face Spaces](https://huggingface.co/spaces/AnubhaParashar/ASHU)
-- **🎥 Demo Video:** [ASHU Mentor AI Studio YouTube Demo](https://www.youtube.com/watch?v=2XXnTbtjREs)
-- **📦 GitHub Repository:** [ASHU-Mentor-AI-Studio](https://github.com/dranubhaparashar/ASHU-Mentor-AI-Studio)
-- **📚 Wiki Documentation:** [ASHU Mentor AI Studio GitHub Wiki](https://github.com/dranubhaparashar/ASHU-Mentor-AI-Studio/wiki)
+## Architecture Diagrams
+
+The repository includes project diagrams under `assets/diagrams/`.
+
+| Diagram | Link |
+|---|---|
+| LightDID-ZKP Banner | `assets/diagrams/lightdid_banner.svg` |
+| Layered Architecture | `assets/diagrams/lightdid_layered_architecture.svg` |
+| CAPS-ZK Selection Flow | `assets/diagrams/caps_zk_selection_flow.svg` |
+| Experiment Pipeline | `assets/diagrams/experiment_pipeline.svg` |
+| Verifier Metadata Guard | `assets/diagrams/verifier_metadata_guard.svg` |
+
+---
+
+## Result Files
+
+The repository includes result files for:
+
+- BBS presentation latency,
+- AnonCreds presentation latency,
+- verification time,
+- verifiable presentation size,
+- RSS memory usage,
+- coefficient of variation,
+- selector decisions across policy types,
+- ablation comparison against unsafe cost-first fallback,
+- resource-sensitivity analysis.
+
+Result folders:
+
+```text
+benchmarks/
+results/tables/
+results/figures/
+```
+
+---
+
+## Research Scope and Claim Boundary
+
+LightDID-ZKP is intended as a research prototype for privacy-preserving decentralized identity presentation selection.
+
+It does **not** claim to:
+
+- introduce a new zero-knowledge proof primitive,
+- replace BBS or AnonCreds,
+- provide production wallet security certification,
+- prove constrained-device deployment without real device measurements,
+- implement a complete DID wallet,
+- provide legal or compliance certification for digital identity deployments.
+
+It does claim to:
+
+- provide a policy-aware selection framework,
+- provide a resource-aware presentation decision layer,
+- compare presentation-level trade-offs,
+- support reproducibility through scripts, tables, and figures,
+- demonstrate why policy semantics must be checked before cost optimization.
 
 ---
 
 ## Practical Use Cases
 
-| User Group | How ASHU Helps |
+| User Group | How LightDID-ZKP Helps |
 |---|---|
-| **Students** | Practice interviews based on their own resume and target job. |
-| **Job Seekers** | Identify role gaps and receive adaptive learning recommendations. |
-| **Interview Coaches** | Use structured evidence to guide candidate improvement. |
-| **Educators** | Convert topics into AI-generated teaching scripts and digital lectures. |
-| **HR Teams** | Support pre-screening workflows with human review and evidence-backed reports. |
-| **AI Researchers** | Explore combined LLM reasoning, evaluation, voice synthesis, lip-sync, and governance. |
-| **Product Demonstrators** | Showcase an end-to-end GenAI workflow with app, demo, code, wiki, and video. |
+| DID wallet developers | Provides a policy-safe way to choose between multiple presentation backends |
+| Identity researchers | Demonstrates a formal selector model for privacy-preserving verifiable presentations |
+| ZKP learners | Shows why selective disclosure and predicate proofs are not interchangeable |
+| Academic reviewers | Provides reproducible scripts, tables, diagrams, and clear claim boundaries |
+| Privacy engineers | Highlights unsafe fallback and privacy-downgrade risks |
+| Standards readers | Connects verifier policy semantics with presentation backend selection |
+| Project evaluators | Provides GitHub repository, Wiki documentation, diagrams, and experiment outputs |
 
 ---
 
 ## Engineering Value
 
-ASHU Mentor AI Studio demonstrates how multiple AI capabilities can be connected into one practical system:
+LightDID-ZKP demonstrates how decentralized identity presentation selection can be treated as an engineering decision problem rather than only a cryptographic primitive choice.
 
-- **LLM orchestration** for interview and training generation,
-- **evaluation logic** for answer scoring and readiness analysis,
-- **adaptive training** for personalized learning paths,
-- **voice generation** using XTTS/Coqui,
-- **lip-sync rendering** using SadTalker or Wav2Lip,
-- **browser-safe media conversion** using FFmpeg,
-- **evidence export** for reports, transcripts, logs, and media manifests,
-- **public demo readiness** through Hugging Face, YouTube, GitHub, and Wiki documentation.
+The project connects:
 
-It is designed to be measurable, explainable, adaptive, auditable, consent-aware, and demo-ready.
+- verifier policy parsing,
+- backend capability modeling,
+- privacy-level abstraction,
+- predicate requirement checking,
+- resource filtering,
+- benchmark-driven cost scoring,
+- safe rejection,
+- reproducible experiment generation,
+- GitHub documentation and Wiki publishing.
+
+This makes the project useful as a research prototype, academic support repository, and technical portfolio project.
 
 ---
 
 ## Current Strengths
 
-- Complete interview-to-training workflow instead of isolated question generation.
-- Resume-aware and JD-aware questioning for personalized interview preparation.
-- Candidate response scoring with strengths, weaknesses, and readiness summary.
-- Adaptive training plan generation from actual learning gaps.
-- Digital-human lecture generation using voice and lip-sync pipelines.
-- Cached media reuse for smoother demonstrations.
-- Evidence pack export for review and reproducibility.
-- Public project surface through GitHub, Hugging Face, YouTube, and Wiki.
-
----
-
-## Next Improvements
-
-- Stabilize Hugging Face deployment for more reliable public access.
-- Add role-specific rubrics for software, data science, AI, product, and management roles.
-- Add exportable PDF reports for candidate feedback and training plans.
-- Add structured coding-round scoring with test cases and explanations.
-- Add a consent checklist UI before voice or presenter rendering.
-- Add model-provider abstraction for local LLMs, OpenAI, Azure OpenAI, and Gemini.
-- Add dashboard-level evidence pack export for demo and review workflows.
-- Add transcript alignment for generated lecture videos.
-- Add analytics for comparing candidate progress across multiple interview attempts.
+- Clear focus on decentralized identity and verifiable presentation selection.
+- Separates policy correctness from cost optimization.
+- Distinguishes BBS selective disclosure from AnonCreds predicate presentation.
+- Prevents unsafe fallback and privacy downgrades.
+- Includes reproducibility scripts, tables, result files, and diagrams.
+- Provides GitHub Wiki documentation instead of relying only on README text.
+- States a clear claim boundary, which is important for research credibility.
+- Suitable for manuscript support, GitHub portfolio display, and technical review.
 
 ---
 
 ## Key Innovation
 
-> [!IMPORTANT]
-> The strongest innovation is not one model or one screen. The innovation is the complete connected pipeline: **resume-aware interview → JD-aware evaluation → learning-gap analysis → adaptive training → voice generation → lip-sync rendering → browser-safe video → evidence-backed report**.
+> **Key point**
+>
+> The strongest innovation is not claiming a new proof system. The strongest innovation is the policy-safe selector: LightDID-ZKP checks whether a presentation backend satisfies verifier semantics and privacy requirements before optimizing for resource cost.
 
-Most tools handle these steps separately. ASHU Mentor AI Studio connects them into one workflow so that the reader can see a complete AI product idea, not only a prototype screen.
+Most systems discuss proof mechanisms individually. LightDID-ZKP focuses on the wallet-side decision problem that appears when multiple privacy-preserving presentation mechanisms are available.
 
 ---
 
 ## Conclusion
 
-ASHU Mentor AI Studio shows how interview preparation and training can evolve from disconnected tools into an end-to-end AI mentoring platform.
+LightDID-ZKP shows how decentralized identity wallets can make safer presentation choices when multiple privacy-preserving mechanisms are available.
 
-It combines structured interview intelligence, explainable evaluation, personalized learning, consent-aware media generation, and public demo documentation into one integrated system.
+It connects verifier policy, privacy semantics, backend capability, resource feasibility, and cost scoring into one reproducible framework.
 
-The result is a practical AI mentor studio for users who need more than mock questions. It supports assessment, improvement, teaching, demonstration, and evidence-backed review in one workflow.
+The project is valuable because it explains a practical identity-system problem: a low-cost proof is not acceptable if it does not satisfy the verifier’s actual requirement. By placing policy safety before cost optimization, LightDID-ZKP provides a clean and credible research direction for privacy-preserving decentralized identity presentation selection.
 
 ---
 
 ## Final Thought
 
-> From **interview practice** to **adaptive digital-human training**.
+> Policy first. Privacy second. Cost only after safety.
 >
-> The real value is not only asking better questions. It is connecting questions, answers, evaluation, learning gaps, teaching scripts, generated voice, rendered video, and evidence-backed reports into one explainable AI workflow.
+> LightDID-ZKP is about making decentralized identity presentation selection safer, explainable, and reproducible.
 >
-> **Resume-aware interview · JD-aware evaluation · candidate evidence · adaptive training · consent-based voice · digital-human lecture · GitHub + Hugging Face + YouTube demo surface**
+> BBS selective disclosure · AnonCreds predicates · CAPS-ZK selector · no unsafe fallback · no privacy downgrade · GitHub Wiki documentation
