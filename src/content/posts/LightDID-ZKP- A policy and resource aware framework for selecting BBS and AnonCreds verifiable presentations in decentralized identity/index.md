@@ -586,19 +586,6 @@ This makes the project useful as a research prototype, academic support reposito
 
 ---
 
-## Next Improvements
-
-- Add a short screen-recorded walkthrough when a YouTube demo is ready.
-- Add example verifier policies for education, employment, membership, and age-verification scenarios.
-- Add more explicit diagrams for the no-unsafe-fallback and no-privacy-downgrade properties.
-- Add optional real-backend benchmark notebooks with clearly separated environment notes.
-- Add a small Streamlit or CLI demo page for interactive policy selection.
-- Add reviewer-facing result summaries for Raspberry Pi, Android-like, and desktop profiles if those measurements are available.
-- Add badge links for tests, license, and documentation status.
-- Add manuscript DOI or preprint link after the paper is uploaded.
-
----
-
 ## Key Innovation
 
 > **Key point**
