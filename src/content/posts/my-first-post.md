@@ -1,5 +1,5 @@
 ---
-title: "MCP 2.0 — Full Feature Showcase Post"
+title: "MCP 2.0"
 published: 2025-06-03
 description: "A polished MCP 2.0 post that uses normal markdown, guide-style sections, expressive code blocks, GitHub repo cards, tables, and checklists."
 tags: [MCP, Protocols, AI Infrastructure, gRPC, Protobuf, Agents, Demo]
