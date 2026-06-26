@@ -3,49 +3,11 @@ import { mkdir, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import MarkdownIt from "markdown-it";
 import { chromium } from "playwright";
+import { getGeneratedPostPdfPath, slugToPdfBasename } from "../src/utils/pdf-utils.js";
 
 const rootDir = process.cwd();
 const postsRoot = path.join(rootDir, "src", "content", "posts");
 const outputDir = path.join(rootDir, "public", "downloads");
-
-const projects = [
-	{
-		slug: "aegisflow-devsecops-pipeline-orchestrator-agent",
-		output: "aegisflow-project-details.pdf",
-	},
-	{
-		slug: "End-to-End-YOLO-Key-Detection-System-Training-API-Deployment-and-Azure-Container-Apps",
-		output: "end-to-end-yolo-key-detection-system-project-details.pdf",
-	},
-	{
-		slug: "pole-detection",
-		output: "ai-powered-pole-validation-project-details.pdf",
-	},
-	{
-		slug: "dacr-q",
-		output: "dacr-q-project-details.pdf",
-	},
-	{
-		slug: "Vehicle-Scale-LLMs",
-		output: "vehicle-scale-llms-project-details.pdf",
-	},
-	{
-		slug: "LLM-Agents",
-		output: "autonomous-microservice-composition-mcp-control-plane-project-details.pdf",
-	},
-	{
-		slug: "my-first-post",
-		output: "mcp-2-full-feature-showcase-post-project-details.pdf",
-	},
-	{
-		slug: "predictive-preventive-maintenance-generator",
-		output: "predictive-preventive-maintenance-generator-project-details.pdf",
-	},
-	{
-		slug: "execution-aware-agentic-vrp",
-		output: "execution-aware-agentic-vrp-project-details.pdf",
-	},
-];
 
 const markdown = new MarkdownIt({
 	html: true,
@@ -59,7 +21,7 @@ function stripQuotes(value) {
 		.replace(/^["']|["']$/g, "");
 }
 
-function parseArray(value) {
+function parseInlineArray(value) {
 	const raw = String(value || "").trim();
 	if (!raw.startsWith("[") || !raw.endsWith("]")) return [];
 	return raw
@@ -77,15 +39,28 @@ function parseFrontmatter(markdownText) {
 	}
 
 	const frontmatter = {};
+	let listKey = "";
+
 	for (const line of match[1].split(/\r?\n/)) {
 		const trimmed = line.trim();
 		if (!trimmed || trimmed.startsWith("#")) continue;
+
+		if (listKey && trimmed.startsWith("- ")) {
+			frontmatter[listKey].push(stripQuotes(trimmed.slice(2)));
+			continue;
+		}
+
+		listKey = "";
 		const colonIndex = trimmed.indexOf(":");
 		if (colonIndex < 0) continue;
+
 		const key = trimmed.slice(0, colonIndex).trim();
 		const rawValue = trimmed.slice(colonIndex + 1).trim();
-		if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
-			frontmatter[key] = parseArray(rawValue);
+		if (!rawValue) {
+			frontmatter[key] = [];
+			listKey = key;
+		} else if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
+			frontmatter[key] = parseInlineArray(rawValue);
 		} else if (/^(true|false)$/i.test(rawValue)) {
 			frontmatter[key] = rawValue.toLowerCase() === "true";
 		} else {
@@ -114,23 +89,40 @@ async function walkMarkdownFiles(dir) {
 	}
 
 	await visit(dir);
-	return files;
+	return files.sort((a, b) => a.localeCompare(b));
 }
 
-async function findPostFile(slug) {
-	const files = await walkMarkdownFiles(postsRoot);
-	const normalizedSlug = slug.toLowerCase();
-	return files.find((file) => {
-		const relative = path.relative(postsRoot, file).replace(/\\/g, "/").toLowerCase();
-		const base = path.basename(file, path.extname(file)).toLowerCase();
-		return (
-			relative === `${normalizedSlug}.md` ||
-			relative === `${normalizedSlug}.mdx` ||
-			relative.startsWith(`${normalizedSlug}/`) ||
-			relative.includes(`/${normalizedSlug}/`) ||
-			base === normalizedSlug
-		);
-	});
+function slugifyPathSegment(segment) {
+	return String(segment || "")
+		.toLowerCase()
+		.normalize("NFKD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.replace(/[^a-z0-9\s-]/g, "")
+		.trim()
+		.replace(/\s+/g, "-")
+		.replace(/^-+|-+$/g, "");
+}
+
+function getPostSlug(postFile) {
+	const relative = path.relative(postsRoot, postFile).replace(/\\/g, "/");
+	const parsed = path.posix.parse(relative);
+	const parts = parsed.dir ? parsed.dir.split("/") : [];
+	if (parsed.name.toLowerCase() !== "index") {
+		parts.push(parsed.name);
+	}
+	return parts.map(slugifyPathSegment).filter(Boolean).join("/");
+}
+
+function explicitPdfOutputName(pdfPath) {
+	const value = String(pdfPath || "").trim();
+	if (!value || /^https?:\/\//i.test(value)) return "";
+	return path.basename(value.replace(/\\/g, "/"));
+}
+
+function getOutputName(post) {
+	const explicit = explicitPdfOutputName(post.frontmatter.pdf);
+	if (explicit) return explicit;
+	return path.basename(getGeneratedPostPdfPath(post.slug));
 }
 
 function extractImageRefs(markdownText) {
@@ -186,13 +178,14 @@ async function buildAssetMap(postFile, body, frontmatter) {
 		const resolved = path.resolve(postDir, normalized);
 		if (existsSync(resolved)) {
 			assets.set(ref, await loadDataUrl(resolved));
+			assets.set(normalized, assets.get(ref));
 		}
 	}
 
 	return assets;
 }
 
-function preprocessMarkdown(body, frontmatter) {
+function preprocessMarkdown(body) {
 	let content = String(body || "");
 
 	content = content.replace(/::github\{repo="([^"]+)"\}/g, (_match, repo) => {
@@ -245,11 +238,6 @@ function collectProjectLinks(markdownText, frontmatter) {
 
 	addLink("GitHub Repository", frontmatter.github || frontmatter.repo || "");
 
-	if (frontmatter.title) {
-		const slug = String(frontmatter.title).toLowerCase();
-		void slug;
-	}
-
 	for (const url of extractInlineUrls(markdownText)) {
 		if (/huggingface\.co\/spaces/i.test(url)) addLink("Hugging Face Space", url);
 		else if (/youtube\.com|youtu\.be/i.test(url)) addLink("Demo Video", url);
@@ -274,7 +262,7 @@ function shortText(markdownText, maxChars = 260) {
 		.replace(/^---[\s\S]*?---/m, "")
 		.replace(/```[\s\S]*?```/g, " ")
 		.replace(/!\[[^\]]*]\([^)]+\)/g, " ")
-		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+		.replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
 		.replace(/::[\w-]+(?:\{[^}]*\})?/g, " ")
 		.replace(/[*_`>#|-]/g, " ")
 		.replace(/\s+/g, " ")
@@ -305,20 +293,12 @@ function pageHtml({
 	sourcePath,
 }) {
 	const tagMarkup = tags.length
-		? tags
-				.map(
-					(tag) =>
-						`<span class="tag">${escapeHtml(tag)}</span>`,
-				)
-				.join("")
+		? tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")
 		: `<span class="muted">No tags</span>`;
 
 	const linksMarkup = projectLinks.length
 		? projectLinks
-				.map(
-					(link) =>
-						`<a class="link-chip" href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`,
-				)
+				.map((link) => `<a class="link-chip" href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`)
 				.join("")
 		: `<span class="muted">No external links listed.</span>`;
 
@@ -344,23 +324,15 @@ function pageHtml({
 		body {
 			margin: 0;
 			font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-			background:
-				radial-gradient(circle at top left, rgba(191, 219, 254, 0.45), transparent 34%),
-				radial-gradient(circle at top right, rgba(224, 231, 255, 0.5), transparent 28%),
-				linear-gradient(180deg, #fbfdff 0%, #f3f7fb 100%);
+			background: linear-gradient(180deg, #fbfdff 0%, #f3f7fb 100%);
 			color: var(--text);
 		}
-		main {
-			max-width: 980px;
-			margin: 0 auto;
-			padding: 28px;
-		}
+		main { max-width: 980px; margin: 0 auto; padding: 28px; }
 		.hero, .section {
 			background: var(--panel);
 			border: 1px solid var(--panel-border);
 			border-radius: 24px;
 			box-shadow: var(--shadow);
-			backdrop-filter: blur(16px);
 		}
 		.hero {
 			padding: 26px;
@@ -370,18 +342,8 @@ function pageHtml({
 			align-items: start;
 			overflow: hidden;
 		}
-		.hero-copy h1 {
-			margin: 0 0 12px;
-			font-size: 30px;
-			line-height: 1.15;
-			letter-spacing: -0.02em;
-		}
-		.meta-row {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 8px;
-			margin-bottom: 16px;
-		}
+		.hero-copy h1 { margin: 0 0 12px; font-size: 30px; line-height: 1.15; }
+		.meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 		.chip, .tag, .link-chip {
 			display: inline-flex;
 			align-items: center;
@@ -391,149 +353,33 @@ function pageHtml({
 			line-height: 1;
 			font-weight: 600;
 		}
-		.chip {
-			background: var(--accent-soft);
-			color: #1d4ed8;
-			border: 1px solid rgba(37, 99, 235, 0.14);
-		}
-		.cover {
-			border-radius: 18px;
-			overflow: hidden;
-			border: 1px solid rgba(148, 163, 184, 0.18);
-			background: #fff;
-		}
-		.cover img {
-			display: block;
-			width: 100%;
-			height: auto;
-		}
-		.lead {
-			font-size: 15px;
-			line-height: 1.75;
-			color: var(--muted);
-			margin: 0;
-		}
-		.section {
-			margin-top: 18px;
-			padding: 22px 26px;
-		}
-		.section h2 {
-			margin: 0 0 12px;
-			font-size: 18px;
-		}
-		.content {
-			font-size: 14px;
-			line-height: 1.72;
-			color: #0f172a;
-		}
-		.content h2, .content h3, .content h4 {
-			margin: 1.4em 0 0.55em;
-			line-height: 1.2;
-		}
+		.chip { background: var(--accent-soft); color: #1d4ed8; border: 1px solid rgba(37, 99, 235, 0.14); }
+		.cover { border-radius: 18px; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); background: #fff; }
+		.cover img { display: block; width: 100%; height: auto; }
+		.lead { font-size: 15px; line-height: 1.75; color: var(--muted); margin: 0; }
+		.section { margin-top: 18px; padding: 22px 26px; }
+		.section h2 { margin: 0 0 12px; font-size: 18px; }
+		.content { font-size: 14px; line-height: 1.72; color: #0f172a; }
+		.content h2, .content h3, .content h4 { margin: 1.4em 0 0.55em; line-height: 1.2; }
 		.content p { margin: 0 0 1em; }
-		.content blockquote {
-			margin: 1em 0;
-			padding: 14px 16px;
-			border-left: 4px solid rgba(37, 99, 235, 0.4);
-			background: rgba(37, 99, 235, 0.05);
-			border-radius: 12px;
-		}
-		.content table {
-			width: 100%;
-			border-collapse: collapse;
-			margin: 1em 0;
-			font-size: 13px;
-		}
-		.content th, .content td {
-			border: 1px solid rgba(148, 163, 184, 0.24);
-			padding: 8px 10px;
-			vertical-align: top;
-		}
-		.content th {
-			background: rgba(15, 23, 42, 0.03);
-			text-align: left;
-		}
-		.content pre {
-			white-space: pre-wrap;
-			word-break: break-word;
-			background: #0f172a;
-			color: #e2e8f0;
-			padding: 14px 16px;
-			border-radius: 14px;
-			overflow: hidden;
-			font-size: 12px;
-		}
-		.content code {
-			font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-			font-size: 0.92em;
-		}
-		.content img {
-			max-width: 100%;
-			border-radius: 14px;
-			margin: 10px 0;
-		}
-		.tag-list, .link-list {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 8px;
-		}
-		.tag {
-			background: rgba(15, 23, 42, 0.05);
-			border: 1px solid rgba(148, 163, 184, 0.18);
-			color: #334155;
-		}
-		.link-chip {
-			background: rgba(37, 99, 235, 0.08);
-			border: 1px solid rgba(37, 99, 235, 0.16);
-			color: #1d4ed8;
-			text-decoration: none;
-		}
-		.grid {
-			display: grid;
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-			gap: 18px;
-		}
-		.kv {
-			padding: 16px 18px;
-			background: rgba(15, 23, 42, 0.03);
-			border: 1px solid rgba(148, 163, 184, 0.18);
-			border-radius: 16px;
-		}
-		.kv .label {
-			font-size: 12px;
-			color: var(--muted);
-			font-weight: 700;
-			text-transform: uppercase;
-			letter-spacing: 0.04em;
-			margin-bottom: 6px;
-		}
-		.kv .value {
-			font-size: 14px;
-			color: var(--text);
-			line-height: 1.6;
-		}
-		.muted {
-			color: var(--muted);
-			font-size: 13px;
-		}
-		.footer {
-			margin-top: 18px;
-			color: var(--muted);
-			font-size: 11px;
-			text-align: right;
-		}
-		@media print {
-			body { background: white; }
-			main { padding: 0; max-width: none; }
-			.hero, .section {
-				box-shadow: none;
-				backdrop-filter: none;
-			}
-		}
-		@page {
-			size: A4;
-			margin: 16mm;
-		}
+		.content blockquote { margin: 1em 0; padding: 14px 16px; border-left: 4px solid rgba(37, 99, 235, 0.4); background: rgba(37, 99, 235, 0.05); border-radius: 12px; }
+		.content table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 13px; }
+		.content th, .content td { border: 1px solid rgba(148, 163, 184, 0.24); padding: 8px 10px; vertical-align: top; }
+		.content th { background: rgba(15, 23, 42, 0.03); text-align: left; }
+		.content pre { white-space: pre-wrap; word-break: break-word; background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 14px; overflow: hidden; font-size: 12px; }
+		.content code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 0.92em; }
+		.content img { max-width: 100%; border-radius: 14px; margin: 10px 0; }
+		.tag-list, .link-list { display: flex; flex-wrap: wrap; gap: 8px; }
+		.tag { background: rgba(15, 23, 42, 0.05); border: 1px solid rgba(148, 163, 184, 0.18); color: #334155; }
+		.link-chip { background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.16); color: #1d4ed8; text-decoration: none; }
+		.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+		.kv { padding: 16px 18px; background: rgba(15, 23, 42, 0.03); border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 16px; }
+		.kv .label { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+		.kv .value { font-size: 14px; color: var(--text); line-height: 1.6; }
+		.muted { color: var(--muted); font-size: 13px; }
+		.footer { margin-top: 18px; color: var(--muted); font-size: 11px; text-align: right; }
+		@media print { body { background: white; } main { padding: 0; max-width: none; } .hero, .section { box-shadow: none; } }
+		@page { size: A4; margin: 16mm; }
 	</style>
 </head>
 <body>
@@ -555,37 +401,15 @@ function pageHtml({
 		<section class="section">
 			<h2>Project Snapshot</h2>
 			<div class="grid">
-				<div class="kv">
-					<div class="label">Date</div>
-					<div class="value">${escapeHtml(published)}</div>
-				</div>
-				<div class="kv">
-					<div class="label">Category</div>
-					<div class="value">${escapeHtml(category || "Uncategorized")}</div>
-				</div>
-				<div class="kv" style="grid-column: 1 / -1;">
-					<div class="label">Short Description</div>
-					<div class="value">${escapeHtml(description || shortText(summaryText, 260) || "No description available.")}</div>
-				</div>
-				<div class="kv" style="grid-column: 1 / -1;">
-					<div class="label">Tags / Tech Stack</div>
-					<div class="tag-list">${tagMarkup}</div>
-				</div>
+				<div class="kv"><div class="label">Date</div><div class="value">${escapeHtml(published)}</div></div>
+				<div class="kv"><div class="label">Category</div><div class="value">${escapeHtml(category || "Uncategorized")}</div></div>
+				<div class="kv" style="grid-column: 1 / -1;"><div class="label">Short Description</div><div class="value">${escapeHtml(description || shortText(summaryText, 260) || "No description available.")}</div></div>
+				<div class="kv" style="grid-column: 1 / -1;"><div class="label">Tags / Tech Stack</div><div class="tag-list">${tagMarkup}</div></div>
 			</div>
 		</section>
 
-		<section class="section">
-			<h2>Project Links</h2>
-			<div class="link-list">${linksMarkup}</div>
-		</section>
-
-		<section class="section">
-			<h2>Full Project Content</h2>
-			<div class="content">
-				${bodyHtml}
-			</div>
-		</section>
-
+		<section class="section"><h2>Project Links</h2><div class="link-list">${linksMarkup}</div></section>
+		<section class="section"><h2>Full Project Content</h2><div class="content">${bodyHtml}</div></section>
 		<div class="footer">Source: ${escapeHtml(sourcePath)}</div>
 	</main>
 </body>
@@ -605,21 +429,39 @@ function escapeHtml(value) {
 	});
 }
 
-async function renderProjectPdf(project) {
-	const postFile = await findPostFile(project.slug);
-	if (!postFile) {
-		throw new Error(`Could not locate markdown source for ${project.slug}`);
+async function discoverPosts() {
+	const files = await walkMarkdownFiles(postsRoot);
+	const posts = [];
+
+	for (const postFile of files) {
+		const rawMarkdown = await readFile(postFile, "utf8");
+		const { frontmatter, body } = parseFrontmatter(rawMarkdown);
+		if (frontmatter.draft === true) continue;
+
+		const slug = getPostSlug(postFile);
+		if (!slug) continue;
+
+		posts.push({
+			postFile,
+			slug,
+			frontmatter,
+			body,
+			output: getOutputName({ slug, frontmatter }),
+		});
 	}
 
-	const rawMarkdown = await readFile(postFile, "utf8");
-	const { frontmatter, body } = parseFrontmatter(rawMarkdown);
+	return posts;
+}
+
+async function renderProjectPdf(post, browser) {
+	const { postFile, slug, frontmatter, body, output } = post;
 	const published = frontmatter.published ? String(frontmatter.published) : "";
-	const title = frontmatter.title || project.slug;
+	const title = frontmatter.title || slug;
 	const category = frontmatter.category || "";
 	const description = frontmatter.description || "";
 	const tags = Array.isArray(frontmatter.tags) ? frontmatter.tags : [];
 	const assetMap = await buildAssetMap(postFile, body, frontmatter);
-	const processedBody = preprocessMarkdown(body, frontmatter);
+	const processedBody = preprocessMarkdown(body);
 	const bodyHtml = renderMarkdownWithAssets(processedBody, assetMap);
 	const coverCandidates = [
 		frontmatter.image,
@@ -655,7 +497,6 @@ async function renderProjectPdf(project) {
 		sourcePath: path.relative(rootDir, postFile).replace(/\\/g, "/"),
 	});
 
-	const browser = await chromium.launch({ headless: true });
 	const page = await browser.newPage({
 		deviceScaleFactor: 1,
 		viewport: { width: 1400, height: 2400 },
@@ -668,7 +509,7 @@ async function renderProjectPdf(project) {
 		}
 	});
 
-	const outputPath = path.join(outputDir, project.output);
+	const outputPath = path.join(outputDir, output || `${slugToPdfBasename(slug)}-project-details.pdf`);
 	await page.pdf({
 		path: outputPath,
 		format: "A4",
@@ -682,16 +523,24 @@ async function renderProjectPdf(project) {
 		},
 	});
 
-	await browser.close();
+	await page.close();
 	console.log(`Wrote ${path.relative(rootDir, outputPath).replace(/\\/g, "/")}`);
 }
 
 async function main() {
 	await mkdir(outputDir, { recursive: true });
-	for (const project of projects) {
-		await renderProjectPdf(project);
+	const posts = await discoverPosts();
+	const browser = await chromium.launch({ headless: true });
+
+	try {
+		for (const post of posts) {
+			await renderProjectPdf(post, browser);
+		}
+	} finally {
+		await browser.close();
 	}
-	console.log(`Generated ${projects.length} project PDFs.`);
+
+	console.log(`Generated ${posts.length} project PDFs.`);
 }
 
 await main();
