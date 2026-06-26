@@ -12,7 +12,6 @@ draft: false
 
 ::github{repo="dranubhaparashar/-DACR-Q-ATraining-Free-Framework-for-Memory-Efficient-LLM-Inference"}
 
-> Cover image source: AI-generated project illustration
 
 This post documents a compact research-style implementation of **DACR-Q**, a repository focused on **training-free, memory-efficient LLM inference**. The public repo currently contains a minimal README and a core implementation file, so this post is written as a project walkthrough and interpretation of the available code.
 
