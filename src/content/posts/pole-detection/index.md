@@ -13,11 +13,6 @@ draft: false
 
 ::github{repo="dranubhaparashar/Pole-Detection"}
 
----
-
-
-> Cover image source: [Source](https://github.com/dranubhaparashar/Pole-Detection)
-
 
 ---
 

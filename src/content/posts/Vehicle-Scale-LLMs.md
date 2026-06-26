@@ -12,8 +12,6 @@ draft: false
 
 ::github{repo="dranubhaparashar/Vehicle-Scale-LLMs-Integrating-Low-Rank-Residuals-and-4-Bit-Quantization-for-In-Vehicle-AI"}
 
-> Cover image source: AI-generated project illustration
-
 This post documents a compact, reproducible starter for **vehicle-scale LLM inference**. The repository presents **DAC+Q4-ITS** as a minimal pipeline that demonstrates a complete flow from corpus preparation to export, INT4 quantization, eigenspace computation, adapter injection, inference, and evaluation.
 
 ---

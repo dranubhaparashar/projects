@@ -13,7 +13,6 @@ draft: false
 
 ::github{repo="anubhaparashar/Autonomous-Microservice-Composition-via-LLM-Agents-in-an-MCP-Control-Plane"}
 
-> Cover image source: AI-generated project illustration
 
 This project implements an **MCP control plane** for autonomous microservice composition. The repository centers on a single FastAPI app, `control_plane.py`, which combines a Redis-backed service registry, an OpenAI-powered DAG planner, PostgreSQL + `pgvector` metadata access, and an execution orchestrator built with HTTPX and NetworkX.
 
