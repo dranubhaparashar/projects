@@ -11,6 +11,56 @@ const currentYear = new Date().getFullYear();
         &copy; <span id="copyright-year">{currentYear}</span> {profileConfig.name}. All Rights Reserved. /
         <a class="transition link text-[var(--primary)] font-medium" target="_blank" rel="noopener noreferrer" href="https://github.com/dranubhaparashar/">GitHub</a> /
         <a class="transition link text-[var(--primary)] font-medium" target="_blank" rel="noopener noreferrer" href="https://huggingface.co/AnubhaParashar/">Hugging Face</a> /
-        <a href="/projects/admin-comments.html" class="admin-comments-link">Admin</a><br>
+        <a href="/projects/admin-comments.html" class="admin-comments-link" data-admin-comments-link>Admin</a><br>
     </div>
 </div>
+<script>
+	import { getAuth, onAuthStateChanged } from "firebase/auth";
+	import { collectionGroup, getCountFromServer, query, where } from "firebase/firestore";
+	import { app, db } from "../lib/firebase";
+
+	const ADMIN_EMAIL = "anubhaparashar1025@gmail.com";
+
+	// No-backend notification: authenticated admins see a pending-comment count in the footer.
+	// Public users cannot read pendingComments, so permission-denied is expected and no count is shown.
+	// Real email notification requires Firebase Trigger Email extension or Cloud Functions; never put
+	// SMTP passwords, service account JSON, or other private notification credentials in frontend code.
+	async function updateAdminPendingCommentLinks() {
+		const links = document.querySelectorAll<HTMLAnchorElement>("[data-admin-comments-link]");
+		if (!links.length || !app || !db) return;
+
+		const auth = getAuth(app);
+		onAuthStateChanged(auth, async (user) => {
+			if (user?.email !== ADMIN_EMAIL) {
+				links.forEach((link) => {
+					link.textContent = "Admin";
+				});
+				return;
+			}
+
+			try {
+				const pendingQuery = query(collectionGroup(db, "comments"), where("status", "==", "pending"));
+				const snapshot = await getCountFromServer(pendingQuery);
+				const count = snapshot.data().count || 0;
+				links.forEach((link) => {
+					link.textContent = count > 0 ? `Admin (${count} pending)` : "Admin";
+				});
+			} catch (error) {
+				console.info("Pending comment count unavailable for this session.", error);
+				links.forEach((link) => {
+					link.textContent = "Admin";
+				});
+			}
+		});
+	}
+
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", updateAdminPendingCommentLinks, { once: true });
+	} else {
+		updateAdminPendingCommentLinks();
+	}
+
+	document.addEventListener("astro:page-load", updateAdminPendingCommentLinks);
+	document.addEventListener("swup:contentReplaced", updateAdminPendingCommentLinks);
+	document.addEventListener("swup:page:view", updateAdminPendingCommentLinks);
+</script>

@@ -13,7 +13,6 @@ import {
 	getFirestore,
 	increment,
 	limit,
-	orderBy,
 	query,
 	serverTimestamp,
 	startAfter,
@@ -23,7 +22,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const ADMIN_EMAIL = "anubhaparashar1025@gmail.com";
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
 const firebaseConfig = window.DRANUBHA_FIREBASE_CONFIG || {};
 const missingConfig = window.DRANUBHA_FIREBASE_CONFIG_MISSING || [];
@@ -88,6 +87,14 @@ function getPostSlug(data, docRef) {
 
 function isPendingCommentPath(docRef) {
 	return docRef.path.startsWith("pendingComments/");
+}
+
+function timestampToMillis(value) {
+	if (!value) return 0;
+	if (typeof value.toMillis === "function") return value.toMillis();
+	if (value.seconds) return value.seconds * 1000;
+	const parsed = Date.parse(value);
+	return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 function formatDate(value) {
@@ -191,7 +198,6 @@ function createPendingQuery() {
 	const base = query(
 		collectionGroup(state.db, "comments"),
 		where("status", "==", "pending"),
-		orderBy("createdAt", "desc"),
 		limit(PAGE_SIZE),
 	);
 
@@ -199,10 +205,21 @@ function createPendingQuery() {
 	return query(
 		collectionGroup(state.db, "comments"),
 		where("status", "==", "pending"),
-		orderBy("createdAt", "desc"),
 		startAfter(state.lastVisibleDoc),
 		limit(PAGE_SIZE),
 	);
+}
+
+function sortPendingDocs(docs) {
+	return docs
+		.filter((docSnap) => isPendingCommentPath(docSnap.ref))
+		.sort((a, b) => {
+			const aData = a.data();
+			const bData = b.data();
+			const aTime = timestampToMillis(aData.createdAt || aData.updatedAt);
+			const bTime = timestampToMillis(bData.createdAt || bData.updatedAt);
+			return bTime - aTime;
+		});
 }
 
 async function loadPendingComments({ reset = false } = {}) {
@@ -220,15 +237,15 @@ async function loadPendingComments({ reset = false } = {}) {
 
 		const snapshot = await getDocs(createPendingQuery());
 		state.lastVisibleDoc = snapshot.docs.at(-1) || state.lastVisibleDoc;
-		snapshot.docs.forEach(renderComment);
+		sortPendingDocs(snapshot.docs).forEach(renderComment);
 		elements.loadMoreButton.classList.toggle("hidden", snapshot.docs.length < PAGE_SIZE);
 		updateCounts();
 	} catch (error) {
 		console.error("Failed to load pending comments", error);
-		if (String(error?.message || "").toLowerCase().includes("index")) {
-			setStatus("Firestore index required. Open the Firebase index creation link shown in browser console.", "error");
+		if (error?.code === "permission-denied") {
+			setStatus("Permission denied. Check Firebase login and Firestore rules.", "error");
 		} else {
-			setStatus("Could not load pending comments. Check console for details.", "error");
+			setStatus(error?.message || "Could not load pending comments. Check console for details.", "error");
 		}
 	} finally {
 		setLoading(false);
