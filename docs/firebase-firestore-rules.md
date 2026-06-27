@@ -11,10 +11,6 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
     function isAdmin() {
       return request.auth != null
         && request.auth.token.email == "anubhaparashar1025@gmail.com";
@@ -27,6 +23,7 @@ service cloud.firestore {
     function validPendingComment(postSlug) {
       return request.resource.data.keys().hasOnly([
         'id',
+        'commentId',
         'postSlug',
         'status',
         'approved',
@@ -51,6 +48,12 @@ service cloud.firestore {
       && isNonEmptyString(request.resource.data.message, 1000)
       && isNonEmptyString(request.resource.data.body, 1000)
       && request.resource.data.source == 'firebase';
+    }
+
+    function validPendingPostMetadata(postSlug) {
+      return request.resource.data.keys().hasOnly(['postSlug', 'updatedAt', 'hasPendingComments'])
+        && request.resource.data.postSlug == postSlug
+        && request.resource.data.hasPendingComments == true;
     }
 
     match /postStats/{postId} {
@@ -99,8 +102,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /pendingCommentQueue/{queueId} {
+      allow create: if request.resource.data.status == 'pending'
+        && request.resource.data.postSlug is string;
+      allow read, update, delete: if isAdmin();
+    }
+
     match /pendingComments/{postSlug} {
-      allow read, create, update, delete: if false;
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin() || validPendingPostMetadata(postSlug);
 
       match /comments/{commentId} {
         allow create: if !exists(/databases/$(database)/documents/pendingComments/$(postSlug)/comments/$(commentId))
@@ -118,10 +128,6 @@ service cloud.firestore {
       }
     }
 
-
-    match /{path=**}/comments/{commentId} {
-      allow read: if isAdmin();
-    }
     match /projectPosts/{postId} {
       allow read: if true;
 

@@ -52,6 +52,7 @@ const { postId, path, title } = Astro.props;
 		query,
 		serverTimestamp,
 		setDoc,
+		writeBatch,
 	} from "firebase/firestore";
 
 	function escapeHtml(value: string): string {
@@ -150,6 +151,7 @@ const { postId, path, title } = Astro.props;
 		const statsRef = doc(db, "postStats", postId);
 		const publicCommentsRef = collection(db, "postComments", postId, "comments");
 		const pendingCommentsRef = collection(db, "pendingComments", postId, "comments");
+		const pendingPostRef = doc(db, "pendingComments", postId);
 		const status = root.querySelector<HTMLElement>("[data-comment-status]");
 		const form = root.querySelector<HTMLFormElement>("[data-comment-form]");
 		const nameInput = root.querySelector<HTMLInputElement>("[data-comment-name]");
@@ -198,8 +200,13 @@ const { postId, path, title } = Astro.props;
 				const commentId =
 					globalThis.crypto?.randomUUID?.() ||
 					`firebase-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-				await setDoc(doc(pendingCommentsRef, commentId), {
+				const queueId = `${postId}__${commentId}`;
+				const pendingRef = doc(pendingCommentsRef, commentId);
+				const queueRef = doc(db, "pendingCommentQueue", queueId);
+				const createdAt = serverTimestamp();
+				const pendingComment = {
 					id: commentId,
+					commentId,
 					postSlug: postId,
 					status: "pending",
 					approved: false,
@@ -212,9 +219,21 @@ const { postId, path, title } = Astro.props;
 					source: "firebase",
 					sourceCommentId: null,
 					importedAt: null,
-					createdAt: serverTimestamp(),
-					updatedAt: serverTimestamp(),
+					createdAt,
+					updatedAt: createdAt,
+				};
+				const batch = writeBatch(db);
+				batch.set(pendingRef, pendingComment);
+				batch.set(queueRef, {
+					...pendingComment,
+					pendingPath: pendingRef.path,
 				});
+				batch.set(pendingPostRef, {
+					postSlug: postId,
+					updatedAt: serverTimestamp(),
+					hasPendingComments: true,
+				}, { merge: true });
+				await batch.commit();
 
 				if (nameInput) nameInput.value = "";
 				if (messageInput) messageInput.value = "";

@@ -7,22 +7,32 @@ import {
 	signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
-	collectionGroup,
+	collection,
 	doc,
 	getDoc,
+	getDocs,
 	getFirestore,
 	increment,
-	limit,
-	query,
 	serverTimestamp,
-	startAfter,
-	where,
 	writeBatch,
-	getDocs,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const ADMIN_EMAIL = "anubhaparashar1025@gmail.com";
 const PAGE_SIZE = 50;
+const KNOWN_POST_SLUGS = [
+	"aegisflow-devsecops-pipeline-orchestrator-agent",
+	"ashu-mentor-ai-studio",
+	"dacr-q",
+	"end-to-end-yolo-key-detection-system-training-api-deployment-and-azure-container-apps",
+	"execution-aware-agentic-vrp",
+	"lightdid-zkp--a-policy-and-resource-aware-framework-for-selecting-bbs-and-anoncreds-verifiable-presentations-in-decentralized-identity",
+	"lightdid-zkp-a-policy-and-resource-aware-framework-for-selecting-bbs-and-anoncreds-verifiable-presentations-in-decentralized-identity",
+	"llm-agents",
+	"my-first-post",
+	"pole-detection",
+	"predictive-preventive-maintenance-generator",
+	"vehicle-scale-llms",
+];
 
 const firebaseConfig = window.DRANUBHA_FIREBASE_CONFIG || {};
 const missingConfig = window.DRANUBHA_FIREBASE_CONFIG_MISSING || [];
@@ -30,8 +40,9 @@ const missingConfig = window.DRANUBHA_FIREBASE_CONFIG_MISSING || [];
 const state = {
 	db: null,
 	auth: null,
-	lastVisibleDoc: null,
 	isLoading: false,
+	visibleCount: PAGE_SIZE,
+	queueDocs: [],
 	pending: new Map(),
 	selected: new Set(),
 };
@@ -50,6 +61,7 @@ const elements = {
 	selectedCount: document.getElementById("selected-count"),
 	approveSelectedButton: document.getElementById("approve-selected-button"),
 	rejectSelectedButton: document.getElementById("reject-selected-button"),
+	repairQueueButton: document.getElementById("repair-queue-button"),
 	statusMessage: document.getElementById("status-message"),
 	commentsList: document.getElementById("comments-list"),
 	emptyState: document.getElementById("empty-state"),
@@ -70,6 +82,7 @@ function setStatus(message, tone = "") {
 function setLoading(isLoading) {
 	state.isLoading = isLoading;
 	elements.loadMoreButton.disabled = isLoading;
+	elements.repairQueueButton.disabled = isLoading;
 	elements.loadMoreButton.textContent = isLoading ? "Loading..." : "Load More";
 }
 
@@ -85,8 +98,8 @@ function getPostSlug(data, docRef) {
 	return data.postSlug || docRef.parent.parent?.id || "";
 }
 
-function isPendingCommentPath(docRef) {
-	return docRef.path.startsWith("pendingComments/");
+function getQueueId(postSlug, commentId) {
+	return `${postSlug}__${commentId}`;
 }
 
 function timestampToMillis(value) {
@@ -121,11 +134,17 @@ function escapeHtml(value) {
 }
 
 function updateCounts() {
-	elements.pendingCount.textContent = String(state.pending.size);
+	elements.pendingCount.textContent = String(state.queueDocs.length);
 	elements.selectedCount.textContent = String(state.selected.size);
 	elements.approveSelectedButton.disabled = state.selected.size === 0;
 	elements.rejectSelectedButton.disabled = state.selected.size === 0;
-	elements.emptyState.classList.toggle("hidden", state.pending.size > 0 || state.isLoading);
+	elements.emptyState.classList.toggle("hidden", state.queueDocs.length > 0 || state.isLoading);
+}
+
+function clearRenderedComments() {
+	state.pending.clear();
+	state.selected.clear();
+	elements.commentsList.innerHTML = "";
 }
 
 function removeCard(key) {
@@ -134,6 +153,7 @@ function removeCard(key) {
 	item.element.remove();
 	state.pending.delete(key);
 	state.selected.delete(key);
+	state.queueDocs = state.queueDocs.filter((docSnap) => docSnap.ref.path !== key);
 	updateCounts();
 }
 
@@ -147,10 +167,11 @@ function setCardBusy(key, isBusy) {
 }
 
 function renderComment(docSnap) {
-	if (!isPendingCommentPath(docSnap.ref)) return;
 	const data = docSnap.data();
+	if (data.status !== "pending") return;
 	const postSlug = getPostSlug(data, docSnap.ref);
-	if (!postSlug) return;
+	const commentId = data.commentId || data.id;
+	if (!postSlug || !commentId) return;
 
 	const key = docSnap.ref.path;
 	if (state.pending.has(key)) return;
@@ -164,7 +185,7 @@ function renderComment(docSnap) {
 				<input type="checkbox" aria-label="Select comment" data-select-comment />
 				<div>
 					<div class="comment-author">${escapeHtml(getAuthorName(data))}</div>
-					<div class="muted">${escapeHtml(formatDate(data.createdAt))}</div>
+					<div class="muted">${escapeHtml(formatDate(data.createdAt || data.updatedAt))}</div>
 				</div>
 			</div>
 			<div class="comment-card-actions">
@@ -175,9 +196,10 @@ function renderComment(docSnap) {
 		<p class="comment-body">${escapeHtml(getCommentText(data))}</p>
 		<div class="comment-meta">
 			<div class="meta-item"><span class="meta-label">Post slug</span><span class="meta-value">${escapeHtml(postSlug)}</span></div>
-			<div class="meta-item"><span class="meta-label">Comment ID</span><span class="meta-value">${escapeHtml(docSnap.id)}</span></div>
+			<div class="meta-item"><span class="meta-label">Comment ID</span><span class="meta-value">${escapeHtml(commentId)}</span></div>
 			<div class="meta-item"><span class="meta-label">Source</span><span class="meta-value">${escapeHtml(data.source || "firebase")}</span></div>
-			<div class="meta-item"><span class="meta-label">Path</span><span class="meta-value">${escapeHtml(docSnap.ref.path)}</span></div>
+			<div class="meta-item"><span class="meta-label">Queue path</span><span class="meta-value">${escapeHtml(docSnap.ref.path)}</span></div>
+			<div class="meta-item"><span class="meta-label">Pending path</span><span class="meta-value">${escapeHtml(data.pendingPath || `pendingComments/${postSlug}/comments/${commentId}`)}</span></div>
 		</div>
 	`;
 
@@ -194,25 +216,9 @@ function renderComment(docSnap) {
 	updateCounts();
 }
 
-function createPendingQuery() {
-	const base = query(
-		collectionGroup(state.db, "comments"),
-		where("status", "==", "pending"),
-		limit(PAGE_SIZE),
-	);
-
-	if (!state.lastVisibleDoc) return base;
-	return query(
-		collectionGroup(state.db, "comments"),
-		where("status", "==", "pending"),
-		startAfter(state.lastVisibleDoc),
-		limit(PAGE_SIZE),
-	);
-}
-
 function sortPendingDocs(docs) {
 	return docs
-		.filter((docSnap) => isPendingCommentPath(docSnap.ref))
+		.filter((docSnap) => docSnap.data().status === "pending")
 		.sort((a, b) => {
 			const aData = a.data();
 			const bData = b.data();
@@ -222,26 +228,25 @@ function sortPendingDocs(docs) {
 		});
 }
 
+function renderVisibleQueueDocs() {
+	clearRenderedComments();
+	state.queueDocs.slice(0, state.visibleCount).forEach(renderComment);
+	elements.loadMoreButton.classList.toggle("hidden", state.visibleCount >= state.queueDocs.length);
+	updateCounts();
+}
+
 async function loadPendingComments({ reset = false } = {}) {
 	if (state.isLoading) return;
 	setLoading(true);
 	setStatus("");
 
 	try {
-		if (reset) {
-			state.lastVisibleDoc = null;
-			state.pending.clear();
-			state.selected.clear();
-			elements.commentsList.innerHTML = "";
-		}
-
-		const snapshot = await getDocs(createPendingQuery());
-		state.lastVisibleDoc = snapshot.docs.at(-1) || state.lastVisibleDoc;
-		sortPendingDocs(snapshot.docs).forEach(renderComment);
-		elements.loadMoreButton.classList.toggle("hidden", snapshot.docs.length < PAGE_SIZE);
-		updateCounts();
+		if (reset) state.visibleCount = PAGE_SIZE;
+		const snapshot = await getDocs(collection(state.db, "pendingCommentQueue"));
+		state.queueDocs = sortPendingDocs(snapshot.docs);
+		renderVisibleQueueDocs();
 	} catch (error) {
-		console.error("Failed to load pending comments", error);
+		console.error("Failed to load pending comment queue", error);
 		if (error?.code === "permission-denied") {
 			setStatus("Permission denied. Check Firebase login and Firestore rules.", "error");
 		} else {
@@ -252,29 +257,41 @@ async function loadPendingComments({ reset = false } = {}) {
 	}
 }
 
+function commentPayloadFromQueue(data, fallback, postSlug, commentId) {
+	return {
+		...fallback,
+		...data,
+		id: data.id || fallback.id || commentId,
+		commentId: data.commentId || fallback.commentId || commentId,
+		postSlug,
+	};
+}
+
 async function approveComment(item) {
-	const latest = await getDoc(item.docSnap.ref);
-	if (!latest.exists()) throw new Error("Pending comment no longer exists.");
-	if (!isPendingCommentPath(latest.ref)) throw new Error("Refusing to approve a non-pending comment path.");
+	const queueSnap = await getDoc(item.docSnap.ref);
+	if (!queueSnap.exists()) throw new Error("Pending queue item no longer exists.");
 
-	const data = latest.data();
-	const commentId = latest.id;
-	const postSlug = getPostSlug(data, latest.ref);
-	if (!postSlug) throw new Error("Missing postSlug.");
+	const queueData = queueSnap.data();
+	const postSlug = queueData.postSlug;
+	const commentId = queueData.commentId || queueData.id;
+	if (!postSlug || !commentId) throw new Error("Missing postSlug or commentId.");
 
+	const pendingRef = doc(state.db, "pendingComments", postSlug, "comments", commentId);
+	const pendingSnap = await getDoc(pendingRef);
+	const pendingData = pendingSnap.exists() ? pendingSnap.data() : {};
 	const targetRef = doc(state.db, "postComments", postSlug, "comments", commentId);
 	const statsRef = doc(state.db, "postStats", postSlug);
 	const batch = writeBatch(state.db);
+
 	batch.set(targetRef, {
-		...data,
-		id: data.id || commentId,
-		postSlug,
+		...commentPayloadFromQueue(queueData, pendingData, postSlug, commentId),
 		status: "approved",
 		approved: true,
 		approvedAt: serverTimestamp(),
 		updatedAt: serverTimestamp(),
 	});
-	batch.delete(latest.ref);
+	batch.delete(pendingRef);
+	batch.delete(queueSnap.ref);
 	batch.set(statsRef, {
 		comments: increment(1),
 		updatedAt: serverTimestamp(),
@@ -283,11 +300,17 @@ async function approveComment(item) {
 }
 
 async function rejectComment(item) {
-	const latest = await getDoc(item.docSnap.ref);
-	if (!latest.exists()) return;
-	if (!isPendingCommentPath(latest.ref)) throw new Error("Refusing to reject a non-pending comment path.");
+	const queueSnap = await getDoc(item.docSnap.ref);
+	if (!queueSnap.exists()) return;
+
+	const data = queueSnap.data();
+	const postSlug = data.postSlug;
+	const commentId = data.commentId || data.id;
+	if (!postSlug || !commentId) throw new Error("Missing postSlug or commentId.");
+
 	const batch = writeBatch(state.db);
-	batch.delete(latest.ref);
+	batch.delete(doc(state.db, "pendingComments", postSlug, "comments", commentId));
+	batch.delete(queueSnap.ref);
 	await batch.commit();
 }
 
@@ -369,6 +392,62 @@ async function rejectSelected() {
 	setStatus(`Bulk reject complete: ${success} rejected, ${failed} failed.`, failed ? "error" : "success");
 }
 
+async function repairPendingQueue() {
+	if (state.isLoading) return;
+	setLoading(true);
+	setStatus("Repairing pending queue...");
+	let repaired = 0;
+	let scanned = 0;
+
+	try {
+		for (const postSlug of KNOWN_POST_SLUGS) {
+			const commentsRef = collection(state.db, "pendingComments", postSlug, "comments");
+			const snapshot = await getDocs(commentsRef);
+			if (snapshot.empty) continue;
+
+			const batch = writeBatch(state.db);
+			let batchWrites = 0;
+			snapshot.docs.forEach((docSnap) => {
+				const data = docSnap.data();
+				if (data.status && data.status !== "pending") return;
+				const commentId = data.commentId || data.id || docSnap.id;
+				const queueRef = doc(state.db, "pendingCommentQueue", getQueueId(postSlug, commentId));
+				batch.set(queueRef, {
+					...data,
+					id: data.id || commentId,
+					commentId,
+					postSlug,
+					status: "pending",
+					source: data.source || "firebase",
+					pendingPath: docSnap.ref.path,
+					updatedAt: data.updatedAt || serverTimestamp(),
+				}, { merge: true });
+				batch.set(doc(state.db, "pendingComments", postSlug), {
+					postSlug,
+					updatedAt: serverTimestamp(),
+					hasPendingComments: true,
+				}, { merge: true });
+				repaired += 1;
+				batchWrites += 2;
+			});
+			scanned += snapshot.size;
+			if (batchWrites > 0) await batch.commit();
+		}
+
+		setStatus(`Repair complete: scanned ${scanned}, queued ${repaired}.`, "success");
+		await loadPendingComments({ reset: true });
+	} catch (error) {
+		console.error("Repair pending queue failed", error);
+		if (error?.code === "permission-denied") {
+			setStatus("Permission denied. Check Firebase login and Firestore rules.", "error");
+		} else {
+			setStatus(error?.message || "Could not repair pending queue. Check console for details.", "error");
+		}
+	} finally {
+		setLoading(false);
+	}
+}
+
 function initFirebase() {
 	if (missingConfig.length > 0 || !firebaseConfig.apiKey || !firebaseConfig.projectId) {
 		console.error("Firebase config missing", missingConfig);
@@ -384,10 +463,9 @@ function initFirebase() {
 
 function initAuth() {
 	onAuthStateChanged(state.auth, (user) => {
-		state.pending.clear();
-		state.selected.clear();
-		state.lastVisibleDoc = null;
-		elements.commentsList.innerHTML = "";
+		clearRenderedComments();
+		state.queueDocs = [];
+		state.visibleCount = PAGE_SIZE;
 		updateCounts();
 
 		if (!user) {
@@ -417,7 +495,11 @@ function bindEvents() {
 	});
 	elements.logoutButton.addEventListener("click", () => signOut(state.auth));
 	elements.deniedLogoutButton.addEventListener("click", () => signOut(state.auth));
-	elements.loadMoreButton.addEventListener("click", () => loadPendingComments());
+	elements.loadMoreButton.addEventListener("click", () => {
+		state.visibleCount += PAGE_SIZE;
+		renderVisibleQueueDocs();
+	});
+	elements.repairQueueButton.addEventListener("click", repairPendingQueue);
 	elements.approveSelectedButton.addEventListener("click", approveSelected);
 	elements.rejectSelectedButton.addEventListener("click", rejectSelected);
 }
