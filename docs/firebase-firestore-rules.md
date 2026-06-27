@@ -8,6 +8,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isNonEmptyString(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+
+
     match /postStats/{postId} {
       allow read: if true;
 
@@ -53,33 +58,63 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Legacy visible comments path. Keep readable temporarily so old comments remain
+    // inspectable during migration, but do not allow public writes here anymore.
     match /postComments/{postId} {
       allow read: if true;
       allow create, update, delete: if false;
 
       match /comments/{commentId} {
         allow read: if true;
+        allow create, update, delete: if false;
+      }
+    }
 
-        allow create: if request.resource.data.keys().hasOnly([
-          'id',
-          'postSlug',
-          'name',
-          'authorName',
-          'authorAvatarUrl',
-          'message',
-          'body',
-          'source',
-          'sourceCommentId',
-          'importedAt',
-          'createdAt',
-          'updatedAt'
-        ])
-        && request.resource.data.name is string
-        && request.resource.data.message is string
-        && request.resource.data.source == 'firebase'
-        && request.resource.data.name.size() <= 80
-        && request.resource.data.message.size() <= 1000;
+    // Publicly visible moderated comments. Admin SDK bypasses these rules, so manual
+    // approval/copying from Firebase Console or an Admin SDK script can write here.
+    match /approvedComments/{postId} {
+      allow read: if true;
+      allow create, update, delete: if false;
 
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create, update, delete: if false;
+      }
+    }
+
+    // Public submission queue. Visitors can create a new pending comment, but cannot
+    // read pending comments and cannot overwrite or delete any pending comment.
+    match /pendingComments/{postId} {
+      allow read: if false;
+      allow create, update, delete: if false;
+
+      match /comments/{commentId} {
+        allow read: if false;
+        allow create: if !exists(/databases/$(database)/documents/pendingComments/$(postId)/comments/$(commentId))
+          && request.resource.data.keys().hasOnly([
+            'id',
+            'postSlug',
+            'status',
+            'name',
+            'authorName',
+            'authorAvatarUrl',
+            'text',
+            'message',
+            'body',
+            'source',
+            'sourceCommentId',
+            'importedAt',
+            'createdAt',
+            'updatedAt'
+          ])
+          && request.resource.data.postSlug == postId
+          && request.resource.data.status == 'pending'
+          && isNonEmptyString(request.resource.data.name, 80)
+          && isNonEmptyString(request.resource.data.authorName, 80)
+          && isNonEmptyString(request.resource.data.text, 1000)
+          && isNonEmptyString(request.resource.data.message, 1000)
+          && isNonEmptyString(request.resource.data.body, 1000)
+          && request.resource.data.source == 'firebase';
         allow update, delete: if false;
       }
     }
@@ -103,4 +138,32 @@ service cloud.firestore {
 }
 ```
 
-The migration script uses the Firebase Admin SDK, so these client rules do not need to permit writes to imported Giscus metadata.
+## Moderated comment flow
+
+Current visible comments were previously stored in Firestore at:
+
+```txt
+postComments/{postId}/comments/{commentId}
+```
+
+Run this migration once with Firebase Admin credentials before deploying the frontend rules/path switch:
+
+```bash
+pnpm migrate:approved-comments
+```
+
+That copies existing visible comments into:
+
+```txt
+approvedComments/{postId}/comments/{commentId}
+```
+
+New public submissions are written to:
+
+```txt
+pendingComments/{postId}/comments/{commentId}
+```
+
+To approve manually in Firebase Console, copy the pending comment document to the same post/comment ID under `approvedComments/{postId}/comments/{commentId}`, optionally add `approvedAt`, then delete the pending document. Public users cannot read `pendingComments` or write to `approvedComments`.
+
+The migration script uses the Firebase Admin SDK, so these client rules do not need to permit writes to imported Giscus metadata or approved comments.

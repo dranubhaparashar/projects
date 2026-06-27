@@ -44,17 +44,14 @@ const { postId, path, title } = Astro.props;
 <script>
 	import { db } from "../lib/firebase";
 	import {
-		addDoc,
 		collection,
 		doc,
 		getDoc,
-		increment,
 		onSnapshot,
 		orderBy,
 		query,
 		serverTimestamp,
 		setDoc,
-		updateDoc,
 	} from "firebase/firestore";
 
 	function escapeHtml(value: string): string {
@@ -119,7 +116,7 @@ const { postId, path, title } = Astro.props;
 				const name =
 					stringValue(data.authorName) || stringValue(data.name) || "Anonymous";
 				const message =
-					stringValue(data.body) || stringValue(data.message);
+					stringValue(data.body) || stringValue(data.message) || stringValue(data.text);
 				const avatarUrl = stringValue(data.authorAvatarUrl);
 				const source = stringValue(data.source) || "firebase";
 				const sourceId =
@@ -151,7 +148,8 @@ const { postId, path, title } = Astro.props;
 		if (!db) return;
 
 		const statsRef = doc(db, "postStats", postId);
-		const commentsRef = collection(db, "postComments", postId, "comments");
+		const approvedCommentsRef = collection(db, "approvedComments", postId, "comments");
+		const pendingCommentsRef = collection(db, "pendingComments", postId, "comments");
 		const status = root.querySelector<HTMLElement>("[data-comment-status]");
 		const form = root.querySelector<HTMLFormElement>("[data-comment-form]");
 		const nameInput = root.querySelector<HTMLInputElement>("[data-comment-name]");
@@ -161,7 +159,7 @@ const { postId, path, title } = Astro.props;
 			await ensurePostStatsDocument(statsRef, root);
 
 			onSnapshot(
-				query(commentsRef, orderBy("createdAt", "asc")),
+				query(approvedCommentsRef, orderBy("createdAt", "asc")),
 				(snapshot) => renderComments(root, snapshot.docs),
 				(error) => {
 					console.warn("Firebase comments read failed", error);
@@ -200,12 +198,14 @@ const { postId, path, title } = Astro.props;
 				const commentId =
 					globalThis.crypto?.randomUUID?.() ||
 					`firebase-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-				await addDoc(commentsRef, {
+				await setDoc(doc(pendingCommentsRef, commentId), {
 					id: commentId,
 					postSlug: postId,
+					status: "pending",
 					name,
 					authorName: name,
 					authorAvatarUrl: "",
+					text: message,
 					message,
 					body: message,
 					source: "firebase",
@@ -214,14 +214,10 @@ const { postId, path, title } = Astro.props;
 					createdAt: serverTimestamp(),
 					updatedAt: serverTimestamp(),
 				});
-				await updateDoc(statsRef, {
-					comments: increment(1),
-					updatedAt: serverTimestamp(),
-				});
 
 				if (nameInput) nameInput.value = "";
 				if (messageInput) messageInput.value = "";
-				if (status) status.textContent = "Comment posted.";
+				if (status) status.textContent = "Thank you. Your comment has been submitted for approval and will appear after review.";
 			} catch (error) {
 				console.warn("Firebase comment write failed", error);
 				if (status) status.textContent = "Could not post comment.";
