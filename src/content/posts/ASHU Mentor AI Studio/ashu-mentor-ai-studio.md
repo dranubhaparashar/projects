@@ -24,7 +24,7 @@ draft: false
 
 > **ASHU Mentor AI Studio** — **Adaptive Smart Human-like Unit Mentor AI Studio** — is an end-to-end AI mentor platform that moves beyond simple mock interviews. It reads a candidate profile, understands the target role, asks structured questions, evaluates responses, identifies learning gaps, recommends personalized training, and can convert training content into a digital-human lecture with consent-aware voice and lip-sync generation.
 
-[dranubhaparashar / ASHU-Mentor-AI-Studio](https://github.com/dranubhaparashar/ASHU-Mentor-AI-Studio)
+::github{repo="dranubhaparashar/ASHU-Mentor-AI-Studio"}
 
 ---
 
