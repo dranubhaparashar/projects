@@ -2,7 +2,6 @@
 title: "AI-Powered Telecom Copper Reclamation: Document Intelligence and Workflow Automation for ACR/CAPR/CPR Analysis"
 published: 2026-07-10
 description: "A decision-support and workflow-modernization platform for telecom copper reclamation that parses ACR, CAPR, and CPR reports, normalizes cable-pair evidence, generates conservative review recommendations, models With-SOW and Without-SOW processes, and provides a FastAPI and React/Vite foundation for governed automation."
-image: "https://raw.githubusercontent.com/dranubhaparashar/AI-Powered-Telecom-Copper-Reclamation-Workflow-Automation-Platform/main/assets/diagrams/platform_architecture.svg"
 pdf: "/downloads/ai-powered-telecom-reclamation-complete-website-post-project-details.pdf"
 tags:
   - AI
