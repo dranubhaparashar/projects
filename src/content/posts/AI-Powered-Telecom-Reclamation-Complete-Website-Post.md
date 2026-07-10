@@ -1,9 +1,9 @@
 ---
 title: "AI-Powered Telecom Copper Reclamation: Document Intelligence and Workflow Automation for ACR/CAPR/CPR Analysis"
-slug: "ai-powered-telecom-copper-reclamation--document-intelligence-and-workflow-automation-for-acr-capr-cpr-analysis"
-date: "2026-07-10"
-category: "Industrial Project"
-excerpt: "A decision-support and workflow-modernization platform for telecom copper reclamation that parses ACR, CAPR, and CPR reports, normalizes cable-pair evidence, generates conservative review recommendations, models With-SOW and Without-SOW processes, and provides a FastAPI and React/Vite foundation for governed automation."
+published: 2026-07-10
+description: "A decision-support and workflow-modernization platform for telecom copper reclamation that parses ACR, CAPR, and CPR reports, normalizes cable-pair evidence, generates conservative review recommendations, models With-SOW and Without-SOW processes, and provides a FastAPI and React/Vite foundation for governed automation."
+image: "https://raw.githubusercontent.com/dranubhaparashar/AI-Powered-Telecom-Copper-Reclamation-Workflow-Automation-Platform/main/assets/diagrams/platform_architecture.svg"
+pdf: "/downloads/ai-powered-telecom-reclamation-complete-website-post-project-details.pdf"
 tags:
   - AI
   - Telecom
@@ -16,16 +16,15 @@ tags:
   - React
   - TypeScript
   - Python
-repository: "https://github.com/dranubhaparashar/AI-Powered-Telecom-Copper-Reclamation-Workflow-Automation-Platform"
-wiki: "https://github.com/dranubhaparashar/AI-Powered-Telecom-Copper-Reclamation-Workflow-Automation-Platform/wiki"
-cover_image: "https://raw.githubusercontent.com/dranubhaparashar/AI-Powered-Telecom-Copper-Reclamation-Workflow-Automation-Platform/main/assets/diagrams/platform_architecture.svg"
+category: "Industrial Project"
+draft: false
 ---
-
-# AI-Powered Telecom Copper Reclamation: Document Intelligence and Workflow Automation for ACR/CAPR/CPR Analysis
 
 > **AI-Powered Telecom Copper Reclamation Workflow Automation Platform** is a decision-support and workflow-modernization prototype for analyzing ACR, CAPR, and CPR reports, classifying cable-pair evidence, generating conservative reclamation recommendations, mapping engineering workflows, and identifying opportunities for governed automation.
 
 [View the GitHub Repository](https://github.com/dranubhaparashar/AI-Powered-Telecom-Copper-Reclamation-Workflow-Automation-Platform)
+::github{repo="dranubhaparashar/AI-Powered-Telecom-Copper-Reclamation-Workflow-Automation-Platform"}
+
 
 ---
 
