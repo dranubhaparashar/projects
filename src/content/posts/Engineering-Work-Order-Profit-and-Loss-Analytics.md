@@ -25,6 +25,8 @@ draft: false
 
 [View the GitHub Repository](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics)
 
+::github{repo="dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics"}
+
 ---
 
 > **Wiki documentation:** [Home](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki) · [Getting Started](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Getting-Started) · [Architecture](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Architecture) · [Data Model](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Data-Model) · [Dashboard Guide](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Dashboard-Guide)
@@ -73,7 +75,7 @@ The goal is not to create an audited accounting system. The goal is to create a 
 | Data warehouse path | Snowflake-ready schemas, analytical views, and quality checks |
 | Core language | Python |
 | Main libraries | pandas, Streamlit, Plotly, pytest |
-| Documentation | README, architecture guide, data dictionary, technical docs, and GitHub Wiki pages |
+| Documentation | README, architecture guide, data dictionary, root-level technical guides, and GitHub Wiki pages |
 | Current maturity | Public synthetic-data MVP and reference architecture |
 | Safety boundary | Demonstration only; not an audited finance, revenue-recognition, or accounting system |
 
@@ -118,61 +120,17 @@ A reader can understand the platform in nine steps:
 
 ![Engineering Work Order Profit and Loss Analytics architecture](https://raw.githubusercontent.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/main/assets/diagrams/workorder_profit_loss_architecture.svg)
 
-The architecture has five major layers.
+The platform is organized around two complementary implementation paths.
 
-### 1. Source Layer
+### 1. Synthetic Analytics Application
 
-The public project reads synthetic CSV files. A production implementation would map approved enterprise source fields to the same logical model through governed tables or warehouse views.
+The public implementation loads deterministic synthetic CSV files, validates and standardizes the records, combines work-unit revenue, DWR labor, billing, and other-cost data, and produces a one-row-per-work-order financial summary. The Streamlit application presents portfolio KPIs, work-order drill-downs, lifecycle and labor analysis, rate scenarios, data-quality findings, risk reasons, and downloadable summaries.
 
-### 2. Ingestion and Data Quality
+### 2. Governed Snowflake Deployment
 
-The data loader validates required files, parses dates, standardizes frames, and supports downstream checks for missing, duplicated, orphaned, or invalid records.
+The production path replaces local CSV files with approved Snowflake tables or secure views. Snowflake-compatible schemas and analytical views support governed source mapping, configurable labor rates and thresholds, validated financial calculations, role-based access, and deployment through Streamlit in Snowflake or another approved analytics layer.
 
-### 3. Financial and Lifecycle Analytics Engine
-
-The metric engine calculates estimated revenue, billed revenue, labor cost, other cost, actual cost, forecast revenue, forecast margin, margin percentage, target variance, travel hours, rework hours, and risk reasons.
-
-### 4. Streamlit Presentation Layer
-
-The dashboard turns the work-order summary into portfolio KPIs, charts, drill-down tables, scenario controls, and CSV downloads.
-
-### 5. Snowflake and Governance Path
-
-SQL scripts define Snowflake-compatible tables, views, and quality checks so the prototype can be adapted to a governed warehouse instead of relying on local CSV files.
-
-### Architecture View 1 — End-to-End Analytical Flow
-
-```text
-Synthetic CSV Files or Governed Enterprise Views
-                    ↓
-        Data Loading and Validation
-                    ↓
- Revenue + Labor + Billing + Other-Cost Aggregation
-                    ↓
-     Work-Order Financial Summary and Risk Logic
-                    ↓
- Streamlit KPIs, Charts, Drill-Downs, and Downloads
-```
-
-This view shows how fragmented operational and financial records are transformed into a single, explainable work-order profit-and-loss summary.
-
-### Architecture View 2 — Production Snowflake Path
-
-```text
-Approved Source Systems
-          ↓
-Snowflake Raw and Curated Tables
-          ↓
-Secure Analytical Views
-          ↓
-Profit-and-Loss Metric Layer
-          ↓
-Streamlit in Snowflake or Governed BI Application
-```
-
-In a production deployment, confidential source data remains inside the governed warehouse. Secure views, role-based access, approved financial formulas, and data-quality controls replace the public CSV-based demonstration layer.
-
-[Read the complete Architecture Wiki page](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Architecture)
+[Read the Architecture Wiki page](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Architecture)
 
 ---
 
@@ -184,7 +142,7 @@ The project uses a compact star-style analytical model.
 |---|---|---|
 | `dim_work_order` | One row per work order | Master work-order attributes and target margin |
 | `fact_work_unit_revenue` | One row per work-unit revenue line | Estimated revenue from work-unit quantity and rate |
-| `fact_activity_labor` | One row per activity/labor event | Hours by milestone, activity type, and delivery organization |
+| `fact_dwr_labor` | One row per DWR labor or lifecycle event | Hours by milestone, activity type, and delivery organization |
 | `fact_billing` | One row per billing event | Invoice, progress billing, or billing status events |
 | `fact_other_cost` | One row per non-labor cost event | Travel, permit, subcontractor, or miscellaneous costs |
 | `dim_labor_rate` | One row per delivery organization/rate | Burdened hourly cost assumptions |
@@ -204,7 +162,7 @@ The bundled dataset is deterministic and can be regenerated with the default see
 |---|---:|---|
 | Work orders | 600 | Portfolio, filters, status, target margin, account/program/region/category |
 | Work-unit revenue | 2,660 | Estimated revenue and sales-order/work-unit drill-down |
-| Activity/labor reports | 8,713 | Labor hours, lifecycle effort, delivery organization, travel, rework |
+| DWR activity/labor records | 8,713 | Labor hours, lifecycle effort, delivery organization, travel, rework |
 | Billing events | 730 | Billed amount, billing progress, billing visibility |
 | Other costs | 977 | Travel, permit, subcontractor, and operational cost tracking |
 | Labor rates | 2 | Delivery-center and field-operations rate assumptions |
@@ -274,13 +232,13 @@ Surfaces potential duplicate work-unit rows, orphan activity records, zero-hour 
 
 ## Snowflake-Ready Integration
 
-The repository includes SQL files for a Snowflake-oriented implementation.
+The implementation includes Snowflake-oriented SQL inside the application folder.
 
-| SQL file | Purpose |
+| Repository file | Purpose |
 |---|---|
-| `sql/snowflake_schema.sql` | Physical table definitions for the logical model |
-| `sql/profit_loss_views.sql` | Revenue, labor, cost, billing, margin, and risk views |
-| `sql/quality_checks.sql` | Duplicate, orphan, invalid-value, missing-rate, and missing-revenue checks |
+| `insite_pl_mvp/sql/snowflake_schema.sql` | Defines Snowflake tables for the logical work-order model |
+| `insite_pl_mvp/sql/mvp_views.sql` | Builds analytical views for revenue, labor, billing, cost, margin, and work-order reporting |
+| `insite_pl_mvp/tests/test_metrics.py` | Validates core metric behavior; application-level data-quality findings are displayed in Streamlit |
 
 A production implementation should not upload confidential data into a public repository. Instead, it should map approved enterprise source fields into curated warehouse tables or secure views and connect the dashboard to those governed objects.
 
@@ -296,7 +254,7 @@ A production implementation should not upload confidential data into a public re
 | Language | Python |
 | Data processing | pandas |
 | Visualization | Plotly |
-| Testing | pytest, compile checks, GitHub Actions |
+| Testing | pytest and local validation |
 | Data warehouse path | Snowflake SQL |
 | Documentation | Markdown, README, docs, GitHub Wiki |
 | Data | Synthetic CSV files generated by Python |
@@ -308,61 +266,59 @@ A production implementation should not upload confidential data into a public re
 
 ```text
 Engineering-Work-Order-Profit-and-Loss-Analytics/
-├── .github/
-│   ├── ISSUE_TEMPLATE/
-│   ├── pull_request_template.md
-│   └── workflows/ci.yml
-├── .streamlit/
-│   ├── config.toml
-│   └── secrets.toml.example
-├── data/
-│   ├── dim_labor_rate.csv
-│   ├── dim_milestone.csv
-│   ├── dim_work_order.csv
-│   ├── fact_activity_labor.csv
-│   ├── fact_billing.csv
-│   ├── fact_other_cost.csv
-│   └── fact_work_unit_revenue.csv
-├── docs/
-│   ├── configuration.md
-│   ├── data-model.md
-│   ├── deployment.md
-│   ├── developer-guide.md
-│   ├── financial-calculations.md
-│   ├── installation.md
-│   ├── security-privacy.md
-│   ├── snowflake-integration.md
-│   ├── synthetic-data.md
-│   ├── testing.md
-│   ├── troubleshooting.md
-│   ├── user-guide.md
-│   └── wiki-publishing.md
-├── scripts/
-│   ├── generate_synthetic_data.py
-│   ├── publish_wiki.ps1
-│   └── publish_wiki.sh
-├── sql/
-│   ├── snowflake_schema.sql
-│   ├── profit_loss_views.sql
-│   └── quality_checks.sql
-├── src/
-│   ├── data_loader.py
-│   └── metrics.py
-├── tests/
-│   ├── test_data_quality.py
-│   └── test_metrics.py
-├── wiki/
-├── app.py
-├── README.md
-├── ARCHITECTURE.md
-├── DATA_DICTIONARY.md
-├── PROJECT_STRUCTURE.md
+├── assets/
+│   └── diagrams/
+│       └── workorder_profit_loss_architecture.svg
+├── insite_pl_mvp/
+│   ├── data/
+│   │   ├── dim_labor_rate.csv
+│   │   ├── dim_milestone.csv
+│   │   ├── dim_work_order.csv
+│   │   ├── fact_billing.csv
+│   │   ├── fact_dwr_labor.csv
+│   │   ├── fact_other_cost.csv
+│   │   └── fact_work_unit_revenue.csv
+│   ├── scripts/
+│   │   └── generate_synthetic_data.py
+│   ├── sql/
+│   │   ├── mvp_views.sql
+│   │   └── snowflake_schema.sql
+│   ├── src/
+│   │   ├── __init__.py
+│   │   ├── data_loader.py
+│   │   └── metrics.py
+│   ├── tests/
+│   │   └── test_metrics.py
+│   ├── DATA_DICTIONARY.md
+│   ├── README.md
+│   ├── app.py
+│   ├── requirements.txt
+│   ├── setup_and_run.bat
+│   └── setup_and_run.ps1
 ├── A-Z_FILE_GUIDE.md
+├── ARCHITECTURE.md
+├── CHANGELOG.md
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+├── DATA_DICTIONARY.md
+├── GITHUB_REPOSITORY_SETUP.md
+├── PROJECT_STRUCTURE.md
+├── README.md
 ├── ROADMAP.md
 ├── SECURITY.md
-├── CONTRIBUTING.md
-├── LICENSE
-└── requirements.txt
+├── configuration.md
+├── data-model.md
+├── deployment.md
+├── developer-guide.md
+├── faq.md
+├── financial-calculations.md
+├── installation.md
+├── security-privacy.md
+├── snowflake-integration.md
+├── synthetic-data.md
+├── testing.md
+├── troubleshooting.md
+└── user-guide.md
 ```
 
 [Read the Project Structure guide](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/PROJECT_STRUCTURE.md)
@@ -370,6 +326,13 @@ Engineering-Work-Order-Profit-and-Loss-Analytics/
 ---
 
 ## Local Run
+
+Clone the repository and enter the application folder:
+
+```powershell
+git clone https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics.git
+cd Engineering-Work-Order-Profit-and-Loss-Analytics\insite_pl_mvp
+```
 
 ### Windows one-click setup
 
@@ -383,10 +346,9 @@ Alternatively, double-click:
 setup_and_run.bat
 ```
 
-### Manual setup
+### Windows manual setup
 
 ```powershell
-cd Engineering-Work-Order-Profit-and-Loss-Analytics
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -397,7 +359,8 @@ streamlit run app.py
 ### macOS or Linux
 
 ```bash
-cd Engineering-Work-Order-Profit-and-Loss-Analytics
+git clone https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics.git
+cd Engineering-Work-Order-Profit-and-Loss-Analytics/insite_pl_mvp
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -405,13 +368,13 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Open the Streamlit URL shown in the terminal, usually:
+Open the Streamlit URL shown in the terminal, normally:
 
 ```text
 http://localhost:8501
 ```
 
-[Read Installation](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/docs/installation.md)
+[Read Installation](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/installation.md)
 
 ---
 
@@ -430,7 +393,8 @@ http://localhost:8501
 | Rate scenario analysis | Implemented |
 | Data-quality page | Implemented |
 | Snowflake schema and views | Implemented |
-| GitHub Actions CI | Implemented |
+| Automated pytest coverage | Implemented (`insite_pl_mvp/tests/test_metrics.py`) |
+| GitHub Actions workflow | Not currently present in the live repository |
 | GitHub Wiki content | Included |
 | Enterprise authentication | Not included in public demo |
 | Audited finance/accounting controls | Not included |
@@ -578,7 +542,7 @@ The repository includes automated tests for data quality and financial logic. A 
 - Includes travel and rework risk indicators.
 - Includes data-quality checks inside the application.
 - Provides Snowflake-ready schema and analytical views.
-- Includes README, architecture documentation, data dictionary, and GitHub Wiki pages.
+- Includes README, architecture documentation, data dictionary, implementation guides, and GitHub Wiki pages.
 - Avoids company-specific, customer-specific, or source-system-specific public claims.
 
 ---
@@ -596,13 +560,17 @@ The project shows how a team can move from late-stage financial visibility to li
 - [GitHub Repository](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics)
 - [GitHub Wiki](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki)
 - [README](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/README.md)
+- [Application Folder](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/tree/main/insite_pl_mvp)
 - [Architecture](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/ARCHITECTURE.md)
 - [Data Dictionary](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/DATA_DICTIONARY.md)
-- [Financial Calculations](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/docs/financial-calculations.md)
-- [Snowflake Integration](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/docs/snowflake-integration.md)
-- [Streamlit App](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/app.py)
-- [Metric Engine](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/src/metrics.py)
-- [Synthetic Data Generator](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/scripts/generate_synthetic_data.py)
+- [Financial Calculations](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/financial-calculations.md)
+- [Snowflake Integration](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/snowflake-integration.md)
+- [Streamlit App](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/insite_pl_mvp/app.py)
+- [Metric Engine](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/insite_pl_mvp/src/metrics.py)
+- [Synthetic Data Generator](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/insite_pl_mvp/scripts/generate_synthetic_data.py)
+- [Snowflake Schema](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/insite_pl_mvp/sql/snowflake_schema.sql)
+- [Analytical Views](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/insite_pl_mvp/sql/mvp_views.sql)
+- [Tests](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/blob/main/insite_pl_mvp/tests/test_metrics.py)
 - [Testing and Quality](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Testing-and-Quality)
 - [Security and Privacy](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Security-and-Privacy)
 - [Roadmap](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Roadmap)
