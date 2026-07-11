@@ -1,9 +1,9 @@
 ---
 title: "Engineering Work Order Profit and Loss Analytics: Synthetic Data Platform for Revenue, Cost, Margin, Billing, and Risk Monitoring"
-slug: "engineering-work-order-profit-and-loss-analytics--synthetic-data-platform-for-revenue-cost-margin-billing-and-risk-monitoring"
-date: "2026-07-11"
-category: "Industrial Project"
-excerpt: "A synthetic-data-based analytics platform for estimating work-order revenue, tracking delivery-center and field-operations labor, monitoring billing and other costs, calculating profit and loss, and identifying margin risk across the engineering work-order lifecycle."
+published: 2026-07-11
+description: "A synthetic-data-based analytics platform for estimating work-order revenue, tracking delivery-center and field-operations labor, monitoring billing and other costs, calculating profit and loss, and identifying margin risk across the engineering work-order lifecycle."
+image: "https://raw.githubusercontent.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/main/assets/diagrams/workorder_profit_loss_architecture.svg"
+pdf: "/downloads/engineering-work-order-profit-and-loss-analytics-project-details.pdf"
 tags:
   - Data Analytics
   - Financial Analytics
@@ -17,9 +17,8 @@ tags:
   - Risk Monitoring
   - Decision Support
   - Data Quality
-repository: "https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics"
-wiki: "https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki"
-cover_image: "https://raw.githubusercontent.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/main/assets/diagrams/workorder_profit_loss_architecture.svg"
+category: "Industrial Project"
+draft: false
 ---
 
 # Engineering Work Order Profit and Loss Analytics: Synthetic Data Platform for Revenue, Cost, Margin, Billing, and Risk Monitoring
