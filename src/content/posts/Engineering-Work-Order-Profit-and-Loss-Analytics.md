@@ -140,7 +140,39 @@ The dashboard turns the work-order summary into portfolio KPIs, charts, drill-do
 
 SQL scripts define Snowflake-compatible tables, views, and quality checks so the prototype can be adapted to a governed warehouse instead of relying on local CSV files.
 
-[Read the Architecture Wiki page](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Architecture)
+### Architecture View 1 — End-to-End Analytical Flow
+
+```text
+Synthetic CSV Files or Governed Enterprise Views
+                    ↓
+        Data Loading and Validation
+                    ↓
+ Revenue + Labor + Billing + Other-Cost Aggregation
+                    ↓
+     Work-Order Financial Summary and Risk Logic
+                    ↓
+ Streamlit KPIs, Charts, Drill-Downs, and Downloads
+```
+
+This view shows how fragmented operational and financial records are transformed into a single, explainable work-order profit-and-loss summary.
+
+### Architecture View 2 — Production Snowflake Path
+
+```text
+Approved Source Systems
+          ↓
+Snowflake Raw and Curated Tables
+          ↓
+Secure Analytical Views
+          ↓
+Profit-and-Loss Metric Layer
+          ↓
+Streamlit in Snowflake or Governed BI Application
+```
+
+In a production deployment, confidential source data remains inside the governed warehouse. Secure views, role-based access, approved financial formulas, and data-quality controls replace the public CSV-based demonstration layer.
+
+[Read the complete Architecture Wiki page](https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki/Architecture)
 
 ---
 
