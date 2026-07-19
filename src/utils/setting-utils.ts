@@ -7,7 +7,7 @@ import {
 import { expressiveCodeConfig } from "@/config";
 import type { LIGHT_DARK_MODE } from "@/types/config";
 
-const DEFAULT_ACCENT_POSITION = 16.7;
+const DEFAULT_ACCENT_POSITION = 59;
 const ACCENT_POSITION_STORAGE_KEY = "premium-accent-position";
 const ACCENT_COLOR_STORAGE_KEY = "premium-accent-color";
 const LEGACY_HUE_STORAGE_KEY = "hue";
