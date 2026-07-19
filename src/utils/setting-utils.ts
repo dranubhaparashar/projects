@@ -7,20 +7,22 @@ import {
 import { expressiveCodeConfig } from "@/config";
 import type { LIGHT_DARK_MODE } from "@/types/config";
 
-const DEFAULT_ACCENT_POSITION = 0;
+const DEFAULT_ACCENT_POSITION = 16.7;
 const ACCENT_POSITION_STORAGE_KEY = "premium-accent-position";
 const ACCENT_COLOR_STORAGE_KEY = "premium-accent-color";
 const LEGACY_HUE_STORAGE_KEY = "hue";
 
 export const PREMIUM_ACCENT_GRADIENT =
-	"linear-gradient(to right, #1E3A5F 0%, #0F766E 25%, #5B4B8A 50%, #7F1D3A 75%, #374151 100%)";
+	"linear-gradient(to right, #0B132B 0%, #0F3460 16.7%, #334155 33.3%, #475569 50%, #0D6EFD 66.7%, #0891B2 83.3%, #22D3EE 100%)";
 
 const PREMIUM_ACCENT_ANCHORS = [
-	{ position: 0, color: "#1E3A5F" },
-	{ position: 25, color: "#0F766E" },
-	{ position: 50, color: "#5B4B8A" },
-	{ position: 75, color: "#7F1D3A" },
-	{ position: 100, color: "#374151" },
+	{ position: 0, color: "#0B132B" },
+	{ position: 16.7, color: "#0F3460" },
+	{ position: 33.3, color: "#334155" },
+	{ position: 50, color: "#475569" },
+	{ position: 66.7, color: "#0D6EFD" },
+	{ position: 83.3, color: "#0891B2" },
+	{ position: 100, color: "#22D3EE" },
 ] as const;
 
 type RgbColor = {
