@@ -34,7 +34,7 @@ const isHomePage = pathsEqual(Astro.url.pathname, url("/"));
 
 // defines global css variables
 // why doing this in Layout instead of GlobalStyles: https://github.com/withastro/astro/issues/6728#issuecomment-1502203757
-const configHue = siteConfig.themeColor.hue;
+const defaultAccentPosition = siteConfig.accentColor.position;
 if (!banner || typeof banner !== "string" || banner.trim() === "") {
 	banner = siteConfig.banner.src;
 }
@@ -113,7 +113,7 @@ const bannerOffset =
 		))}
 
 		<!-- Set the theme before the page is rendered to avoid a flash -->
-		<script is:inline define:vars={{DEFAULT_THEME, LIGHT_MODE, DARK_MODE, AUTO_MODE, BANNER_HEIGHT_EXTEND, PAGE_WIDTH, configHue}}>
+		<script is:inline define:vars={{DEFAULT_THEME, LIGHT_MODE, DARK_MODE, AUTO_MODE, BANNER_HEIGHT_EXTEND, PAGE_WIDTH, defaultAccentPosition}}>
 			// Load the theme from local storage
 			const theme = localStorage.getItem('theme') || DEFAULT_THEME;
 			switch (theme) {
@@ -131,15 +131,53 @@ const bannerOffset =
 					}
 			}
 
-			// Load the hue from local storage
-			const storedHue = localStorage.getItem('hue');
-			const hasStoredHue = storedHue !== null && storedHue.trim() !== '';
-			const hueValue = hasStoredHue ? Number(storedHue) : NaN;
-			const hue = Number.isFinite(hueValue) && hueValue >= 0 && hueValue <= 360 ? hueValue : configHue;
-			if (!Number.isFinite(hueValue) || hueValue < 0 || hueValue > 360) {
-				localStorage.setItem('hue', String(hue));
-			}
-			document.documentElement.style.setProperty('--hue', String(hue));
+			const premiumAccentAnchors = [
+				{ position: 0, color: '#1E3A5F' },
+				{ position: 25, color: '#0F766E' },
+				{ position: 50, color: '#5B4B8A' },
+				{ position: 75, color: '#7F1D3A' },
+				{ position: 100, color: '#374151' },
+			];
+			const normalizeAccentPosition = (value) => {
+				if (value === null || value === undefined || String(value).trim() === '') return defaultAccentPosition;
+				const parsed = Number(value);
+				return Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : defaultAccentPosition;
+			};
+			const hexToRgb = (hexColor) => {
+				const hex = hexColor.replace('#', '');
+				return {
+					r: Number.parseInt(hex.slice(0, 2), 16),
+					g: Number.parseInt(hex.slice(2, 4), 16),
+					b: Number.parseInt(hex.slice(4, 6), 16),
+				};
+			};
+			const toHexChannel = (value) => Math.round(value).toString(16).padStart(2, '0').toUpperCase();
+			const rgbToHex = ({ r, g, b }) => `#${toHexChannel(r)}${toHexChannel(g)}${toHexChannel(b)}`;
+			const interpolatePremiumColor = (position) => {
+				const normalizedPosition = normalizeAccentPosition(position);
+				const exactAnchor = premiumAccentAnchors.find((anchor) => anchor.position === normalizedPosition);
+				if (exactAnchor) return exactAnchor.color;
+				const upperAnchor = premiumAccentAnchors.find((anchor) => anchor.position > normalizedPosition);
+				const lowerAnchor = [...premiumAccentAnchors].reverse().find((anchor) => anchor.position < normalizedPosition);
+				if (!lowerAnchor) return premiumAccentAnchors[0].color;
+				if (!upperAnchor) return premiumAccentAnchors[premiumAccentAnchors.length - 1].color;
+				const progress = (normalizedPosition - lowerAnchor.position) / (upperAnchor.position - lowerAnchor.position);
+				const lowerRgb = hexToRgb(lowerAnchor.color);
+				const upperRgb = hexToRgb(upperAnchor.color);
+				return rgbToHex({
+					r: lowerRgb.r + (upperRgb.r - lowerRgb.r) * progress,
+					g: lowerRgb.g + (upperRgb.g - lowerRgb.g) * progress,
+					b: lowerRgb.b + (upperRgb.b - lowerRgb.b) * progress,
+				});
+			};
+
+			const storedAccentPosition = localStorage.getItem('premium-accent-position');
+			const accentPosition = normalizeAccentPosition(storedAccentPosition);
+			const accentColor = interpolatePremiumColor(accentPosition);
+			localStorage.setItem('premium-accent-position', String(accentPosition));
+			localStorage.setItem('premium-accent-color', accentColor);
+			localStorage.removeItem('hue');
+			document.documentElement.style.setProperty('--accent-color', accentColor);
 
 			// calculate the --banner-height-extend, which needs to be a multiple of 4 to avoid blurry text
 			let offset = Math.floor(window.innerHeight * (BANNER_HEIGHT_EXTEND / 100));
@@ -147,12 +185,9 @@ const bannerOffset =
 			document.documentElement.style.setProperty('--banner-height-extend', `${offset}px`);
 		</script>
 		<style define:vars={{
-			configHue,
 			'page-width': `${PAGE_WIDTH}rem`,
 		}}></style>  <!-- defines global css variables. This will be applied to <html> <body> and some other elements idk why -->
 
-
-	
 
 		<slot name="head"></slot>
 
@@ -223,7 +258,7 @@ import {
 	// SizeObserverPlugin,
 	// ClickScrollPlugin
 } from 'overlayscrollbars';
-import {getHue, getStoredTheme, setHue, setTheme} from "../utils/setting-utils";
+import {getAccentPosition, getStoredTheme, setAccentPosition, setTheme} from "../utils/setting-utils";
 import {pathsEqual, url} from "../utils/url-utils";
 import {
 	BANNER_HEIGHT,
@@ -303,8 +338,8 @@ function loadTheme() {
 	setTheme(theme)
 }
 
-function loadHue() {
-	setHue(getHue())
+function loadAccent() {
+	setAccentPosition(getAccentPosition())
 }
 
 function initCustomScrollbar() {
@@ -387,7 +422,7 @@ function showBanner() {
 function init() {
 	// disableAnimation()()		// TODO
 	loadTheme();
-	loadHue();
+	loadAccent();
 	initCustomScrollbar();
 	showBanner();
 }

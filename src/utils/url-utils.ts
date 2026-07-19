@@ -2,9 +2,7 @@ import I18nKey from "@i18n/i18nKey";
 import { i18n } from "@i18n/translation";
 
 export function pathsEqual(path1: string, path2: string): boolean {
-	const normalizedPath1 = path1.replace(/^\/|\/$/g, "").toLowerCase();
-	const normalizedPath2 = path2.replace(/^\/|\/$/g, "").toLowerCase();
-	return normalizedPath1 === normalizedPath2;
+	return normalizeNavPath(path1) === normalizeNavPath(path2);
 }
 
 export function normalizeNavPath(path: string): string {
@@ -16,7 +14,7 @@ export function normalizeNavPath(path: string): string {
 		pathname = path.split(/[?#]/)[0] || "/";
 	}
 
-	pathname = pathname.replace(/\/index\.html$/i, "/");
+	pathname = pathname.replace(/\/index\.html\/?$/i, "/");
 	if (!pathname.endsWith("/")) {
 		pathname += "/";
 	}

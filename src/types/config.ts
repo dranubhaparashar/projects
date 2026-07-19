@@ -16,8 +16,8 @@ export type SiteConfig = {
 		| "tr"
 		| "id";
 
-	themeColor: {
-		hue: number;
+	accentColor: {
+		position: number;
 		fixed: boolean;
 	};
 	banner: {

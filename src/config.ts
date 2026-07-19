@@ -11,8 +11,8 @@ export const siteConfig: SiteConfig = {
 	title: "Anubha Parashar",
 	subtitle: "AI Projects",
 	lang: "en",
-	themeColor: {
-		hue: 230,
+	accentColor: {
+		position: 0,
 		fixed: false,
 	},
 	banner: {
