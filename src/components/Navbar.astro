@@ -3,7 +3,7 @@ import { Icon } from "astro-icon/components";
 import { navBarConfig, siteConfig } from "../config";
 import { LinkPresets } from "../constants/link-presets";
 import { LinkPreset, type NavBarLink } from "../types/config";
-import { url } from "../utils/url-utils";
+import { navPathsEqual, url } from "../utils/url-utils";
 import LightDarkSwitch from "./LightDarkSwitch.svelte";
 import Search from "./Search.svelte";
 import DisplaySettings from "./widget/DisplaySettings.svelte";
@@ -19,6 +19,9 @@ let links: NavBarLink[] = navBarConfig.links.map(
 		return item;
 	},
 );
+const currentPath = Astro.url.pathname;
+const isActiveLink = (link: NavBarLink) =>
+	!link.external && navPathsEqual(currentPath, url(link.url));
 ---
 <div id="navbar" class="z-50 onload-animation">
     <div class="absolute h-8 left-0 right-0 -top-8 bg-[var(--card-bg)] transition"></div> <!-- used for onload animation -->
@@ -33,8 +36,17 @@ let links: NavBarLink[] = navBarConfig.links.map(
         </a>
         <div class="hidden md:flex">
             {links.map((l) => {
-                return <a aria-label={l.name} href={l.external ? l.url : url(l.url)} target={l.external ? "_blank" : null}
-                          class="btn-plain scale-animation rounded-lg h-11 font-bold px-5 active:scale-95"
+                const href = l.external ? l.url : url(l.url);
+                const isActive = isActiveLink(l);
+
+                return <a aria-label={l.name} href={href} target={l.external ? "_blank" : null}
+                          data-nav-link={!l.external ? "true" : null}
+                          data-nav-path={!l.external ? href : null}
+                          aria-current={isActive ? "page" : null}
+                          class:list={[
+                              "btn-plain scale-animation rounded-lg h-11 font-bold px-5 active:scale-95",
+                              { "nav-link-active": isActive },
+                          ]}
                 >
                     <div class="flex items-center">
                         {l.name}
@@ -62,6 +74,10 @@ let links: NavBarLink[] = navBarConfig.links.map(
 </div>
 
 <script>
+import { normalizeNavPath } from "../utils/url-utils";
+
+const activeNavClass = "nav-link-active";
+
 function switchTheme() {
     if (localStorage.theme === 'dark') {
         document.documentElement.classList.remove('dark');
@@ -102,6 +118,56 @@ function loadButtonScript() {
 }
 
 loadButtonScript();
+
+function setActiveNavLink(link: HTMLElement, isActive: boolean) {
+    link.classList.toggle(activeNavClass, isActive);
+    if (isActive) {
+        link.setAttribute("aria-current", "page");
+    } else {
+        link.removeAttribute("aria-current");
+    }
+}
+
+function updateActiveNavLinks(path = window.location.pathname) {
+    const currentPath = normalizeNavPath(path);
+    document.querySelectorAll("[data-nav-link][data-nav-path]").forEach((link) => {
+        if (!(link instanceof HTMLElement)) return;
+
+        const targetPath = link.dataset.navPath;
+        setActiveNavLink(
+            link,
+            !!targetPath && normalizeNavPath(targetPath) === currentPath,
+        );
+    });
+}
+
+function setupActiveNavLinkUpdates() {
+    const update = () => updateActiveNavLinks();
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", update, { once: true });
+    } else {
+        update();
+    }
+
+    const setupSwupHooks = () => {
+        if (!window?.swup?.hooks) return;
+
+        window.swup.hooks.on("visit:start", (visit: { to: { url: string } }) => {
+            updateActiveNavLinks(visit.to.url);
+        });
+        window.swup.hooks.on("page:view", update);
+    };
+
+    if (window?.swup?.hooks) {
+        setupSwupHooks();
+    } else {
+        document.addEventListener("swup:enable", setupSwupHooks, { once: true });
+    }
+
+    window.addEventListener("popstate", update);
+}
+
+setupActiveNavLinkUpdates();
 </script>
 
 {import.meta.env.PROD && <script is:inline define:vars={{scriptUrl: url('/pagefind/pagefind.js')}}>

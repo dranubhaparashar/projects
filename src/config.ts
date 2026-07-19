@@ -64,6 +64,18 @@ export const profileConfig: ProfileConfig = {
 			icon: "fa6-brands:github",
 			url: "https://github.com/anubhaparashar",
 		},
+		{
+			name: "Hugging Face Spaces",
+			icon: "custom:hugging-face",
+			url: "https://huggingface.co/AnubhaParashar/spaces",
+			rel: "noopener noreferrer",
+		},
+		{
+			name: "YouTube",
+			icon: "fa6-brands:youtube",
+			url: "https://www.youtube.com/@Dr.AnubhaParashar",
+			rel: "noopener noreferrer",
+		},
 	],
 };
 

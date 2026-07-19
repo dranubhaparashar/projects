@@ -1,12 +1,32 @@
 import I18nKey from "@i18n/i18nKey";
 import { i18n } from "@i18n/translation";
 
-export function pathsEqual(path1: string, path2: string) {
+export function pathsEqual(path1: string, path2: string): boolean {
 	const normalizedPath1 = path1.replace(/^\/|\/$/g, "").toLowerCase();
 	const normalizedPath2 = path2.replace(/^\/|\/$/g, "").toLowerCase();
 	return normalizedPath1 === normalizedPath2;
 }
 
+export function normalizeNavPath(path: string): string {
+	let pathname = path;
+
+	try {
+		pathname = new URL(path, "https://example.com").pathname;
+	} catch {
+		pathname = path.split(/[?#]/)[0] || "/";
+	}
+
+	pathname = pathname.replace(/\/index\.html$/i, "/");
+	if (!pathname.endsWith("/")) {
+		pathname += "/";
+	}
+
+	return pathname.replace(/\/+/g, "/").toLowerCase();
+}
+
+export function navPathsEqual(path1: string, path2: string): boolean {
+	return normalizeNavPath(path1) === normalizeNavPath(path2);
+}
 function joinUrl(...parts: string[]): string {
 	const joined = parts.join("/");
 	return joined.replace(/\/+/g, "/");
@@ -39,6 +59,6 @@ export function getDir(path: string): string {
 	return path.substring(0, lastSlashIndex + 1);
 }
 
-export function url(path: string) {
+export function url(path: string): string {
 	return joinUrl("", import.meta.env.BASE_URL, path);
 }
