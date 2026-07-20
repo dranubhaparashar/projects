@@ -18,7 +18,7 @@ tags:
   - Python
   - SQLite
   - Fraud Analytics
-category: "Consulting Projects"
+category: "Consulting Project"
 draft: false
 ---
 
