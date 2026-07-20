@@ -13,7 +13,7 @@ tags:
   - CAPS-ZK
   - Python
   - Research Prototype
-category: Self Projects
+category: Self Project
 draft: false
 ---
 
