@@ -1,0 +1,261 @@
+---
+import MainGridLayout from "@layouts/MainGridLayout.astro";
+import { getSortedPosts } from "@utils/content-utils";
+import { buildProjectImpactGraphData } from "@utils/project-impact-data";
+import { url } from "@utils/url-utils";
+
+const pageTitle = "Project Impact Landscape";
+const pageDescription =
+	"Explore how my AI projects connect across industries, research areas, technologies and real-world impact domains.";
+const posts = (await getSortedPosts()).filter(
+	(entry) => entry.data.draft !== true,
+);
+const graphData = buildProjectImpactGraphData(posts);
+const graphDataJson = JSON.stringify(graphData).replace(/</g, "\\u003c");
+const projectById = new Map(
+	graphData.projects.map((project) => [project.id, project]),
+);
+const edgeByPair = new Map(
+	graphData.edges.map((edge) => [
+		[edge.source, edge.target].sort().join("::"),
+		edge,
+	]),
+);
+const groupedProjects = graphData.domains
+	.map((domain) => ({
+		domain,
+		projects: graphData.projects.filter(
+			(project) => project.primaryDomain === domain.name,
+		),
+	}))
+	.filter((group) => group.projects.length > 0);
+
+function getRelationship(projectId: string, relatedId: string) {
+	return edgeByPair.get([projectId, relatedId].sort().join("::"));
+}
+
+function getRelatedProjects(projectId: string) {
+	const project = projectById.get(projectId);
+	if (!project) return [];
+	return project.relatedProjects
+		.map((relatedId) => ({
+			project: projectById.get(relatedId),
+			edge: getRelationship(projectId, relatedId),
+		}))
+		.filter((item) => item.project);
+}
+---
+
+<MainGridLayout title={pageTitle} description={pageDescription}>
+	<Fragment slot="head">
+		<link rel="stylesheet" href={url("/assets/css/project-impact-graph.css")} />
+	</Fragment>
+
+	<section
+		id="project-impact-app"
+		class="project-impact-shell card-base"
+		data-impact-app
+		aria-labelledby="impact-domain-title"
+	>
+		<header class="project-impact-header">
+			<div>
+				<h1 id="impact-domain-title" class="project-impact-title hero-title">
+					{pageTitle}
+				</h1>
+				<p class="project-impact-subtitle text-75">{pageDescription}</p>
+			</div>
+			<div class="project-impact-summary" aria-label={`${graphData.projects.length} published projects and ${graphData.edges.length} project relationships`}>
+				<span>{graphData.projects.length} projects</span>
+				<span>{graphData.edges.length} relationships</span>
+			</div>
+		</header>
+
+		<div class="project-impact-controls card-base" aria-label="Impact domain filters">
+			<label class="impact-control impact-search-control">
+				<span>Search</span>
+				<input
+					type="search"
+					data-impact-search
+					placeholder="Search projects, domains or tags..."
+					autocomplete="off"
+				/>
+			</label>
+
+			<label class="impact-control">
+				<span>Impact Domain</span>
+				<select data-impact-filter="domain">
+					<option value="">All domains</option>
+					{graphData.domains.map((domain) => (
+						<option value={domain.name}>{domain.name}</option>
+					))}
+				</select>
+			</label>
+
+			<label class="impact-control">
+				<span>Project Type</span>
+				<select data-impact-filter="category">
+					<option value="">All types</option>
+					{graphData.filters.categories.map((category) => (
+						<option value={category}>{category}</option>
+					))}
+				</select>
+			</label>
+
+			<label class="impact-control">
+				<span>Tags</span>
+				<select data-impact-filter="tag">
+					<option value="">All tags</option>
+					{graphData.filters.tags.map((tag) => (
+						<option value={tag}>{tag}</option>
+					))}
+				</select>
+			</label>
+
+			<label class="impact-control">
+				<span>Year</span>
+				<select data-impact-filter="year">
+					<option value="">All years</option>
+					{graphData.filters.years.map((year) => (
+						<option value={year}>{year}</option>
+					))}
+				</select>
+			</label>
+
+			<button type="button" class="impact-clear-filters btn-plain" data-impact-clear-filters>
+				Clear filters
+			</button>
+		</div>
+
+		<div class="project-impact-toolbar" aria-label="Impact domain view controls">
+			<div class="impact-view-switch" role="group" aria-label="Display mode">
+				<button type="button" class="impact-view-button" data-impact-view="graph" aria-pressed="true">
+					Graph
+				</button>
+				<button type="button" class="impact-view-button" data-impact-view="list" aria-pressed="false">
+					Accessible List
+				</button>
+			</div>
+
+			<div class="impact-zoom-controls" aria-label="Graph zoom controls">
+				<button type="button" class="impact-icon-button" data-impact-zoom="in" aria-label="Zoom in">+</button>
+				<button type="button" class="impact-icon-button" data-impact-zoom="out" aria-label="Zoom out">-</button>
+				<button type="button" class="impact-command-button" data-impact-fit aria-label="Fit graph to viewport">Fit</button>
+				<button type="button" class="impact-command-button" data-impact-reset aria-label="Reset graph view">Reset</button>
+			</div>
+		</div>
+
+		<p class="impact-status text-50" data-impact-status aria-live="polite">
+			All domains shown.
+		</p>
+
+		<div class="impact-empty-state card-base" data-impact-empty hidden>
+			<p>No projects match these filters.</p>
+			<button type="button" class="btn-regular" data-impact-clear-filters>Clear filters</button>
+		</div>
+
+		<div class="impact-view-panel impact-graph-panel" data-impact-panel="graph">
+			<div class="impact-graph-layout">
+				<div class="impact-graph-card card-base">
+					<svg
+						class="impact-graph-svg"
+						data-impact-svg
+						role="img"
+						aria-label="Force-directed graph of projects grouped by primary impact domain"
+					></svg>
+					<div class="impact-tooltip" data-impact-tooltip role="tooltip" hidden></div>
+				</div>
+
+				<aside class="impact-details-panel card-base" data-impact-details aria-live="polite">
+					<div class="impact-details-empty">
+						<h2>Project Details</h2>
+						<p>No project selected.</p>
+					</div>
+				</aside>
+			</div>
+
+			<nav class="impact-domain-legend" data-impact-legend aria-label="Impact domain legend">
+				<button
+					type="button"
+					class="impact-legend-item impact-legend-all is-active"
+					data-impact-domain=""
+					aria-pressed="true"
+				>
+					<span class="impact-legend-swatch impact-legend-all-icon" data-impact-icon="network" aria-hidden="true"></span>
+					<span>All domains</span>
+					<strong>{graphData.projects.length}</strong>
+				</button>
+				{graphData.domains.map((domain) => (
+					<button
+						type="button"
+						class="impact-legend-item"
+						data-impact-domain={domain.name}
+						style={`--domain-color: ${domain.color}`}
+						aria-pressed="false"
+					>
+						<span class="impact-legend-swatch" data-impact-icon={domain.icon} aria-hidden="true"></span>
+						<span>{domain.name}</span>
+						<strong>{domain.count}</strong>
+					</button>
+				))}
+			</nav>
+		</div>
+
+		<div class="impact-view-panel impact-list-panel" data-impact-panel="list">
+			<div class="impact-list-content" data-impact-list>
+				{groupedProjects.map(({ domain, projects }) => (
+					<section class="impact-list-domain" data-list-domain={domain.name}>
+						<header class="impact-list-domain-header" style={`--domain-color: ${domain.color}`}>
+							<span class="impact-list-domain-icon" data-impact-icon={domain.icon} aria-hidden="true"></span>
+							<div>
+								<h2>{domain.name}</h2>
+								<p>{projects.length} {projects.length === 1 ? "project" : "projects"}</p>
+							</div>
+						</header>
+
+						<div class="impact-list-grid">
+							{projects.map((project) => (
+								<article class="impact-list-project card-base" data-list-project={project.id}>
+									<div class="impact-list-project-main">
+										<h3>{project.title}</h3>
+										<p class="impact-list-meta">{project.category} / {project.date}</p>
+										<p>{project.description}</p>
+									</div>
+									<div class="impact-chip-row" aria-label={`${project.title} tags`}>
+										{project.tags.map((tag) => <span>{tag}</span>)}
+									</div>
+									{project.relatedProjects.length > 0 && (
+										<div class="impact-list-related">
+											<h4>Related projects</h4>
+											<ul>
+												{getRelatedProjects(project.id).map(({ project: related, edge }) => (
+													<li>
+														<a href={related?.url} data-impact-select={related?.id}>{related?.title}</a>
+														{edge && edge.sharedTags.length > 0 && (
+															<span> through {edge.sharedTags.slice(0, 3).join(", ")}</span>
+														)}
+													</li>
+												))}
+											</ul>
+										</div>
+									)}
+									<a class="impact-project-link btn-regular" href={project.url}>View full project</a>
+								</article>
+							))}
+						</div>
+					</section>
+				))}
+			</div>
+		</div>
+
+		<div class="impact-screen-reader-summary" data-impact-sr-summary aria-live="polite"></div>
+
+		<noscript>
+			<p class="impact-noscript text-75">
+				JavaScript is disabled, so the accessible project list is shown instead of the interactive graph.
+			</p>
+		</noscript>
+
+		<script is:inline id="project-impact-data" type="application/json" set:html={graphDataJson}></script>
+		<script is:inline type="module" src={url("/assets/js/project-impact-graph.js")}></script>
+	</section>
+</MainGridLayout>

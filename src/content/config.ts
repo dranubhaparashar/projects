@@ -11,6 +11,8 @@ const postsCollection = defineCollection({
 		pdf: z.string().optional().default(""),
 		tags: z.array(z.string()).optional().default([]),
 		category: z.string().optional().nullable().default(""),
+		impact_domain: z.string().optional().default(""),
+		impact_domains: z.array(z.string()).optional().default([]),
 		lang: z.string().optional().default(""),
 
 		/* For internal use */

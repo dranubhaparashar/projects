@@ -37,6 +37,10 @@ export const navBarConfig: NavBarConfig = {
 		LinkPreset.Home,
 		LinkPreset.Archive,
 		{
+			name: "Impact Domain",
+			url: "/impact-domain/",
+		},
+		{
 			name: "Website",
 			url: "https://anubhaparashar.github.io/",
 			external: true,
