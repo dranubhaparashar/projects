@@ -1,0 +1,374 @@
+---
+import type { CollectionEntry } from "astro:content";
+import Pagination from "@components/control/Pagination.astro";
+import ImageWrapper from "@components/misc/ImageWrapper.astro";
+import PostPage from "@components/PostPage.astro";
+import {
+	buildProjectProblemExplorerData,
+	type ProjectProblemMatch,
+	type ProjectProblemProject,
+	toFilterKey,
+} from "@utils/project-problem-matching";
+import { url } from "@utils/url-utils";
+import type { Page } from "astro";
+import { Icon } from "astro-icon/components";
+
+interface Props {
+	allPosts: CollectionEntry<"posts">[];
+	page: Page<CollectionEntry<"posts">>;
+}
+
+const { allPosts, page } = Astro.props;
+const problemData = buildProjectProblemExplorerData(allPosts);
+const len = page.data.length;
+
+function buildCardSearchText(
+	project: ProjectProblemProject,
+	match: ProjectProblemMatch,
+) {
+	return [
+		project.title,
+		project.description,
+		project.category,
+		project.tags.join(" "),
+		project.technologyTags.join(" "),
+		match.useCases.join(" "),
+	]
+		.join(" ")
+		.toLowerCase();
+}
+
+function buildTechnologyKeys(project: ProjectProblemProject) {
+	return project.technologyTags.map(toFilterKey).filter(Boolean).join(" ");
+}
+
+function buildUseCaseKeys(match: ProjectProblemMatch) {
+	return match.useCaseKeys.join(" ");
+}
+
+function getMatchEvidence(match: ProjectProblemMatch) {
+	const values = [
+		...match.matchedTags,
+		...match.matchedKeywords,
+		...match.matchedCategories,
+	];
+	return [...new Set(values)].slice(0, 5);
+}
+
+function getArchitecturePlaceholder(project: ProjectProblemProject) {
+	return project.architecturePreview.status === "inside-project"
+		? "Architecture available inside project"
+		: "Architecture preview not added";
+}
+---
+
+<section
+	class="project-discovery"
+	data-project-discovery
+	aria-labelledby="project-discovery-tabs-label"
+>
+	<p id="project-discovery-tabs-label" class="sr-only">Project discovery mode</p>
+	<div class="project-discovery-tabs card-base" role="tablist" aria-label="Project discovery mode">
+		<button
+			type="button"
+			id="project-discovery-tab-projects"
+			class="project-discovery-tab"
+			role="tab"
+			aria-selected="true"
+			aria-controls="project-discovery-panel-projects"
+			tabindex="0"
+			data-discovery-tab="projects"
+		>
+			Browse Projects
+		</button>
+		<button
+			type="button"
+			id="project-discovery-tab-problems"
+			class="project-discovery-tab"
+			role="tab"
+			aria-selected="false"
+			aria-controls="project-discovery-panel-problems"
+			tabindex="-1"
+			data-discovery-tab="problems"
+		>
+			Choose a Problem
+		</button>
+	</div>
+
+	<section
+		id="project-discovery-panel-projects"
+		class="project-discovery-panel"
+		role="tabpanel"
+		aria-labelledby="project-discovery-tab-projects"
+		data-discovery-panel="projects"
+	>
+		<PostPage page={page}></PostPage>
+		<Pagination class="mx-auto onload-animation" page={page} style={`animation-delay: calc(var(--content-delay) + ${len * 50}ms)`}></Pagination>
+	</section>
+
+	<section
+		id="project-discovery-panel-problems"
+		class="project-discovery-panel"
+		role="tabpanel"
+		aria-labelledby="project-discovery-tab-problems"
+		data-discovery-panel="problems"
+		hidden
+	>
+		<div class="problem-explorer card-base">
+			<section class="problem-overview" data-problem-overview aria-labelledby="problem-overview-title">
+				<div class="problem-overview-header">
+					<div>
+						<h1 id="problem-overview-title">What problem are you trying to solve?</h1>
+						<p>Explore relevant AI projects by business problem, technical challenge or application domain.</p>
+					</div>
+				</div>
+
+				<div class="problem-option-grid" aria-label="Problem areas">
+					{problemData.problems.map((problem) => (
+						<button
+							type="button"
+							class="problem-option-card"
+							data-problem-option
+							data-problem-id={problem.id}
+							aria-pressed="false"
+							aria-label={`${problem.label}, ${problem.count} ${problem.count === 1 ? "matching project" : "matching projects"}`}
+						>
+							<span class="problem-option-icon" aria-hidden="true">
+								<Icon name={problem.icon}></Icon>
+							</span>
+							<span class="problem-option-content">
+								<strong>{problem.label}</strong>
+								<span>{problem.description}</span>
+							</span>
+							<span class="problem-option-count">
+								{problem.count} {problem.count === 1 ? "project" : "projects"}
+							</span>
+						</button>
+					))}
+				</div>
+			</section>
+
+			{problemData.problems.map((problem) => (
+				<section
+					class="problem-detail"
+					data-problem-detail={problem.id}
+					aria-labelledby={`problem-detail-title-${problem.id}`}
+					hidden
+				>
+					<div class="problem-detail-topbar">
+						<button type="button" class="problem-back-button btn-plain" data-problem-back>
+							<span aria-hidden="true">&larr;</span>
+							All problems
+						</button>
+						<div class="problem-switcher" role="group" aria-label="Switch problem area">
+							{problemData.problems.map((candidate) => (
+								<button
+									type="button"
+									class="problem-switch-button"
+									data-problem-option
+									data-problem-id={candidate.id}
+									aria-pressed={candidate.id === problem.id ? "true" : "false"}
+								>
+									{candidate.label}
+								</button>
+							))}
+						</div>
+					</div>
+
+					<header class="problem-detail-header">
+						<div class="problem-detail-heading">
+							<span class="problem-detail-icon" aria-hidden="true">
+								<Icon name={problem.icon}></Icon>
+							</span>
+							<div>
+								<h2 id={`problem-detail-title-${problem.id}`}>{problem.label}</h2>
+								<p>{problem.description}</p>
+							</div>
+						</div>
+						<div class="problem-detail-count" data-problem-result-count>
+							{problem.count} {problem.count === 1 ? "project" : "projects"}
+						</div>
+					</header>
+
+					<div class="problem-filter-row">
+						<label class="problem-search-control">
+							<span>Search within this problem</span>
+							<input
+								type="search"
+								data-problem-search
+								placeholder="Search projects, technologies or use cases..."
+								autocomplete="off"
+							/>
+						</label>
+					</div>
+
+					{problem.technologies.length > 0 && (
+						<section class="problem-facet-section" aria-labelledby={`problem-technologies-${problem.id}`}>
+							<div class="problem-section-heading">
+								<h3 id={`problem-technologies-${problem.id}`}>Technologies used</h3>
+								<button type="button" class="problem-clear-chip btn-plain" data-clear-technology hidden>
+									Clear technology filter
+								</button>
+							</div>
+							<div class="problem-chip-row">
+								{problem.technologies.map((technology) => (
+									<button
+										type="button"
+										class="problem-filter-chip"
+										data-technology-filter={technology.key}
+										aria-pressed="false"
+									>
+										<span>{technology.label}</span>
+										<small>{technology.count}</small>
+									</button>
+								))}
+							</div>
+						</section>
+					)}
+
+					{problem.useCases.length > 0 && (
+						<section class="problem-facet-section" aria-labelledby={`problem-use-cases-${problem.id}`}>
+							<div class="problem-section-heading">
+								<h3 id={`problem-use-cases-${problem.id}`}>Similar use cases</h3>
+								<button type="button" class="problem-clear-chip btn-plain" data-clear-use-case hidden>
+									Clear use case filter
+								</button>
+							</div>
+							<div class="problem-use-case-row">
+								{problem.useCases.map((useCase) => (
+									<button
+										type="button"
+										class="problem-use-case-chip"
+										data-use-case-filter={useCase.key}
+										aria-pressed="false"
+									>
+										<span>{useCase.label}</span>
+										<small>{useCase.count}</small>
+									</button>
+								))}
+							</div>
+						</section>
+					)}
+
+					<div class="problem-results-grid" data-problem-results>
+						{problem.projects.map(({ project, match }) => (
+							<article
+								class="problem-project-card card-base"
+								data-problem-card
+								data-search={buildCardSearchText(project, match)}
+								data-technology-keys={buildTechnologyKeys(project)}
+								data-use-case-keys={buildUseCaseKeys(match)}
+							>
+								<a
+									class:list={[
+										"problem-architecture-preview",
+										{
+											"has-preview":
+												project.architecturePreview.status === "available" &&
+												project.architecturePreview.src,
+										},
+									]}
+									href={project.url}
+									aria-label={`Open ${project.title}`}
+								>
+									{project.architecturePreview.status === "available" && project.architecturePreview.src ? (
+										<ImageWrapper
+											src={project.architecturePreview.src}
+											basePath={project.assetBasePath}
+											alt={project.architecturePreview.alt}
+											fit="contain"
+											overlay={false}
+											loading="lazy"
+											class="problem-architecture-image"
+										/>
+									) : (
+										<span>{getArchitecturePlaceholder(project)}</span>
+									)}
+								</a>
+
+								<div class="problem-project-body">
+									<div class="problem-project-meta">
+										<span>{project.category}</span>
+										<span>{project.year}</span>
+									</div>
+									<h3>
+										<a href={project.url}>{project.title}</a>
+									</h3>
+									<p>{project.description}</p>
+
+									<div class="problem-match-summary">
+										<span>{problem.label}</span>
+										<strong>{match.matchReason}</strong>
+										{getMatchEvidence(match).length > 0 && (
+											<div class="problem-match-tags" aria-label="Matching evidence">
+												{getMatchEvidence(match).map((value) => <span>{value}</span>)}
+											</div>
+										)}
+									</div>
+
+									<div class="problem-project-tags" aria-label={`${project.title} technologies`}>
+										{project.technologyTags.slice(0, 8).map((tag) => <span>{tag}</span>)}
+									</div>
+								</div>
+
+								<div class="problem-project-actions">
+									<a class="btn-regular" href={project.url}>View Project</a>
+									{project.actions.map((action) => (
+										<a
+											class="problem-secondary-action"
+											href={action.url}
+											target={action.external ? "_blank" : undefined}
+											rel={action.external ? "noopener noreferrer" : undefined}
+											aria-label={`${action.label} for ${project.title}${action.external ? " (opens in a new tab)" : ""}`}
+										>
+											{action.label}
+											{action.external && (
+											<span class="problem-external-indicator" aria-hidden="true">
+												External
+											</span>
+										)}
+										</a>
+									))}
+								</div>
+							</article>
+						))}
+					</div>
+
+					<div class="problem-empty-state card-base" data-problem-empty hidden>
+						<h3>No matching projects found</h3>
+						<p>Try clearing the technology filter or searching with a broader term.</p>
+						<div class="problem-empty-actions">
+							<button type="button" class="btn-regular" data-clear-search>Clear search</button>
+							<button type="button" class="btn-regular" data-clear-technology>Clear technology filter</button>
+							<button type="button" class="btn-regular" data-clear-use-case>Clear use case filter</button>
+							<button type="button" class="btn-regular" data-view-projects>View all projects</button>
+						</div>
+					</div>
+
+					{problem.relatedProblems.length > 0 && (
+						<section class="problem-related-section" aria-labelledby={`problem-related-${problem.id}`}>
+							<h3 id={`problem-related-${problem.id}`}>You may also be interested in</h3>
+							<div class="problem-related-row">
+								{problem.relatedProblems.map((related) => (
+									<button
+										type="button"
+										class="problem-related-chip"
+										data-problem-option
+										data-problem-id={related.id}
+									>
+										<span>{related.label}</span>
+										<small>{related.count}</small>
+									</button>
+								))}
+							</div>
+						</section>
+					)}
+				</section>
+			))}
+		</div>
+	</section>
+
+	<div class="project-discovery-live sr-only" data-project-discovery-live aria-live="polite"></div>
+
+	<script is:inline type="module" src={url("/assets/js/project-problem-explorer.js")}></script>
+</section>

@@ -1,0 +1,175 @@
+---
+import { Icon } from "astro-icon/components";
+import { url } from "../utils/url-utils";
+import "../styles/project-intelligence.css";
+
+interface Props {
+	currentProjectSlug?: string;
+}
+
+const { currentProjectSlug = "" } = Astro.props;
+const globalSuggestions = [
+	"Which projects use computer vision?",
+	"Have you deployed models in production?",
+	"Show projects related to healthcare.",
+	"Which projects use Snowflake?",
+	"Which project is most relevant to logistics?",
+	"Show projects involving Generative AI.",
+	"Which projects have live demos?",
+	"Which projects use multimodal AI?",
+];
+const contextualSuggestions = [
+	"Explain this project",
+	"What technologies are used?",
+	"Is this deployed?",
+	"Show similar projects",
+	"What problem does this solve?",
+];
+const suggestions = currentProjectSlug
+	? contextualSuggestions
+	: globalSuggestions;
+---
+
+<project-intelligence
+	data-index-url={url("/project-intelligence-index.json")}
+	data-current-project-slug={currentProjectSlug}
+>
+	<button
+		type="button"
+		class="project-intelligence-trigger"
+		data-project-intelligence-trigger
+		aria-label="Ask about my projects"
+		aria-controls="project-intelligence-dialog"
+		aria-expanded="false"
+	>
+		<Icon name="material-symbols:forum-outline-rounded" aria-hidden="true" />
+		<span>Ask about my projects</span>
+	</button>
+
+	<div class="project-intelligence-layer" data-project-intelligence-layer hidden>
+		<button
+			type="button"
+			class="project-intelligence-backdrop"
+			data-project-intelligence-close
+			aria-label="Close Project Intelligence"
+		></button>
+		<section
+			id="project-intelligence-dialog"
+			class="project-intelligence-dialog"
+			data-project-intelligence-dialog
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="project-intelligence-title"
+			aria-describedby="project-intelligence-description"
+			aria-hidden="true"
+		>
+			<header class="project-intelligence-header">
+				<div class="project-intelligence-heading">
+					<span class="project-intelligence-heading-icon" aria-hidden="true">
+						<Icon name="material-symbols:account-tree-outline-rounded" />
+					</span>
+					<div>
+						<h2 id="project-intelligence-title">Project Intelligence</h2>
+						<p id="project-intelligence-description">
+							Ask about Anubha’s projects, technologies, research and production deployments.
+						</p>
+					</div>
+				</div>
+				<button
+					type="button"
+					class="project-intelligence-close btn-plain"
+					data-project-intelligence-close
+					aria-label="Close Project Intelligence"
+				>
+					<Icon name="material-symbols:close-rounded" aria-hidden="true" />
+				</button>
+			</header>
+
+			<div class="project-intelligence-body" data-project-intelligence-body>
+				<section class="project-intelligence-suggestions" aria-labelledby="project-intelligence-suggestions-title">
+					<h3 id="project-intelligence-suggestions-title">
+						{currentProjectSlug ? "Ask about this project" : "Suggested questions"}
+					</h3>
+					<div class="project-intelligence-suggestion-list">
+						{suggestions.map((suggestion) => (
+							<button type="button" data-project-intelligence-suggestion>
+								<span>{suggestion}</span>
+								<Icon name="material-symbols:arrow-forward-rounded" aria-hidden="true" />
+							</button>
+						))}
+					</div>
+				</section>
+
+				<div
+					class="project-intelligence-messages"
+					data-project-intelligence-messages
+					role="log"
+					aria-live="polite"
+					aria-relevant="additions text"
+				></div>
+			</div>
+
+			<form class="project-intelligence-form" data-project-intelligence-form>
+				<label for="project-intelligence-input">Ask a portfolio question</label>
+				<div class="project-intelligence-input-row">
+					<input
+						id="project-intelligence-input"
+						name="question"
+						type="text"
+						maxlength="240"
+						autocomplete="off"
+						placeholder="Ask about projects, technologies or research…"
+						data-project-intelligence-input
+					/>
+					<button type="submit" aria-label="Ask Project Intelligence">
+						<Icon name="material-symbols:arrow-upward-rounded" aria-hidden="true" />
+					</button>
+				</div>
+				<p>Answers use published portfolio content only.</p>
+			</form>
+		</section>
+	</div>
+	<div class="sr-only" data-project-intelligence-live aria-live="polite"></div>
+</project-intelligence>
+
+<script>
+	class ProjectIntelligenceElement extends HTMLElement {
+		controller?: {
+			open: () => void;
+			destroy: () => void;
+		};
+		trigger?: HTMLButtonElement;
+		handleOpen = async () => {
+			if (!this.trigger) return;
+			this.trigger.setAttribute("aria-busy", "true");
+			try {
+				if (!this.controller) {
+					const { mountProjectIntelligence } = await import(
+						"../scripts/project-intelligence"
+					);
+					this.controller = mountProjectIntelligence(this);
+				}
+				this.controller.open();
+			} finally {
+				this.trigger.removeAttribute("aria-busy");
+			}
+		};
+
+		connectedCallback() {
+			this.trigger = this.querySelector<HTMLButtonElement>(
+				"[data-project-intelligence-trigger]",
+			) || undefined;
+			this.trigger?.addEventListener("click", this.handleOpen);
+		}
+
+		disconnectedCallback() {
+			this.trigger?.removeEventListener("click", this.handleOpen);
+			this.controller?.destroy();
+			this.controller = undefined;
+		}
+	}
+
+	if (!customElements.get("project-intelligence")) {
+		customElements.define("project-intelligence", ProjectIntelligenceElement);
+	}
+</script>

@@ -94,6 +94,11 @@ export type BlogPostData = {
 	category?: string;
 	impact_domain?: string;
 	impact_domains?: string[];
+	problems?: string[];
+	architecture?: {
+		src: string;
+		alt?: string;
+	};
 	prevTitle?: string;
 	prevSlug?: string;
 	nextTitle?: string;

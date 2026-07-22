@@ -13,6 +13,13 @@ const postsCollection = defineCollection({
 		category: z.string().optional().nullable().default(""),
 		impact_domain: z.string().optional().default(""),
 		impact_domains: z.array(z.string()).optional().default([]),
+		problems: z.array(z.string()).optional().default([]),
+		architecture: z
+			.object({
+				src: z.string(),
+				alt: z.string().optional().default(""),
+			})
+			.optional(),
 		lang: z.string().optional().default(""),
 
 		/* For internal use */
