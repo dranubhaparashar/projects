@@ -58,6 +58,18 @@ const ICON_PATHS = {
 		"M15.5 7l-2.2 9",
 		"M9 5h6",
 	],
+	maximize: [
+		"M8 3H5a2 2 0 0 0-2 2v3",
+		"M16 3h3a2 2 0 0 1 2 2v3",
+		"M21 16v3a2 2 0 0 1-2 2h-3",
+		"M8 21H5a2 2 0 0 1-2-2v-3",
+	],
+	minimize: [
+		"M8 3v3a2 2 0 0 1-2 2H3",
+		"M16 3v3a2 2 0 0 0 2 2h3",
+		"M21 16h-3a2 2 0 0 0-2 2v3",
+		"M3 16h3a2 2 0 0 1 2 2v3",
+	],
 };
 
 function svgElement(name, attributes = {}) {
@@ -210,6 +222,7 @@ class ProjectImpactGraph {
 		this.data = JSON.parse(
 			app.querySelector("#project-impact-data")?.textContent || "{}",
 		);
+		this.explorer = app.querySelector("[data-impact-explorer]") || app;
 		this.svg = app.querySelector("[data-impact-svg]");
 		this.tooltip = app.querySelector("[data-impact-tooltip]");
 		this.details = app.querySelector("[data-impact-details]");
@@ -217,6 +230,13 @@ class ProjectImpactGraph {
 		this.emptyState = app.querySelector("[data-impact-empty]");
 		this.srSummary = app.querySelector("[data-impact-sr-summary]");
 		this.list = app.querySelector("[data-impact-list]");
+		this.fullscreenButton = app.querySelector("[data-impact-fullscreen]");
+		this.visibleProjectCount = app.querySelector(
+			"[data-impact-visible-project-count]",
+		);
+		this.visibleDomainCount = app.querySelector(
+			"[data-impact-visible-domain-count]",
+		);
 		this.width = 800;
 		this.height = 520;
 		this.alpha = 0;
@@ -225,7 +245,11 @@ class ProjectImpactGraph {
 		this.fitTimer = 0;
 		this.fitPulseTimer = 0;
 		this.fitAfterSimulation = false;
+		this.fullscreenFrame = 0;
 		this.labelsArePersistent = false;
+		this.fullscreenActive = false;
+		this.usingFullscreenFallback = false;
+		this.previousBodyOverflow = "";
 		this.reducedMotion = window.matchMedia(
 			"(prefers-reduced-motion: reduce)",
 		).matches;
@@ -302,6 +326,8 @@ class ProjectImpactGraph {
 		this.lastNodePress = null;
 		this.panStart = null;
 		this.searchTimer = 0;
+		this.boundDocumentKeydown = (event) => this.handleDocumentKeydown(event);
+		this.boundFullscreenChange = () => this.handleFullscreenChange();
 
 		this.setupSvg();
 		this.bindControls();
@@ -316,10 +342,26 @@ class ProjectImpactGraph {
 	destroy() {
 		cancelAnimationFrame(this.frame);
 		cancelAnimationFrame(this.resizeFrame);
+		cancelAnimationFrame(this.fullscreenFrame);
 		clearTimeout(this.fitTimer);
 		clearTimeout(this.fitPulseTimer);
+		if (this.usingFullscreenFallback) {
+			this.exitFallbackFullscreen({ restoreFocus: false, refit: false });
+		}
+		if (
+			document.fullscreenElement === this.explorer &&
+			document.exitFullscreen
+		) {
+			document.exitFullscreen().catch(() => {});
+		}
+		this.unlockBodyScroll();
 		this.resizeObserver?.disconnect();
 		window.removeEventListener("resize", this.boundResize);
+		document.removeEventListener("keydown", this.boundDocumentKeydown);
+		document.removeEventListener(
+			"fullscreenchange",
+			this.boundFullscreenChange,
+		);
 	}
 
 	setupSvg() {
@@ -541,6 +583,9 @@ class ProjectImpactGraph {
 		this.app
 			.querySelector("[data-impact-reset]")
 			?.addEventListener("click", () => this.resetView());
+		this.fullscreenButton?.addEventListener("click", () =>
+			this.toggleFullscreen(),
+		);
 
 		this.app.querySelectorAll("[data-impact-domain]").forEach((button) => {
 			button.addEventListener("click", () => {
@@ -575,11 +620,8 @@ class ProjectImpactGraph {
 			}
 		});
 
-		document.addEventListener("keydown", (event) => {
-			if (event.key === "Escape" && document.contains(this.app)) {
-				this.clearSelection();
-			}
-		});
+		document.addEventListener("keydown", this.boundDocumentKeydown);
+		document.addEventListener("fullscreenchange", this.boundFullscreenChange);
 	}
 
 	setMode(mode, shouldStore = true) {
@@ -711,6 +753,7 @@ class ProjectImpactGraph {
 
 	updateStatus() {
 		const visibleNodes = this.getVisibleNodes();
+		this.updateToolbarMetrics(visibleNodes);
 		if (visibleNodes.length === 0) {
 			this.status.textContent = "No projects match these filters.";
 			return;
@@ -725,6 +768,17 @@ class ProjectImpactGraph {
 		const domainCount = new Set(visibleNodes.map((node) => node.primaryDomain))
 			.size;
 		this.status.textContent = `${visibleNodes.length} ${visibleNodes.length === 1 ? "project" : "projects"} shown across ${domainCount} ${domainCount === 1 ? "domain" : "domains"}.`;
+	}
+
+	updateToolbarMetrics(visibleNodes = this.getVisibleNodes()) {
+		const domainCount = new Set(visibleNodes.map((node) => node.primaryDomain))
+			.size;
+		if (this.visibleProjectCount) {
+			this.visibleProjectCount.textContent = String(visibleNodes.length);
+		}
+		if (this.visibleDomainCount) {
+			this.visibleDomainCount.textContent = String(domainCount);
+		}
 	}
 
 	selectProject(projectId) {
@@ -746,6 +800,161 @@ class ProjectImpactGraph {
 		this.renderDetails(null);
 		this.updateHighlighting();
 		this.fitCurrentView();
+	}
+
+	isBrowserFullscreenActive() {
+		return document.fullscreenElement === this.explorer;
+	}
+
+	isFullscreenActive() {
+		return this.fullscreenActive || this.isBrowserFullscreenActive();
+	}
+
+	async toggleFullscreen() {
+		if (this.isFullscreenActive()) {
+			await this.exitFullscreen();
+			return;
+		}
+		await this.enterFullscreen();
+	}
+
+	async enterFullscreen() {
+		this.fullscreenButton?.focus({ preventScroll: true });
+		if (this.explorer?.requestFullscreen) {
+			try {
+				await this.explorer.requestFullscreen();
+				this.usingFullscreenFallback = false;
+				this.setFullscreenState(true, { fallback: false, restoreFocus: false });
+				return;
+			} catch {
+				// Fall through to the in-page fullscreen fallback.
+			}
+		}
+		this.enterFallbackFullscreen();
+	}
+
+	async exitFullscreen() {
+		if (this.usingFullscreenFallback) {
+			this.exitFallbackFullscreen();
+			return;
+		}
+		if (this.isBrowserFullscreenActive() && document.exitFullscreen) {
+			try {
+				await document.exitFullscreen();
+			} catch {
+				this.setFullscreenState(false);
+			}
+			return;
+		}
+		this.setFullscreenState(false);
+	}
+
+	enterFallbackFullscreen() {
+		this.usingFullscreenFallback = true;
+		this.lockBodyScroll();
+		this.setFullscreenState(true, { fallback: true, restoreFocus: false });
+	}
+
+	exitFallbackFullscreen({ restoreFocus = true, refit = true } = {}) {
+		if (!this.usingFullscreenFallback) return;
+		this.usingFullscreenFallback = false;
+		this.setFullscreenState(false, { restoreFocus, refit });
+	}
+
+	setFullscreenState(
+		active,
+		{
+			fallback = this.usingFullscreenFallback,
+			restoreFocus = true,
+			refit = true,
+		} = {},
+	) {
+		this.fullscreenActive = active;
+		this.explorer.classList.toggle(
+			"impact-explorer--fullscreen-active",
+			active,
+		);
+		this.explorer.classList.toggle(
+			"impact-explorer--fullscreen",
+			active && fallback,
+		);
+		if (!active) this.unlockBodyScroll();
+		this.updateFullscreenButton(active);
+		if (refit) this.refitAfterFullscreenChange();
+		if (!active && restoreFocus) this.restoreFullscreenFocus();
+	}
+
+	updateFullscreenButton(active = this.isFullscreenActive()) {
+		if (!this.fullscreenButton) return;
+		const label = active ? "Exit full screen" : "View graph in full screen";
+		this.fullscreenButton.setAttribute("aria-label", label);
+		this.fullscreenButton.setAttribute("aria-pressed", String(active));
+		this.fullscreenButton.setAttribute("title", label);
+		this.fullscreenButton
+			.querySelector('[data-impact-fullscreen-icon="enter"]')
+			?.toggleAttribute("hidden", active);
+		this.fullscreenButton
+			.querySelector('[data-impact-fullscreen-icon="exit"]')
+			?.toggleAttribute("hidden", !active);
+	}
+
+	handleFullscreenChange() {
+		const active = this.isBrowserFullscreenActive();
+		if (active) {
+			this.usingFullscreenFallback = false;
+			this.setFullscreenState(true, { fallback: false, restoreFocus: false });
+			return;
+		}
+		if (this.fullscreenActive && !this.usingFullscreenFallback) {
+			this.setFullscreenState(false);
+		}
+	}
+
+	handleDocumentKeydown(event) {
+		if (event.key !== "Escape" || !document.contains(this.app)) return;
+		if (this.usingFullscreenFallback) {
+			event.preventDefault();
+			this.exitFallbackFullscreen();
+			return;
+		}
+		if (this.isBrowserFullscreenActive()) {
+			event.preventDefault();
+			this.exitFullscreen();
+			return;
+		}
+		this.clearSelection();
+	}
+
+	lockBodyScroll() {
+		if (!document.body.classList.contains("impact-fullscreen-scroll-lock")) {
+			this.previousBodyOverflow = document.body.style.overflow;
+		}
+		document.body.classList.add("impact-fullscreen-scroll-lock");
+		document.body.style.overflow = "hidden";
+	}
+
+	unlockBodyScroll() {
+		if (!document.body.classList.contains("impact-fullscreen-scroll-lock"))
+			return;
+		document.body.classList.remove("impact-fullscreen-scroll-lock");
+		document.body.style.overflow = this.previousBodyOverflow || "";
+	}
+
+	restoreFullscreenFocus() {
+		requestAnimationFrame(() => {
+			this.fullscreenButton?.focus({ preventScroll: true });
+		});
+	}
+
+	refitAfterFullscreenChange() {
+		cancelAnimationFrame(this.fullscreenFrame);
+		this.fullscreenFrame = requestAnimationFrame(() => {
+			this.fullscreenFrame = requestAnimationFrame(() => {
+				if (this.state.mode !== "graph") return;
+				this.handleResize();
+				this.scheduleFit(0);
+			});
+		});
 	}
 
 	openProject(projectId) {
