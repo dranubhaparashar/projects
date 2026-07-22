@@ -110,6 +110,53 @@ function hashString(value) {
 	return hash >>> 0;
 }
 
+function createDisplayTitle(title) {
+	const compact = String(title || "")
+		.replace(/\s+/g, " ")
+		.replace(/\s*:\s*.*/, "")
+		.replace(/\s+-\s+.*/, "")
+		.trim();
+	const words = compact.split(" ").filter(Boolean);
+	if (words.length <= 5) return compact;
+	return words.slice(0, 5).join(" ");
+}
+
+function splitLabelText(label) {
+	const words = String(label || "")
+		.split(" ")
+		.filter(Boolean);
+	const lines = [];
+	let current = "";
+	for (const word of words) {
+		const next = current ? `${current} ${word}` : word;
+		if (next.length > 18 && current && lines.length < 1) {
+			lines.push(current);
+			current = word;
+		} else {
+			current = next;
+		}
+	}
+	if (current) lines.push(current);
+	return lines.slice(0, 2);
+}
+
+function createNodeLabel(node) {
+	const text = svgElement("text", {
+		class: "impact-node-label",
+		"aria-hidden": "true",
+		y: node.radius + 16,
+	});
+	node.labelLines.forEach((line, index) => {
+		const tspan = svgElement("tspan", {
+			x: "0",
+			dy: index === 0 ? "0" : "1.15em",
+		});
+		tspan.textContent = line;
+		text.append(tspan);
+	});
+	return text;
+}
+
 function createIconSvg(iconName) {
 	const svg = svgElement("svg", {
 		viewBox: "0 0 24 24",
@@ -175,6 +222,10 @@ class ProjectImpactGraph {
 		this.alpha = 0;
 		this.frame = 0;
 		this.resizeFrame = 0;
+		this.fitTimer = 0;
+		this.fitPulseTimer = 0;
+		this.fitAfterSimulation = false;
+		this.labelsArePersistent = false;
 		this.reducedMotion = window.matchMedia(
 			"(prefers-reduced-motion: reduce)",
 		).matches;
@@ -188,6 +239,7 @@ class ProjectImpactGraph {
 			year: "",
 			selectedId: "",
 			selectedDomain: "",
+			hoveredId: "",
 		};
 		this.domainMeta = new Map(
 			this.data.domains.map((domain) => [domain.name, domain]),
@@ -195,26 +247,35 @@ class ProjectImpactGraph {
 		this.projects = new Map(
 			this.data.projects.map((project) => [project.id, project]),
 		);
-		this.nodes = this.data.projects.map((project, index) => ({
-			...project,
-			index,
-			radius: 18 + Math.min(7, project.relatedProjects.length * 1.5),
-			x: 0,
-			y: 0,
-			vx: 0,
-			vy: 0,
-			visible: true,
-			searchText: normalizeText(
-				[
-					project.title,
-					project.description,
-					project.category,
-					project.primaryDomain,
-					...project.domains,
-					...project.tags,
-				].join(" "),
-			),
-		}));
+		this.nodes = this.data.projects.map((project, index) => {
+			const displayTitle = createDisplayTitle(project.title);
+			const labelLines = splitLabelText(displayTitle);
+			return {
+				...project,
+				index,
+				radius: 18 + Math.min(7, project.relatedProjects.length * 1.5),
+				displayTitle,
+				labelLines,
+				labelWidth: Math.max(...labelLines.map((line) => line.length), 8) * 6.2,
+				labelHeight: labelLines.length * 12,
+				collisionRadius: 34,
+				x: 0,
+				y: 0,
+				vx: 0,
+				vy: 0,
+				visible: true,
+				searchText: normalizeText(
+					[
+						project.title,
+						project.description,
+						project.category,
+						project.primaryDomain,
+						...project.domains,
+						...project.tags,
+					].join(" "),
+				),
+			};
+		});
 		this.nodeById = new Map(this.nodes.map((node) => [node.id, node]));
 		this.edges = this.data.edges.map((edge) => ({
 			...edge,
@@ -234,6 +295,7 @@ class ProjectImpactGraph {
 		);
 		this.nodeElements = new Map();
 		this.edgeElements = new Map();
+		this.domainRegionElements = new Map();
 		this.clusterCenters = {};
 		this.dragNode = null;
 		this.dragStart = null;
@@ -254,6 +316,8 @@ class ProjectImpactGraph {
 	destroy() {
 		cancelAnimationFrame(this.frame);
 		cancelAnimationFrame(this.resizeFrame);
+		clearTimeout(this.fitTimer);
+		clearTimeout(this.fitPulseTimer);
 		this.resizeObserver?.disconnect();
 		window.removeEventListener("resize", this.boundResize);
 	}
@@ -261,10 +325,29 @@ class ProjectImpactGraph {
 	setupSvg() {
 		this.svg.textContent = "";
 		this.viewport = svgElement("g", { class: "impact-graph-viewport" });
+		this.clusterLayer = svgElement("g", { class: "impact-cluster-layer" });
 		this.edgeLayer = svgElement("g", { class: "impact-edge-layer" });
 		this.nodeLayer = svgElement("g", { class: "impact-node-layer" });
-		this.viewport.append(this.edgeLayer, this.nodeLayer);
+		this.viewport.append(this.clusterLayer, this.edgeLayer, this.nodeLayer);
 		this.svg.append(this.viewport);
+
+		for (const domain of this.data.domains) {
+			const region = svgElement("g", {
+				class: "impact-cluster-region",
+				"data-cluster-domain": domain.name,
+			});
+			region.style.setProperty(
+				"--cluster-color",
+				domain.color || "var(--accent-color)",
+			);
+			region.append(
+				svgElement("ellipse"),
+				svgElement("text", { class: "impact-cluster-label" }),
+			);
+			region.querySelector("text").textContent = domain.name;
+			this.clusterLayer.append(region);
+			this.domainRegionElements.set(domain.name, region);
+		}
 
 		for (const edge of this.edges) {
 			const edgeElement = svgElement("path", {
@@ -303,26 +386,75 @@ class ProjectImpactGraph {
 				"--node-fill-dark",
 				`color-mix(in srgb, ${domain.color || "var(--accent-color)"} 24%, #101418)`,
 			);
+			const hitWidth = Math.max(node.labelWidth + 22, node.radius * 2 + 22);
+			const hitHeight = node.radius * 2 + node.labelHeight + 34;
+			const hitTarget = svgElement("rect", {
+				class: "impact-node-hit",
+				x: -hitWidth / 2,
+				y: -node.radius - 11,
+				width: hitWidth,
+				height: hitHeight,
+				rx: 10,
+			});
 			const circle = svgElement("circle", { r: node.radius });
 			const iconGroup = svgElement("g", { transform: "translate(-12 -12)" });
 			for (const pathData of ICON_PATHS[node.icon] || ICON_PATHS.network) {
 				iconGroup.append(svgElement("path", { d: pathData }));
 			}
-			nodeElement.append(circle, iconGroup, svgElement("title"));
-			nodeElement.querySelector("title").textContent = node.title;
+			const title = svgElement("title");
+			title.textContent = node.title;
+			nodeElement.append(
+				hitTarget,
+				circle,
+				iconGroup,
+				createNodeLabel(node),
+				title,
+			);
 			nodeElement.addEventListener("click", () => this.selectProject(node.id));
 			nodeElement.addEventListener("dblclick", () => this.openProject(node.id));
-			nodeElement.addEventListener("pointerenter", (event) =>
-				this.showNodeTooltip(node, event),
-			);
+			nodeElement.addEventListener("pointerenter", (event) => {
+				this.state.hoveredId = node.id;
+				this.updateHighlighting();
+				this.showNodeTooltip(node, event);
+			});
 			nodeElement.addEventListener("pointermove", (event) =>
 				this.moveTooltip(event),
 			);
-			nodeElement.addEventListener("pointerleave", () => this.hideTooltip());
-			nodeElement.addEventListener("focus", (event) =>
-				this.showNodeTooltip(node, event),
-			);
-			nodeElement.addEventListener("blur", () => this.hideTooltip());
+			nodeElement.addEventListener("pointerleave", () => {
+				if (this.state.hoveredId === node.id) {
+					this.state.hoveredId = "";
+					this.updateHighlighting();
+				}
+				this.hideTooltip();
+			});
+			nodeElement.addEventListener("mouseover", (event) => {
+				if (this.state.hoveredId !== node.id) {
+					this.state.hoveredId = node.id;
+					this.updateHighlighting();
+				}
+				this.showNodeTooltip(node, event);
+			});
+			nodeElement.addEventListener("mouseout", (event) => {
+				if (event.relatedTarget && nodeElement.contains(event.relatedTarget))
+					return;
+				if (this.state.hoveredId === node.id) {
+					this.state.hoveredId = "";
+					this.updateHighlighting();
+				}
+				this.hideTooltip();
+			});
+			nodeElement.addEventListener("focus", (event) => {
+				this.state.hoveredId = node.id;
+				this.updateHighlighting();
+				this.showNodeTooltip(node, event);
+			});
+			nodeElement.addEventListener("blur", () => {
+				if (this.state.hoveredId === node.id) {
+					this.state.hoveredId = "";
+					this.updateHighlighting();
+				}
+				this.hideTooltip();
+			});
 			nodeElement.addEventListener("keydown", (event) =>
 				this.handleNodeKeydown(event, node),
 			);
@@ -402,13 +534,17 @@ class ProjectImpactGraph {
 			?.addEventListener("click", () => this.zoomAt(0.82));
 		this.app
 			.querySelector("[data-impact-fit]")
-			?.addEventListener("click", () => this.fitCurrentView());
+			?.addEventListener("click", () => {
+				this.cancelFitPulse();
+				this.fitVisibleNodes();
+			});
 		this.app
 			.querySelector("[data-impact-reset]")
 			?.addEventListener("click", () => this.resetView());
 
 		this.app.querySelectorAll("[data-impact-domain]").forEach((button) => {
 			button.addEventListener("click", () => {
+				this.cancelFitPulse();
 				this.state.selectedDomain = button.dataset.impactDomain || "";
 				this.updateLegend();
 				this.updateStatus();
@@ -458,7 +594,12 @@ class ProjectImpactGraph {
 			panel.hidden = panel.dataset.impactPanel !== this.state.mode;
 		});
 		if (shouldStore) storeMode(this.state.mode);
-		if (this.state.mode === "graph") this.fitCurrentView();
+		if (this.state.mode === "graph") {
+			requestAnimationFrame(() => {
+				this.handleResize();
+				this.scheduleFit(80);
+			});
+		}
 	}
 
 	applyFilters(shouldFit = true) {
@@ -492,12 +633,13 @@ class ProjectImpactGraph {
 		}
 
 		this.emptyState.hidden = visibleIds.size !== 0;
+		this.updateClearFilterButton();
 		this.updateListVisibility(visibleIds);
 		this.updateLegend();
 		this.updateStatus();
 		this.updateHighlighting();
-		this.restartSimulation();
-		if (shouldFit) window.setTimeout(() => this.fitCurrentView(), 80);
+		this.restartSimulation({ fitAfter: shouldFit });
+		if (shouldFit) this.scheduleFit(100);
 	}
 
 	clearFilters() {
@@ -511,6 +653,22 @@ class ProjectImpactGraph {
 			control.value = "";
 		});
 		this.applyFilters();
+	}
+
+	hasActiveFilters() {
+		return Boolean(
+			this.state.query ||
+				this.state.domain ||
+				this.state.category ||
+				this.state.tag ||
+				this.state.year,
+		);
+	}
+
+	updateClearFilterButton() {
+		this.app.querySelectorAll(".impact-clear-filters").forEach((button) => {
+			button.hidden = !this.hasActiveFilters();
+		});
 	}
 
 	updateListVisibility(visibleIds) {
@@ -571,6 +729,7 @@ class ProjectImpactGraph {
 
 	selectProject(projectId) {
 		if (!projectId || !this.nodeById.has(projectId)) return;
+		this.cancelFitPulse();
 		const node = this.nodeById.get(projectId);
 		if (!node.visible) return;
 		this.state.selectedId = projectId;
@@ -597,7 +756,8 @@ class ProjectImpactGraph {
 	renderDetails(project) {
 		if (!project) {
 			this.details.innerHTML =
-				'<div class="impact-details-empty"><h2>Project Details</h2><p>No project selected.</p></div>';
+				'<div class="impact-details-empty"><span class="impact-details-empty-icon" data-impact-icon="network" aria-hidden="true"></span><h2>Select a project</h2><p>Choose a node in the graph to explore its impact domain, technologies and related projects.</p></div>';
+			injectInlineIcons(this.details);
 			this.srSummary.textContent = "No project selected.";
 			return;
 		}
@@ -609,25 +769,33 @@ class ProjectImpactGraph {
 		const relatedMarkup = related.length
 			? `<ul class="impact-detail-related-list">${related
 					.map(({ project: relatedProject, edge }) => {
-						const through = formatList(
-							[...edge.sharedTags, ...edge.sharedDomains].slice(0, 4),
-						);
-						return `<li><button type="button" class="impact-related-button" data-impact-select="${escapeHTML(relatedProject.id)}">${escapeHTML(relatedProject.title)}</button><div class="impact-detail-related-note">Related through: ${escapeHTML(through)}</div></li>`;
+						const sharedTags = edge.sharedTags.length
+							? edge.sharedTags
+							: edge.sharedDomains;
+						const through = formatList(sharedTags.slice(0, 4));
+						const chipMarkup = sharedTags
+							.slice(0, 5)
+							.map(
+								(tag) =>
+									`<span class="impact-relationship-chip">${escapeHTML(tag)}</span>`,
+							)
+							.join("");
+						return `<li><button type="button" class="impact-related-button" data-impact-select="${escapeHTML(relatedProject.id)}">${escapeHTML(relatedProject.title)}</button><div class="impact-detail-related-note">Related through: ${escapeHTML(through)}</div>${chipMarkup ? `<div class="impact-detail-relationship-tags" aria-label="Shared relationship tags">${chipMarkup}</div>` : ""}</li>`;
 					})
 					.join("")}</ul>`
 			: '<p class="impact-detail-related-note">No strong related projects in the current graph.</p>';
 
 		this.details.innerHTML = `
-			<div class="impact-detail-kicker">${escapeHTML(project.category)} / ${escapeHTML(project.date)}</div>
 			<h2>${escapeHTML(project.title)}</h2>
-			<p class="impact-detail-description">${escapeHTML(project.description)}</p>
+			<div class="impact-detail-meta"><span>${escapeHTML(project.category)}</span><span>${escapeHTML(project.year)}</span></div>
 			<div class="impact-detail-section">
 				<h3>Primary impact domain</h3>
 				<span class="impact-domain-chip">${escapeHTML(project.primaryDomain)}</span>
 			</div>
+			<p class="impact-detail-description">${escapeHTML(project.description)}</p>
 			${additionalDomains.length ? `<div class="impact-detail-section"><h3>Additional impact domains</h3><div class="impact-chip-row">${additionalDomains.map((domain) => `<span>${escapeHTML(domain)}</span>`).join("")}</div></div>` : ""}
 			<div class="impact-detail-section">
-				<h3>Project tags</h3>
+				<h3>Technologies and tags</h3>
 				<div class="impact-chip-row">${project.tags.map((tag) => `<span>${escapeHTML(tag)}</span>`).join("")}</div>
 			</div>
 			<div class="impact-detail-section">
@@ -670,11 +838,12 @@ class ProjectImpactGraph {
 
 	updateHighlighting() {
 		const selectedId = this.state.selectedId;
+		const activeId = this.state.hoveredId || selectedId;
 		const connectedIds = new Set();
-		if (selectedId) {
+		if (activeId) {
 			for (const edge of this.edges) {
-				if (edge.source === selectedId) connectedIds.add(edge.target);
-				if (edge.target === selectedId) connectedIds.add(edge.source);
+				if (edge.source === activeId) connectedIds.add(edge.target);
+				if (edge.target === activeId) connectedIds.add(edge.source);
 			}
 		}
 
@@ -682,18 +851,20 @@ class ProjectImpactGraph {
 			const element = this.nodeElements.get(node.id);
 			if (!element) continue;
 			const selected = node.id === selectedId;
+			const hovered = node.id === this.state.hoveredId;
 			const connected = connectedIds.has(node.id);
 			const outsideDomain =
 				this.state.selectedDomain &&
 				node.primaryDomain !== this.state.selectedDomain;
 			element.classList.toggle("is-hidden", !node.visible);
 			element.classList.toggle("is-selected", selected);
+			element.classList.toggle("is-hovered", hovered);
 			element.classList.toggle("is-connected", connected);
 			element.classList.toggle(
 				"is-dimmed",
 				node.visible &&
-					((selectedId && !selected && !connected) ||
-						(!selectedId && outsideDomain)),
+					((activeId && node.id !== activeId && !connected) ||
+						(!activeId && outsideDomain)),
 			);
 		}
 
@@ -701,8 +872,7 @@ class ProjectImpactGraph {
 			const element = this.edgeElements.get(`${edge.source}::${edge.target}`);
 			if (!element) continue;
 			const active =
-				selectedId &&
-				(edge.source === selectedId || edge.target === selectedId);
+				activeId && (edge.source === activeId || edge.target === activeId);
 			const outsideDomain =
 				this.state.selectedDomain &&
 				edge.sourceNode?.primaryDomain !== this.state.selectedDomain &&
@@ -711,7 +881,7 @@ class ProjectImpactGraph {
 			element.classList.toggle("is-active", !!active);
 			element.classList.toggle(
 				"is-dimmed",
-				edge.visible && !active && (!!selectedId || !!outsideDomain),
+				edge.visible && !active && (!!activeId || !!outsideDomain),
 			);
 		}
 	}
@@ -768,21 +938,28 @@ class ProjectImpactGraph {
 		const bounds = this.svg.parentElement.getBoundingClientRect();
 		this.width = Math.max(320, Math.round(bounds.width));
 		this.height = Math.max(320, Math.round(bounds.height));
+		this.labelsArePersistent = window.innerWidth >= 768;
+		for (const node of this.nodes) {
+			node.collisionRadius = node.radius + (this.labelsArePersistent ? 34 : 12);
+		}
 		this.svg.setAttribute("viewBox", `0 0 ${this.width} ${this.height}`);
 		this.computeClusterCenters();
-		this.restartSimulation();
-		this.fitCurrentView();
+		this.restartSimulation({ fitAfter: true });
+		this.scheduleFit(80);
 	}
 
-	restartSimulation() {
+	restartSimulation({ fitAfter = false } = {}) {
 		cancelAnimationFrame(this.frame);
 		this.computeClusterCenters();
 		this.alpha = 0.92;
+		this.fitAfterSimulation = this.fitAfterSimulation || fitAfter;
 		if (this.reducedMotion) {
 			for (let index = 0; index < 90; index += 1) this.tickSimulation();
 			this.renderGraph();
+			if (fitAfter) this.scheduleFit(0);
 			return;
 		}
+		if (fitAfter) this.scheduleFitPulse(850);
 		this.frame = requestAnimationFrame(() => this.runSimulation());
 	}
 
@@ -790,6 +967,10 @@ class ProjectImpactGraph {
 		if (!document.contains(this.app)) return;
 		if (this.alpha < 0.018) {
 			this.renderGraph();
+			if (this.fitAfterSimulation) {
+				this.fitAfterSimulation = false;
+				this.scheduleFit(0);
+			}
 			return;
 		}
 		this.tickSimulation();
@@ -834,8 +1015,8 @@ class ProjectImpactGraph {
 				let dx = right.x - left.x;
 				let dy = right.y - left.y;
 				const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-				const minDistance = left.radius + right.radius + 12;
-				const charge = (-130 * alpha) / (distance * distance);
+				const minDistance = left.collisionRadius + right.collisionRadius + 10;
+				const charge = (-155 * alpha) / (distance * distance);
 				left.vx += dx * charge;
 				left.vy += dy * charge;
 				right.vx -= dx * charge;
@@ -858,13 +1039,20 @@ class ProjectImpactGraph {
 			node.vy *= 0.82;
 			node.x += node.vx;
 			node.y += node.vy;
-			node.x = clamp(node.x, node.radius + 8, this.width - node.radius - 8);
-			node.y = clamp(node.y, node.radius + 8, this.height - node.radius - 8);
+			const labelSidePad = this.labelsArePersistent
+				? Math.max(node.radius, node.labelWidth / 2)
+				: node.radius;
+			const labelBottomPad = this.labelsArePersistent
+				? node.radius + node.labelHeight + 22
+				: node.radius;
+			node.x = clamp(node.x, labelSidePad + 8, this.width - labelSidePad - 8);
+			node.y = clamp(node.y, node.radius + 8, this.height - labelBottomPad - 8);
 		}
 	}
 
 	renderGraph() {
 		this.applyTransform();
+		this.renderClusterRegions();
 		for (const edge of this.edges) {
 			const element = this.edgeElements.get(`${edge.source}::${edge.target}`);
 			if (!element || !edge.sourceNode || !edge.targetNode) continue;
@@ -888,6 +1076,45 @@ class ProjectImpactGraph {
 			const element = this.nodeElements.get(node.id);
 			if (!element) continue;
 			element.setAttribute("transform", `translate(${node.x},${node.y})`);
+		}
+	}
+
+	renderClusterRegions() {
+		const domains = new Map();
+		for (const node of this.getVisibleNodes()) {
+			if (!domains.has(node.primaryDomain)) domains.set(node.primaryDomain, []);
+			domains.get(node.primaryDomain).push(node);
+		}
+		for (const [domainName, region] of this.domainRegionElements) {
+			const nodes = domains.get(domainName) || [];
+			region.classList.toggle("is-hidden", nodes.length === 0);
+			if (nodes.length === 0) continue;
+			let minX = Number.POSITIVE_INFINITY;
+			let maxX = Number.NEGATIVE_INFINITY;
+			let minY = Number.POSITIVE_INFINITY;
+			let maxY = Number.NEGATIVE_INFINITY;
+			for (const node of nodes) {
+				const side = Math.max(node.radius, node.labelWidth / 2);
+				minX = Math.min(minX, node.x - side);
+				maxX = Math.max(maxX, node.x + side);
+				minY = Math.min(minY, node.y - node.radius);
+				maxY = Math.max(maxY, node.y + node.radius + node.labelHeight + 16);
+			}
+			const cx = (minX + maxX) / 2;
+			const cy = (minY + maxY) / 2;
+			const rx = Math.max(76, (maxX - minX) / 2 + 34);
+			const ry = Math.max(58, (maxY - minY) / 2 + 28);
+			const ellipse = region.querySelector("ellipse");
+			const label = region.querySelector("text");
+			ellipse.setAttribute("cx", cx);
+			ellipse.setAttribute("cy", cy);
+			ellipse.setAttribute("rx", Math.min(rx, this.width * 0.45));
+			ellipse.setAttribute("ry", Math.min(ry, this.height * 0.36));
+			label.setAttribute("x", cx);
+			label.setAttribute(
+				"y",
+				Math.max(18, cy - Math.min(ry, this.height * 0.36) + 18),
+			);
 		}
 	}
 
@@ -916,6 +1143,10 @@ class ProjectImpactGraph {
 			this.fitNodes(domainNodes.length ? domainNodes : this.getVisibleNodes());
 			return;
 		}
+		this.fitVisibleNodes();
+	}
+
+	fitVisibleNodes() {
 		this.fitNodes(this.getVisibleNodes());
 	}
 
@@ -927,12 +1158,15 @@ class ProjectImpactGraph {
 		let minY = Number.POSITIVE_INFINITY;
 		let maxY = Number.NEGATIVE_INFINITY;
 		for (const node of visibleNodes) {
-			minX = Math.min(minX, node.x - node.radius);
-			maxX = Math.max(maxX, node.x + node.radius);
-			minY = Math.min(minY, node.y - node.radius);
-			maxY = Math.max(maxY, node.y + node.radius);
+			const side = Math.max(node.radius, node.labelWidth / 2 + 11);
+			const top = node.radius + 11;
+			const bottom = node.radius + node.labelHeight + 23;
+			minX = Math.min(minX, node.x - side);
+			maxX = Math.max(maxX, node.x + side);
+			minY = Math.min(minY, node.y - top);
+			maxY = Math.max(maxY, node.y + bottom);
 		}
-		const padding = visibleNodes.length === 1 ? 180 : 92;
+		const padding = visibleNodes.length === 1 ? 200 : 150;
 		const boxWidth = Math.max(1, maxX - minX + padding);
 		const boxHeight = Math.max(1, maxY - minY + padding);
 		const scale = clamp(
@@ -952,11 +1186,36 @@ class ProjectImpactGraph {
 
 	resetView() {
 		this.resetNodePositions();
-		this.restartSimulation();
-		window.setTimeout(() => this.fitCurrentView(), 80);
+		this.restartSimulation({ fitAfter: true });
+		this.scheduleFit(100);
+	}
+
+	scheduleFit(delay = 80) {
+		clearTimeout(this.fitTimer);
+		this.fitTimer = window.setTimeout(() => {
+			if (this.state.mode === "graph") this.fitVisibleNodes();
+		}, delay);
+	}
+
+	cancelFitPulse() {
+		clearTimeout(this.fitPulseTimer);
+		this.fitPulseTimer = 0;
+	}
+
+	scheduleFitPulse(delay = 850, interval = 110) {
+		this.cancelFitPulse();
+		const deadline = performance.now() + delay;
+		const pulse = () => {
+			if (this.state.mode === "graph") this.fitVisibleNodes();
+			if (performance.now() < deadline) {
+				this.fitPulseTimer = window.setTimeout(pulse, interval);
+			}
+		};
+		this.fitPulseTimer = window.setTimeout(pulse, interval);
 	}
 
 	zoomAt(scaleDelta, clientX, clientY) {
+		this.cancelFitPulse();
 		const rect = this.svg.getBoundingClientRect();
 		const cx = clientX ? clientX - rect.left : rect.width / 2;
 		const cy = clientY ? clientY - rect.top : rect.height / 2;
