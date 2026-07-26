@@ -38,7 +38,7 @@ const NO_INFORMATION =
 const NO_MATCH =
 	"I could not find a matching project in the published portfolio.";
 const PORTFOLIO_REDIRECT =
-	"This assistant answers questions about Anubha?s published projects, technologies and research. Try asking which projects use computer vision, Snowflake or Generative AI.";
+	"This assistant answers questions about Anubha\u2019s published projects, technologies and research. Try asking which projects use computer vision, Snowflake or Generative AI.";
 
 const GENERIC_TERMS = new Set([
 	"ai",
@@ -446,7 +446,7 @@ function isPortfolioQuestion(
 ): boolean {
 	if (current && /\b(this|current)\b/i.test(query)) return true;
 	if (ranked.length > 0) return true;
-	return /\b(project|portfolio|technolog(?:y|ies)|research|deploy|production|prototype|demo|github|paper|architecture|dataset|metric|result|accuracy|impact domain|problem|capabilit(?:y|ies)|compare)\b/i.test(
+	return /\b(projects?|portfolio|technolog(?:y|ies)|research|deploy(?:ed|ment|ments|ing)?|production|prototype|demo|github|paper|architecture|dataset|metric|result|accuracy|impact domain|problem|capabilit(?:y|ies)|compare)\b/i.test(
 		query,
 	);
 }
@@ -589,13 +589,32 @@ export function answerPortfolioQuestion(
 			technologies: collectTechnologies(similar),
 		};
 	}
+	if (/\bsimilar to\b/i.test(trimmed)) {
+		const reference = findProjectReference(
+			index,
+			trimmed.replace(/^.*?\bsimilar to\b/i, ""),
+		);
+		if (reference) {
+			const similar = similarProjects(index, reference);
+			if (!similar.length)
+				return { lead: NO_MATCH, projects: [], navigation: true };
+			return {
+				lead: "These projects have the strongest published domain, technology, tag or related-project overlap.",
+				projects: similar.map((project) => ({
+					project,
+					reason: project.description,
+				})),
+				technologies: collectTechnologies(similar),
+			};
+		}
+	}
 
 	if (current && /\bwhat problem|\bproblem does this solve/i.test(trimmed)) {
 		const reasons = current.problems.map((problem) => problem.label);
 		return {
 			lead: reasons.length
 				? "The current project maps to the following published problem areas."
-				: "The current project?s published description provides the available problem context.",
+				: "The current project\u2019s published description provides the available problem context.",
 			projects: [
 				{
 					project: current,
@@ -702,6 +721,16 @@ export function answerPortfolioQuestion(
 	}
 
 	let results = ranked;
+	if (
+		/\bcomputer vision\b/i.test(trimmed) &&
+		!/\bimpact domain\b/i.test(trimmed)
+	) {
+		results = results.filter((match) =>
+			match.reasons.some((reason) =>
+				/^(Uses|Tagged|Title|The published description|Lists)/.test(reason),
+			),
+		);
+	}
 	if (/\bresearch\b/i.test(trimmed)) {
 		const researchResults = results.filter((match) =>
 			/\bresearch|experiment|benchmark\b/i.test(
@@ -1077,7 +1106,7 @@ export function mountProjectIntelligence(
 				...dialog.querySelectorAll<HTMLElement>(
 					'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
 				),
-			].filter((node) => !node.hasAttribute("hidden"));
+			].filter((node) => !node.closest("[hidden]"));
 			if (!focusable.length) return;
 			const first = focusable[0];
 			const last = focusable[focusable.length - 1];
