@@ -664,8 +664,13 @@ export function answerPortfolioQuestion(
 			trimmed,
 		)
 	) {
-		const scope =
-			scoped || referenced || (current ? [current] : index.projects);
+		const scope = scoped?.length
+			? scoped
+			: referenced.length
+				? referenced
+				: current
+					? [current]
+					: index.projects;
 		const productionOnly =
 			!current ||
 			/\bproduction|which of those|which are deployed|have you deployed\b/i.test(
