@@ -1,0 +1,233 @@
+---
+import type { ProjectCapabilityMatrixData } from "@utils/project-capability-matching";
+import CapabilityDetailPanel from "./CapabilityDetailPanel.astro";
+
+interface Props {
+	data: ProjectCapabilityMatrixData;
+}
+
+const { data } = Astro.props;
+---
+
+<section
+	id="capability-matrix"
+	class="capability-subsection card-base"
+	data-capability-matrix
+	aria-labelledby="capability-matrix-title"
+>
+	<header class="capability-subsection-header">
+		<div>
+			<p class="capability-section-kicker">Capability Matrix</p>
+			<h3 id="capability-matrix-title">Capability-to-Project Matrix</h3>
+			<p>
+				Explore which technical and delivery capabilities are demonstrated by
+				each project.
+			</p>
+			<p id="capability-matrix-help" class="capability-secondary-copy">
+				Select any highlighted cell to see how that capability was applied in
+				the project.
+			</p>
+		</div>
+		<p class="capability-data-summary" aria-live="polite">
+			<strong data-capability-visible-count>{data.projects.length}</strong>
+			<span>projects in view</span>
+		</p>
+	</header>
+
+	<div class="capability-controls" aria-label="Capability matrix filters">
+		<label class="capability-control">
+			<span>Search capability</span>
+			<input
+				type="search"
+				data-capability-search
+				placeholder="e.g. Computer Vision"
+				autocomplete="off"
+			/>
+		</label>
+		<label class="capability-control">
+			<span>Search project</span>
+			<input
+				type="search"
+				data-capability-project-search
+				placeholder="Project title"
+				autocomplete="off"
+			/>
+		</label>
+		<label class="capability-control">
+			<span>Impact Domain</span>
+			<select data-capability-domain>
+				<option value="">All domains</option>
+				{data.filters.impactDomains.map((domain) => (
+					<option value={domain}>{domain}</option>
+				))}
+			</select>
+		</label>
+		<label class="capability-control">
+			<span>Project Type</span>
+			<select data-capability-category>
+				<option value="">All types</option>
+				{data.filters.categories.map((category) => (
+					<option value={category}>{category}</option>
+				))}
+			</select>
+		</label>
+		<label class="capability-control">
+			<span>Capability rows</span>
+			<select data-capability-mode>
+				<option value="all">Show all capabilities</option>
+				<option value="demonstrated">Only demonstrated capabilities</option>
+			</select>
+		</label>
+		<button
+			type="button"
+			class="capability-clear-button btn-plain"
+			data-capability-clear
+		>
+			Clear filters
+		</button>
+	</div>
+
+	<p class="capability-filter-status text-50" data-capability-filter-status aria-live="polite">
+		Showing all capabilities and projects.
+	</p>
+
+	<div
+		class="capability-matrix-scroll"
+		tabindex="0"
+		role="region"
+		aria-label="Scrollable capability-to-project matrix"
+		aria-describedby="capability-matrix-help"
+	>
+		<table class="capability-matrix-table">
+			<caption class="sr-only">
+				Capabilities by published project. Checkmarked cells contain documented
+				evidence and can be selected for details.
+			</caption>
+			<thead>
+				<tr>
+					<th scope="col" class="capability-name-column">Capability</th>
+					{data.projects.map((project) => (
+						<th
+							scope="col"
+							data-capability-project-column={project.id}
+							data-project-domain={project.impactDomains.join("|")}
+							data-project-category={project.category}
+							data-project-title={project.title}
+						>
+							<a href={project.url} title={project.title}>
+								<span aria-hidden="true">{project.shortTitle}</span>
+								<span class="sr-only">{project.title}</span>
+							</a>
+						</th>
+					))}
+				</tr>
+			</thead>
+			<tbody>
+				{data.capabilities.map((capability) => (
+					<tr
+						data-capability-row={capability.id}
+						data-capability-label={capability.label}
+					>
+						<th scope="row" class="capability-name-column">
+							<strong>{capability.label}</strong>
+							<span>{capability.description}</span>
+						</th>
+						{data.projects.map((project) => {
+							const match = data.matches[project.id]?.[capability.id];
+							return (
+								<td
+									data-capability-project-column={project.id}
+									data-capability-match={match ? "true" : "false"}
+								>
+									{match ? (
+										<button
+											type="button"
+											class="capability-match-button"
+											data-capability-cell
+											data-capability-id={capability.id}
+											data-project-id={project.id}
+											aria-label={`${capability.label} is documented in ${project.title}. Open evidence.`}
+										>
+											<span aria-hidden="true">✓</span>
+										</button>
+									) : (
+										<span
+											class="capability-empty-cell"
+											aria-label={`${capability.label} is not documented for ${project.title}`}
+										>
+											<span aria-hidden="true">—</span>
+										</span>
+									)}
+								</td>
+							);
+						})}
+					</tr>
+				))}
+			</tbody>
+		</table>
+	</div>
+
+	<div class="capability-mobile-list" data-capability-mobile-list>
+		{data.capabilities.map((capability) => {
+			const matchingProjects = data.projects.filter(
+				(project) => data.matches[project.id]?.[capability.id],
+			);
+			return (
+				<details
+					class="capability-mobile-item"
+					data-capability-mobile-row={capability.id}
+					data-capability-label={capability.label}
+				>
+					<summary>
+						<span>
+							<strong>{capability.label}</strong>
+							<small>{capability.description}</small>
+						</span>
+						<em>
+							<span data-capability-mobile-count>{matchingProjects.length}</span>
+							{matchingProjects.length === 1 ? " project" : " projects"}
+						</em>
+					</summary>
+					<div class="capability-mobile-projects">
+						{matchingProjects.length > 0 ? (
+							matchingProjects.map((project) => (
+								<article
+									class="capability-mobile-project"
+									data-capability-mobile-project={project.id}
+									data-project-domain={project.impactDomains.join("|")}
+									data-project-category={project.category}
+									data-project-title={project.title}
+								>
+									<div>
+										<strong>{project.title}</strong>
+										<span>{project.category}</span>
+									</div>
+									<button
+										type="button"
+										class="btn-regular"
+										data-capability-cell
+										data-capability-id={capability.id}
+										data-project-id={project.id}
+										aria-label={`Open ${capability.label} evidence for ${project.title}`}
+									>
+										View evidence
+									</button>
+								</article>
+							))
+						) : (
+							<p class="capability-mobile-empty">
+								No documented projects match this capability.
+							</p>
+						)}
+					</div>
+				</details>
+			);
+		})}
+	</div>
+
+	<div class="capability-no-results card-base" data-capability-no-results hidden>
+		No capabilities or projects match the current filters.
+	</div>
+
+	<CapabilityDetailPanel />
+</section>

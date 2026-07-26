@@ -41,6 +41,25 @@ class ProjectProblemExplorer {
 		}
 
 		this.root.addEventListener(
+			"error",
+			(event) => {
+				const image = event.target;
+				if (!(image instanceof HTMLImageElement)) return;
+				const imageWrapper = image.closest(".problem-architecture-image");
+				const preview = image.closest(".problem-architecture-preview");
+				if (!imageWrapper || !preview) return;
+				imageWrapper.hidden = true;
+				preview.classList.remove("has-preview");
+				preview.classList.add("preview-unavailable");
+				const fallback = preview.querySelector(
+					".problem-architecture-fallback",
+				);
+				if (fallback) fallback.hidden = false;
+			},
+			{ signal, capture: true },
+		);
+
+		this.root.addEventListener(
 			"click",
 			(event) => {
 				const target = event.target;
@@ -191,6 +210,14 @@ class ProjectProblemExplorer {
 	selectProblem(problemId, { updateUrl = true, moveFocus = true } = {}) {
 		if (!problemId) {
 			this.showProblemOverview({ updateUrl, moveFocus });
+			return;
+		}
+
+		const requestedDetail = [
+			...this.root.querySelectorAll("[data-problem-detail]"),
+		].find((detail) => detail.dataset.problemDetail === problemId);
+		if (!requestedDetail) {
+			this.showProblemOverview({ updateUrl: true, moveFocus });
 			return;
 		}
 

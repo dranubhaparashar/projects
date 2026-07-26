@@ -2,11 +2,16 @@
 import path from "node:path";
 import License from "@components/misc/License.astro";
 import Markdown from "@components/misc/Markdown.astro";
+import ProjectViews from "@components/ProjectViews.astro";
 import MainGridLayout from "@layouts/MainGridLayout.astro";
 import { getSortedPosts } from "@utils/content-utils";
-import { normalizePostId } from "@utils/post-id";
 import { getPostPdfPath } from "@utils/pdf-utils";
-import { getDir, getPostUrlBySlug } from "@utils/url-utils";
+import { normalizePostId } from "@utils/post-id";
+import {
+	getRelatedProjects,
+	isEnhancedProject,
+} from "@utils/project-view-data";
+import { getDir, getPostUrlBySlug, url } from "@utils/url-utils";
 import { Icon } from "astro-icon/components";
 import { licenseConfig } from "src/config";
 import FirebaseComments from "../../components/FirebaseComments.astro";
@@ -28,6 +33,12 @@ const { entry } = Astro.props;
 const { Content, headings } = await entry.render();
 const postId = normalizePostId(entry.slug);
 const pdfPath = getPostPdfPath(entry);
+const pdfUrl = /^https?:\/\//i.test(pdfPath) ? pdfPath : url(pdfPath);
+const enhancedProject = isEnhancedProject(entry);
+const allPosts = enhancedProject ? await getSortedPosts() : [];
+const relatedProjects = enhancedProject
+	? getRelatedProjects(entry, allPosts, getPostUrlBySlug)
+	: [];
 
 const jsonLd = {
 	"@context": "https://schema.org",
@@ -55,6 +66,7 @@ const jsonLd = {
 	lang={entry.data.lang}
 	setOGTypeArticle={true}
 	headings={headings}
+	currentProjectSlug={entry.slug}
 >
 	<script
 		is:inline
@@ -119,9 +131,20 @@ const jsonLd = {
 				/>
 			)}
 
-			<Markdown class="mb-6 markdown-content onload-animation">
-				<Content />
-			</Markdown>
+			{enhancedProject ? (
+				<ProjectViews
+					entry={entry}
+					basePath={path.join("content/posts/", getDir(entry.id))}
+					pdfUrl={pdfUrl}
+					relatedProjects={relatedProjects}
+				>
+					<Content slot="technical" />
+				</ProjectViews>
+			) : (
+				<Markdown class="mb-6 markdown-content onload-animation">
+					<Content />
+				</Markdown>
+			)}
 
 			{licenseConfig.enable && (
 				<License

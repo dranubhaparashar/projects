@@ -6,7 +6,12 @@ import {
 } from "./project-problem-matching";
 import { url } from "./url-utils";
 
-export type PortfolioActionKind = "github" | "demo" | "paper" | "docs";
+export type PortfolioActionKind =
+	| "github"
+	| "demo"
+	| "paper"
+	| "docs"
+	| "video";
 
 export interface PortfolioAction {
 	kind: PortfolioActionKind;
@@ -39,6 +44,7 @@ export interface PortfolioKnowledgeProject {
 	year: string;
 	tags: string[];
 	technologies: string[];
+	capabilities: string[];
 	impactDomains: string[];
 	problems: PortfolioProblemMapping[];
 	searchableContent: string;
@@ -46,6 +52,7 @@ export interface PortfolioKnowledgeProject {
 	architecture: {
 		available: boolean;
 		url: string;
+		details: string;
 	};
 	deployment: {
 		status: PortfolioDeploymentStatus;
@@ -81,10 +88,12 @@ type ExtendedPortfolioMetadata = {
 	deployment?: string;
 	dataset?: string;
 	results?: string;
-	related_projects?: string[];
+	related_projects?: Array<
+		string | { title: string; url: string; description?: string }
+	>;
 };
 
-const MAX_SEARCHABLE_CONTENT_LENGTH = 14_000;
+const MAX_SEARCHABLE_CONTENT_LENGTH = 8_000;
 const MAX_DETAIL_LENGTH = 700;
 
 function normalizeValue(value: string): string {
@@ -134,6 +143,20 @@ function compact(value: string, maxLength = MAX_DETAIL_LENGTH): string {
 	return `${truncated.slice(0, Math.max(lastSpace, maxLength - 80)).trim()}…`;
 }
 
+function flattenStructuredValue(value: unknown): string[] {
+	if (typeof value === "string") return [value];
+	if (typeof value === "number" || typeof value === "boolean") {
+		return [String(value)];
+	}
+	if (Array.isArray(value)) {
+		return value.flatMap((item) => flattenStructuredValue(item));
+	}
+	if (value && typeof value === "object") {
+		return Object.values(value).flatMap((item) => flattenStructuredValue(item));
+	}
+	return [];
+}
+
 function extractSection(body: string, headingPattern: RegExp): string {
 	const lines = body.split(/\r?\n/);
 	let collecting = false;
@@ -180,7 +203,7 @@ const PRODUCTION_EVIDENCE_PATTERNS = [
 ];
 
 const NON_DEPLOYMENT_CONTEXT =
-	/\b(?:future|planned|planning|roadmap|target|intended|requires?|requiring|before|not|isn'?t|is not|path|pattern|ready|oriented|focus|story|approval|concept)\b/i;
+	/\b(?:can|could|may|might|would|future|planned|planning|roadmap|target|intended|requires?|requiring|before|not|isn'?t|is not|path|pattern|ready|deployable|deployment-ready|oriented|focus|story|approval|concept|proposal|proposed)\b/i;
 
 function getProductionEvidence(body: string): string[] {
 	return uniqueValues(
@@ -199,6 +222,12 @@ function classifyDeployment(
 	hasDemo: boolean,
 ): PortfolioKnowledgeProject["deployment"] {
 	const source = `${explicitDeployment}\n${body}`;
+	const explicitProduction =
+		explicitDeployment &&
+		!NON_DEPLOYMENT_CONTEXT.test(explicitDeployment) &&
+		/\b(?:production|deployed|live system|client environment|operational dashboard)\b/i.test(
+			explicitDeployment,
+		);
 	const productionEvidence = getProductionEvidence(source);
 	const deploymentSection = extractSection(
 		body,
@@ -206,11 +235,14 @@ function classifyDeployment(
 	);
 	const details = compact(explicitDeployment || deploymentSection || "");
 
-	if (productionEvidence.length > 0) {
+	if (explicitProduction || productionEvidence.length > 0) {
+		const evidence = explicitProduction
+			? uniqueValues([compact(explicitDeployment, 260), ...productionEvidence])
+			: productionEvidence;
 		return {
 			status: "production",
-			evidence: productionEvidence,
-			details: details || productionEvidence.join(" "),
+			evidence,
+			details: details || evidence.join(" "),
 		};
 	}
 
@@ -218,11 +250,18 @@ function classifyDeployment(
 	if (/\b(prototype|proof[- ]of[- ]concept|\bpoc\b)\b/i.test(plainSource)) {
 		return {
 			status: "prototype",
-			evidence: extractEvidence(source, /\b(prototype|proof[- ]of[- ]concept|\bpoc\b)\b/i),
+			evidence: extractEvidence(
+				source,
+				/\b(prototype|proof[- ]of[- ]concept|\bpoc\b)\b/i,
+			),
 			details,
 		};
 	}
-	if (/\b(research experiment|experiment|benchmark|research project|research study)\b/i.test(plainSource)) {
+	if (
+		/\b(research experiment|experiment|benchmark|research project|research study)\b/i.test(
+			plainSource,
+		)
+	) {
 		return {
 			status: "research",
 			evidence: extractEvidence(
@@ -235,7 +274,10 @@ function classifyDeployment(
 	if (/\b(concept|conceptual|planned system)\b/i.test(plainSource)) {
 		return {
 			status: "concept",
-			evidence: extractEvidence(source, /\b(concept|conceptual|planned system)\b/i),
+			evidence: extractEvidence(
+				source,
+				/\b(concept|conceptual|planned system)\b/i,
+			),
 			details,
 		};
 	}
@@ -297,6 +339,86 @@ function mergeActions(
 	return [...byKind.values()];
 }
 
+function isVideoUrl(value: string): boolean {
+	return /(?:youtube\.com\/watch|youtu\.be\/|vimeo\.com\/)/i.test(value);
+}
+
+function getStructuredDeploymentDetails(
+	entry: CollectionEntry<"posts">,
+): string {
+	return uniqueValues([
+		entry.data.deployment || "",
+		entry.data.comparison?.deployment_status || "",
+		entry.data.comparison?.deployment_environment || "",
+		...flattenStructuredValue(entry.data.views?.executive?.deployment_context),
+		...flattenStructuredValue(
+			entry.data.views?.technical?.deployment_architecture,
+		),
+		...flattenStructuredValue(entry.data.views?.technical?.infrastructure),
+	]).join(". ");
+}
+
+function getStructuredDatasetDetails(entry: CollectionEntry<"posts">): string {
+	return uniqueValues([
+		entry.data.dataset || "",
+		entry.data.comparison?.dataset || "",
+		...flattenStructuredValue(entry.data.views?.technical?.dataset),
+	]).join(". ");
+}
+
+function getStructuredResults(entry: CollectionEntry<"posts">): string {
+	return uniqueValues([
+		entry.data.results || "",
+		entry.data.comparison?.evaluation_metrics || "",
+		...flattenStructuredValue(entry.data.views?.technical?.metrics),
+		...flattenStructuredValue(entry.data.views?.technical?.training_evaluation),
+		...flattenStructuredValue(entry.data.views?.executive?.outcome),
+	]).join(". ");
+}
+
+function getStructuredTechnologies(entry: CollectionEntry<"posts">): string[] {
+	const algorithmNames = (entry.data.views?.technical?.algorithms || []).map(
+		(algorithm) => (typeof algorithm === "string" ? algorithm : algorithm.name),
+	);
+	return uniqueValues([
+		...(entry.data.technologies || []),
+		...(entry.data.comparison?.technologies || []),
+		...algorithmNames,
+	]);
+}
+
+function mergeProblemMappings(
+	project: ReturnType<
+		typeof buildProjectProblemExplorerData
+	>["projects"][number],
+	problemsById: Map<
+		string,
+		ReturnType<typeof buildProjectProblemExplorerData>["problems"][number]
+	>,
+	explicitProblems: string[],
+): PortfolioProblemMapping[] {
+	const byId = new Map<string, PortfolioProblemMapping>();
+	for (const problem of explicitProblems) {
+		const id = toFilterKey(problem);
+		if (!id) continue;
+		byId.set(id, {
+			id,
+			label: problem,
+			score: 100,
+			reason: "Explicit portfolio problem mapping.",
+		});
+	}
+	for (const match of project.matches) {
+		if (byId.has(match.problemId)) continue;
+		byId.set(match.problemId, {
+			id: match.problemId,
+			label: problemsById.get(match.problemId)?.label || match.problemId,
+			score: match.score,
+			reason: match.matchReason,
+		});
+	}
+	return [...byId.values()];
+}
 function headingAnchor(body: string, pattern: RegExp): string {
 	for (const line of body.split(/\r?\n/)) {
 		const match = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
@@ -361,13 +483,17 @@ export function buildPortfolioKnowledgeIndex(
 				ExtendedPortfolioMetadata;
 			const impact = impactById.get(project.id);
 			const body = entry.body || "";
-			const explicitTechnologies = metadata.technologies || [];
+			const explicitTechnologies = getStructuredTechnologies(entry);
 			const technologies = uniqueValues([
 				...explicitTechnologies,
 				...project.technologyTags,
 			]);
 			const extractedActions = project.actions.map((action) => ({
-				kind: action.kind === "video" ? ("demo" as const) : action.kind,
+				kind:
+					action.kind === "video" ||
+					(action.kind === "demo" && isVideoUrl(action.url))
+						? ("video" as const)
+						: action.kind,
 				label: action.label,
 				url: action.url,
 			}));
@@ -375,15 +501,34 @@ export function buildPortfolioKnowledgeIndex(
 			const architectureHeading = headingAnchor(body, /architecture/i);
 			const architectureAvailable =
 				project.architecturePreview.status !== "missing";
-			const explicitRelatedIds = (metadata.related_projects || []).map(
-				toFilterKey,
+			const architectureDetails = compact(
+				[
+					entry.data.architecture?.alt || "",
+					entry.data.architecture?.caption || "",
+					extractSection(body, /\b(architecture|system design)\b/i),
+				].join(". "),
 			);
+			const explicitRelatedIds = (metadata.related_projects || [])
+				.filter((related): related is string => typeof related === "string")
+				.map(toFilterKey);
+			const structuredDeployment = getStructuredDeploymentDetails(entry);
 			const deployment = classifyDeployment(
 				body,
-				metadata.deployment || "",
+				structuredDeployment,
 				actions.some((action) => action.kind === "demo"),
 			);
 
+			const structuredSearchContent = uniqueValues([
+				...flattenStructuredValue(entry.data.views),
+				...flattenStructuredValue(entry.data.comparison),
+				...flattenStructuredValue(entry.data.contribution),
+				...flattenStructuredValue(entry.data.project_links),
+			]).join(" ");
+			const impactDomains = uniqueValues([
+				...(impact?.domains || []),
+				entry.data.impact_domain || "",
+				...(entry.data.impact_domains || []),
+			]);
 			return {
 				id: project.id,
 				slug: entry.slug,
@@ -394,16 +539,15 @@ export function buildPortfolioKnowledgeIndex(
 				year: project.year,
 				tags: project.tags,
 				technologies,
-				impactDomains: impact?.domains || [],
-				problems: project.matches.map((match) => ({
-					id: match.problemId,
-					label:
-						problemsById.get(match.problemId)?.label || match.problemId,
-					score: match.score,
-					reason: match.matchReason,
-				})),
+				capabilities: uniqueValues(entry.data.capabilities || []),
+				impactDomains,
+				problems: mergeProblemMappings(
+					project,
+					problemsById,
+					entry.data.problems || [],
+				),
 				searchableContent: compact(
-					body,
+					`${body}\n${structuredSearchContent}`,
 					MAX_SEARCHABLE_CONTENT_LENGTH,
 				),
 				actions,
@@ -412,12 +556,16 @@ export function buildPortfolioKnowledgeIndex(
 					url: architectureAvailable
 						? `${project.url}${architectureHeading ? `#${architectureHeading}` : ""}`
 						: "",
+					details: architectureDetails,
 				},
 				deployment,
-				datasetDetails: getDatasetDetails(body, metadata.dataset || ""),
+				datasetDetails: getDatasetDetails(
+					body,
+					getStructuredDatasetDetails(entry),
+				),
 				resultsAndMetrics: getResultsAndMetrics(
 					body,
-					metadata.results || "",
+					getStructuredResults(entry),
 				),
 				relatedProjectIds: uniqueValues([
 					...(impact?.relatedProjects || []),

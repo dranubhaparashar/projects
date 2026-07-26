@@ -1,0 +1,569 @@
+---
+import type { CollectionEntry } from "astro:content";
+import ImageWrapper from "@components/misc/ImageWrapper.astro";
+import Markdown from "@components/misc/Markdown.astro";
+import MarkdownIt from "markdown-it";
+import sanitizeHtml from "sanitize-html";
+import "../styles/project-views.css";
+import {
+	buildProjectViewData,
+	type RelatedProject,
+} from "@utils/project-view-data";
+
+interface Props {
+	entry: CollectionEntry<"posts">;
+	basePath: string;
+	pdfUrl: string;
+	relatedProjects: RelatedProject[];
+}
+
+const { entry, basePath, pdfUrl, relatedProjects } = Astro.props;
+const viewData = buildProjectViewData(entry, pdfUrl, relatedProjects);
+const idBase = `project-view-${entry.slug
+	.replace(/[^a-z0-9]+/gi, "-")
+	.replace(/^-|-$/g, "")
+	.toLowerCase()}`;
+const executiveTabId = `${idBase}-executive-tab`;
+const technicalTabId = `${idBase}-technical-tab`;
+const executivePanelId = `${idBase}-executive-panel`;
+const technicalPanelId = `${idBase}-technical-panel`;
+const architectureDialogId = `${idBase}-architecture-dialog`;
+
+const markdown = new MarkdownIt({
+	html: false,
+	linkify: false,
+	typographer: false,
+});
+const defaultLinkOpen = markdown.renderer.rules.link_open;
+markdown.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
+	const href = tokens[index].attrGet("href") || "";
+	if (/^https?:\/\//i.test(href)) {
+		tokens[index].attrSet("target", "_blank");
+		tokens[index].attrSet("rel", "noopener noreferrer");
+	}
+	return defaultLinkOpen
+		? defaultLinkOpen(tokens, index, options, env, renderer)
+		: renderer.renderToken(tokens, index, options);
+};
+
+function renderMarkdown(value: string) {
+	return sanitizeHtml(markdown.render(value || ""), {
+		allowedTags: sanitizeHtml.defaults.allowedTags,
+		allowedAttributes: {
+			a: ["href", "target", "rel"],
+			code: ["class"],
+		},
+		allowedSchemes: ["http", "https", "mailto"],
+	});
+}
+
+const outcomeStatusLabels = {
+	achieved: "Achieved outcome",
+	prototype: "Prototype capability",
+	expected: "Expected benefit",
+};
+
+const datasetLabels: Record<string, string> = {
+	name: "Dataset name",
+	type: "Data type",
+	source: "Source",
+	size: "Samples / size",
+	classes: "Classes",
+	class_distribution: "Class distribution",
+	split: "Train / validation / test split",
+	annotation_format: "Annotation format",
+	input_resolution: "Input resolution",
+	video_duration: "Video duration",
+	frame_rate: "Frame rate",
+	augmentation: "Augmentation",
+	synthetic_data: "Synthetic data",
+	privacy: "Privacy constraints",
+};
+
+const datasetEntries = Object.entries(viewData.technical.dataset || {})
+	.filter(([, value]) =>
+		Array.isArray(value) ? value.length > 0 : Boolean(value),
+	)
+	.map(([key, value]) => ({
+		label: datasetLabels[key] || key,
+		value: Array.isArray(value) ? value.join(", ") : String(value),
+	}));
+const infrastructureEntries = Object.entries(viewData.technical.infrastructure)
+	.filter(([, items]) => items.length > 0)
+	.map(([key, items]) => ({
+		label: key[0].toUpperCase() + key.slice(1),
+		items,
+	}));
+const reproducibilityLinks = viewData.technical.reproducibilityLinks.length
+	? viewData.technical.reproducibilityLinks
+			.filter((link) => /^(?:https?:\/\/|\/)/i.test(link.url))
+			.map((link) => ({
+				label: link.label,
+				url: link.url,
+				external: /^https?:\/\//i.test(link.url),
+			}))
+	: viewData.actions
+			.filter((action) =>
+				["github", "paper", "documentation", "dataset", "report"].includes(
+					action.kind,
+				),
+			)
+			.map((action) => ({
+				label: action.label,
+				url: action.url,
+				external: action.external,
+			}));
+---
+
+<project-view-switcher class="project-view-shell" data-project-view-root>
+	<section class="project-overview-card" aria-labelledby={`${idBase}-overview-title`}>
+		<p class="project-view-eyebrow">Inside the System</p>
+		<h2 id={`${idBase}-overview-title`}>Project overview</h2>
+		<div class="project-view-markdown" set:html={renderMarkdown(viewData.overviewMarkdown)}></div>
+	</section>
+
+	<div class="project-view-tabbar">
+		<p class="sr-only" id={`${idBase}-tablist-label`}>Choose a project explanation mode</p>
+		<div class="project-view-tabs" role="tablist" aria-labelledby={`${idBase}-tablist-label`}>
+			<button
+				type="button"
+				id={executiveTabId}
+				role="tab"
+				aria-selected="true"
+				aria-controls={executivePanelId}
+				tabindex="0"
+				data-project-view-tab="executive"
+			>
+				<span>Executive View</span>
+				<small>Business context</small>
+			</button>
+			<button
+				type="button"
+				id={technicalTabId}
+				role="tab"
+				aria-selected="false"
+				aria-controls={technicalPanelId}
+				tabindex="-1"
+				data-project-view-tab="technical"
+			>
+				<span>Technical View</span>
+				<small>Architecture & implementation</small>
+			</button>
+		</div>
+	</div>
+
+	<section
+		id={executivePanelId}
+		class="project-view-panel"
+		role="tabpanel"
+		aria-labelledby={executiveTabId}
+		tabindex="0"
+		data-project-view-panel="executive"
+	>
+		<div class="executive-section-grid">
+			{viewData.businessProblem && (
+				<section class="project-view-card" aria-labelledby={`${idBase}-business-problem`}>
+					<h2 id={`${idBase}-business-problem`}>Business Problem</h2>
+					<div class="project-view-markdown" set:html={renderMarkdown(viewData.businessProblem.markdown)}></div>
+					{viewData.businessProblem.source && <p class="project-view-source">From: {viewData.businessProblem.source}</p>}
+				</section>
+			)}
+
+			{viewData.solution && (
+				<section class="project-view-card" aria-labelledby={`${idBase}-solution`}>
+					<h2 id={`${idBase}-solution`}>Proposed Solution</h2>
+					<div class="project-view-markdown" set:html={renderMarkdown(viewData.solution.markdown)}></div>
+					{viewData.solution.source && <p class="project-view-source">From: {viewData.solution.source}</p>}
+				</section>
+			)}
+
+			{viewData.outcome && (
+				<section class="project-view-card" aria-labelledby={`${idBase}-outcome`}>
+					<div class="project-view-heading-row">
+						<h2 id={`${idBase}-outcome`}>Outcome</h2>
+						<span class="project-status-badge subdued">
+							{viewData.outcome.status ? outcomeStatusLabels[viewData.outcome.status] : "Documented in project article"}
+						</span>
+					</div>
+					{viewData.outcome.markdown && <div class="project-view-markdown" set:html={renderMarkdown(viewData.outcome.markdown)}></div>}
+					{viewData.outcome.metrics.length > 0 && (
+						<dl class="project-metric-grid">
+							{viewData.outcome.metrics.map((metric) => (
+								<div><dt>{metric.label}</dt><dd>{metric.value}</dd>{metric.context && <small>{metric.context}</small>}</div>
+							))}
+						</dl>
+					)}
+					{viewData.outcome.source && <p class="project-view-source">From: {viewData.outcome.source}</p>}
+				</section>
+			)}
+
+			<section class="project-view-card" aria-labelledby={`${idBase}-cost-risk`}>
+				<div class="project-view-heading-row">
+					<h2 id={`${idBase}-cost-risk`}>Cost and Risk Reduction</h2>
+					{!viewData.hasDocumentedCostRisk && <span class="project-status-badge subdued">Not quantified</span>}
+				</div>
+				<div class="project-view-markdown" set:html={renderMarkdown(viewData.costRiskMarkdown)}></div>
+			</section>
+
+			{viewData.deployment && (
+				<section class="project-view-card full-width" aria-labelledby={`${idBase}-deployment`}>
+					<div class="project-view-heading-row">
+						<h2 id={`${idBase}-deployment`}>Deployment Context</h2>
+						{viewData.deployment.status && <span class="project-status-badge">{viewData.deployment.status}</span>}
+					</div>
+					{viewData.deployment.markdown && <div class="project-view-markdown" set:html={renderMarkdown(viewData.deployment.markdown)}></div>}
+					{viewData.deployment.source && <p class="project-view-source">From: {viewData.deployment.source}</p>}
+				</section>
+			)}
+
+			{viewData.youtube && (
+				<section class="project-view-card full-width" aria-labelledby={`${idBase}-video`}>
+					<h2 id={`${idBase}-video`}>Project Video</h2>
+					<div class="project-video-frame">
+						<iframe
+							src={viewData.youtube.embedUrl}
+							title={viewData.youtube.title}
+							loading="lazy"
+							allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+							allowfullscreen
+						></iframe>
+					</div>
+					<p class="project-video-fallback">
+						<a href={viewData.youtube.watchUrl} target="_blank" rel="noopener noreferrer">Watch on YouTube</a>
+					</p>
+				</section>
+			)}
+
+			{viewData.capabilities.length > 0 && (
+				<section class="project-view-card full-width" aria-labelledby={`${idBase}-capabilities`}>
+					<h2 id={`${idBase}-capabilities`}>Key Capabilities</h2>
+					<ul class="capability-grid">
+						{viewData.capabilities.map((capability) => <li>{capability}</li>)}
+					</ul>
+				</section>
+			)}
+
+			<section class="project-view-card full-width" aria-labelledby={`${idBase}-evidence`}>
+				<h2 id={`${idBase}-evidence`}>Evidence and Project Links</h2>
+				<div class="project-action-row">
+					<button type="button" class="project-primary-action" data-switch-to-technical>View Technical Details</button>
+					{viewData.actions.map((action) => (
+						<a href={action.url} target={action.external ? "_blank" : undefined} rel={action.external ? "noopener noreferrer" : undefined}>
+							{action.label}
+						</a>
+					))}
+				</div>
+			</section>
+
+			{viewData.contribution && (
+				<section class="project-view-card full-width" aria-labelledby={`${idBase}-contribution`}>
+					<h2 id={`${idBase}-contribution`}>My Contribution</h2>
+					{viewData.contribution.role && <p class="contribution-role">{viewData.contribution.role}</p>}
+					{viewData.contribution.markdown && <div class="project-view-markdown" set:html={renderMarkdown(viewData.contribution.markdown)}></div>}
+					{viewData.contribution.source && <p class="project-view-source">From: {viewData.contribution.source}</p>}
+				</section>
+			)}
+
+			{viewData.relatedProjects.length > 0 && (
+				<section class="project-view-card full-width" aria-labelledby={`${idBase}-related`}>
+					<h2 id={`${idBase}-related`}>Related Projects</h2>
+					<div class="related-project-grid">
+						{viewData.relatedProjects.map((project) => (
+							<a href={project.url}><strong>{project.title}</strong>{project.description && <span>{project.description}</span>}</a>
+						))}
+					</div>
+				</section>
+			)}
+		</div>
+	</section>
+
+	<section
+		id={technicalPanelId}
+		class="project-view-panel"
+		role="tabpanel"
+		aria-labelledby={technicalTabId}
+		tabindex="0"
+		data-project-view-panel="technical"
+		hidden
+	>
+		<section class="technical-summary project-view-card" aria-labelledby={`${idBase}-technical-summary`}>
+			<p class="project-view-eyebrow">Engineering review</p>
+			<h2 id={`${idBase}-technical-summary`}>Technical Summary</h2>
+			<div class="project-view-markdown" set:html={renderMarkdown(viewData.technical.summaryMarkdown)}></div>
+		</section>
+
+		{entry.data.architecture && (
+			<section class="technical-section" aria-labelledby={`${idBase}-architecture`}>
+				<h2 id={`${idBase}-architecture`}>System Architecture</h2>
+				<figure class="architecture-figure">
+					<button type="button" class="architecture-open" data-architecture-open aria-haspopup="dialog" aria-controls={architectureDialogId}>
+						<ImageWrapper
+							src={entry.data.architecture.src}
+							basePath={basePath}
+							alt={entry.data.architecture.alt || `${entry.data.title} system architecture`}
+							fit="contain"
+							overlay={false}
+							loading="lazy"
+							class="architecture-image"
+						/>
+						<span>Enlarge architecture</span>
+					</button>
+					{entry.data.architecture.caption && <figcaption>{entry.data.architecture.caption}</figcaption>}
+				</figure>
+				<dialog id={architectureDialogId} class="architecture-dialog" data-architecture-dialog aria-label={`${entry.data.title} architecture enlarged`}>
+					<button type="button" class="architecture-close" data-architecture-close>Close</button>
+					<img data-architecture-dialog-image alt={entry.data.architecture.alt || `${entry.data.title} system architecture`} />
+				</dialog>
+			</section>
+		)}
+
+		{viewData.technical.processingPipeline.length > 0 && (
+			<section class="technical-section" aria-labelledby={`${idBase}-pipeline`}>
+				<h2 id={`${idBase}-pipeline`}>Processing Pipeline</h2>
+				<ol class="pipeline-flow">{viewData.technical.processingPipeline.map((stage) => <li>{stage}</li>)}</ol>
+			</section>
+		)}
+
+		{viewData.technical.algorithms.length > 0 && (
+			<section class="technical-section" aria-labelledby={`${idBase}-algorithms`}>
+				<h2 id={`${idBase}-algorithms`}>Algorithms and Models</h2>
+				<div class="technical-card-grid">
+					{viewData.technical.algorithms.map((algorithm) => typeof algorithm === "string" ? (
+						<article><h3>{algorithm}</h3></article>
+					) : (
+						<article>
+							<h3>{algorithm.name}</h3>
+							{algorithm.role && <p>{algorithm.role}</p>}
+							{algorithm.rationale && <p><strong>Why selected:</strong> {algorithm.rationale}</p>}
+							{algorithm.input && <p><strong>Input:</strong> {algorithm.input}</p>}
+							{algorithm.output && <p><strong>Output:</strong> {algorithm.output}</p>}
+						</article>
+					))}
+				</div>
+			</section>
+		)}
+
+		{datasetEntries.length > 0 ? (
+			<section class="technical-section" aria-labelledby={`${idBase}-dataset`}>
+				<h2 id={`${idBase}-dataset`}>Dataset</h2>
+				<dl class="technical-definition-grid">{datasetEntries.map((item) => <div><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
+			</section>
+		) : !viewData.technical.signals.dataset && (
+			<section class="technical-section technical-empty" aria-labelledby={`${idBase}-dataset`}>
+				<h2 id={`${idBase}-dataset`}>Dataset</h2>
+				<p>Dataset details are not published for this project.</p>
+			</section>
+		)}
+
+		{viewData.technical.trainingEvaluationMarkdown && (
+			<section class="technical-section" aria-labelledby={`${idBase}-training`}>
+				<h2 id={`${idBase}-training`}>Training and Evaluation</h2>
+				<div class="project-view-markdown" set:html={renderMarkdown(viewData.technical.trainingEvaluationMarkdown)}></div>
+			</section>
+		)}
+
+		{viewData.technical.metrics.length > 0 ? (
+			<section class="technical-section" aria-labelledby={`${idBase}-metrics`}>
+				<h2 id={`${idBase}-metrics`}>Evaluation and Metrics</h2>
+				<div class="technical-table-scroll"><table><thead><tr><th>Metric</th><th>Value</th><th>Evaluation context</th></tr></thead><tbody>
+					{viewData.technical.metrics.map((metric) => <tr><th scope="row">{metric.label}</th><td>{metric.value}</td><td>{metric.context || "Not specified"}</td></tr>)}
+				</tbody></table></div>
+			</section>
+		) : !viewData.technical.signals.evaluation && (
+			<section class="technical-section technical-empty" aria-labelledby={`${idBase}-metrics`}>
+				<h2 id={`${idBase}-metrics`}>Evaluation and Metrics</h2>
+				<p>Formal evaluation metrics have not yet been published.</p>
+			</section>
+		)}
+
+		{infrastructureEntries.length > 0 && (
+			<section class="technical-section" aria-labelledby={`${idBase}-infrastructure`}>
+				<h2 id={`${idBase}-infrastructure`}>Infrastructure</h2>
+				<div class="technical-card-grid">{infrastructureEntries.map((group) => <article><h3>{group.label}</h3><ul>{group.items.map((item) => <li>{item}</li>)}</ul></article>)}</div>
+			</section>
+		)}
+
+		{viewData.technical.deploymentArchitectureMarkdown && (
+			<section class="technical-section" aria-labelledby={`${idBase}-deployment-architecture`}>
+				<h2 id={`${idBase}-deployment-architecture`}>Deployment Architecture</h2>
+				<div class="project-view-markdown" set:html={renderMarkdown(viewData.technical.deploymentArchitectureMarkdown)}></div>
+			</section>
+		)}
+
+		{viewData.technical.limitations.length > 0 && (
+			<section class="technical-section" aria-labelledby={`${idBase}-limitations`}>
+				<h2 id={`${idBase}-limitations`}>Limitations</h2>
+				<ul>{viewData.technical.limitations.map((item) => <li>{item}</li>)}</ul>
+				{viewData.technical.futureImprovements.length > 0 && <><h3>Future Improvements</h3><ul>{viewData.technical.futureImprovements.map((item) => <li>{item}</li>)}</ul></>}
+			</section>
+		)}
+
+		{reproducibilityLinks.length > 0 && (
+			<section class="technical-section" aria-labelledby={`${idBase}-reproducibility`}>
+				<h2 id={`${idBase}-reproducibility`}>Reproducibility Links</h2>
+				<div class="project-action-row">{reproducibilityLinks.map((link) => <a href={link.url} target={link.external ? "_blank" : undefined} rel={link.external ? "noopener noreferrer" : undefined}>{link.label}</a>)}</div>
+			</section>
+		)}
+
+		<section class="technical-article-section" aria-labelledby={`${idBase}-full-article`}>
+			<div class="technical-article-heading">
+				<p class="project-view-eyebrow">Original project record</p>
+				<h2 id={`${idBase}-full-article`}>Complete Technical Article</h2>
+				<p>Original diagrams, implementation notes, code, tables, equations, metrics and documented limitations are preserved below.</p>
+			</div>
+			<Markdown class="mb-6 markdown-content technical-article">
+				<slot name="technical" />
+			</Markdown>
+		</section>
+
+		{viewData.relatedProjects.length > 0 && (
+			<section class="technical-section" aria-labelledby={`${idBase}-technical-related`}>
+				<h2 id={`${idBase}-technical-related`}>Related Technical Projects</h2>
+				<div class="related-project-grid">{viewData.relatedProjects.map((project) => <a href={project.url}><strong>{project.title}</strong>{project.description && <span>{project.description}</span>}</a>)}</div>
+			</section>
+		)}
+	</section>
+
+	<p class="sr-only" aria-live="polite" aria-atomic="true" data-project-view-live></p>
+</project-view-switcher>
+
+<script>
+	type ProjectMode = "executive" | "technical";
+	type SelectOptions = {
+		history?: "push" | "replace" | "none";
+		focus?: boolean;
+		scroll?: boolean;
+		announce?: boolean;
+	};
+
+	class ProjectViewSwitcher extends HTMLElement {
+		tabs: HTMLButtonElement[] = [];
+		panels: HTMLElement[] = [];
+		liveRegion: HTMLElement | null = null;
+		reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+		connectedCallback() {
+			this.tabs = Array.from(this.querySelectorAll<HTMLButtonElement>("[data-project-view-tab]"));
+			this.panels = Array.from(this.querySelectorAll<HTMLElement>("[data-project-view-panel]"));
+			this.liveRegion = this.querySelector<HTMLElement>("[data-project-view-live]");
+			this.addEventListener("click", this.handleClick);
+			this.addEventListener("keydown", this.handleKeydown);
+			window.addEventListener("popstate", this.handlePopState);
+			document.addEventListener("click", this.handleDocumentClick, true);
+
+			const url = new URL(window.location.href);
+			const rawView = url.searchParams.get("view");
+			const initialView: ProjectMode = rawView === "technical" ? "technical" : "executive";
+			if (rawView && rawView !== "executive" && rawView !== "technical") {
+				url.searchParams.delete("view");
+				window.history.replaceState(window.history.state, "", url);
+			}
+			this.selectView(initialView, { history: "none", announce: false });
+		}
+
+		disconnectedCallback() {
+			this.removeEventListener("click", this.handleClick);
+			this.removeEventListener("keydown", this.handleKeydown);
+			window.removeEventListener("popstate", this.handlePopState);
+			document.removeEventListener("click", this.handleDocumentClick, true);
+		}
+
+		getMode(element: Element): ProjectMode {
+			return element.getAttribute("data-project-view-tab") === "technical" ? "technical" : "executive";
+		}
+
+		selectView(mode: ProjectMode, options: SelectOptions = {}) {
+			for (const tab of this.tabs) {
+				const selected = this.getMode(tab) === mode;
+				tab.setAttribute("aria-selected", String(selected));
+				tab.tabIndex = selected ? 0 : -1;
+				if (selected && options.focus) tab.focus();
+			}
+			for (const panel of this.panels) {
+				const selected = panel.getAttribute("data-project-view-panel") === mode;
+				panel.hidden = !selected;
+			}
+			this.setAttribute("data-active-view", mode);
+
+			if (options.history && options.history !== "none") {
+				const url = new URL(window.location.href);
+				url.searchParams.set("view", mode);
+				const state = { ...(window.history.state || {}), projectView: mode };
+				window.history[options.history === "replace" ? "replaceState" : "pushState"](state, "", url);
+			}
+
+			if (options.announce !== false && this.liveRegion) {
+				this.liveRegion.textContent = `${mode === "technical" ? "Technical" : "Executive"} view selected.`;
+			}
+			if (options.scroll) {
+				const panel = this.panels.find((item) => item.getAttribute("data-project-view-panel") === mode);
+				panel?.scrollIntoView({ behavior: this.reducedMotion.matches ? "auto" : "smooth", block: "start" });
+			}
+		}
+
+		handleClick = (event: Event) => {
+			const target = event.target as Element | null;
+			const tab = target?.closest<HTMLButtonElement>("[data-project-view-tab]");
+			if (tab && this.contains(tab)) {
+				this.selectView(this.getMode(tab), { history: "push", focus: true });
+				return;
+			}
+			if (target?.closest("[data-switch-to-technical]")) {
+				this.selectView("technical", { history: "push", scroll: true });
+				return;
+			}
+
+			const openButton = target?.closest<HTMLButtonElement>("[data-architecture-open]");
+			if (openButton) {
+				const dialog = this.querySelector<HTMLDialogElement>("[data-architecture-dialog]");
+				const source = openButton.querySelector<HTMLImageElement>("img");
+				const dialogImage = dialog?.querySelector<HTMLImageElement>("[data-architecture-dialog-image]");
+				if (dialog && source && dialogImage) {
+					dialogImage.src = source.currentSrc || source.src;
+					dialog.showModal();
+				}
+				return;
+			}
+			const closeButton = target?.closest("[data-architecture-close]");
+			if (closeButton) this.querySelector<HTMLDialogElement>("[data-architecture-dialog]")?.close();
+			const dialog = target?.closest<HTMLDialogElement>("[data-architecture-dialog]");
+			if (dialog && target === dialog) dialog.close();
+		};
+
+		handleKeydown = (event: KeyboardEvent) => {
+			const target = event.target as Element | null;
+			const current = target?.closest<HTMLButtonElement>("[data-project-view-tab]");
+			if (!current || !this.contains(current)) return;
+			const index = this.tabs.indexOf(current);
+			let nextIndex = index;
+			if (event.key === "ArrowRight") nextIndex = (index + 1) % this.tabs.length;
+			else if (event.key === "ArrowLeft") nextIndex = (index - 1 + this.tabs.length) % this.tabs.length;
+			else if (event.key === "Home") nextIndex = 0;
+			else if (event.key === "End") nextIndex = this.tabs.length - 1;
+			else return;
+			event.preventDefault();
+			this.selectView(this.getMode(this.tabs[nextIndex]), { history: "push", focus: true });
+		};
+
+		handlePopState = () => {
+			const mode = new URL(window.location.href).searchParams.get("view") === "technical" ? "technical" : "executive";
+			this.selectView(mode, { history: "none" });
+		};
+
+		handleDocumentClick = (event: Event) => {
+			const target = event.target as Element | null;
+			const anchor = target?.closest<HTMLAnchorElement>("#toc a[href^='#']");
+			if (!anchor) return;
+			const id = decodeURIComponent(anchor.hash.slice(1));
+			const destination = document.getElementById(id);
+			const technicalPanel = this.querySelector<HTMLElement>("[data-project-view-panel='technical']");
+			if (destination && technicalPanel?.contains(destination)) {
+				this.selectView("technical", { history: "replace", announce: true });
+			}
+		};
+	}
+
+	if (!customElements.get("project-view-switcher")) {
+		customElements.define("project-view-switcher", ProjectViewSwitcher);
+	}
+</script>

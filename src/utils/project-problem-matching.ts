@@ -99,8 +99,19 @@ type MarkdownLink = {
 	url: string;
 };
 
-const PROBLEM_MATCH_THRESHOLD = 8;
-const STRONG_AUTOMATIC_THRESHOLD = 14;
+export const PROJECT_PROBLEM_MATCH_WEIGHTS = {
+	explicit: 100,
+	exactTag: 8,
+	exactCategory: 5,
+	titleKeyword: 4,
+	descriptionKeyword: 2,
+} as const;
+
+const PROBLEM_MATCH_THRESHOLD = PROJECT_PROBLEM_MATCH_WEIGHTS.exactTag;
+const STRONG_AUTOMATIC_THRESHOLD =
+	PROJECT_PROBLEM_MATCH_WEIGHTS.exactTag +
+	PROJECT_PROBLEM_MATCH_WEIGHTS.titleKeyword +
+	PROJECT_PROBLEM_MATCH_WEIGHTS.descriptionKeyword;
 
 function normalizeValue(value: string): string {
 	return String(value || "")
@@ -220,12 +231,12 @@ export function matchProjectProblems(
 		const matchedKeywords: string[] = [];
 		const matchedCategories: string[] = [];
 
-		if (explicitMatch) score += 100;
+		if (explicitMatch) score += PROJECT_PROBLEM_MATCH_WEIGHTS.explicit;
 
 		for (const problemTag of problem.tags) {
 			const tag = normalizedTags.get(normalizeValue(problemTag));
 			if (tag && !genericProblemTags.has(normalizeValue(tag))) {
-				score += 8;
+				score += PROJECT_PROBLEM_MATCH_WEIGHTS.exactTag;
 				matchedTags.push(tag);
 			}
 		}
@@ -235,7 +246,7 @@ export function matchProjectProblems(
 				category &&
 				normalizeValue(category) === normalizeValue(problemCategory)
 			) {
-				score += 5;
+				score += PROJECT_PROBLEM_MATCH_WEIGHTS.exactCategory;
 				matchedCategories.push(category);
 			}
 		}
@@ -243,11 +254,11 @@ export function matchProjectProblems(
 		for (const keyword of problem.keywords) {
 			let matched = false;
 			if (includesTerm(title, keyword)) {
-				score += 4;
+				score += PROJECT_PROBLEM_MATCH_WEIGHTS.titleKeyword;
 				matched = true;
 			}
 			if (includesTerm(description, keyword)) {
-				score += 2;
+				score += PROJECT_PROBLEM_MATCH_WEIGHTS.descriptionKeyword;
 				matched = true;
 			}
 			if (matched) matchedKeywords.push(keyword);
@@ -291,11 +302,15 @@ export function matchProjectProblems(
 	});
 }
 
-function getTechnologyTags(tags: string[]): string[] {
-	const specific = uniqueValues(tags).filter(
+function getTechnologyTags(
+	tags: string[],
+	explicitTechnologies: string[] = [],
+): string[] {
+	const candidates = uniqueValues([...explicitTechnologies, ...tags]);
+	const specific = candidates.filter(
 		(tag) => !genericProblemTags.has(normalizeValue(tag)),
 	);
-	return specific.length > 0 ? specific : uniqueValues(tags);
+	return specific.length > 0 ? specific : candidates;
 }
 
 function extractMarkdownLinks(body: string): MarkdownLink[] {
@@ -332,6 +347,97 @@ function getProjectActions(
 	const body = entry.body || "";
 	const links = extractMarkdownLinks(body);
 	const actions: ProjectProblemAction[] = [];
+	const explicitActions: ProjectProblemAction[] = [
+		entry.data.demo_url
+			? {
+					label: "Live Demo",
+					url: entry.data.demo_url,
+					external: /^https?:\/\//i.test(entry.data.demo_url),
+					kind: "demo",
+				}
+			: null,
+		entry.data.github_url
+			? {
+					label: "GitHub",
+					url: entry.data.github_url,
+					external: /^https?:\/\//i.test(entry.data.github_url),
+					kind: "github",
+				}
+			: null,
+		entry.data.paper_url
+			? {
+					label: "Paper",
+					url: entry.data.paper_url,
+					external: /^https?:\/\//i.test(entry.data.paper_url),
+					kind: "paper",
+				}
+			: null,
+		entry.data.documentation_url
+			? {
+					label: "Documentation",
+					url: entry.data.documentation_url,
+					external: /^https?:\/\//i.test(entry.data.documentation_url),
+					kind: "docs",
+				}
+			: null,
+		entry.data.video_url
+			? {
+					label: "Video",
+					url: entry.data.video_url,
+					external: /^https?:\/\//i.test(entry.data.video_url),
+					kind: "video",
+				}
+			: null,
+	].filter((action): action is ProjectProblemAction => Boolean(action));
+	const structuredActions: ProjectProblemAction[] = [];
+	for (const link of entry.data.project_links || []) {
+		const normalizedKind = link.kind === "documentation" ? "docs" : link.kind;
+		const inferredKind = normalizeValue(`${link.label} ${link.url}`);
+		const kind =
+			normalizedKind === "demo" ||
+			normalizedKind === "github" ||
+			normalizedKind === "paper" ||
+			normalizedKind === "docs" ||
+			normalizedKind === "video"
+				? normalizedKind
+				: inferredKind.includes("github")
+					? "github"
+					: inferredKind.includes("demo") || inferredKind.includes("live app")
+						? "demo"
+						: inferredKind.includes("paper") ||
+								inferredKind.includes("publication")
+							? "paper"
+							: inferredKind.includes("documentation") ||
+									inferredKind.includes("docs") ||
+									inferredKind.includes("wiki")
+								? "docs"
+								: inferredKind.includes("video") ||
+										inferredKind.includes("youtube")
+									? "video"
+									: null;
+		if (!kind) continue;
+		structuredActions.push({
+			label: link.label,
+			url: link.url,
+			external: /^https?:\/\//i.test(link.url),
+			kind,
+		});
+	}
+	const youtubeUrl =
+		typeof entry.data.youtube === "string"
+			? entry.data.youtube
+			: entry.data.youtube?.url || "";
+	if (youtubeUrl) {
+		structuredActions.push({
+			label:
+				typeof entry.data.youtube === "object"
+					? entry.data.youtube.title || "Video"
+					: "Video",
+			url: youtubeUrl,
+			external: /^https?:\/\//i.test(youtubeUrl),
+			kind: "video",
+		});
+	}
 	const githubDirective = body.match(/::github\{repo=["']([^"']+)["']\}/);
 	const githubFromDirective = githubDirective?.[1]?.includes("/")
 		? `https://github.com/${githubDirective[1]}`
@@ -344,15 +450,15 @@ function getProjectActions(
 	const demoLink = links.find((link) => {
 		const label = normalizeValue(link.label);
 		const href = normalizeValue(link.url);
+		if (href.includes("youtube.com/watch") || href.includes("youtu.be/"))
+			return false;
 		return (
 			label.includes("live app") ||
 			label.includes("live demo") ||
 			label.includes("demo") ||
 			label.includes("hugging face") ||
 			href.includes("huggingface.co/spaces") ||
-			href.includes("streamlit.app") ||
-			href.includes("youtube.com/watch") ||
-			href.includes("youtu.be/")
+			href.includes("streamlit.app")
 		);
 	});
 
@@ -371,10 +477,14 @@ function getProjectActions(
 	const paperLink = links.find((link) => {
 		const label = normalizeValue(link.label);
 		const href = normalizeValue(link.url);
+		const scholarlyHost =
+			href.includes("arxiv.org") ||
+			href.includes("doi.org") ||
+			href.includes("researchgate.net");
+		const linkedDocument = /\.pdf(?:$|[?#])/i.test(link.url);
 		return (
-			label.includes("paper") ||
-			label.includes("publication") ||
-			href.includes("arxiv.org")
+			scholarlyHost ||
+			(linkedDocument && /\b(paper|publication)\b/i.test(label))
 		);
 	});
 
@@ -411,7 +521,13 @@ function getProjectActions(
 		});
 	}
 
-	return actions;
+	const byKind = new Map<ProjectProblemAction["kind"], ProjectProblemAction>();
+	for (const action of [...explicitActions, ...structuredActions, ...actions]) {
+		if (!action.url || byKind.has(action.kind)) continue;
+		byKind.set(action.kind, action);
+	}
+
+	return [...byKind.values()];
 }
 
 function isArchitectureCandidate(value: string): boolean {
@@ -470,15 +586,18 @@ function getArchitecturePreview(
 ): ProjectArchitecturePreview {
 	const explicit = entry.data.architecture;
 	if (explicit?.src) {
-		return {
+		const preview = {
 			src: explicit.src,
 			alt: explicit.alt || `${entry.data.title} architecture preview`,
-			status: "available",
+			status: "available" as const,
 		};
+		if (isUsableArchitectureSource(preview.src)) return preview;
 	}
 
 	const fromMarkdown = extractMarkdownArchitectureImage(entry);
-	if (fromMarkdown) return fromMarkdown;
+	if (fromMarkdown && isUsableArchitectureSource(fromMarkdown.src)) {
+		return fromMarkdown;
+	}
 
 	const fromDirectory = findLocalArchitectureImage(entry);
 	if (fromDirectory) return fromDirectory;
@@ -502,6 +621,18 @@ function getArchitecturePreview(
 		alt: "",
 		status: "missing",
 	};
+}
+
+function isUsableArchitectureSource(src: string): boolean {
+	if (!src.startsWith("/")) return true;
+
+	const basePath = import.meta.env.BASE_URL.replace(/^\/|\/$/g, "");
+	let publicPath = src.replace(/^\/+/, "");
+	if (basePath && publicPath.startsWith(`${basePath}/`)) {
+		publicPath = publicPath.slice(basePath.length + 1);
+	}
+
+	return existsSync(path.join(process.cwd(), "public", publicPath));
 }
 
 function getUseCaseMatches(
@@ -549,7 +680,7 @@ function buildProjectRecord(
 		category,
 		description: entry.data.description || "",
 		tags,
-		technologyTags: getTechnologyTags(tags),
+		technologyTags: getTechnologyTags(tags, entry.data.technologies || []),
 		assetBasePath: path.join("content/posts/", getDir(entry.id)),
 		image: entry.data.image || "",
 		architecturePreview: getArchitecturePreview(entry),
@@ -558,7 +689,7 @@ function buildProjectRecord(
 		bodyText,
 		fullText,
 		publishedMs: entry.data.published.getTime(),
-		featured: Boolean((entry.data as { featured?: boolean }).featured),
+		featured: entry.data.featured === true,
 	};
 }
 
@@ -685,7 +816,11 @@ function computeRelatedProblems(
 export function buildProjectProblemExplorerData(
 	entries: CollectionEntry<"posts">[],
 ): ProjectProblemExplorerData {
-	const publishedEntries = entries.filter((entry) => entry.data.draft !== true);
+	const now = Date.now();
+	const publishedEntries = entries.filter(
+		(entry) =>
+			entry.data.draft !== true && entry.data.published.getTime() <= now,
+	);
 	const definitions = getProblemDefinitions(publishedEntries);
 	const projects = publishedEntries.map((entry) =>
 		buildProjectRecord(entry, definitions),

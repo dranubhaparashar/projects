@@ -40,8 +40,6 @@ export const projectProblems: ProjectProblemDefinition[] = [
 			"Image Processing",
 			"Video Analytics",
 			"OCR",
-			"Automotive AI",
-			"Edge AI",
 			"Pole Validation",
 		],
 		keywords: [
@@ -93,9 +91,6 @@ export const projectProblems: ProjectProblemDefinition[] = [
 			"Maintenance",
 			"Failure Prediction",
 			"Asset Health",
-			"Decision Support",
-			"Snowflake",
-			"Scikit-learn",
 		],
 		keywords: [
 			"maintenance",
@@ -143,7 +138,6 @@ export const projectProblems: ProjectProblemDefinition[] = [
 			"Agentic AI",
 			"MCP",
 			"Gemini",
-			"Hugging Face",
 			"Digital Human",
 			"Voice AI",
 			"XTTS",
@@ -201,9 +195,6 @@ export const projectProblems: ProjectProblemDefinition[] = [
 			"OR-Tools",
 			"PyVRP",
 			"Route Optimization",
-			"Workflow Automation",
-			"Field Operations",
-			"GIS",
 		],
 		keywords: [
 			"logistics",
@@ -251,9 +242,6 @@ export const projectProblems: ProjectProblemDefinition[] = [
 			"Medical Insurance",
 			"Claim Review",
 			"Clinical Consistency",
-			"OCR",
-			"Document Intelligence",
-			"Multimodal AI",
 		],
 		keywords: [
 			"medical",
@@ -350,8 +338,6 @@ export const projectProblems: ProjectProblemDefinition[] = [
 			"Memory Efficiency",
 			"Benchmarking",
 			"Evaluation",
-			"Orchestration",
-			"MCP",
 		],
 		keywords: [
 			"research",
