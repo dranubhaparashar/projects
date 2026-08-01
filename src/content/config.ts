@@ -48,6 +48,12 @@ const postsCollection = defineCollection({
 		category: z.string().optional().nullable().default(""),
 		impact_domain: z.string().optional().default(""),
 		impact_domains: z.array(z.string()).optional().default([]),
+		industry: z
+			.union([z.string(), z.array(z.string())])
+			.optional()
+			.default([]),
+		technology_group: z.string().optional().default(""),
+		technology_groups: z.array(z.string()).optional().default([]),
 		problems: z.array(z.string()).optional().default([]),
 		capabilities: z.array(z.string()).optional().default([]),
 		technologies: z.array(z.string()).optional().default([]),

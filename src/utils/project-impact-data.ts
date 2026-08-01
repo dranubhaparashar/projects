@@ -1,7 +1,15 @@
 import type { CollectionEntry } from "astro:content";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { ClusterMode } from "../config/project-cluster-groups";
+import {
+	buildGraphClusterModes,
+	buildProjectClusterAssignments,
+	type GraphClusterMode,
+	type ProjectClusterAssignment,
+} from "./project-cluster-data";
 import { formatDateToYYYYMMDD } from "./date-utils";
+import { explainProjectRelationship } from "./project-relationship-explanations";
 import { getPostUrlBySlug } from "./url-utils";
 
 type ImpactDomainConfig = {
@@ -22,10 +30,20 @@ export type ProjectImpactRecord = {
 	description: string;
 	tags: string[];
 	meaningfulTags: string[];
+	technologies: string[];
+	problems: string[];
+	industries: string[];
 	primaryDomain: string;
 	domains: string[];
 	icon: string;
 	relatedProjects: string[];
+	deployment: string;
+	links: Array<{
+		label: string;
+		url: string;
+		kind: string;
+	}>;
+	clusterAssignments: Record<ClusterMode, ProjectClusterAssignment>;
 };
 
 export type ProjectImpactEdge = {
@@ -37,6 +55,10 @@ export type ProjectImpactEdge = {
 	sharedCategory: boolean;
 	sharedKeywords: string[];
 	reasons: string[];
+	relationshipTypes: string[];
+	sharedTechnologies: string[];
+	sharedIndustries: string[];
+	explanation: string;
 };
 
 export type ProjectImpactDomain = {
@@ -50,6 +72,7 @@ export type ProjectImpactGraphData = {
 	projects: ProjectImpactRecord[];
 	edges: ProjectImpactEdge[];
 	domains: ProjectImpactDomain[];
+	clusterModes: GraphClusterMode[];
 	filters: {
 		categories: string[];
 		tags: string[];
@@ -378,6 +401,10 @@ function buildCandidateEdge(
 		sharedCategory: sameCategory,
 		sharedKeywords: sharedKeywords.slice(0, 5),
 		reasons,
+		relationshipTypes: [],
+		sharedTechnologies: [],
+		sharedIndustries: [],
+		explanation: "",
 	};
 }
 
@@ -431,9 +458,51 @@ export function buildProjectImpactGraphData(
 			const inference = inferDomains(entry);
 			const category = entry.data.category?.trim() || "Uncategorized";
 			const meaningfulTags = getMeaningfulTags(entry.data.tags || []);
-
-			return {
-				id: normalizeProjectId(entry.slug),
+			const explicitTechnologies = uniqueValues([
+				...(entry.data.technologies || []),
+				...(entry.data.comparison?.technologies || []),
+			]);
+			const technologies =
+				explicitTechnologies.length > 0
+					? explicitTechnologies
+					: meaningfulTags;
+			const rawIndustries = Array.isArray(entry.data.industry)
+				? entry.data.industry
+				: [entry.data.industry || ""];
+			const industries = uniqueValues([
+				...rawIndustries,
+				entry.data.comparison?.industry || "",
+			]);
+			const problems = uniqueValues([
+				...(entry.data.problems || []),
+				entry.data.comparison?.business_problem || "",
+			]);
+			const directLinks = [
+				{ label: "GitHub", url: entry.data.github_url, kind: "github" },
+				{ label: "Live demo", url: entry.data.demo_url, kind: "demo" },
+				{ label: "Paper", url: entry.data.paper_url, kind: "paper" },
+				{
+					label: "Documentation",
+					url: entry.data.documentation_url,
+					kind: "documentation",
+				},
+			];
+			const linkUrls = new Set<string>();
+			const links = [
+				...(entry.data.project_links || []).map((link) => ({
+					label: link.label,
+					url: link.url,
+					kind: link.kind || "link",
+				})),
+				...directLinks,
+			].filter((link) => {
+				if (!link.url || linkUrls.has(link.url)) return false;
+				linkUrls.add(link.url);
+				return true;
+			});
+			const id = normalizeProjectId(entry.slug);
+			const baseProject = {
+				id,
 				title: entry.data.title,
 				url: getPostUrlBySlug(entry.slug),
 				date: formatDateToYYYYMMDD(entry.data.published),
@@ -442,14 +511,47 @@ export function buildProjectImpactGraphData(
 				description: entry.data.description || "",
 				tags: uniqueValues(entry.data.tags || []),
 				meaningfulTags,
+				technologies,
+				problems,
+				industries,
 				primaryDomain: inference.primaryDomain,
 				domains: inference.domains,
 				icon: getDomainMeta(inference.primaryDomain).icon,
 				relatedProjects: [],
+				deployment: entry.data.deployment || "",
+				links,
 			};
+			const clusterAssignments = buildProjectClusterAssignments({
+				id,
+				title: baseProject.title,
+				description: baseProject.description,
+				category,
+				tags: baseProject.tags,
+				technologies: explicitTechnologies,
+				problems,
+				primaryDomain: inference.primaryDomain,
+				domains: inference.domains,
+				explicitIndustries: rawIndustries,
+				comparisonIndustry: entry.data.comparison?.industry || "",
+				explicitTechnologyGroup: entry.data.technology_group || "",
+				explicitTechnologyGroups: entry.data.technology_groups || [],
+			});
+
+			return { ...baseProject, clusterAssignments };
 		});
 
-	const edges = buildEdges(projects);
+	const projectById = new Map(
+		projects.map((project) => [project.id, project]),
+	);
+	const edges = buildEdges(projects).map((edge) => {
+		const source = projectById.get(edge.source);
+		const target = projectById.get(edge.target);
+		if (!source || !target) return edge;
+		return {
+			...edge,
+			...explainProjectRelationship(edge, source, target),
+		};
+	});
 	const relatedByProject = new Map(
 		projects.map((project) => [project.id, [] as string[]]),
 	);
@@ -477,14 +579,25 @@ export function buildProjectImpactGraphData(
 			.filter((domain) => !domainOrder.includes(domain))
 			.sort(),
 	];
+	const domains = activeDomainNames.map((domain) => ({
+		...getDomainMeta(domain),
+		count: domainCounts.get(domain) || 0,
+	}));
+	const clusterModes = buildGraphClusterModes(
+		projects,
+		new Map(
+			domains.map((domain) => [
+				domain.name,
+				{ icon: domain.icon, color: domain.color },
+			]),
+		),
+	);
 
 	return {
 		projects,
 		edges,
-		domains: activeDomainNames.map((domain) => ({
-			...getDomainMeta(domain),
-			count: domainCounts.get(domain) || 0,
-		})),
+		domains,
+		clusterModes,
 		filters: {
 			categories: uniqueValues(
 				projects.map((project) => project.category),
