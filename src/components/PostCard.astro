@@ -1,567 +1,509 @@
 ---
 import type { CollectionEntry } from "astro:content";
-import path from "node:path";
-import { Icon } from "astro-icon/components";
-import { normalizePostId } from "../utils/post-id";
-import { getDir } from "../utils/url-utils";
+import { formatDateToYYYYMMDD } from "@utils/date-utils";
+import { normalizePostId } from "@utils/post-id";
+import { buildProjectCardData } from "@utils/project-card-data";
 import ImageWrapper from "./misc/ImageWrapper.astro";
-import PostMetadata from "./PostMeta.astro";
 
 interface Props {
 	class?: string;
 	entry: CollectionEntry<"posts">;
-	title: string;
 	url: string;
-	published: Date;
-	updated?: Date;
-	tags: string[];
-	category: string | null;
-	image: string;
-	description: string;
-	draft: boolean;
-	style: string;
-	viewsPath: string;
-	postId: string;
 	pdf?: string;
+	style?: string;
 }
 
-const {
-	entry,
-	title,
-	url,
-	published,
-	updated,
-	tags,
-	category,
-	image,
-	description,
-	style,
-	viewsPath,
-	postId,
-	pdf = "",
-} = Astro.props;
-
+const { entry, url, pdf = "", style = "" } = Astro.props;
 const className = Astro.props.class;
-const hasCover = image !== undefined && image !== null && image !== "";
-const normalizedPostId = normalizePostId(entry.slug);
-const { remarkPluginFrontmatter } = await entry.render();
-const coverBasePath = path.join("content/posts/", getDir(entry.id));
-
-const isLocalCover =
-	hasCover &&
-	!(
-		image.startsWith("/") ||
-		image.startsWith("http") ||
-		image.startsWith("https") ||
-		image.startsWith("data:")
-	);
-
-let coverWidth = 16;
-let coverHeight = 9;
-
-if (isLocalCover) {
-	const files = import.meta.glob<ImageMetadata>("../**", {
-		import: "default",
-	});
-	const normalizedPath = path
-		.normalize(path.join("../", coverBasePath, image))
-		.replace(/\\/g, "/");
-	const file = files[normalizedPath];
-
-	if (file) {
-		const cover = await file();
-		coverWidth = cover.width;
-		coverHeight = cover.height;
-	}
-}
-
-const isPortraitCover = coverHeight > coverWidth;
-const coverAspectRatio = `${coverWidth} / ${coverHeight}`;
-const coverAspect = coverWidth / coverHeight;
-
-const defaultCoverMaxWidth = isPortraitCover ? 220 : 320;
-const defaultCoverMaxHeight = isPortraitCover ? 260 : 220;
-const defaultCoverDisplayWidth = Math.round(
-	Math.min(defaultCoverMaxWidth, defaultCoverMaxHeight * coverAspect),
-);
-
-const cardKey = `${title} ${entry.slug}`.toLowerCase();
-
-const isPoleCard = cardKey.includes("pole") && cardKey.includes("validation");
-
-const isVRPCard =
-	cardKey.includes("vrp") ||
-	cardKey.includes("vehicle routing") ||
-	cardKey.includes("execution-aware");
-
-const isSpecialRightImageCard =
-	isPoleCard ||
-	(cardKey.includes("predictive") && cardKey.includes("maintenance")) ||
-	(cardKey.includes("generator") && cardKey.includes("reliability")) ||
-	isVRPCard;
-
-const shouldShowLeftPartOfImage =
-	(cardKey.includes("predictive") && cardKey.includes("maintenance")) ||
-	(cardKey.includes("generator") && cardKey.includes("reliability"));
-
-function cleanMarkdownPreview(text = "", maxChars = 245) {
-	return text
-		.replace(/^---[\s\S]*?---/m, "")
-		.replace(/```[\s\S]*?```/g, "")
-		.replace(/::[\w-]+(?:\{[^}]*\})?/g, " ")
-		.replace(/!\[[^\]]*\]\([^)]+\)/g, "")
-		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-		.replace(/^#+\s+/gm, "")
-		.replace(/[*_`>#|-]/g, " ")
-		.replace(/\s+/g, " ")
-		.trim()
-		.slice(0, maxChars)
-		.replace(/\s+\S*$/, "");
-}
-
-const specialPreviewText = cleanMarkdownPreview(
-	description || remarkPluginFrontmatter.excerpt || "",
-	isPoleCard ? 220 : 245,
-)
-	.replace(
-		/—\s*built in Streamlit with Scikit[- ]learn, Plotly, and multi[- ]platform deployment on.*$/i,
-		"",
-	)
-	.replace(
-		/—\s*packaged into a Streamlit benchmark studio with live re[- ]optimization, locked prefix.*$/i,
-		"",
-	)
-	.trim();
+const card = buildProjectCardData(entry, url, pdf);
+const cardId = `project-card-${normalizePostId(entry.slug)}`;
+const fullDate = formatDateToYYYYMMDD(entry.data.published);
+const year = String(entry.data.published.getFullYear());
+const category = entry.data.category?.trim() || "Uncategorized";
 ---
 
-{
-	isSpecialRightImageCard ? (
-		<>
-			<div
-				class:list={[
-					"card-base post-card-special-right grid w-full rounded-[var(--radius-large)] overflow-hidden relative",
-					isPoleCard ? "post-card-pole-compact" : "",
-					hasCover
-						? isPoleCard
-							? "grid-cols-1 md:grid-cols-[minmax(0,1fr)_190px] items-stretch"
-							: "grid-cols-1 md:grid-cols-[minmax(0,1fr)_260px] items-stretch"
-						: "grid-cols-1",
-					className,
-				]}
-				style={style}
-			>
-				<div
-					class:list={[
-						"post-card-special-content min-w-0 relative",
-						isPoleCard
-							? "px-6 md:px-7 pt-4 md:pt-4 pb-4"
-							: "px-6 md:px-9 pt-6 md:pt-7 pb-6",
-					]}
-				>
-					<a
-						href={url}
-						class:list={[
-							"post-card-title project-title transition group w-full block font-bold text-90 break-words hover:text-[var(--primary)] dark:hover:text-[var(--primary)] active:text-[var(--title-active)] dark:active:text-[var(--title-active)] before:w-1 before:rounded-md before:bg-[var(--primary)] before:absolute before:left-[18px] before:hidden md:before:block",
-							isPoleCard
-								? "mb-2 text-2xl md:text-[1.7rem] before:h-4 before:top-[27px]"
-								: "mb-3 text-3xl before:h-5 before:top-[35px]",
-						]}
+<article
+	class:list={['project-case-card card-base', className]}
+	style={style}
+	aria-labelledby={`${cardId}-title`}
+>
+	{card.image && (
+		<a
+			class='project-card-media'
+			href={url}
+			aria-label={`View ${card.fullTitle}`}
+		>
+			<ImageWrapper
+				src={card.image.src}
+				basePath={card.image.basePath}
+				alt={card.image.alt}
+				fit='cover'
+				overlay={false}
+				loading='lazy'
+				class='project-card-image'
+				imgClass='project-card-image-element'
+			/>
+		</a>
+	)}
+
+	<div class='project-card-body'>
+		<header class='project-card-header'>
+			<div class='project-card-kicker'>
+				<p class='project-card-meta'>
+					<span class='sr-only'>Project type: </span>
+					<span>{category}</span>
+					<span aria-hidden='true'>·</span>
+					<time datetime={entry.data.published.toISOString()} title={fullDate}>
+						<span class='sr-only'>Published in </span>{year}
+					</time>
+				</p>
+				{card.status && (
+					<span
+						class='project-status-badge'
+						data-status-type={card.status.type}
+						aria-label={`Project status: ${card.status.label}`}
 					>
-						{title}
-
-						<Icon
-							class="inline text-[2rem] text-[var(--primary)] md:hidden translate-y-0.5 absolute"
-							name="material-symbols:chevron-right-rounded"
-						></Icon>
-
-						<Icon
-							class="text-[var(--primary)] text-[2rem] transition hidden md:inline absolute translate-y-0.5 opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0"
-							name="material-symbols:chevron-right-rounded"
-						></Icon>
-					</a>
-
-					<PostMetadata
-						published={published}
-						updated={updated}
-						tags={tags}
-						category={category}
-						viewsPath={viewsPath}
-						postId={normalizedPostId || postId}
-						postTitle={title}
-						pdf={pdf}
-						incrementViews={false}
-						showLike={false}
-						showCommentsCount={false}
-						hideTagsForMobile={false}
-						hideUpdateDate={true}
-						limitTagsToTwoLines={true}
-						class={isPoleCard ? "mb-3 post-card-meta-flow pole-meta-tight" : "mb-4 post-card-meta-flow"}
-					></PostMetadata>
-
-					<div
-						class:list={[
-							"transition text-75 mb-0 md:pr-0 leading-relaxed post-card-description-flow special-preview-text",
-							isPoleCard ? "pole-preview-tight" : "",
-						]}
-					>
-						{specialPreviewText}
-					</div>
-				</div>
-
-				{hasCover && (
-					<a
-						href={url}
-						aria-label={title}
-						class:list={[
-							"post-card-special-cover group relative hidden md:flex items-center justify-center overflow-hidden bg-white active:scale-95 md:col-start-2 md:row-start-1",
-							isPoleCard
-								? "ml-4 my-4 mr-0 h-[calc(100%-2rem)] w-[calc(100%-1rem)] self-center justify-self-end rounded-l-2xl rounded-r-none"
-								: "h-full min-h-full w-full",
-						]}
-					>
-						<div class="absolute pointer-events-none z-10 w-full h-full group-hover:bg-black/20 group-active:bg-black/30 transition"></div>
-
-						<div class="absolute pointer-events-none z-20 w-full h-full flex items-center justify-center">
-							<Icon
-								name="material-symbols:chevron-right-rounded"
-								class="transition opacity-0 group-hover:opacity-100 scale-50 group-hover:scale-100 text-white text-5xl drop-shadow"
-							></Icon>
-						</div>
-
-						<ImageWrapper
-							src={image}
-							basePath={coverBasePath}
-							alt={title}
-							class="post-card-cover post-card-image-frame special-image-frame w-full h-full bg-white"
-							imgClass={`post-card-image special-card-image ${
-								shouldShowLeftPartOfImage ? "special-card-image-left" : ""
-							} ${isVRPCard ? "special-card-image-vrp-map" : ""}`}
-							fit="cover"
-							overlay={false}
-						>
-						</ImageWrapper>
-					</a>
-				)}
-
-				{hasCover && (
-					<a
-						href={url}
-						aria-label={title}
-						class="post-card-special-cover group relative mx-auto mb-5 flex md:hidden items-center justify-center overflow-hidden rounded-2xl bg-white active:scale-95"
-						style="width: min(220px, calc(100% - 2rem)); aspect-ratio: 220 / 260;"
-					>
-						<div class="absolute pointer-events-none z-10 w-full h-full group-hover:bg-black/20 group-active:bg-black/30 transition"></div>
-
-						<div class="absolute pointer-events-none z-20 w-full h-full flex items-center justify-center">
-							<Icon
-								name="material-symbols:chevron-right-rounded"
-								class="transition opacity-0 group-hover:opacity-100 scale-50 group-hover:scale-100 text-white text-5xl drop-shadow"
-							></Icon>
-						</div>
-
-						<ImageWrapper
-							src={image}
-							basePath={coverBasePath}
-							alt={title}
-							class="post-card-cover post-card-image-frame special-image-frame w-full h-full bg-white"
-							imgClass={`post-card-image special-card-image ${
-								shouldShowLeftPartOfImage ? "special-card-image-left" : ""
-							} ${isVRPCard ? "special-card-image-vrp-map" : ""}`}
-							fit="cover"
-							overlay={false}
-						>
-						</ImageWrapper>
-					</a>
+						{card.status.label}
+					</span>
 				)}
 			</div>
 
-			<div class="transition border-t-[1px] border-dashed mx-6 border-black/10 dark:border-white/[0.15] last:border-t-0 md:hidden"></div>
-		</>
-	) : (
-		<>
-			<div
-				class:list={[
-					"card-base grid w-full rounded-[var(--radius-large)] overflow-hidden relative",
-					hasCover
-						? "grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(220px,320px)_44px] md:gap-5 lg:gap-6 items-stretch"
-						: "grid-cols-1 md:grid-cols-[minmax(0,1fr)_44px] md:gap-5 items-stretch",
-					className,
-				]}
-				style={style}
-			>
-				<div
-					class:list={[
-						"min-w-0 overflow-visible px-6 md:pl-9 pt-6 md:pt-7 pb-6 relative",
-						hasCover ? "md:pr-0 md:col-start-1" : "md:pr-0 md:col-start-1",
-					]}
-				>
-					<a
-						href={url}
-						class="post-card-title project-title transition group w-full block font-bold mb-3 text-3xl text-90 break-words
-							hover:text-[var(--primary)] dark:hover:text-[var(--primary)]
-							active:text-[var(--title-active)] dark:active:text-[var(--title-active)]
-							before:w-1 before:h-5 before:rounded-md before:bg-[var(--primary)]
-							before:absolute before:top-[35px] before:left-[18px] before:hidden md:before:block"
-					>
-						{title}
-
-						<Icon
-							class="inline text-[2rem] text-[var(--primary)] md:hidden translate-y-0.5 absolute"
-							name="material-symbols:chevron-right-rounded"
-						></Icon>
-
-						<Icon
-							class="text-[var(--primary)] text-[2rem] transition hidden md:inline absolute translate-y-0.5 opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0"
-							name="material-symbols:chevron-right-rounded"
-						></Icon>
-					</a>
-
-					<PostMetadata
-						published={published}
-						updated={updated}
-						tags={tags}
-						category={category}
-						viewsPath={viewsPath}
-						postId={normalizedPostId || postId}
-						postTitle={title}
-						pdf={pdf}
-						incrementViews={false}
-						showLike={false}
-						showCommentsCount={false}
-						hideTagsForMobile={false}
-						hideUpdateDate={true}
-						limitTagsToTwoLines={true}
-						class="mb-4"
-					></PostMetadata>
-
-					<div class="transition text-75 mb-3.5 md:pr-0 leading-relaxed line-clamp-3">
-						{description || remarkPluginFrontmatter.excerpt}
-					</div>
-				</div>
-
-				{hasCover && (
-					<a
-						href={url}
-						aria-label={title}
-						class:list={[
-							"group",
-							"relative mx-auto mb-4 flex items-center justify-center self-center overflow-hidden rounded-xl bg-white active:scale-95 md:mx-0 md:my-4 md:justify-self-center md:self-start md:col-start-2",
-							isPortraitCover
-								? "w-[min(14rem,calc(100%-2rem))] md:w-[var(--cover-width)]"
-								: "w-[calc(100%-2rem)] md:w-[var(--cover-width)]",
-						]}
-						style={`aspect-ratio: ${coverAspectRatio}; --cover-width: ${defaultCoverDisplayWidth}px;`}
-					>
-						<div class="absolute pointer-events-none z-10 w-full h-full group-hover:bg-black/20 group-active:bg-black/30 transition"></div>
-
-						<div class="absolute pointer-events-none z-20 w-full h-full flex items-center justify-center">
-							<Icon
-								name="material-symbols:chevron-right-rounded"
-								class="transition opacity-0 group-hover:opacity-100 scale-50 group-hover:scale-100 text-white text-5xl drop-shadow"
-							></Icon>
-						</div>
-
-						<ImageWrapper
-							src={image}
-							basePath={coverBasePath}
-							alt={title}
-							class="post-card-cover post-card-image-frame w-full h-full bg-white"
-							imgClass="post-card-image"
-							fit="contain"
-							overlay={false}
-						>
-						</ImageWrapper>
-					</a>
-				)}
-
-				<a
-					href={url}
-					aria-label={title}
-					class:list={[
-						"!hidden md:!flex btn-regular my-3 md:m-0 rounded-xl bg-[var(--enter-btn-bg)] hover:bg-[var(--enter-btn-bg-hover)] active:bg-[var(--enter-btn-bg-active)] active:scale-95 self-stretch md:justify-self-stretch md:h-full md:w-11",
-						hasCover ? "md:col-start-3" : "md:col-start-2",
-					]}
-				>
-					<Icon
-						name="material-symbols:chevron-right-rounded"
-						class="transition text-[var(--primary)] text-4xl mx-auto"
-					></Icon>
+			<h2 id={`${cardId}-title`} class='project-card-title'>
+				<a href={url} title={card.fullTitle} aria-label={card.fullTitle}>
+					{card.displayTitle}
 				</a>
-			</div>
+			</h2>
+		</header>
 
-			<div class="transition border-t-[1px] border-dashed mx-6 border-black/10 dark:border-white/[0.15] last:border-t-0 md:hidden"></div>
-		</>
-	)
-}
+		{card.summary && <p class='project-card-summary'>{card.summary}</p>}
+
+		{(card.problem || card.solution) && (
+			<div class='project-card-case-notes'>
+				{card.problem && (
+					<section aria-labelledby={`${cardId}-problem`}>
+						<h3 id={`${cardId}-problem`}>Problem</h3>
+						<p>{card.problem}</p>
+					</section>
+				)}
+				{card.solution && (
+					<section aria-labelledby={`${cardId}-solution`}>
+						<h3 id={`${cardId}-solution`}>Solution</h3>
+						<p>{card.solution}</p>
+					</section>
+				)}
+			</div>
+		)}
+
+		{card.capabilities.length > 0 && (
+			<section class='project-card-section' aria-labelledby={`${cardId}-capabilities`}>
+				<h3 id={`${cardId}-capabilities`}>Capabilities</h3>
+				<ul class='project-capability-list'>
+					{card.capabilities.map((capability) => <li>{capability}</li>)}
+					{card.additionalCapabilityCount > 0 && (
+						<li class='project-capability-more'>
+							<a
+								href={url}
+								aria-label={`View ${card.additionalCapabilityCount} more documented capabilities and tags for ${card.fullTitle}`}
+							>
+								+{card.additionalCapabilityCount} more
+							</a>
+						</li>
+					)}
+				</ul>
+			</section>
+		)}
+
+		{card.evidence.length > 0 && (
+			<section class='project-card-section project-evidence' aria-labelledby={`${cardId}-evidence`}>
+				<h3 id={`${cardId}-evidence`}>Evidence</h3>
+				<nav aria-label={`Evidence for ${card.fullTitle}`}>
+					{card.evidence.map((item, index) => (
+						<>
+							{index > 0 && <span aria-hidden='true'>·</span>}
+							<a
+								href={item.url}
+								target={item.external ? '_blank' : undefined}
+								rel={item.external ? 'noopener noreferrer' : undefined}
+								aria-label={`${item.label} evidence for ${card.fullTitle}${item.external ? ' (opens in a new tab)' : ''}`}
+							>
+								{item.label}
+							</a>
+						</>
+					))}
+				</nav>
+			</section>
+		)}
+
+		<footer class='project-card-actions'>
+			<a
+				class='project-primary-action btn-regular'
+				href={url}
+				aria-label={`View project: ${card.fullTitle}`}
+			>
+				View Project
+			</a>
+			{card.actions.length > 0 && (
+				<div class='project-secondary-actions' aria-label={`More actions for ${card.fullTitle}`}>
+					{card.actions.map((action) => (
+						<a
+							href={action.url}
+							target={action.external ? '_blank' : undefined}
+							rel={action.external ? 'noopener noreferrer' : undefined}
+							aria-label={`${action.label} for ${card.fullTitle}${action.external ? ' (opens in a new tab)' : ''}`}
+						>
+							{action.label}
+						</a>
+					))}
+				</div>
+			)}
+		</footer>
+	</div>
+</article>
 
 <style>
-	:global(.post-card-special-right) {
+	.project-case-card {
+		display: flex;
+		min-width: 0;
+		height: 100%;
+		flex-direction: column;
+		overflow: hidden;
+		background: var(--card-bg);
+		border: 1px solid var(--card-border);
+		box-shadow: 0 8px 22px rgb(15 23 42 / 0.08);
+		backdrop-filter: none;
+		transition:
+			transform 160ms ease,
+			border-color 160ms ease,
+			box-shadow 160ms ease;
+	}
+
+	.project-card-media {
+		display: block;
 		position: relative;
-		min-height: 310px;
+		aspect-ratio: 16 / 9;
+		overflow: hidden;
+		background: color-mix(in srgb, var(--card-bg) 88%, var(--primary));
+		border-bottom: 1px solid var(--card-border);
 	}
 
-	:global(.post-card-pole-compact) {
-		min-height: 215px;
+	.project-card-image {
+		width: 100%;
+		height: 100%;
 	}
 
-	:global(.post-card-special-content) {
+	.project-card-media :global(.project-card-image-element) {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		transition: transform 180ms ease;
+	}
+
+	.project-card-body {
+		display: flex;
+		min-width: 0;
+		flex: 1;
+		flex-direction: column;
+		gap: 1rem;
+		padding: 1.3rem;
+	}
+
+	.project-card-header,
+	.project-card-section,
+	.project-card-case-notes section {
 		min-width: 0;
 	}
 
-	:global(.post-card-special-cover) {
-		box-shadow: none;
+	.project-card-kicker {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-bottom: 0.8rem;
 	}
 
-	:global(.post-card-pole-compact .post-card-special-cover) {
-		box-shadow: 0 10px 24px rgba(2, 6, 23, 0.12);
+	.project-card-meta {
+		display: flex;
+		min-width: 0;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0;
+		color: var(--text-muted);
+		font-family: var(--font-mono);
+		font-size: 0.71rem;
+		font-weight: 700;
+		line-height: 1.35;
+		letter-spacing: 0.045em;
+		text-transform: uppercase;
 	}
 
-	:global(.post-card-pole-compact .post-card-special-content) {
+	.project-status-badge {
+		display: inline-flex;
+		flex: 0 0 auto;
+		align-items: center;
+		gap: 0.38rem;
+		max-width: 48%;
+		padding: 0.3rem 0.52rem;
+		border: 1px solid var(--theme-accent-border);
+		border-radius: 999px;
+		background: var(--theme-accent-soft);
+		color: var(--theme-accent-text);
+		font-size: 0.69rem;
+		font-weight: 750;
+		line-height: 1.2;
+		text-align: right;
+		text-transform: uppercase;
+	}
+
+	.project-status-badge::before {
+		content: '';
+		width: 0.42rem;
+		height: 0.42rem;
+		flex: 0 0 auto;
+		border: 1px solid currentColor;
+		border-radius: 50%;
+		background: currentColor;
+	}
+
+	.project-card-title {
+		margin: 0;
+		font-size: clamp(1.28rem, 2vw, 1.55rem);
+		line-height: 1.18;
+		letter-spacing: -0.032em;
+	}
+
+	.project-card-title a {
+		display: -webkit-box;
+		overflow: hidden;
+		color: var(--text-primary);
+		text-decoration: none;
+		overflow-wrap: anywhere;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+	}
+
+	.project-card-title a:hover {
+		color: var(--primary);
+	}
+
+	.project-card-summary {
+		display: -webkit-box;
+		overflow: hidden;
+		margin: 0;
+		color: var(--text-secondary);
+		font-size: 0.92rem;
+		line-height: 1.58;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+	}
+
+	.project-card-case-notes {
+		display: grid;
+		gap: 0.85rem;
+		padding: 0.9rem 0 0.9rem 0.95rem;
+		border-left: 3px solid var(--theme-accent-border);
+		background: color-mix(in srgb, var(--theme-accent-soft) 55%, transparent);
+	}
+
+	.project-card-case-notes h3,
+	.project-card-section h3 {
+		margin: 0 0 0.32rem;
+		color: var(--text-muted);
+		font-family: var(--font-body);
+		font-size: 0.72rem;
+		font-weight: 800;
+		line-height: 1.25;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+
+	.project-card-case-notes p {
+		margin: 0;
+		color: var(--text-secondary);
+		font-size: 0.84rem;
+		line-height: 1.48;
+	}
+
+	.project-capability-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.42rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.project-capability-list li {
+		display: inline-flex;
+		align-items: center;
+		min-height: 1.9rem;
+		padding: 0.28rem 0.58rem;
+		border: 1px solid var(--theme-accent-border);
+		border-radius: 999px;
+		background: var(--theme-accent-soft);
+		color: var(--theme-accent-text);
+		font-size: 0.74rem;
+		font-weight: 650;
+		line-height: 1.25;
+	}
+
+	.project-capability-list .project-capability-more {
+		padding: 0;
+		background: transparent;
+		border-style: dashed;
+	}
+
+	.project-capability-more a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 1.9rem;
+		padding: 0.28rem 0.58rem;
+		color: var(--primary);
+		text-decoration: none;
+	}
+
+	.project-evidence nav {
+		display: flex;
+		min-width: 0;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem 0.42rem;
+		color: var(--text-muted);
+		font-size: 0.79rem;
+		line-height: 1.45;
+	}
+
+	.project-evidence a {
+		color: var(--text-secondary);
+		font-weight: 650;
+		text-underline-offset: 0.2rem;
+	}
+
+	.project-evidence a:hover {
+		color: var(--primary);
+	}
+
+	.project-card-actions {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-top: auto;
 		padding-top: 1rem;
-		padding-bottom: 1rem;
+		border-top: 1px solid var(--card-border);
 	}
 
-	:global(.post-card-image-frame) {
+	.project-primary-action {
+		min-height: 2.65rem;
+		flex: 0 0 auto;
+		padding: 0.68rem 1rem;
+		border-radius: calc(var(--radius-large) * 0.56);
+		font-size: 0.84rem;
+		font-weight: 750;
+		text-decoration: none;
+	}
+
+	.project-secondary-actions {
 		display: flex;
+		min-width: 0;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 0.3rem 0.65rem;
+	}
+
+	.project-secondary-actions a {
+		display: inline-flex;
+		min-height: 2.45rem;
 		align-items: center;
-		justify-content: center;
-		width: 100%;
-		height: 100%;
-		background: white;
-	}
-
-	:global(.post-card-image-frame picture) {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 100%;
-		height: 100%;
-	}
-
-	:global(.post-card-image-frame img),
-	:global(.post-card-image) {
-		display: block;
-		width: auto;
-		height: auto;
-		max-width: 100%;
-		max-height: 100%;
-		object-position: center;
-		background: white;
-		border-radius: 0;
-	}
-
-	:global(.post-card-pole-compact .post-card-image),
-	:global(.post-card-pole-compact .post-card-image-frame img) {
-		border-radius: 1rem 0 0 1rem;
-	}
-
-	:global(.special-image-frame img),
-	:global(.special-card-image) {
-		width: 100%;
-		height: 100%;
-		max-width: none;
-		max-height: none;
-		object-fit: cover;
-		object-position: center;
-	}
-
-	:global(.post-card-pole-compact .special-card-image),
-	:global(.post-card-pole-compact .special-image-frame img) {
-		width: 100%;
-		height: 100%;
-		object-fit: cover !important;
-		object-position: center center !important;
-		border-radius: 1rem 0 0 1rem;
-	}
-
-	:global(.post-card-pole-compact .post-card-special-cover),
-	:global(.post-card-pole-compact .special-image-frame),
-	:global(.post-card-pole-compact .post-card-image-frame) {
-		height: 100% !important;
-		min-height: 100% !important;
-	}
-
-	:global(.special-card-image-left) {
-		object-position: left center !important;
-	}
-
-	:global(.special-card-image-vrp-map) {
-		object-fit: cover !important;
-		object-position: 58% 16% !important;
-		transform: scale(2.05);
-		transform-origin: 58% 16%;
-	}
-
-	:global(.post-card-meta-flow) {
-		max-width: none;
-	}
-
-	:global(.post-card-description-flow) {
-		max-width: none;
-	}
-
-	:global(.special-preview-text) {
-		display: -webkit-box;
-		-webkit-line-clamp: 4;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-		max-height: 6.5rem;
-	}
-
-	:global(.post-card-pole-compact .special-preview-text) {
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-		max-height: 3.4rem;
-	}
-
-	:global(.pole-meta-tight .tag-two-line-fade) {
-		max-height: 3.6rem !important;
-		overflow: hidden !important;
-		-webkit-mask-image: linear-gradient(
-			to bottom,
-			black 0%,
-			black calc(100% - 0.25rem),
-			transparent 100%
-		) !important;
-		mask-image: linear-gradient(
-			to bottom,
-			black 0%,
-			black calc(100% - 0.25rem),
-			transparent 100%
-		) !important;
-	}
-
-	:global(.pole-meta-tight .tag-two-line-fade a) {
+		padding: 0.45rem 0.05rem;
+		color: var(--text-secondary);
 		font-size: 0.78rem;
-		line-height: 1.05rem;
-		padding: 0.22rem 0.55rem;
+		font-weight: 700;
+		text-decoration-line: underline;
+		text-decoration-color: var(--theme-accent-border);
+		text-underline-offset: 0.22rem;
 	}
 
-	@media (max-width: 767px) {
-		:global(.post-card-special-right),
-		:global(.post-card-pole-compact) {
-			min-height: auto;
+	.project-secondary-actions a:hover {
+		color: var(--primary);
+		text-decoration-color: currentColor;
+	}
+
+	.project-case-card:focus-within {
+		border-color: var(--primary);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+	}
+
+	.project-case-card :where(a):focus-visible {
+		outline: 3px solid var(--primary);
+		outline-offset: 3px;
+		border-radius: 0.28rem;
+	}
+
+	:global(.dark) .project-case-card {
+		box-shadow: 0 8px 22px rgb(0 0 0 / 0.2);
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		.project-case-card:hover {
+			transform: translateY(-2px);
+			border-color: color-mix(in srgb, var(--primary) 48%, var(--card-border));
+			box-shadow: 0 11px 26px rgb(15 23 42 / 0.12);
 		}
 
-		:global(.post-card-special-cover) {
-			float: none;
-			margin-left: auto;
-			margin-right: auto;
-			border-radius: 1rem;
-			box-shadow: 0 18px 42px rgba(2, 6, 23, 0.16);
+		.project-card-media:hover :global(.project-card-image-element) {
+			transform: scale(1.01);
+		}
+	}
+
+	@media (max-width: 640px) {
+		.project-card-body {
+			gap: 0.9rem;
+			padding: 1.15rem;
 		}
 
-		:global(.special-card-image-vrp-map) {
-			object-position: 58% 16% !important;
-			transform: scale(1.9);
-			transform-origin: 58% 16%;
+		.project-card-kicker {
+			align-items: flex-start;
 		}
 
-		:global(.special-preview-text) {
-			-webkit-line-clamp: 3;
-			max-height: 5rem;
+		.project-status-badge {
+			max-width: 52%;
+			font-size: 0.66rem;
+		}
+
+		.project-card-title {
+			font-size: 1.3rem;
+		}
+
+		.project-card-case-notes p {
+			overflow: visible;
+		}
+
+		.project-card-actions {
+			align-items: stretch;
+			flex-direction: column;
+		}
+
+		.project-primary-action {
+			width: 100%;
+		}
+
+		.project-secondary-actions {
+			width: 100%;
+			justify-content: flex-start;
+			gap: 0.35rem 0.9rem;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.project-case-card,
+		.project-card-media :global(.project-card-image-element) {
+			transition: none;
+		}
+
+		.project-case-card:hover,
+		.project-card-media:hover :global(.project-card-image-element) {
+			transform: none;
 		}
 	}
 </style>

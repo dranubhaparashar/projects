@@ -38,12 +38,38 @@ const algorithm = z.union([
 const postsCollection = defineCollection({
 	schema: z.object({
 		title: z.string(),
+		card_title: z.string().optional().default(""),
 		published: z.date(),
 		updated: z.date().optional(),
 		draft: z.boolean().optional().default(false),
 		description: z.string().optional().default(""),
 		image: z.string().optional().default(""),
 		pdf: z.string().optional().default(""),
+		card_image: z
+			.object({
+				src: z.string(),
+				alt: z.string(),
+			})
+			.optional(),
+		card: z
+			.object({
+				problem: z.string().optional().default(""),
+				solution: z.string().optional().default(""),
+			})
+			.optional(),
+		status: z
+			.object({
+				label: z.string(),
+				type: z.enum([
+					"production",
+					"pilot",
+					"operational",
+					"prototype",
+					"research",
+					"concept",
+				]),
+			})
+			.optional(),
 		tags: z.array(z.string()).optional().default([]),
 		category: z.string().optional().nullable().default(""),
 		impact_domain: z.string().optional().default(""),
