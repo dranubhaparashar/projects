@@ -40,6 +40,7 @@ export interface ProjectCardImage {
 	alt: string;
 	basePath: string;
 	fit: "cover" | "contain";
+	architecture?: boolean;
 	generated?: boolean;
 }
 
@@ -189,14 +190,19 @@ const SOLUTION_HEADINGS = [
 const EVIDENCE_ORDER = [
 	"Demo",
 	"Architecture",
-	"GitHub",
 	"Video",
-	"PDF",
+	"Dashboard",
+	"Paper",
 	"Dataset",
 	"Metrics",
-	"Paper",
-	"Dashboard",
+	"GitHub",
+	"PDF",
 ];
+
+const ARCHITECTURE_PREVIEW_PATTERN =
+	/\b(?:architecture|architectural|diagram|flowchart|system design|solution design)\b/i;
+const NON_ARCHITECTURE_PREVIEW_PATTERN =
+	/\b(?:cover|dashboard|interface|photo|photograph|screen(?:shot)?|ui)\b/i;
 
 const COMPACT_STATUS_LABELS: Record<ProjectCardStatusType, string> = {
 	production: "Production",
@@ -586,17 +592,21 @@ function markdownImages(body: string): Array<{ src: string; alt: string }> {
 	return images;
 }
 
+function isArchitecturePreview(src: string, alt: string): boolean {
+	const description = `${alt} ${src}`.replace(/[-_]+/g, " ");
+	return (
+		ARCHITECTURE_PREVIEW_PATTERN.test(description) &&
+		!NON_ARCHITECTURE_PREVIEW_PATTERN.test(description)
+	);
+}
+
 function cardImage(
 	entry: CollectionEntry<"posts">,
 	title: string,
 ): ProjectCardImage | undefined {
 	const basePath = path.join("content/posts/", getDir(entry.id));
 	const fitFor = (src: string, alt: string): ProjectCardImage["fit"] =>
-		/architecture|diagram|flow|pipeline|system[-_ ]?design/i.test(
-			`${alt} ${src}`,
-		)
-			? "contain"
-			: "cover";
+		isArchitecturePreview(src, alt) ? "contain" : "cover";
 	const explicit = entry.data.card_image;
 	if (explicit?.src && usableImage(entry, explicit.src)) {
 		return {
@@ -604,6 +614,7 @@ function cardImage(
 			alt: explicit.alt,
 			basePath,
 			fit: fitFor(explicit.src, explicit.alt),
+			architecture: isArchitecturePreview(explicit.src, explicit.alt),
 		};
 	}
 	if (entry.data.image && usableImage(entry, entry.data.image)) {
@@ -613,6 +624,7 @@ function cardImage(
 			alt,
 			basePath,
 			fit: fitFor(entry.data.image, alt),
+			architecture: isArchitecturePreview(entry.data.image, alt),
 		};
 	}
 	const images = markdownImages(entry.body || "");
@@ -623,17 +635,14 @@ function cardImage(
 					src: entry.data.architecture.src,
 					alt: entry.data.architecture.alt || `${title} architecture preview`,
 				}
-			: images.find((image) =>
-					/architecture|diagram|flow|pipeline|system/i.test(
-						`${image.alt} ${image.src}`,
-					),
-				);
+			: images.find((image) => isArchitecturePreview(image.src, image.alt));
 	if (architecture?.src && usableImage(entry, architecture.src)) {
 		return {
 			src: architecture.src,
 			alt: architecture.alt || `${title} architecture preview`,
 			basePath,
 			fit: "contain",
+			architecture: true,
 		};
 	}
 	const first = images.find(
@@ -643,7 +652,13 @@ function cardImage(
 	);
 	if (!first) return undefined;
 	const alt = first.alt || `${title} project preview`;
-	return { src: first.src, alt, basePath, fit: fitFor(first.src, alt) };
+	return {
+		src: first.src,
+		alt,
+		basePath,
+		fit: fitFor(first.src, alt),
+		architecture: isArchitecturePreview(first.src, alt),
+	};
 }
 
 function hasHeading(body: string, pattern: RegExp): boolean {
@@ -724,10 +739,18 @@ function evidenceData(
 		add("Dataset", datasetUrl, datasetUrl !== projectUrl);
 	}
 	if (hasMetrics) add("Metrics", projectUrl, false);
-	return evidence.sort(
+	const sortedEvidence = evidence.sort(
 		(left, right) =>
 			EVIDENCE_ORDER.indexOf(left.label) - EVIDENCE_ORDER.indexOf(right.label),
 	);
+	const directUrls = new Set<string>();
+	return sortedEvidence.filter((item) => {
+		if (!item.direct) return true;
+		const key = normalize(item.url);
+		if (!key || directUrls.has(key)) return false;
+		directUrls.add(key);
+		return true;
+	});
 }
 
 function actionData(
@@ -740,7 +763,7 @@ function actionData(
 		if (!url || actions.some((action) => action.kind === kind)) return;
 		actions.push({ label, url, kind, external: /^https?:\/\//i.test(url) });
 	};
-	add("Live Demo", direct.demo, "demo");
+	add("Demo", direct.demo, "demo");
 	add("GitHub", direct.github, "github");
 	add("Video", direct.video, "video");
 	if (pdfUrl && verifiedPublicAsset(pdfUrl)) add("PDF", pdfUrl, "pdf");
@@ -774,14 +797,28 @@ export function buildProjectCardData(
 	const capabilities = capabilityData.visible;
 	const additionalCapabilityCount = capabilityData.additionalCount;
 	const allActions = actionData(entry, pdfUrl);
-	const preferredActions = allActions.filter(({ kind }) =>
-		["github", "pdf"].includes(kind),
+	const actionByKind = new Map(
+		allActions.map((action) => [action.kind, action]),
 	);
-	const actions = (
-		preferredActions.length > 0
-			? preferredActions
-			: allActions.filter(({ kind }) => ["demo", "video"].includes(kind))
-	).slice(0, 3);
+	const fixedFooterActions = (["github", "pdf"] as const)
+		.map((kind) => actionByKind.get(kind))
+		.filter((action): action is ProjectCardAction => Boolean(action));
+	const supportingFooterActions = (["demo", "video"] as const)
+		.map((kind) => actionByKind.get(kind))
+		.filter((action): action is ProjectCardAction => Boolean(action));
+	const footerDisplayOrder: ProjectCardAction["kind"][] = [
+		"demo",
+		"github",
+		"pdf",
+		"video",
+	];
+	const actions = [...fixedFooterActions, ...supportingFooterActions]
+		.slice(0, 2)
+		.sort(
+			(left, right) =>
+				footerDisplayOrder.indexOf(left.kind) -
+				footerDisplayOrder.indexOf(right.kind),
+		);
 	const footerActionUrls = new Set(actions.map(({ url }) => url));
 	const footerActionLabels = new Set(
 		actions.map(({ label }) => normalize(label)),
@@ -791,8 +828,7 @@ export function buildProjectCardData(
 			!footerActionUrls.has(item.url) &&
 			!footerActionLabels.has(normalize(item.label)),
 	);
-	const evidenceLimit = allEvidence.length > 3 ? 2 : 3;
-	const evidence = allEvidence.slice(0, evidenceLimit);
+	const evidence = allEvidence.slice(0, 2);
 	const documentedStatus = entry.data.status;
 	const fallbackPresentation = getProjectDomainPresentation(entry);
 	const realImage = cardImage(entry, fullTitle);

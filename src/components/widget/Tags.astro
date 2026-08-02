@@ -1,5 +1,4 @@
 ---
-
 import I18nKey from "../../i18n/i18nKey";
 import { i18n } from "../../i18n/translation";
 import { getTagList } from "../../utils/content-utils";
@@ -7,11 +6,57 @@ import { getTagUrl } from "../../utils/url-utils";
 import ButtonTag from "../control/ButtonTag.astro";
 import WidgetLayout from "./WidgetLayout.astro";
 
-const tags = await getTagList();
-
-const VISIBLE_TAG_COUNT = 28;
-
+const allTags = await getTagList();
+const VISIBLE_TAG_COUNT = 16;
+const PRIORITY_TAGS = [
+	"Computer Vision",
+	"Generative AI",
+	"GenAI",
+	"Agentic AI",
+	"MLOps",
+	"Predictive Analytics",
+	"Predictive Maintenance",
+	"Snowflake",
+	"Document Intelligence",
+	"Security",
+	"Optimization",
+	"Healthcare AI",
+	"Telecom",
+	"Edge AI",
+	"Multimodal AI",
+	"LLM Inference",
+	"DevSecOps",
+	"Decentralized Identity",
+];
+const GENERIC_TAGS = new Set([
+	"ai",
+	"application",
+	"demo",
+	"machine learning",
+	"project",
+	"python",
+]);
+const normalizeTag = (value: string) => value.trim().toLowerCase();
+const priorityIndex = new Map(
+	PRIORITY_TAGS.map((tag, index) => [normalizeTag(tag), index]),
+);
+const tags = [...allTags].sort((left, right) => {
+	const leftKey = normalizeTag(left.name);
+	const rightKey = normalizeTag(right.name);
+	const leftPriority = priorityIndex.get(leftKey);
+	const rightPriority = priorityIndex.get(rightKey);
+	if (leftPriority !== undefined || rightPriority !== undefined) {
+		if (leftPriority === undefined) return 1;
+		if (rightPriority === undefined) return -1;
+		return leftPriority - rightPriority;
+	}
+	const leftGeneric = GENERIC_TAGS.has(leftKey);
+	const rightGeneric = GENERIC_TAGS.has(rightKey);
+	if (leftGeneric !== rightGeneric) return leftGeneric ? 1 : -1;
+	return right.count - left.count || leftKey.localeCompare(rightKey);
+});
 const hasHiddenTags = tags.length > VISIBLE_TAG_COUNT;
+const tagCloudId = "sidebar-tag-cloud";
 
 interface Props {
 	class?: string;
@@ -20,50 +65,85 @@ interface Props {
 const className = Astro.props.class;
 const style = Astro.props.style;
 ---
-<WidgetLayout name={i18n(I18nKey.tags)} id="tags" isCollapsed={false} class={className} style={style}>
-    <div class="tag-cloud flex flex-wrap items-start gap-x-[0.22rem] gap-y-[0.18rem]" data-tag-cloud>
-        {tags.map((t, index) => (
-            <span class:list={[{ "hidden": index >= VISIBLE_TAG_COUNT }, { "extra-tag": index >= VISIBLE_TAG_COUNT }]}>
-                <ButtonTag href={getTagUrl(t.name)} label={`View all posts with the ${t.name.trim()} tag`}>
-                {t.name.trim()}
-                </ButtonTag>
-            </span>
-        ))}
-    </div>
-    {hasHiddenTags && (
-        <button
-            type="button"
-            class="tag-toggle btn-plain mt-2 h-7 w-full rounded-lg text-xs font-semibold"
-            data-tag-toggle
-            data-more-label="More"
-            data-less-label="Less"
-            aria-expanded="false"
-        >
-            More
-        </button>
-    )}
+
+<WidgetLayout name={i18n(I18nKey.tags)} id='tags' isCollapsed={false} class={className} style={style}>
+	<div
+		id={tagCloudId}
+		class='tag-cloud flex flex-wrap items-start gap-x-[0.22rem] gap-y-[0.18rem]'
+		data-tag-cloud
+	>
+		{tags.map((tag, index) => (
+			<span
+				class:list={[
+					{ hidden: index >= VISIBLE_TAG_COUNT },
+					{ 'extra-tag': index >= VISIBLE_TAG_COUNT },
+				]}
+			>
+				<ButtonTag
+					href={getTagUrl(tag.name)}
+					label={`View all posts with the ${tag.name.trim()} tag`}
+				>
+					{tag.name.trim()}
+				</ButtonTag>
+			</span>
+		))}
+	</div>
+	{hasHiddenTags && (
+		<button
+			type='button'
+			class='tag-toggle btn-plain mt-2 min-h-9 w-full rounded-lg text-xs font-semibold'
+			data-tag-toggle
+			data-more-label='View all tags'
+			data-less-label='Show fewer tags'
+			aria-controls={tagCloudId}
+			aria-expanded='false'
+		>
+			View all tags
+		</button>
+	)}
 </WidgetLayout>
 
 <script>
-    function initTagToggles() {
-        document.querySelectorAll<HTMLButtonElement>("[data-tag-toggle]").forEach((button) => {
-            if (button.dataset.initialized === "true") return;
-            button.dataset.initialized = "true";
+	function initTagToggles() {
+		document.querySelectorAll<HTMLButtonElement>("[data-tag-toggle]").forEach((button) => {
+			if (button.dataset.initialized === "true") return;
+			button.dataset.initialized = "true";
 
-            button.addEventListener("click", () => {
-                const wrapper = button.closest("widget-layout");
-                const tags = wrapper?.querySelectorAll<HTMLElement>(".extra-tag");
-                const expanded = button.getAttribute("aria-expanded") === "true";
+			button.addEventListener("click", () => {
+				const wrapper = button.closest("widget-layout");
+				const tags = wrapper?.querySelectorAll<HTMLElement>(".extra-tag");
+				const expanded = button.getAttribute("aria-expanded") === "true";
 
-                tags?.forEach((tag) => tag.classList.toggle("hidden", expanded));
-                button.setAttribute("aria-expanded", String(!expanded));
-                button.textContent = expanded ? button.dataset.moreLabel || "More" : button.dataset.lessLabel || "Less";
-            });
-        });
-    }
+				tags?.forEach((tag) => tag.classList.toggle("hidden", expanded));
+				button.setAttribute("aria-expanded", String(!expanded));
+				button.textContent = expanded
+					? button.dataset.moreLabel || "View all tags"
+					: button.dataset.lessLabel || "Show fewer tags";
+			});
+		});
+	}
 
-    initTagToggles();
-    document.addEventListener("astro:page-load", initTagToggles);
-    document.addEventListener("swup:contentReplaced", initTagToggles);
-    document.addEventListener("swup:page:view", initTagToggles);
+	initTagToggles();
+	document.addEventListener("astro:page-load", initTagToggles);
+	document.addEventListener("swup:contentReplaced", initTagToggles);
+	document.addEventListener("swup:page:view", initTagToggles);
 </script>
+
+<style>
+	.tag-cloud > span {
+		min-width: 0;
+		max-width: 100%;
+	}
+
+	.tag-cloud :global(a) {
+		max-width: 100%;
+		white-space: normal;
+		overflow-wrap: anywhere;
+		text-align: left;
+	}
+
+	.tag-toggle:focus-visible {
+		outline: 3px solid var(--primary);
+		outline-offset: 2px;
+	}
+</style>
