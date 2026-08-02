@@ -37,11 +37,13 @@ export interface ProjectCardImage {
 	src: string;
 	alt: string;
 	basePath: string;
+	fit: "cover" | "contain";
 }
 
 export interface ProjectCardData {
 	fullTitle: string;
 	displayTitle: string;
+	hasDisplayTitle: boolean;
 	summary: string;
 	problem: string;
 	solution: string;
@@ -50,6 +52,7 @@ export interface ProjectCardData {
 	status?: { label: string; type: ProjectCardStatusType };
 	image?: ProjectCardImage;
 	evidence: ProjectCardEvidence[];
+	additionalEvidenceCount: number;
 	actions: ProjectCardAction[];
 }
 
@@ -181,15 +184,15 @@ const SOLUTION_HEADINGS = [
 ];
 
 const EVIDENCE_ORDER = [
-	"Architecture",
-	"Dashboard",
 	"Demo",
+	"Architecture",
 	"GitHub",
 	"Video",
 	"PDF",
-	"Paper",
 	"Dataset",
 	"Metrics",
+	"Paper",
+	"Dashboard",
 ];
 
 function normalize(value: string): string {
@@ -333,7 +336,7 @@ function classifyCapability(value: string): {
 
 export function selectProjectCapabilities(
 	entry: CollectionEntry<"posts">,
-	limit = 4,
+	limit = 3,
 ): { visible: string[]; additionalCount: number } {
 	const sources = [
 		...(entry.data.capabilities || []).map((label, index) => ({
@@ -551,12 +554,29 @@ function cardImage(
 	title: string,
 ): ProjectCardImage | undefined {
 	const basePath = path.join("content/posts/", getDir(entry.id));
+	const fitFor = (src: string, alt: string): ProjectCardImage["fit"] =>
+		/architecture|diagram|flow|pipeline|system[-_ ]?design/i.test(
+			`${alt} ${src}`,
+		)
+			? "contain"
+			: "cover";
 	const explicit = entry.data.card_image;
 	if (explicit?.src && usableImage(entry, explicit.src)) {
-		return { src: explicit.src, alt: explicit.alt, basePath };
+		return {
+			src: explicit.src,
+			alt: explicit.alt,
+			basePath,
+			fit: fitFor(explicit.src, explicit.alt),
+		};
 	}
 	if (entry.data.image && usableImage(entry, entry.data.image)) {
-		return { src: entry.data.image, alt: `${title} project preview`, basePath };
+		const alt = `${title} project preview`;
+		return {
+			src: entry.data.image,
+			alt,
+			basePath,
+			fit: fitFor(entry.data.image, alt),
+		};
 	}
 	const images = markdownImages(entry.body || "");
 	const architecture =
@@ -576,6 +596,7 @@ function cardImage(
 			src: architecture.src,
 			alt: architecture.alt || `${title} architecture preview`,
 			basePath,
+			fit: "contain",
 		};
 	}
 	const first = images.find(
@@ -583,9 +604,9 @@ function cardImage(
 			!/(badge|icon|logo|shield)/i.test(`${image.alt} ${image.src}`) &&
 			usableImage(entry, image.src),
 	);
-	return first
-		? { src: first.src, alt: first.alt || `${title} project preview`, basePath }
-		: undefined;
+	if (!first) return undefined;
+	const alt = first.alt || `${title} project preview`;
+	return { src: first.src, alt, basePath, fit: fitFor(first.src, alt) };
 }
 
 function hasHeading(body: string, pattern: RegExp): boolean {
@@ -695,7 +716,10 @@ export function buildProjectCardData(
 	pdfUrl: string,
 ): ProjectCardData {
 	const fullTitle = entry.data.title.trim();
-	const displayTitle = entry.data.card_title?.trim() || fullTitle;
+	const explicitCardTitle = entry.data.card_title?.trim();
+	const titledProjectName = fullTitle.match(/^([^:]{2,80}):\s+/)?.[1]?.trim();
+	const displayTitle = explicitCardTitle || titledProjectName || fullTitle;
+	const hasDisplayTitle = Boolean(explicitCardTitle || titledProjectName);
 	const summary = stripMarkdown(entry.data.description || "");
 	let problem = getProblem(entry);
 	let solution = getSolution(entry);
@@ -706,9 +730,13 @@ export function buildProjectCardData(
 	if (solutionKey && (solutionKey === summaryKey || solutionKey === problemKey))
 		solution = "";
 	const capabilityData = selectProjectCapabilities(entry);
+	const allEvidence = evidenceData(entry, projectUrl, pdfUrl);
+	const evidence = allEvidence.slice(0, 4);
+	const visibleEvidenceUrls = new Set(evidence.map((item) => item.url));
 	return {
 		fullTitle,
 		displayTitle,
+		hasDisplayTitle,
 		summary,
 		problem,
 		solution,
@@ -718,7 +746,10 @@ export function buildProjectCardData(
 			? { label: entry.data.status.label, type: entry.data.status.type }
 			: undefined,
 		image: cardImage(entry, fullTitle),
-		evidence: evidenceData(entry, projectUrl, pdfUrl),
-		actions: actionData(entry, pdfUrl),
+		evidence,
+		additionalEvidenceCount: Math.max(0, allEvidence.length - evidence.length),
+		actions: actionData(entry, pdfUrl)
+			.filter((action) => !visibleEvidenceUrls.has(action.url))
+			.slice(0, 3),
 	};
 }
