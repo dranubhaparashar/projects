@@ -1,6 +1,7 @@
 import type { CollectionEntry } from "astro:content";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { generateProjectCardCover } from "./project-card-cover";
 import { getProjectDomainPresentation } from "./project-impact-data";
 import { getDir } from "./url-utils";
 
@@ -39,6 +40,7 @@ export interface ProjectCardImage {
 	alt: string;
 	basePath: string;
 	fit: "cover" | "contain";
+	generated?: boolean;
 }
 
 export interface ProjectCardData {
@@ -51,8 +53,7 @@ export interface ProjectCardData {
 	capabilities: string[];
 	additionalCapabilityCount: number;
 	status?: { label: string; type: ProjectCardStatusType };
-	image?: ProjectCardImage;
-	fallbackMedia: { label: string; icon: string; color: string };
+	image: ProjectCardImage;
 	evidence: ProjectCardEvidence[];
 	additionalEvidenceCount: number;
 	actions: ProjectCardAction[];
@@ -219,6 +220,17 @@ function comparisonKey(value: string): string {
 		.replace(/[^a-z0-9]+/g, " ")
 		.replace(/\s+/g, " ")
 		.trim();
+}
+
+function compactDisplayTitle(value: string): string {
+	let compact = value
+		.replace(/\bProfit and Loss\b/gi, "P&L")
+		.replace(/\bArtificial Intelligence\b/gi, "AI")
+		.replace(/\bLarge Language Models?\b/gi, "LLMs")
+		.trim();
+	const aiPowered = compact.match(/^AI[- ]Powered\s+(.+)$/i)?.[1]?.trim();
+	if (aiPowered) compact = `${aiPowered} AI`;
+	return compact;
 }
 
 function uniqueValues(values: string[]): string[] {
@@ -729,8 +741,12 @@ export function buildProjectCardData(
 	const fullTitle = entry.data.title.trim();
 	const explicitCardTitle = entry.data.card_title?.trim();
 	const titledProjectName = fullTitle.match(/^([^:]{2,80}):\s+/)?.[1]?.trim();
-	const displayTitle = explicitCardTitle || titledProjectName || fullTitle;
-	const hasDisplayTitle = Boolean(explicitCardTitle || titledProjectName);
+	const displayTitle = compactDisplayTitle(
+		explicitCardTitle || titledProjectName || fullTitle,
+	);
+	const hasDisplayTitle = Boolean(
+		explicitCardTitle || titledProjectName || displayTitle !== fullTitle,
+	);
 	const summary = stripMarkdown(entry.data.description || "");
 	let problem = getProblem(entry);
 	let solution = getSolution(entry);
@@ -747,14 +763,27 @@ export function buildProjectCardData(
 		capabilityData.additionalCount +
 		Math.max(0, capabilityData.visible.length - capabilities.length);
 	const allEvidence = evidenceData(entry, projectUrl, pdfUrl);
-	const evidence = allEvidence.slice(0, 3);
-	const visibleEvidenceUrls = new Set(evidence.map((item) => item.url));
+	const evidenceLimit = allEvidence.length > 3 ? 2 : 3;
+	const evidence = allEvidence.slice(0, evidenceLimit);
 	const documentedStatus = entry.data.status;
 	const fallbackPresentation = getProjectDomainPresentation(entry);
-	const fallbackMedia = {
-		label: fallbackPresentation.name,
-		icon: fallbackPresentation.icon,
-		color: fallbackPresentation.color,
+	const realImage = cardImage(entry, fullTitle);
+	const generatedCover = realImage
+		? undefined
+		: generateProjectCardCover({
+				title: displayTitle,
+				projectType: entry.data.category?.trim() || "Project",
+				domain: fallbackPresentation.name,
+				capability: capabilities[0],
+				icon: fallbackPresentation.icon,
+				accentColor: fallbackPresentation.color,
+			});
+	const image: ProjectCardImage = realImage || {
+		src: generatedCover?.src || "",
+		alt: generatedCover?.alt || `${displayTitle} project cover`,
+		basePath: "",
+		fit: "cover",
+		generated: true,
 	};
 	return {
 		fullTitle,
@@ -771,12 +800,9 @@ export function buildProjectCardData(
 					type: documentedStatus.type,
 				}
 			: undefined,
-		image: cardImage(entry, fullTitle),
-		fallbackMedia,
+		image,
 		evidence,
 		additionalEvidenceCount: Math.max(0, allEvidence.length - evidence.length),
-		actions: actionData(entry, pdfUrl)
-			.filter((action) => !visibleEvidenceUrls.has(action.url))
-			.slice(0, 3),
+		actions: actionData(entry, pdfUrl).slice(0, 3),
 	};
 }
