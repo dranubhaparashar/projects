@@ -1,6 +1,7 @@
 import type { CollectionEntry } from "astro:content";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { getProjectDomainPresentation } from "./project-impact-data";
 import { getDir } from "./url-utils";
 
 type TextOrList = string | string[];
@@ -51,6 +52,7 @@ export interface ProjectCardData {
 	additionalCapabilityCount: number;
 	status?: { label: string; type: ProjectCardStatusType };
 	image?: ProjectCardImage;
+	fallbackMedia: { label: string; icon: string; color: string };
 	evidence: ProjectCardEvidence[];
 	additionalEvidenceCount: number;
 	actions: ProjectCardAction[];
@@ -194,6 +196,15 @@ const EVIDENCE_ORDER = [
 	"Paper",
 	"Dashboard",
 ];
+
+const COMPACT_STATUS_LABELS: Record<ProjectCardStatusType, string> = {
+	production: "Production",
+	pilot: "Pilot",
+	operational: "Operational",
+	prototype: "Prototype",
+	research: "Research",
+	concept: "Concept",
+};
 
 function normalize(value: string): string {
 	return String(value || "")
@@ -730,9 +741,21 @@ export function buildProjectCardData(
 	if (solutionKey && (solutionKey === summaryKey || solutionKey === problemKey))
 		solution = "";
 	const capabilityData = selectProjectCapabilities(entry);
+	const capabilityLimit = capabilityData.additionalCount > 0 ? 2 : 3;
+	const capabilities = capabilityData.visible.slice(0, capabilityLimit);
+	const additionalCapabilityCount =
+		capabilityData.additionalCount +
+		Math.max(0, capabilityData.visible.length - capabilities.length);
 	const allEvidence = evidenceData(entry, projectUrl, pdfUrl);
-	const evidence = allEvidence.slice(0, 4);
+	const evidence = allEvidence.slice(0, 3);
 	const visibleEvidenceUrls = new Set(evidence.map((item) => item.url));
+	const documentedStatus = entry.data.status;
+	const fallbackPresentation = getProjectDomainPresentation(entry);
+	const fallbackMedia = {
+		label: fallbackPresentation.name,
+		icon: fallbackPresentation.icon,
+		color: fallbackPresentation.color,
+	};
 	return {
 		fullTitle,
 		displayTitle,
@@ -740,12 +763,16 @@ export function buildProjectCardData(
 		summary,
 		problem,
 		solution,
-		capabilities: capabilityData.visible,
-		additionalCapabilityCount: capabilityData.additionalCount,
-		status: entry.data.status
-			? { label: entry.data.status.label, type: entry.data.status.type }
+		capabilities,
+		additionalCapabilityCount,
+		status: documentedStatus
+			? {
+					label: COMPACT_STATUS_LABELS[documentedStatus.type],
+					type: documentedStatus.type,
+				}
 			: undefined,
 		image: cardImage(entry, fullTitle),
+		fallbackMedia,
 		evidence,
 		additionalEvidenceCount: Math.max(0, allEvidence.length - evidence.length),
 		actions: actionData(entry, pdfUrl)

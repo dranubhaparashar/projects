@@ -449,6 +449,12 @@ function getDomainMeta(name: string): Omit<ProjectImpactDomain, "count"> {
 	};
 }
 
+export function getProjectDomainPresentation(
+	entry: CollectionEntry<"posts">,
+): Omit<ProjectImpactDomain, "count"> {
+	return getDomainMeta(inferDomains(entry).primaryDomain);
+}
+
 export function buildProjectImpactGraphData(
 	entries: CollectionEntry<"posts">[],
 ): ProjectImpactGraphData {
