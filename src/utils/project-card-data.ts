@@ -222,7 +222,21 @@ function comparisonKey(value: string): string {
 		.trim();
 }
 
+const DISPLAY_TITLE_ALIASES: Array<{ pattern: RegExp; title: string }> = [
+	{ pattern: /^DACR-Q\b/i, title: "DACR-Q" },
+	{ pattern: /^Vehicle-Scale LLMs\b/i, title: "Vehicle-Scale LLMs" },
+	{
+		pattern: /^Autonomous Microservice Composition\b/i,
+		title: "Autonomous Microservice Composition",
+	},
+	{ pattern: /^MCP 2\.0\b/i, title: "MCP 2.0" },
+];
+
 function compactDisplayTitle(value: string): string {
+	const explicitAlias = DISPLAY_TITLE_ALIASES.find(({ pattern }) =>
+		pattern.test(value.trim()),
+	)?.title;
+	if (explicitAlias) return explicitAlias;
 	let compact = value
 		.replace(/\bProfit and Loss\b/gi, "P&L")
 		.replace(/\bArtificial Intelligence\b/gi, "AI")
@@ -756,13 +770,27 @@ export function buildProjectCardData(
 	if (problemKey && problemKey === summaryKey) problem = "";
 	if (solutionKey && (solutionKey === summaryKey || solutionKey === problemKey))
 		solution = "";
-	const capabilityData = selectProjectCapabilities(entry);
-	const capabilityLimit = capabilityData.additionalCount > 0 ? 2 : 3;
-	const capabilities = capabilityData.visible.slice(0, capabilityLimit);
-	const additionalCapabilityCount =
-		capabilityData.additionalCount +
-		Math.max(0, capabilityData.visible.length - capabilities.length);
-	const allEvidence = evidenceData(entry, projectUrl, pdfUrl);
+	const capabilityData = selectProjectCapabilities(entry, 2);
+	const capabilities = capabilityData.visible;
+	const additionalCapabilityCount = capabilityData.additionalCount;
+	const allActions = actionData(entry, pdfUrl);
+	const preferredActions = allActions.filter(({ kind }) =>
+		["github", "pdf"].includes(kind),
+	);
+	const actions = (
+		preferredActions.length > 0
+			? preferredActions
+			: allActions.filter(({ kind }) => ["demo", "video"].includes(kind))
+	).slice(0, 3);
+	const footerActionUrls = new Set(actions.map(({ url }) => url));
+	const footerActionLabels = new Set(
+		actions.map(({ label }) => normalize(label)),
+	);
+	const allEvidence = evidenceData(entry, projectUrl, pdfUrl).filter(
+		(item) =>
+			!footerActionUrls.has(item.url) &&
+			!footerActionLabels.has(normalize(item.label)),
+	);
 	const evidenceLimit = allEvidence.length > 3 ? 2 : 3;
 	const evidence = allEvidence.slice(0, evidenceLimit);
 	const documentedStatus = entry.data.status;
@@ -771,12 +799,18 @@ export function buildProjectCardData(
 	const generatedCover = realImage
 		? undefined
 		: generateProjectCardCover({
-				title: displayTitle,
+				title: fullTitle,
 				projectType: entry.data.category?.trim() || "Project",
 				domain: fallbackPresentation.name,
 				capability: capabilities[0],
 				icon: fallbackPresentation.icon,
 				accentColor: fallbackPresentation.color,
+				keywords: [
+					entry.data.description || "",
+					...(entry.data.capabilities || []),
+					...(entry.data.technologies || []),
+					...(entry.data.tags || []),
+				],
 			});
 	const image: ProjectCardImage = realImage || {
 		src: generatedCover?.src || "",
@@ -803,6 +837,6 @@ export function buildProjectCardData(
 		image,
 		evidence,
 		additionalEvidenceCount: Math.max(0, allEvidence.length - evidence.length),
-		actions: actionData(entry, pdfUrl).slice(0, 3),
+		actions,
 	};
 }
