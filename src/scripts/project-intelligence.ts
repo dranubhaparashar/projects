@@ -4,6 +4,11 @@ import type {
 	PortfolioKnowledgeIndex,
 	PortfolioKnowledgeProject,
 } from "../utils/project-intelligence-index";
+import type {
+	BrowserAiProgress,
+	BrowserAssetUrls,
+	BrowserHybridHit,
+} from "./project-intelligence/browser-ai-types";
 
 export interface ProjectIntelligenceController {
 	open: () => void;
@@ -11,7 +16,7 @@ export interface ProjectIntelligenceController {
 	destroy: () => void;
 }
 
-interface RankedProject {
+export interface RankedProject {
 	project: PortfolioKnowledgeProject;
 	score: number;
 	reasons: string[];
@@ -32,7 +37,53 @@ interface AssistantAnswer {
 
 interface ConversationState {
 	lastProjectIds: string[];
+	turns: RagConversationTurn[];
 }
+
+interface RagConversationTurn {
+	role: "user" | "assistant";
+	content: string;
+}
+
+interface RagSource {
+	source_id: string;
+	project_id: string;
+	project_title: string;
+	section: string;
+	url: string;
+}
+
+interface RagRelatedProject {
+	id: string;
+	title: string;
+	url: string;
+}
+
+interface RagAnswer {
+	answer: string;
+	sources: RagSource[];
+	related_projects: RagRelatedProject[];
+	retrieval: {
+		mode: "hybrid";
+		semantic_matches: number;
+		context_chunks: number;
+		project_ids?: string[];
+		timings_ms?: Record<string, number>;
+	};
+	context?: BrowserHybridHit[];
+}
+
+const PROJECT_AI_API_URL = String(
+	import.meta.env.PUBLIC_PROJECT_AI_API_URL || "",
+)
+	.trim()
+	.replace(/\/+$/, "");
+const configuredTimeout = Number(
+	import.meta.env.PUBLIC_PROJECT_AI_TIMEOUT_MS || 25_000,
+);
+const PROJECT_AI_TIMEOUT_MS = Number.isFinite(configuredTimeout)
+	? Math.min(Math.max(configuredTimeout, 5_000), 30_000)
+	: 25_000;
 
 const NO_INFORMATION =
 	"I could not find that information in the published portfolio.";
@@ -946,6 +997,206 @@ function renderAnswer(
 	return message;
 }
 
+function renderQuickSearchNotice(
+	message: HTMLElement,
+	label = "Quick portfolio search",
+): HTMLElement {
+	const notice = element("span", "project-intelligence-mode-note");
+	notice.textContent = label;
+	message.prepend(notice);
+	return notice;
+}
+
+function renderRagAnswer(
+	container: HTMLElement,
+	answer: RagAnswer,
+	modeLabel = "",
+): HTMLElement {
+	const message = element(
+		"article",
+		"project-intelligence-message is-assistant is-rag-answer",
+	);
+	message.setAttribute("aria-label", "Project Intelligence answer");
+	if (modeLabel) renderQuickSearchNotice(message, modeLabel);
+	appendText(message, "h3", "Answer");
+	appendText(message, "p", answer.answer, "project-intelligence-answer-lead");
+
+	const sources = answer.sources.filter(
+		(source, index, items) =>
+			source.url &&
+			items.findIndex(
+				(candidate) => candidate.source_id === source.source_id,
+			) === index,
+	);
+	if (sources.length) {
+		appendText(message, "h3", "Sources");
+		const sourceList = element("nav", "project-intelligence-sources");
+		sourceList.setAttribute("aria-label", "Sources for this answer");
+		for (const source of sources) {
+			const anchor = element("a");
+			anchor.href = source.url;
+			anchor.textContent = source.section
+				? `${source.project_title} Â· ${source.section}`
+				: source.project_title;
+			anchor.textContent = source.section
+				? `${source.project_title} · ${source.section}`
+				: source.project_title;
+			anchor.setAttribute(
+				"aria-label",
+				`Open source: ${source.project_title}, ${source.section}`,
+			);
+			sourceList.append(anchor);
+		}
+		message.append(sourceList);
+	}
+
+	const related = answer.related_projects.filter(
+		(project, index, items) =>
+			project.url &&
+			items.findIndex((candidate) => candidate.id === project.id) === index,
+	);
+	if (related.length) {
+		appendText(message, "h3", "Related projects");
+		const relatedList = element("nav", "project-intelligence-related");
+		relatedList.setAttribute("aria-label", "Related projects");
+		for (const project of related) {
+			const anchor = element("a");
+			anchor.href = project.url;
+			anchor.textContent = project.title;
+			relatedList.append(anchor);
+		}
+		message.append(relatedList);
+	}
+	container.append(message);
+	return message;
+}
+
+function renderAiStatus(
+	container: HTMLElement,
+	initialStatus: string,
+	onCancel: () => void,
+): {
+	element: HTMLElement;
+	setStatus: (status: string) => void;
+} {
+	const message = element(
+		"article",
+		"project-intelligence-message is-assistant is-loading project-intelligence-ai-status",
+	);
+	message.setAttribute("aria-label", "Project Intelligence local AI status");
+	const row = element("div", "project-intelligence-ai-status-row");
+	const status = appendText(
+		row,
+		"p",
+		initialStatus,
+		"project-intelligence-loading-status",
+	);
+	const cancel = element("button", "project-intelligence-cancel");
+	cancel.type = "button";
+	cancel.textContent = "Cancel";
+	cancel.addEventListener("click", onCancel, { once: true });
+	row.append(cancel);
+	message.append(row);
+	container.append(message);
+	return {
+		element: message,
+		setStatus(value: string) {
+			status.textContent = value;
+		},
+	};
+}
+
+function appendAiDetail(message: HTMLElement, value: string): void {
+	appendText(message, "p", value, "project-intelligence-ai-detail");
+}
+
+function progressLabel(prefix: string, progress: BrowserAiProgress): string {
+	const percentage = progress.progress;
+	if (typeof percentage === "number" && Number.isFinite(percentage)) {
+		const normalized = percentage <= 1 ? percentage * 100 : percentage;
+		return `${prefix} ${Math.round(Math.min(Math.max(normalized, 0), 100))}%`;
+	}
+	return prefix;
+}
+
+function renderLoadingMessage(container: HTMLElement): {
+	element: HTMLElement;
+	setStatus: (status: string) => void;
+} {
+	const message = element(
+		"article",
+		"project-intelligence-message is-assistant is-loading",
+	);
+	message.setAttribute("aria-label", "Project Intelligence is working");
+	const status = appendText(
+		message,
+		"p",
+		"Searching my project portfolioâ€¦",
+		"project-intelligence-loading-status",
+	);
+	status.textContent = "Searching my project portfolio…";
+	container.append(message);
+	return {
+		element: message,
+		setStatus(value: string) {
+			status.textContent = value;
+		},
+	};
+}
+
+function isRagAnswer(value: unknown): value is RagAnswer {
+	if (!value || typeof value !== "object") return false;
+	const candidate = value as Partial<RagAnswer>;
+	return (
+		typeof candidate.answer === "string" &&
+		candidate.answer.trim().length > 0 &&
+		Array.isArray(candidate.sources) &&
+		Array.isArray(candidate.related_projects)
+	);
+}
+
+async function requestRagAnswer(
+	index: PortfolioKnowledgeIndex,
+	query: string,
+	conversation: RagConversationTurn[],
+	currentProjectId = "",
+): Promise<RagAnswer> {
+	if (!PROJECT_AI_API_URL) throw new Error("Project AI API is not configured");
+	const controller = new AbortController();
+	const timeout = window.setTimeout(
+		() => controller.abort(),
+		PROJECT_AI_TIMEOUT_MS,
+	);
+	try {
+		const lexicalMatches = searchPortfolio(index, query)
+			.slice(0, 12)
+			.map((match) => ({
+				project_id: match.project.id,
+				score: Math.min(Math.max(match.score, 0), 5_000),
+				reasons: match.reasons.slice(0, 5),
+			}));
+		const response = await fetch(`${PROJECT_AI_API_URL}/ask`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			signal: controller.signal,
+			body: JSON.stringify({
+				question: query,
+				conversation: conversation.slice(-6),
+				lexical_matches: lexicalMatches,
+				current_project_id: currentProjectId || null,
+			}),
+		});
+		if (!response.ok) throw new Error("Project AI API request failed");
+		const answer: unknown = await response.json();
+		if (!isRagAnswer(answer)) {
+			throw new Error("Project AI API returned an invalid answer");
+		}
+		return answer;
+	} finally {
+		window.clearTimeout(timeout);
+	}
+}
+
 function renderUserMessage(container: HTMLElement, query: string): void {
 	const message = element("article", "project-intelligence-message is-user");
 	message.setAttribute("aria-label", "Your question");
@@ -989,10 +1240,16 @@ export function mountProjectIntelligence(
 		),
 	];
 	const abortController = new AbortController();
-	const state: ConversationState = { lastProjectIds: [] };
+	const state: ConversationState = { lastProjectIds: [], turns: [] };
 	let activeProjectSlug = root.dataset.currentProjectSlug || "";
 	let previouslyFocused: HTMLElement | null = null;
 	let indexPromise: Promise<PortfolioKnowledgeIndex> | null = null;
+	let activeAiOperation: AbortController | null = null;
+	const browserAssetUrls: BrowserAssetUrls = {
+		chunks: root.dataset.browserChunksUrl || "",
+		vectorMetadata: root.dataset.browserVectorMetadataUrl || "",
+		vectors: root.dataset.browserVectorsUrl || "",
+	};
 
 	const loadIndex = () => {
 		if (!indexPromise) {
@@ -1011,6 +1268,7 @@ export function mountProjectIntelligence(
 
 	const close = () => {
 		if (!layer || !dialog || layer.hidden) return;
+		activeAiOperation?.abort();
 		layer.hidden = true;
 		dialog.setAttribute("aria-hidden", "true");
 		trigger?.setAttribute("aria-expanded", "false");
@@ -1035,27 +1293,218 @@ export function mountProjectIntelligence(
 	const submitQuestion = async (question: string) => {
 		const query = question.trim();
 		if (!query || !messages || !form || !input) return;
+		activeAiOperation?.abort();
+		const operation = new AbortController();
+		activeAiOperation = operation;
+		const priorConversation = state.turns.slice(-6);
 		renderUserMessage(messages, query);
 		input.value = "";
 		input.disabled = true;
 		form.setAttribute("aria-busy", "true");
 		if (suggestions) suggestions.hidden = true;
+		const backendLoading = PROJECT_AI_API_URL
+			? renderLoadingMessage(messages)
+			: null;
+		const progressTimers: number[] = [];
+
+		const rememberRagAnswer = (answer: RagAnswer) => {
+			state.lastProjectIds = unique([
+				...(answer.retrieval.project_ids || []),
+				...answer.sources.map((source) => source.project_id),
+				...answer.related_projects.map((project) => project.id),
+			]);
+			state.turns = [
+				...priorConversation,
+				{ role: "user", content: query } as RagConversationTurn,
+				{ role: "assistant", content: answer.answer } as RagConversationTurn,
+			].slice(-6);
+			if (live) live.textContent = answer.answer;
+		};
+
 		try {
 			const index = await loadIndex();
-			const answer = answerPortfolioQuestion(
+			const activeProject = currentProject(index, activeProjectSlug);
+
+			if (PROJECT_AI_API_URL && backendLoading) {
+				progressTimers.push(
+					window.setTimeout(
+						() => backendLoading.setStatus("Reading relevant projects…"),
+						2_500,
+					),
+					window.setTimeout(
+						() => backendLoading.setStatus("Preparing a grounded answer…"),
+						6_000,
+					),
+				);
+				try {
+					const ragAnswer = await requestRagAnswer(
+						index,
+						query,
+						priorConversation,
+						activeProject?.id || "",
+					);
+					backendLoading.element.remove();
+					renderRagAnswer(messages, ragAnswer, "Self-hosted RAG");
+					rememberRagAnswer(ragAnswer);
+					return;
+				} catch {
+					backendLoading.element.remove();
+				}
+			}
+
+			const quickAnswer = answerPortfolioQuestion(
 				index,
 				query,
 				state,
 				activeProjectSlug,
 			);
-			renderAnswer(messages, answer, index);
-			if (answer.projects.length) {
-				state.lastProjectIds = answer.projects.map(
+			const quickMessage = renderAnswer(messages, quickAnswer, index);
+			const quickNotice = renderQuickSearchNotice(
+				quickMessage,
+				"Quick result · preparing semantic search",
+			);
+			if (quickAnswer.projects.length) {
+				state.lastProjectIds = quickAnswer.projects.map(
 					(answerProject) => answerProject.project.id,
 				);
 			}
-			if (live) live.textContent = answer.lead;
+			state.turns = [
+				...priorConversation,
+				{ role: "user", content: query } as RagConversationTurn,
+				{
+					role: "assistant",
+					content: [
+						quickAnswer.lead,
+						...quickAnswer.projects.map(
+							(answerProject) => answerProject.project.title,
+						),
+					]
+						.join(" ")
+						.slice(0, 4_000),
+				} as RagConversationTurn,
+			].slice(-6);
+			if (live) live.textContent = quickAnswer.lead;
+
+			const semanticStatus = renderAiStatus(
+				messages,
+				"Preparing semantic search…",
+				() => operation.abort(),
+			);
+			try {
+				if (
+					!browserAssetUrls.chunks ||
+					!browserAssetUrls.vectorMetadata ||
+					!browserAssetUrls.vectors
+				) {
+					throw new Error("Browser RAG asset URLs are missing");
+				}
+				const [{ detectBrowserAiCapabilities }, { retrieveBrowserRag }] =
+					await Promise.all([
+						import("./project-intelligence/browser-ai-capabilities"),
+						import("./project-intelligence/browser-rag"),
+					]);
+				const capabilities = await detectBrowserAiCapabilities();
+				if (!capabilities.semanticSearch) {
+					throw new Error("Browser semantic search is unsupported");
+				}
+				const browserAnswer = await retrieveBrowserRag({
+					question: query,
+					assetUrls: browserAssetUrls,
+					lexicalHints: searchPortfolio(index, query)
+						.slice(0, 12)
+						.map((match) => ({
+							project_id: match.project.id,
+							score: Math.min(Math.max(match.score, 0), 5_000),
+							reasons: match.reasons.slice(0, 5),
+						})),
+					currentProjectId: activeProject?.id || "",
+					signal: operation.signal,
+					onProgress: (progress) => {
+						semanticStatus.setStatus(
+							progressLabel("Preparing semantic search…", progress),
+						);
+					},
+				});
+				if (operation.signal.aborted) {
+					throw new DOMException("Aborted", "AbortError");
+				}
+				semanticStatus.element.remove();
+				quickMessage.remove();
+				let ragMessage = renderRagAnswer(
+					messages,
+					browserAnswer,
+					"Browser-local RAG",
+				);
+				rememberRagAnswer(browserAnswer);
+				if (live) live.textContent = "Found relevant projects.";
+
+				if (
+					!capabilities.localLlm ||
+					!browserAnswer.context.length ||
+					browserAnswer.sources.length === 0
+				) {
+					appendAiDetail(ragMessage, capabilities.reason);
+					return;
+				}
+
+				const llmStatus = renderAiStatus(
+					messages,
+					"Loading local AI model for the first answer…",
+					() => operation.abort(),
+				);
+				try {
+					const { generateLocalBrowserAnswer } = await import(
+						"./project-intelligence/browser-llm"
+					);
+					const enhanced = await generateLocalBrowserAnswer({
+						question: query,
+						retrieval: browserAnswer,
+						signal: operation.signal,
+						onProgress: (progress) => {
+							llmStatus.setStatus(
+								progressLabel(
+									"Loading local AI model for the first answer…",
+									progress,
+								),
+							);
+						},
+					});
+					llmStatus.element.remove();
+					if (enhanced && !operation.signal.aborted) {
+						ragMessage.remove();
+						ragMessage = renderRagAnswer(
+							messages,
+							enhanced,
+							"Browser-local AI",
+						);
+						appendAiDetail(
+							ragMessage,
+							"Inference ran in this browser; source links were mapped from trusted portfolio metadata.",
+						);
+						rememberRagAnswer(enhanced);
+					}
+				} catch {
+					llmStatus.element.remove();
+					if (!operation.signal.aborted) {
+						appendAiDetail(
+							ragMessage,
+							"Local generation was unavailable; the grounded hybrid retrieval answer is shown.",
+						);
+					}
+				}
+				return;
+			} catch {
+				semanticStatus.element.remove();
+				quickNotice.textContent = "Quick portfolio search";
+				if (!operation.signal.aborted) {
+					appendAiDetail(
+						quickMessage,
+						"Semantic search was unavailable; the deterministic portfolio result is shown.",
+					);
+				}
+			}
 		} catch {
+			backendLoading?.element.remove();
 			const errorMessage = element(
 				"article",
 				"project-intelligence-message is-assistant",
@@ -1063,11 +1512,16 @@ export function mountProjectIntelligence(
 			appendText(
 				errorMessage,
 				"p",
-				"The published portfolio index could not be loaded. Please try again.",
+				"I couldn't search the portfolio right now. You can still browse the projects directly.",
 			);
 			messages.append(errorMessage);
-			if (live) live.textContent = "The portfolio index could not be loaded.";
+			if (live) {
+				live.textContent =
+					"I couldn't search the portfolio right now. You can still browse the projects directly.";
+			}
 		} finally {
+			for (const timer of progressTimers) window.clearTimeout(timer);
+			if (activeAiOperation === operation) activeAiOperation = null;
 			input.disabled = false;
 			form.removeAttribute("aria-busy");
 			input.focus({ preventScroll: true });
@@ -1142,6 +1596,7 @@ export function mountProjectIntelligence(
 			void submitQuestion(question);
 		},
 		destroy() {
+			activeAiOperation?.abort();
 			abortController.abort();
 			if (layer && !layer.hidden) close();
 		},

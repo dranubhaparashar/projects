@@ -17,6 +17,29 @@ The website is a modern, responsive project and blog-style portfolio built to sh
 
 Project details are intentionally **not hard-coded in this README** because the project list will continue to grow and change over time. The latest projects, posts, categories, tags, and updates should be managed directly inside the website content files.
 
+## Project Intelligence deployment modes
+
+The public `Ask about my projects` assistant defaults to a fully static, zero-infrastructure-cost architecture:
+
+```text
+GitHub Pages
+  -> browser BGE embeddings
+  -> committed static vector index
+  -> lexical + semantic hybrid retrieval
+  -> optional local browser Qwen model
+  -> grounded answer with trusted portfolio sources
+```
+
+No API key or backend is required. Open model weights may be downloaded from Hugging Face on first use, but inference runs in the visitor's browser and questions are not sent to an external inference API. WebGPU-incompatible and mobile devices use the sourced retrieval answer; if semantic initialization fails, the original quick lexical search remains available.
+
+The optional high-power mode remains under `rag-api/`:
+
+```text
+GitHub Pages -> FastAPI -> BGE -> FAISS -> Qwen3-4B through Ollama
+```
+
+GitHub Pages itself cannot execute Python, FAISS, or Ollama. Configure `PUBLIC_PROJECT_AI_API_URL` only when that separate self-hosted service is intentionally deployed. See [`rag-api/README.md`](rag-api/README.md) for model details, index regeneration, privacy behavior, precedence, tests, and Docker instructions.
+
 ## ✨ Features
 
 - [x] Built with [Astro](https://astro.build) and [Tailwind CSS](https://tailwindcss.com)
