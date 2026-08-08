@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { generateProjectCardCover } from "./project-card-cover";
 import { getProjectDomainPresentation } from "./project-impact-data";
+import { getDocumentedProjectMaturity } from "./project-view-data";
 import { getDir } from "./url-utils";
 
 type TextOrList = string | string[];
@@ -58,6 +59,14 @@ export interface ProjectCardData {
 	evidence: ProjectCardEvidence[];
 	additionalEvidenceCount: number;
 	actions: ProjectCardAction[];
+	featuredEvidence?: ProjectCardEvidence;
+	maturitySummary: string[];
+	whyItMatters: string;
+	quickActions: Array<{
+		label: "Architecture" | "Live Demo";
+		url: string;
+		external: boolean;
+	}>;
 }
 
 type LinkCandidate = { label: string; url: string };
@@ -190,14 +199,17 @@ const SOLUTION_HEADINGS = [
 const EVIDENCE_ORDER = [
 	"Demo",
 	"Architecture",
-	"Video",
-	"Dashboard",
 	"Paper",
+	"Video",
 	"Dataset",
 	"Metrics",
 	"GitHub",
 	"PDF",
+	"Dashboard",
 ];
+
+/** View analytics stay secondary until a count carries meaningful signal. */
+export const PROJECT_VIEW_COUNT_THRESHOLD = 25;
 
 const ARCHITECTURE_PREVIEW_PATTERN =
 	/\b(?:architecture|architectural|diagram|flowchart|system design|solution design)\b/i;
@@ -355,6 +367,36 @@ function getSolution(entry: CollectionEntry<"posts">): string {
 			"solution",
 		])
 	);
+}
+
+function compactSentence(value: string, maxLength = 220): string {
+	const sentence = firstSentence(value);
+	if (sentence.length <= maxLength) return sentence;
+	const shortened = sentence.slice(0, maxLength + 1).replace(/\s+\S*$/, "");
+	return `${shortened || sentence.slice(0, maxLength).trim()}â€¦`;
+}
+
+function getWhyItMatters(
+	entry: CollectionEntry<"posts">,
+	problem: string,
+): string {
+	const outcome = entry.data.views?.executive?.outcome;
+	const outcomeSummary =
+		outcome && !Array.isArray(outcome) && typeof outcome === "object"
+			? textValue(outcome.summary)
+			: textValue(outcome);
+	const description = firstSentence(entry.data.description || "");
+	const descriptionHasValueLanguage =
+		/\b(helps?|supports?|enables?|reduces?|detects?|identifies?|forecasts?|prevents?|improves?|prioriti[sz]es?|validates?)\b/i.test(
+			description,
+		);
+	const candidate =
+		textValue(entry.data.views?.executive?.cost_risk_reduction) ||
+		outcomeSummary ||
+		problem ||
+		(descriptionHasValueLanguage ? description : "");
+	const compact = compactSentence(candidate);
+	return compact.length >= 32 ? compact : "";
 }
 
 function classifyCapability(value: string): {
@@ -824,13 +866,84 @@ export function buildProjectCardData(
 	const footerActionLabels = new Set(
 		actions.map(({ label }) => normalize(label)),
 	);
-	const allEvidence = evidenceData(entry, projectUrl, pdfUrl).filter(
+	const documentedEvidence = evidenceData(entry, projectUrl, pdfUrl);
+	const allEvidence = documentedEvidence.filter(
 		(item) =>
 			!footerActionUrls.has(item.url) &&
 			!footerActionLabels.has(normalize(item.label)),
 	);
 	const evidence = allEvidence.slice(0, 2);
-	const documentedStatus = entry.data.status;
+	const derivedMaturity = entry.data.status
+		? undefined
+		: getDocumentedProjectMaturity(entry);
+	const documentedStatus =
+		entry.data.status ||
+		(derivedMaturity
+			? { type: derivedMaturity, label: COMPACT_STATUS_LABELS[derivedMaturity] }
+			: undefined);
+	const featuredSource = documentedEvidence.find((item) =>
+		[
+			"Demo",
+			"Architecture",
+			"Paper",
+			"Video",
+			"Dataset",
+			"Metrics",
+			"GitHub",
+			"PDF",
+		].includes(item.label),
+	);
+	const featuredEvidence: ProjectCardEvidence | undefined =
+		documentedStatus?.type === "production"
+			? {
+					label: "Production",
+					url: projectUrl,
+					external: false,
+					direct: false,
+				}
+			: featuredSource
+				? {
+						...featuredSource,
+						label:
+							featuredSource.label === "Demo"
+								? "Live Demo"
+								: featuredSource.label,
+					}
+				: undefined;
+	const maturitySummary = uniqueValues([
+		documentedStatus ? COMPACT_STATUS_LABELS[documentedStatus.type] : "",
+		featuredEvidence?.label === "Production"
+			? ""
+			: featuredEvidence?.label || "",
+		...documentedEvidence
+			.map((item) => (item.label === "Demo" ? "Live Demo" : item.label))
+			.filter(
+				(label) =>
+					normalize(label) !== normalize(featuredEvidence?.label || ""),
+			),
+	]).slice(0, documentedStatus ? 3 : 2);
+	const architectureEvidence = documentedEvidence.find(
+		(item) => item.label === "Architecture",
+	);
+	const demoAction = allActions.find((action) => action.kind === "demo");
+	const quickActions: ProjectCardData["quickActions"] = [
+		architectureEvidence
+			? {
+					label: "Architecture" as const,
+					url: architectureEvidence.url,
+					external: architectureEvidence.external,
+				}
+			: null,
+		demoAction
+			? {
+					label: "Live Demo" as const,
+					url: demoAction.url,
+					external: demoAction.external,
+				}
+			: null,
+	].filter((action): action is ProjectCardData["quickActions"][number] =>
+		Boolean(action),
+	);
 	const fallbackPresentation = getProjectDomainPresentation(entry);
 	const realImage = cardImage(entry, fullTitle);
 	const generatedCover = realImage
@@ -875,5 +988,9 @@ export function buildProjectCardData(
 		evidence,
 		additionalEvidenceCount: Math.max(0, allEvidence.length - evidence.length),
 		actions,
+		featuredEvidence,
+		maturitySummary,
+		whyItMatters: getWhyItMatters(entry, problem),
+		quickActions,
 	};
 }

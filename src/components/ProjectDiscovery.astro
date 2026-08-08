@@ -1,8 +1,8 @@
 ---
 import type { CollectionEntry } from "astro:content";
-import Pagination from "@components/control/Pagination.astro";
 import ImageWrapper from "@components/misc/ImageWrapper.astro";
 import PostPage from "@components/PostPage.astro";
+import { buildProjectDiscoveryData } from "@utils/project-discovery-data";
 import {
 	buildProjectProblemExplorerData,
 	type ProjectProblemMatch,
@@ -20,7 +20,21 @@ interface Props {
 
 const { allPosts, page } = Astro.props;
 const problemData = buildProjectProblemExplorerData(allPosts);
-const len = page.data.length;
+const discoveryData = buildProjectDiscoveryData(allPosts);
+const publishedIds = new Set(discoveryData.records.map((record) => record.id));
+const discoveryEntries = allPosts.filter((entry) =>
+	publishedIds.has(toFilterKey(entry.slug)),
+);
+const discoveryClientData = JSON.stringify({
+	suggestions: discoveryData.suggestions,
+	projects: discoveryData.records.map((record) => ({
+		id: record.id,
+		slug: record.slug,
+		title: record.card.displayTitle,
+		url: record.url,
+	})),
+}).replace(/</g, "\\u003c");
+const compareUrl = `${url("/impact-domain/")}#project-comparison`;
 
 function buildCardSearchText(
 	project: ProjectProblemProject,
@@ -66,33 +80,85 @@ function getArchitecturePlaceholder(project: ProjectProblemProject) {
 	class="project-discovery"
 	data-project-discovery
 	aria-labelledby="project-discovery-tabs-label"
+	data-compare-url={compareUrl}
 >
 	<p id="project-discovery-tabs-label" class="sr-only">Project discovery mode</p>
-	<div class="project-discovery-tabs card-base" role="tablist" aria-label="Project discovery mode">
-		<button
-			type="button"
-			id="project-discovery-tab-projects"
-			class="project-discovery-tab"
-			role="tab"
-			aria-selected="true"
-			aria-controls="project-discovery-panel-projects"
-			tabindex="0"
-			data-discovery-tab="projects"
-		>
-			Browse Projects
-		</button>
-		<button
-			type="button"
-			id="project-discovery-tab-problems"
-			class="project-discovery-tab"
-			role="tab"
-			aria-selected="false"
-			aria-controls="project-discovery-panel-problems"
-			tabindex="-1"
-			data-discovery-tab="problems"
-		>
-			Choose a Problem
-		</button>
+	<div class="project-discovery-sticky-sentinel" data-discovery-sticky-sentinel aria-hidden="true"></div>
+	<div class="project-discovery-toolbar card-base" data-discovery-toolbar>
+		<div class="project-discovery-toolbar-topline">
+			<div class="project-discovery-tabs" role="tablist" aria-label="Project discovery mode">
+				<button type="button" id="project-discovery-tab-projects" class="project-discovery-tab" role="tab" aria-selected="true" aria-controls="project-discovery-panel-projects" tabindex="0" data-discovery-tab="projects">
+					Browse Projects
+				</button>
+				<button type="button" id="project-discovery-tab-problems" class="project-discovery-tab" role="tab" aria-selected="false" aria-controls="project-discovery-panel-problems" tabindex="-1" data-discovery-tab="problems">
+					Choose a Problem
+				</button>
+			</div>
+
+			<label class="project-main-search" for="project-discovery-search">
+				<span class="sr-only">Search projects</span>
+				<input
+					id="project-discovery-search"
+					type="search"
+					placeholder="Search projects, technologies or problems"
+					autocomplete="off"
+					role="combobox"
+					aria-autocomplete="list"
+					aria-expanded="false"
+					aria-controls="project-search-suggestions"
+					data-project-search-input
+				/>
+				<kbd aria-hidden="true">/</kbd>
+				<div id="project-search-suggestions" class="project-search-suggestions" role="listbox" data-project-suggestions hidden></div>
+			</label>
+
+			<button type="button" class="project-mobile-filter-button" data-project-filter-toggle aria-expanded="false" aria-controls="project-filter-drawer">
+				Filters <span data-project-active-filter-count hidden>0</span>
+			</button>
+		</div>
+
+		<div id="project-filter-drawer" class="project-filter-drawer" data-project-filter-drawer>
+			<div class="project-filter-drawer-header">
+				<strong>Filter projects</strong>
+				<button type="button" class="btn-plain" data-project-filter-close aria-label="Close project filters">Close</button>
+			</div>
+			<div class="project-core-filters">
+				<label><span>Industry</span><select data-project-filter="industry">
+					<option value="">All industries</option>
+					{discoveryData.industries.map((industry) => <option value={industry.id}>{industry.label} ({industry.count})</option>)}
+				</select></label>
+				<label><span>Technology</span><select data-project-filter="technology">
+					<option value="">All technologies</option>
+					{discoveryData.technologies.map((technology) => <option value={technology.id}>{technology.label} ({technology.count})</option>)}
+				</select></label>
+				<label><span>Project type</span><select data-project-filter="category">
+					<option value="">All types</option>
+					{discoveryData.categories.map((category) => <option value={toFilterKey(category)}>{category}</option>)}
+				</select></label>
+				<label><span>Status</span><select data-project-filter="status">
+					<option value="">All statuses</option>
+					{discoveryData.statuses.map((status) => <option value={status.id}>{status.label}</option>)}
+				</select></label>
+				<label><span>Sort</span><select data-project-sort>
+					<option value="featured">Featured</option>
+					<option value="newest">Newest</option>
+					<option value="title">Title A–Z</option>
+				</select></label>
+			</div>
+			<button type="button" class="project-clear-all btn-plain" data-project-clear-all>Clear all filters</button>
+		</div>
+
+		<div class="project-capability-quick-row" aria-label="Quick capability filters">
+			<span class="project-quick-label">Capabilities</span>
+			<div class="project-capability-scroll">
+				{discoveryData.quickCapabilities.map((capability) => (
+					<button type="button" data-project-capability={capability.id} aria-pressed="false">
+						{capability.label}<small>{capability.count}</small>
+					</button>
+				))}
+			</div>
+			<button type="button" class="project-clear-capabilities btn-plain" data-project-clear-capabilities hidden>Clear</button>
+		</div>
 	</div>
 
 	<section
@@ -102,8 +168,16 @@ function getArchitecturePlaceholder(project: ProjectProblemProject) {
 		aria-labelledby="project-discovery-tab-projects"
 		data-discovery-panel="projects"
 	>
-		<PostPage page={page}></PostPage>
-		<Pagination class="mx-auto onload-animation" page={page} style={`animation-delay: calc(var(--content-delay) + ${len * 50}ms)`}></Pagination>
+		<div class="project-result-summary">
+			<p data-project-result-count aria-live="polite">{discoveryData.records.length} projects</p>
+			<p>AND across filters · OR within capabilities</p>
+		</div>
+		<PostPage page={page} entries={discoveryEntries} discoveryRecords={discoveryData.records}></PostPage>
+		<div class="project-discovery-empty card-base" data-project-empty hidden>
+			<h2>No projects match this view</h2>
+			<p>Try a broader search or clear one of the active filters.</p>
+			<button type="button" class="btn-regular" data-project-clear-all>Clear filters</button>
+		</div>
 	</section>
 
 	<section
@@ -375,7 +449,28 @@ function getArchitecturePlaceholder(project: ProjectProblemProject) {
 		</div>
 	</section>
 
-	<div class="project-discovery-live sr-only" data-project-discovery-live aria-live="polite"></div>
+	<section class="project-recently-viewed card-base" data-project-recently-viewed aria-labelledby="recently-viewed-title" hidden>
+		<header>
+			<h2 id="recently-viewed-title">Recently viewed</h2>
+			<button type="button" class="btn-plain" data-project-recent-clear>Clear</button>
+		</header>
+		<div data-project-recent-list></div>
+	</section>
 
-	<script is:inline type="module" src={url("/assets/js/project-problem-explorer.js")}></script>
+	<div class="project-comparison-bar card-base" data-project-comparison-bar hidden>
+		<p data-project-comparison-count aria-live="polite">0 projects selected</p>
+		<p class="project-comparison-limit" data-project-comparison-limit hidden>You can compare up to 3 projects.</p>
+		<div>
+			<a class="btn-regular" data-project-compare-submit href={compareUrl} aria-disabled="true" tabindex="-1">Compare Projects</a>
+			<button type="button" class="btn-plain" data-project-compare-clear>Clear</button>
+		</div>
+	</div>
+
+	<div class="project-discovery-live sr-only" data-project-discovery-live aria-live="polite"></div>
+	<script is:inline id="project-discovery-data" type="application/json" set:html={discoveryClientData}></script>
+	<script>
+		import { mountProjectDiscovery } from "../scripts/project-discovery";
+		const root = document.querySelector<HTMLElement>("[data-project-discovery]");
+		if (root) mountProjectDiscovery(root);
+	</script>
 </section>

@@ -259,6 +259,68 @@ function detectStatus(body: string) {
 	return "";
 }
 
+export type DocumentedProjectMaturity =
+	| "production"
+	| "pilot"
+	| "operational"
+	| "prototype"
+	| "research"
+	| "concept";
+
+/**
+ * Returns only maturity language that is explicitly documented in structured
+ * metadata, Project Attributes, or an unambiguous body phrase. In particular,
+ * generic deployment links and inferred production readiness do not qualify.
+ */
+export function getDocumentedProjectMaturity(
+	entry: CollectionEntry<"posts">,
+): DocumentedProjectMaturity | undefined {
+	const sections = splitSections(entry.body);
+	const attributes = parseAttributes(sections);
+	const executive = entry.data.views?.executive;
+	const outcome = executive?.outcome;
+	const outcomeStatus =
+		outcome && !Array.isArray(outcome) && typeof outcome === "object"
+			? outcome.status
+			: undefined;
+	const structured = normalizeStatus(
+		executive?.deployment_context?.status ||
+			attribute(attributes, "deployment-status") ||
+			attribute(attributes, "project-status") ||
+			(outcomeStatus === "prototype" ? "Prototype" : "") ||
+			entry.data.deployment,
+	);
+	const bodyStatus = detectStatus(entry.body);
+	const bodyStatusPattern = bodyStatus
+		? new RegExp(`\\b${bodyStatus.replace(/\s+/g, "\\s+")}\\b`, "i")
+		: null;
+	const bodyStatusMatch = bodyStatusPattern?.exec(entry.body);
+	const bodyStatusContext = bodyStatusMatch
+		? entry.body.slice(
+				Math.max(0, bodyStatusMatch.index - 48),
+				bodyStatusMatch.index + bodyStatusMatch[0].length,
+			)
+		: "";
+	const bodyStatusIsNegated = /\b(?:not|isn['’]?t|without|before)\b/i.test(
+		bodyStatusContext,
+	);
+	const documented =
+		structured ||
+		(bodyStatusIsNegated ||
+		["Production Deployment", "Demonstration"].includes(bodyStatus)
+			? ""
+			: bodyStatus);
+	const key = normalize(documented);
+	if (key.includes("production deployment")) return "production";
+	if (key.includes("pilot")) return "pilot";
+	if (key.includes("internal operational")) return "operational";
+	if (key.includes("research prototype") || key.includes("experimental study"))
+		return "research";
+	if (key.includes("prototype")) return "prototype";
+	if (key.includes("concept")) return "concept";
+	return undefined;
+}
+
 function extractUrls(body: string) {
 	const urls: Array<{ label: string; url: string }> = [];
 	for (const match of body.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g))

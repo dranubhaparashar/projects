@@ -141,6 +141,7 @@ const suggestions = currentProjectSlug
 	class ProjectIntelligenceElement extends HTMLElement {
 		controller?: {
 			open: () => void;
+			ask: (question: string, projectSlug?: string) => void;
 			destroy: () => void;
 		};
 		trigger?: HTMLButtonElement;
@@ -159,16 +160,49 @@ const suggestions = currentProjectSlug
 				this.trigger.removeAttribute("aria-busy");
 			}
 		};
+		handleContextualAsk = async (event: Event) => {
+			const detail = (event as CustomEvent<{ question?: string; slug?: string }>).detail;
+			if (!detail?.question) return;
+			if (!this.controller) {
+				const { mountProjectIntelligence } = await import(
+					"../scripts/project-intelligence"
+				);
+				this.controller = mountProjectIntelligence(this);
+			}
+			this.controller.ask(detail.question, detail.slug || "");
+		};
+
+		storeRecentProject() {
+			const slug = this.dataset.currentProjectSlug || "";
+			if (!slug) return;
+			const storageKey = "project-recent-history-v1";
+			try {
+				const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]") as Array<{
+					slug: string;
+					lastViewed: number;
+				}>;
+				const next = [
+					{ slug, lastViewed: Date.now() },
+					...parsed.filter((item) => item?.slug && item.slug !== slug),
+				].slice(0, 12);
+				localStorage.setItem(storageKey, JSON.stringify(next));
+			} catch {
+				// Storage may be unavailable in privacy modes; project pages still work.
+			}
+		}
 
 		connectedCallback() {
 			this.trigger = this.querySelector<HTMLButtonElement>(
 				"[data-project-intelligence-trigger]",
 			) || undefined;
 			this.trigger?.addEventListener("click", this.handleOpen);
+			document.addEventListener("project-intelligence:ask", this.handleContextualAsk);
+			this.storeRecentProject();
 		}
 
 		disconnectedCallback() {
 			this.trigger?.removeEventListener("click", this.handleOpen);
+			document.removeEventListener("project-intelligence:ask", this.handleContextualAsk);
 			this.controller?.destroy();
 			this.controller = undefined;
 		}

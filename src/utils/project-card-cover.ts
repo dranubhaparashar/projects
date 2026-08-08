@@ -18,7 +18,10 @@ type CoverMotif =
 	| "identity-policy"
 	| "protocol-hub"
 	| "quantization"
+	| "route-optimization"
+	| "predictive-maintenance"
 	| "service-orchestration"
+	| "telecom-infrastructure"
 	| "vehicle-network"
 	| "vision-detection"
 	| "network";
@@ -49,7 +52,12 @@ const MOTIF_LABELS: Record<CoverMotif, string> = {
 	"identity-policy": "credential and policy selection",
 	"protocol-hub": "client, protocol hub and tool-server topology",
 	quantization: "quantization matrix and low-rank inference",
+	"route-optimization": "depot, route nodes and vehicle path",
+	"predictive-maintenance":
+		"asset telemetry, risk curve and maintenance signal",
 	"service-orchestration": "agent-routed service orchestration",
+	"telecom-infrastructure":
+		"network tower, workflow documents and infrastructure links",
 	"vehicle-network": "connected in-vehicle inference network",
 	"vision-detection": "computer-vision detection pipeline",
 	network: "connected project systems",
@@ -107,6 +115,24 @@ function selectMotif(input: ProjectCardCoverInput): CoverMotif {
 		/\b(medclaim|medical|clinical|insurance claim|claim review)\b/.test(terms)
 	)
 		return "clinical-documents";
+	if (
+		/\b(vrp|vehicle routing|route optimization|fleet routing|or-tools|pyvrp)\b/.test(
+			terms,
+		)
+	)
+		return "route-optimization";
+	if (
+		/\b(predictive maintenance|preventive maintenance|generator failure|failure risk|asset reliability)\b/.test(
+			terms,
+		)
+	)
+		return "predictive-maintenance";
+	if (
+		/\b(telecom|telecommunications|copper reclamation|pole validation|network infrastructure)\b/.test(
+			terms,
+		)
+	)
+		return "telecom-infrastructure";
 	if (/\b(vehicle|automotive|in-vehicle)\b/.test(terms))
 		return "vehicle-network";
 	if (
@@ -138,6 +164,29 @@ function selectMotif(input: ProjectCardCoverInput): CoverMotif {
 
 function motifMarkup(motif: CoverMotif): string {
 	switch (motif) {
+		case "route-optimization":
+			return `<g class="motif-stroke">
+				<rect class="motif-surface" x="118" y="236" width="128" height="148" rx="20"/><path d="M151 264h62m-62 27h41m-41 27h62m-62 27h46"/>
+				<path d="M275 342c54-104 117-116 169-44s119 80 189-4 128-53 192 20"/>
+				<circle class="motif-fill" cx="292" cy="319" r="13"/><circle class="motif-fill" cx="433" cy="290" r="13"/><circle class="motif-fill" cx="577" cy="326" r="13"/><circle class="motif-fill" cx="714" cy="277" r="13"/>
+				<rect class="motif-surface" x="777" y="287" width="74" height="48" rx="12"/><circle class="motif-fill" cx="794" cy="342" r="10"/><circle class="motif-fill" cx="834" cy="342" r="10"/>
+				<path d="M805 287v-20h23v20M453 298l-13-8 5 15M588 319l-15 6 15 6"/>
+			</g>`;
+		case "predictive-maintenance":
+			return `<g class="motif-stroke">
+				<rect class="motif-surface" x="119" y="250" width="205" height="134" rx="21"/><circle class="motif-soft" cx="221" cy="317" r="43"/><path d="M221 274v86m-43-43h86M190 286l62 62m0-62-62 62"/>
+				<path d="M352 331h54l23-48 35 91 39-119 34 76h60"/><circle class="motif-fill" cx="429" cy="283" r="7"/><circle class="motif-fill" cx="503" cy="255" r="7"/>
+				<rect class="motif-surface" x="626" y="232" width="221" height="166" rx="21"/><path d="M656 359c27-13 45-30 63-52s42-31 95-44"/><path d="M656 262v97h160"/>
+				<path class="motif-soft" d="M739 276h79v45h-79z"/><path d="m759 299 13 13 28-31"/>
+			</g>`;
+		case "telecom-infrastructure":
+			return `<g class="motif-stroke">
+				<path class="motif-surface" d="M221 230 171 399h100l-50-169Z"/><path d="M191 330h60m-72 36h84M199 295h44M221 230v-19"/>
+				<path d="M167 263a76 76 0 0 1 108 0M143 238a110 110 0 0 1 156 0"/>
+				<rect class="motif-surface" x="386" y="239" width="166" height="72" rx="16"/><rect class="motif-surface" x="386" y="345" width="166" height="72" rx="16"/><path d="M414 263h110m-110 22h72M414 369h110m-110 22h82"/>
+				<circle class="motif-fill" cx="679" cy="275" r="17"/><circle class="motif-fill" cx="793" cy="354" r="17"/><path d="M271 319h82l33-44m166 0h127l114 79M552 381h94l33-106"/>
+				<path d="m343 308 10 11-10 11m325-66 11 11-11 11m114 57 11 11-11 11"/>
+			</g>`;
 		case "quantization":
 			return `<g class="motif-stroke">
 				<rect class="motif-surface" x="126" y="232" width="242" height="158" rx="20"/>

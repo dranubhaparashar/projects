@@ -3,6 +3,8 @@ import type { CollectionEntry } from "astro:content";
 import { formatDateToYYYYMMDD } from "@utils/date-utils";
 import { normalizePostId } from "@utils/post-id";
 import { buildProjectCardData } from "@utils/project-card-data";
+import type { ProjectDiscoveryRecord } from "@utils/project-discovery-data";
+import { toFilterKey } from "@utils/project-problem-matching";
 import ImageWrapper from "./misc/ImageWrapper.astro";
 
 interface Props {
@@ -11,22 +13,47 @@ interface Props {
 	url: string;
 	pdf?: string;
 	style?: string;
+	discovery?: ProjectDiscoveryRecord;
 }
 
-const { entry, url, pdf = "", style = "" } = Astro.props;
+const { entry, url, pdf = "", style = "", discovery } = Astro.props;
 const className = Astro.props.class;
-const card = buildProjectCardData(entry, url, pdf);
+const card = discovery?.card || buildProjectCardData(entry, url, pdf);
 const cardId = `project-card-${normalizePostId(entry.slug)}`;
+const projectId = discovery?.id || toFilterKey(entry.slug);
 const fullDate = formatDateToYYYYMMDD(entry.data.published);
 const year = String(entry.data.published.getFullYear());
 const category = entry.data.category?.trim() || "Uncategorized";
+const summaryItems = card.maturitySummary.filter(
+	(item) => item !== card.featuredEvidence?.label,
+);
+const assistantQuestions = [
+	"Show similar projects",
+	"Which technologies are used?",
+	"Is this deployed?",
+	"What problem does this solve?",
+	"Which projects use similar capabilities?",
+];
 ---
 
 <article
 	class:list={['project-case-card card-base', className]}
 	style={style}
 	aria-labelledby={`${cardId}-title`}
+	data-project-card
+	data-project-id={projectId}
+	data-project-slug={entry.slug}
+	data-project-title={card.displayTitle}
+	data-project-search={discovery?.searchText || ""}
+	data-project-industries={discovery?.industryIds.join(" ") || ""}
+	data-project-capabilities={discovery?.capabilityIds.join(" ") || ""}
+	data-project-technologies={discovery?.technologies.map((item) => item.id).join(" ") || ""}
+	data-project-category={toFilterKey(category)}
+	data-project-status={discovery?.status || entry.data.status?.type || ""}
+	data-project-published={discovery?.publishedMs || entry.data.published.getTime()}
+	data-project-featured={discovery?.featured ? "true" : "false"}
 >
+	<div class='project-card-media-shell'>
 	<a
 		class:list={[
 			'project-card-media',
@@ -65,6 +92,17 @@ const category = entry.data.category?.trim() || "Uncategorized";
 			</span>
 		)}
 	</a>
+	<nav class='project-thumbnail-actions' aria-label={`Quick actions for ${card.fullTitle}`}>
+		<a href={url}>View Project</a>
+		{card.quickActions.map((action) => (
+			<a
+				href={action.url}
+				target={action.external ? '_blank' : undefined}
+				rel={action.external ? 'noopener noreferrer' : undefined}
+			>{action.label}</a>
+		))}
+	</nav>
+	</div>
 
 	<div class='project-card-body'>
 		<header class='project-card-header'>
@@ -77,15 +115,19 @@ const category = entry.data.category?.trim() || "Uncategorized";
 						<span class='sr-only'>Published in </span>{year}
 					</time>
 				</p>
-				{card.status && (
-					<span
-						class='project-status-badge'
-						data-status-type={card.status.type}
-						aria-label={`Project status: ${card.status.label}`}
-					>
-						{card.status.label}
-					</span>
-				)}
+				<div class='project-card-kicker-actions'>
+					{discovery?.primaryIndustry && (
+						<span class='project-industry-badge' aria-label={`Primary industry: ${discovery.primaryIndustry.label}`}>
+							{discovery.primaryIndustry.label}
+						</span>
+					)}
+					{discovery && (
+						<label class='project-compare-control'>
+							<input type='checkbox' value={projectId} data-project-compare aria-label={`Compare ${card.fullTitle}`} />
+							<span>Compare</span>
+						</label>
+					)}
+				</div>
 			</div>
 
 			<h2
@@ -99,6 +141,23 @@ const category = entry.data.category?.trim() || "Uncategorized";
 		</header>
 
 		{card.summary && <p class='project-card-summary'>{card.summary}</p>}
+
+		{(summaryItems.length > 0 || card.featuredEvidence) && (
+			<div class='project-maturity-line' aria-label={`Project maturity and evidence: ${card.maturitySummary.join(", ")}`}>
+				{summaryItems.length > 0 && <span>{summaryItems.join(" · ")}</span>}
+				{card.featuredEvidence && (
+					<a
+						class='project-featured-evidence'
+						href={card.featuredEvidence.url}
+						target={card.featuredEvidence.external ? '_blank' : undefined}
+						rel={card.featuredEvidence.external ? 'noopener noreferrer' : undefined}
+						aria-label={`Featured evidence: ${card.featuredEvidence.label} for ${card.fullTitle}`}
+					>
+						{card.featuredEvidence.label}
+					</a>
+				)}
+			</div>
+		)}
 
 		{card.capabilities.length > 0 && (
 			<section class='project-card-section' aria-labelledby={`${cardId}-capabilities`}>
@@ -119,38 +178,35 @@ const category = entry.data.category?.trim() || "Uncategorized";
 			</section>
 		)}
 
-		{card.evidence.length > 0 && (
-			<section class='project-card-section project-evidence' aria-labelledby={`${cardId}-evidence`}>
-				<h3 id={`${cardId}-evidence`}>Evidence<span aria-hidden='true'>:</span></h3>
-				<nav aria-label={`Evidence for ${card.fullTitle}`}>
-					{card.evidence.map((item, index) => (
-						<>
-							{index > 0 && <span aria-hidden='true'>·</span>}
-							<a
-								href={item.url}
-								target={item.external ? '_blank' : undefined}
-								rel={item.external ? 'noopener noreferrer' : undefined}
-								aria-label={`${item.label} evidence for ${card.fullTitle}${item.external ? ' (opens in a new tab)' : ''}`}
-							>
-								{item.label}
-							</a>
-						</>
+		<div class='project-mobile-discovery-actions'>
+			{card.quickActions.length > 0 && (
+				<nav class='project-mobile-quick-links' aria-label={`Quick actions for ${card.fullTitle}`}>
+					{card.quickActions.map((action) => (
+						<a href={action.url} target={action.external ? '_blank' : undefined} rel={action.external ? 'noopener noreferrer' : undefined}>{action.label}</a>
 					))}
-					{card.additionalEvidenceCount > 0 && (
-						<>
-							<span aria-hidden='true'>·</span>
-							<a
-								class='project-evidence-more'
-								href={url}
-								aria-label={`View more evidence for ${card.fullTitle}`}
-							>
-								More evidence
-							</a>
-						</>
-					)}
 				</nav>
-			</section>
-		)}
+			)}
+			{card.whyItMatters && (
+				<details>
+					<summary>Why it matters</summary>
+					<p>{card.whyItMatters}</p>
+				</details>
+			)}
+			{discovery && discovery.relatedProjects.length > 0 && (
+				<details>
+					<summary>Related</summary>
+					<ul>{discovery.relatedProjects.map((related) => <li><a href={related.url}>{related.title}</a></li>)}</ul>
+				</details>
+			)}
+			{discovery && (
+				<details class='project-ask-menu'>
+					<summary>Ask</summary>
+					<div>{assistantQuestions.map((question) => (
+						<button type='button' data-project-assistant-question={question} data-project-assistant-slug={entry.slug}>{question}</button>
+					))}</div>
+				</details>
+			)}
+		</div>
 
 		<footer class='project-card-actions'>
 			<a
@@ -181,11 +237,35 @@ const category = entry.data.category?.trim() || "Uncategorized";
 			)}
 		</footer>
 	</div>
+
+	{discovery && (
+		<section class='project-card-discovery-panel' aria-label={`More discovery options for ${card.fullTitle}`}>
+			{card.whyItMatters && (
+				<div class='project-card-why'>
+					<h3>Why this project matters</h3>
+					<p>{card.whyItMatters}</p>
+				</div>
+			)}
+			{discovery.relatedProjects.length > 0 && (
+				<nav class='project-card-related' aria-label={`Related projects to ${card.fullTitle}`}>
+					<h3>Related projects</h3>
+					{discovery.relatedProjects.map((related) => <a href={related.url}>{related.title}</a>)}
+				</nav>
+			)}
+			<details class='project-ask-menu'>
+				<summary>Ask about this project</summary>
+				<div>{assistantQuestions.map((question) => (
+					<button type='button' data-project-assistant-question={question} data-project-assistant-slug={entry.slug}>{question}</button>
+				))}</div>
+			</details>
+		</section>
+	)}
 </article>
 
 <style>
 	.project-case-card {
 		display: flex;
+		position: relative;
 		min-width: 0;
 		height: 100%;
 		flex-direction: column;
@@ -200,17 +280,66 @@ const category = entry.data.category?.trim() || "Uncategorized";
 			box-shadow 160ms ease;
 	}
 
-	.project-card-media {
-		display: grid;
+	.project-card-media-shell {
 		position: relative;
 		width: 88%;
 		aspect-ratio: 16 / 9;
+		margin: 0.5rem auto 0;
+	}
+
+	.project-card-media {
+		display: grid;
+		position: relative;
+		width: 100%;
+		height: 100%;
+		aspect-ratio: 16 / 9;
 		place-items: center;
 		overflow: hidden;
-		margin: 0.5rem auto 0;
+		margin: 0;
 		background: color-mix(in srgb, var(--card-bg) 94%, var(--text-secondary));
 		border: 1px solid var(--card-border);
 		border-radius: calc(var(--radius-large) * 0.68);
+	}
+
+	.project-thumbnail-actions {
+		display: flex;
+		position: absolute;
+		z-index: 4;
+		right: 0.55rem;
+		bottom: 0.55rem;
+		left: 0.55rem;
+		visibility: hidden;
+		align-items: center;
+		justify-content: center;
+		gap: 0.38rem;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 140ms ease;
+	}
+
+	.project-thumbnail-actions a {
+		display: inline-flex;
+		min-height: 2rem;
+		align-items: center;
+		padding: 0.34rem 0.55rem;
+		border: 1px solid color-mix(in srgb, var(--card-border) 72%, var(--text-primary));
+		border-radius: 0.45rem;
+		background: color-mix(in srgb, var(--card-bg) 94%, transparent);
+		color: var(--text-primary);
+		font-size: 0.68rem;
+		font-weight: 750;
+		text-decoration: none;
+	}
+
+	.project-card-media-shell::after {
+		position: absolute;
+		inset: auto 0 0;
+		height: 38%;
+		background: rgb(15 23 42 / 0.14);
+		content: '';
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 140ms ease;
 	}
 
 	.project-card-image {
@@ -279,6 +408,44 @@ const category = entry.data.category?.trim() || "Uncategorized";
 		justify-content: space-between;
 		gap: 0.75rem;
 		margin-bottom: 0.38rem;
+	}
+
+	.project-card-kicker-actions {
+		display: flex;
+		flex: 0 0 auto;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.project-industry-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.22rem 0.44rem;
+		border: 1px solid var(--theme-accent-border);
+		border-radius: 999px;
+		background: var(--theme-accent-soft);
+		color: var(--theme-accent-text);
+		font-size: 0.62rem;
+		font-weight: 750;
+		line-height: 1.2;
+		text-transform: uppercase;
+	}
+
+	.project-compare-control {
+		display: inline-flex;
+		min-height: 1.7rem;
+		align-items: center;
+		gap: 0.28rem;
+		color: var(--text-secondary);
+		font-size: 0.66rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.project-compare-control input {
+		width: 0.9rem;
+		height: 0.9rem;
+		accent-color: var(--primary);
 	}
 
 	.project-card-meta {
@@ -361,6 +528,114 @@ const category = entry.data.category?.trim() || "Uncategorized";
 		line-height: 1.42;
 		-webkit-box-orient: vertical;
 		-webkit-line-clamp: 2;
+	}
+
+	.project-maturity-line {
+		display: flex;
+		min-height: 1.6rem;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		color: var(--text-muted);
+		font-size: 0.72rem;
+		font-weight: 650;
+		line-height: 1.35;
+	}
+
+	.project-featured-evidence {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.18rem 0.42rem;
+		border: 1px solid var(--theme-accent-border);
+		border-radius: 999px;
+		color: var(--theme-accent-text);
+		font-size: 0.67rem;
+		font-weight: 750;
+		text-decoration: none;
+	}
+
+	.project-mobile-discovery-actions {
+		display: none;
+	}
+
+	.project-card-discovery-panel {
+		display: grid;
+		position: absolute;
+		z-index: 8;
+		right: 0.7rem;
+		bottom: 0.7rem;
+		left: 0.7rem;
+		visibility: hidden;
+		max-height: 58%;
+		overflow-y: auto;
+		gap: 0.55rem;
+		padding: 0.72rem;
+		border: 1px solid var(--card-border);
+		border-radius: calc(var(--radius-large) * 0.7);
+		background: var(--card-bg);
+		box-shadow: 0 4px 14px rgb(15 23 42 / 0.12);
+		opacity: 0;
+		pointer-events: none;
+		transform: translateY(0.3rem);
+		transition: opacity 140ms ease, transform 140ms ease;
+	}
+
+	.project-card-discovery-panel h3 {
+		margin: 0 0 0.2rem;
+		color: var(--text-muted);
+		font-size: 0.68rem;
+		font-weight: 800;
+		letter-spacing: 0.055em;
+		text-transform: uppercase;
+	}
+
+	.project-card-discovery-panel p {
+		margin: 0;
+		color: var(--text-secondary);
+		font-size: 0.77rem;
+		line-height: 1.4;
+	}
+
+	.project-card-related {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.28rem 0.65rem;
+	}
+
+	.project-card-related h3 {
+		flex-basis: 100%;
+	}
+
+	.project-card-related a {
+		font-size: 0.74rem;
+		font-weight: 700;
+		text-underline-offset: 0.18rem;
+	}
+
+	.project-ask-menu summary {
+		width: max-content;
+		color: var(--primary);
+		font-size: 0.73rem;
+		font-weight: 750;
+		cursor: pointer;
+	}
+
+	.project-ask-menu > div {
+		display: grid;
+		gap: 0.22rem;
+		margin-top: 0.35rem;
+	}
+
+	.project-ask-menu button {
+		padding: 0.28rem 0.4rem;
+		border: 0;
+		border-radius: 0.35rem;
+		background: color-mix(in srgb, var(--card-bg) 88%, var(--primary));
+		color: var(--text-secondary);
+		font: inherit;
+		font-size: 0.7rem;
+		text-align: left;
+		cursor: pointer;
 	}
 
 	.project-card-section h3 {
@@ -541,9 +816,103 @@ const category = entry.data.category?.trim() || "Uncategorized";
 		.project-card-media:hover :global(.project-card-image-element) {
 			transform: scale(1.01);
 		}
+
+		.project-card-media-shell:hover .project-thumbnail-actions,
+		.project-card-media-shell:focus-within .project-thumbnail-actions {
+			visibility: visible;
+			opacity: 1;
+			pointer-events: auto;
+		}
+
+		.project-card-media-shell:hover::after,
+		.project-card-media-shell:focus-within::after {
+			opacity: 1;
+		}
+
+		.project-case-card:hover .project-card-discovery-panel,
+		.project-case-card:focus-within .project-card-discovery-panel {
+			visibility: visible;
+			opacity: 1;
+			pointer-events: auto;
+			transform: translateY(0);
+		}
 	}
 
 	@media (max-width: 640px) {
+		.project-card-media-shell {
+			width: 92%;
+		}
+
+		.project-thumbnail-actions,
+		.project-card-discovery-panel {
+			display: none;
+		}
+
+		.project-card-kicker-actions {
+			align-items: flex-end;
+			flex-direction: column;
+		}
+
+		.project-mobile-discovery-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.35rem 0.65rem;
+		}
+
+		.project-mobile-discovery-actions details {
+			min-width: 0;
+		}
+
+		.project-mobile-quick-links {
+			display: flex;
+			flex-basis: 100%;
+			gap: 0.8rem;
+		}
+
+		.project-mobile-quick-links a {
+			min-height: 2.2rem;
+			padding: 0.5rem 0;
+			color: var(--text-secondary);
+			font-size: 0.75rem;
+			font-weight: 750;
+			text-underline-offset: 0.18rem;
+		}
+
+		.project-mobile-discovery-actions summary {
+			min-height: 2.2rem;
+			padding: 0.48rem 0;
+			color: var(--text-secondary);
+			font-size: 0.75rem;
+			font-weight: 750;
+			cursor: pointer;
+		}
+
+		.project-mobile-discovery-actions p,
+		.project-mobile-discovery-actions ul {
+			width: 100%;
+			margin: 0.25rem 0 0;
+			padding: 0.5rem;
+			border-left: 2px solid var(--theme-accent-border);
+			color: var(--text-secondary);
+			font-size: 0.78rem;
+			line-height: 1.45;
+		}
+
+		.project-mobile-discovery-actions ul {
+			padding-left: 1.45rem;
+		}
+
+		.project-mobile-discovery-actions .project-ask-menu > div {
+			position: absolute;
+			z-index: 5;
+			right: 1rem;
+			left: 1rem;
+			padding: 0.55rem;
+			border: 1px solid var(--card-border);
+			border-radius: 0.6rem;
+			background: var(--card-bg);
+			box-shadow: 0 4px 12px rgb(15 23 42 / 0.12);
+		}
 		.project-card-body {
 			gap: 0.56rem;
 			padding: 0.72rem 1rem 1rem;
@@ -601,7 +970,10 @@ const category = entry.data.category?.trim() || "Uncategorized";
 
 	@media (prefers-reduced-motion: reduce) {
 		.project-case-card,
-		.project-card-media :global(.project-card-image-element) {
+		.project-card-media :global(.project-card-image-element),
+		.project-card-discovery-panel,
+		.project-thumbnail-actions,
+		.project-card-media-shell::after {
 			transition: none;
 		}
 

@@ -7,6 +7,7 @@ import type {
 
 export interface ProjectIntelligenceController {
 	open: () => void;
+	ask: (question: string, projectSlug?: string) => void;
 	destroy: () => void;
 }
 
@@ -434,9 +435,11 @@ function namedProjects(
 		.filter((project): project is PortfolioKnowledgeProject =>
 			Boolean(project),
 		);
-	return unique(found.map((project) => project.id)).map(
-		(id) => found.find((project) => project.id === id)!,
-	);
+	return unique(found.map((project) => project.id))
+		.map((id) => found.find((project) => project.id === id))
+		.filter((project): project is PortfolioKnowledgeProject =>
+			Boolean(project),
+		);
 }
 
 function isPortfolioQuestion(
@@ -987,7 +990,7 @@ export function mountProjectIntelligence(
 	];
 	const abortController = new AbortController();
 	const state: ConversationState = { lastProjectIds: [] };
-	const currentSlug = root.dataset.currentProjectSlug || "";
+	let activeProjectSlug = root.dataset.currentProjectSlug || "";
 	let previouslyFocused: HTMLElement | null = null;
 	let indexPromise: Promise<PortfolioKnowledgeIndex> | null = null;
 
@@ -1039,7 +1042,12 @@ export function mountProjectIntelligence(
 		if (suggestions) suggestions.hidden = true;
 		try {
 			const index = await loadIndex();
-			const answer = answerPortfolioQuestion(index, query, state, currentSlug);
+			const answer = answerPortfolioQuestion(
+				index,
+				query,
+				state,
+				activeProjectSlug,
+			);
 			renderAnswer(messages, answer, index);
 			if (answer.projects.length) {
 				state.lastProjectIds = answer.projects.map(
@@ -1128,6 +1136,11 @@ export function mountProjectIntelligence(
 
 	return {
 		open,
+		ask(question: string, projectSlug = "") {
+			activeProjectSlug = projectSlug || root.dataset.currentProjectSlug || "";
+			open();
+			void submitQuestion(question);
+		},
 		destroy() {
 			abortController.abort();
 			if (layer && !layer.hidden) close();
