@@ -577,8 +577,9 @@ function usableImage(entry: CollectionEntry<"posts">, value: string): boolean {
 	if (/^https?:\/\//i.test(value)) return true;
 	if (value.startsWith("/")) return verifiedPublicAsset(value);
 	const postsRoot = path.resolve(process.cwd(), "src", "content", "posts");
+	const srcRoot = path.dirname(path.dirname(postsRoot));
 	const file = path.resolve(postsRoot, relativeEntryDirectory(entry), value);
-	return file.startsWith(postsRoot) && existsSync(file);
+	return file.startsWith(srcRoot + path.sep) && existsSync(file);
 }
 
 function markdownImages(body: string): Array<{ src: string; alt: string }> {

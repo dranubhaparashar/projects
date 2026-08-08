@@ -2,6 +2,9 @@
 title: "LightDID-ZKP: Policy- and Resource-Aware Selection of BBS and AnonCreds Verifiable Presentations"
 published: 2026-06-23
 description: "LightDID-ZKP is a self research project that introduces CAPS-ZK, a policy- and resource-aware selector for choosing between BBS selective-disclosure presentations and AnonCreds predicate presentations in privacy-preserving decentralized identity systems."
+architecture:
+  src: ../../../assets/images/projects/covers/lightdid-zkp.png
+  alt: LightDID-ZKP decentralized identity, verifiable credentials and zero-knowledge proof architecture
 tags:
   - Decentralized Identity
   - Verifiable Credentials

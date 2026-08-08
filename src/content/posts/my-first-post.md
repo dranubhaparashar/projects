@@ -2,6 +2,9 @@
 title: "MCP 2.0"
 published: 2025-06-03
 description: "A polished MCP 2.0 post that uses normal markdown, guide-style sections, expressive code blocks, GitHub repo cards, tables, and checklists."
+architecture:
+  src: ../../assets/images/projects/covers/mcp-2.png
+  alt: MCP 2.0 multi-agent platform integrating tools, memory, context, knowledge and workflow orchestration
 tags: [MCP, Protocols, AI Infrastructure, gRPC, Protobuf, Agents, Demo]
 category: Self Project
 pdf: /downloads/mcp-2-full-feature-showcase-post-project-details.pdf
