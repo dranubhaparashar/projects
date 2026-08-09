@@ -1123,14 +1123,14 @@ function localModelDownloadPercentage(
 ): number | null {
 	if (!progress || progress.stage !== "llm-model") return null;
 	if (
-		progress.status === "progress" &&
+		progress.totalKnown === true &&
 		typeof progress.progress === "number" &&
 		Number.isFinite(progress.progress)
 	) {
 		return Math.round(Math.min(Math.max(progress.progress, 0), 100));
 	}
 	if (
-		progress.status === "progress" &&
+		progress.totalKnown === true &&
 		typeof progress.loaded === "number" &&
 		typeof progress.total === "number" &&
 		progress.total > 0
@@ -1142,11 +1142,41 @@ function localModelDownloadPercentage(
 	return null;
 }
 
+function localModelDownloadedBytes(progress?: BrowserAiProgress): string {
+	if (
+		!progress ||
+		progress.stage !== "llm-model" ||
+		typeof progress.loaded !== "number" ||
+		!Number.isFinite(progress.loaded) ||
+		progress.loaded <= 0
+	) {
+		return "";
+	}
+	const formatMegabytes = (bytes: number) => {
+		const megabytes = bytes / 1_000_000;
+		return megabytes >= 100
+			? Math.round(megabytes).toLocaleString()
+			: megabytes.toFixed(1);
+	};
+	if (
+		progress.totalKnown === true &&
+		typeof progress.total === "number" &&
+		Number.isFinite(progress.total) &&
+		progress.total > 0
+	) {
+		return `Downloaded ${formatMegabytes(progress.loaded)} MB / ${formatMegabytes(progress.total)} MB`;
+	}
+	return `Downloaded ${formatMegabytes(progress.loaded)} MB`;
+}
+
 function localModelStatus(snapshot: BrowserLocalLlmSnapshot): string {
 	if (snapshot.state === "loading") {
+		if (snapshot.progress?.stage === "model-init") {
+			return "Initializing WebGPU…";
+		}
 		const percentage = localModelDownloadPercentage(snapshot.progress);
 		return percentage === null
-			? "Initializing WebGPU…"
+			? "Downloading local AI model…"
 			: `Downloading local AI model — ${percentage}%`;
 	}
 	if (snapshot.state === "ready") return "Local AI ready";
@@ -1176,6 +1206,13 @@ async function renderLocalAiAction(options: {
 	button.type = "button";
 	button.dataset.projectIntelligenceLocalAi = "";
 	button.textContent = "Generate deeper local AI explanation";
+	const cancelButton = element(
+		"button",
+		"project-intelligence-cancel project-intelligence-local-ai-cancel",
+	);
+	cancelButton.type = "button";
+	cancelButton.textContent = "Cancel";
+	cancelButton.hidden = true;
 	const status = appendText(
 		controls,
 		"p",
@@ -1183,29 +1220,45 @@ async function renderLocalAiAction(options: {
 		"project-intelligence-local-ai-status",
 	);
 	status.setAttribute("aria-live", "polite");
-	controls.prepend(diagnostic, button);
+	const downloadDetail = appendText(
+		controls,
+		"p",
+		"",
+		"project-intelligence-local-ai-download-detail",
+	);
+	controls.prepend(diagnostic, button, cancelButton);
 	options.message.append(controls);
 
 	let completed = false;
 	let customReadyMessage = "";
 	const renderSnapshot = (snapshot: BrowserLocalLlmSnapshot) => {
 		controls.dataset.localAiState = snapshot.state;
-		button.disabled =
+		button.disabled = completed || snapshot.state === "generating";
+		button.hidden =
 			completed ||
 			snapshot.state === "loading" ||
 			snapshot.state === "generating" ||
 			snapshot.state === "failed";
-		button.hidden = completed || snapshot.state === "failed";
+		cancelButton.hidden = snapshot.state !== "loading";
 		const value =
 			snapshot.state === "ready" && customReadyMessage
 				? customReadyMessage
 				: localModelStatus(snapshot);
 		status.textContent = value;
 		status.hidden = !value;
+		const downloaded =
+			snapshot.state === "loading"
+				? localModelDownloadedBytes(snapshot.progress)
+				: "";
+		downloadDetail.textContent = downloaded;
+		downloadDetail.hidden = !downloaded;
 	};
 	const unsubscribe = localAi.subscribeLocalBrowserModel(renderSnapshot);
 	options.lifecycleSignal.addEventListener("abort", unsubscribe, {
 		once: true,
+	});
+	cancelButton.addEventListener("click", () => {
+		localAi.cancelLocalBrowserModel();
 	});
 
 	button.addEventListener("click", async () => {

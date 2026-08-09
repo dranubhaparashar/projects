@@ -1,8 +1,11 @@
 import type { BrowserRagAnswer, BrowserRagSource } from "./browser-ai-types";
 import {
+	BROWSER_LLM_DOWNLOAD_STALL_TIMEOUT_MS,
+	BROWSER_LLM_DOWNLOAD_TIMEOUT_MS,
 	BROWSER_LLM_GENERATION_TIMEOUT_MS,
 	BROWSER_LLM_INITIALIZATION_TIMEOUT_MS,
 	BROWSER_LLM_MODEL_ID,
+	cancelLocalBrowserModel,
 	generateInBrowser,
 	getLocalBrowserModelState,
 	initializeLocalBrowserModel,
@@ -14,10 +17,13 @@ export const BROWSER_LLM_MODEL = BROWSER_LLM_MODEL_ID;
 export const BROWSER_LLM_DTYPE = "q4";
 export const BROWSER_LLM_DEVICE = "WebGPU";
 export const BROWSER_LLM_LICENSE = "Apache-2.0";
-export const BROWSER_LLM_APPROX_DOWNLOAD_MB = 483;
+export const BROWSER_LLM_APPROX_DOWNLOAD_MB = 786;
 export {
+	BROWSER_LLM_DOWNLOAD_STALL_TIMEOUT_MS,
+	BROWSER_LLM_DOWNLOAD_TIMEOUT_MS,
 	BROWSER_LLM_GENERATION_TIMEOUT_MS,
 	BROWSER_LLM_INITIALIZATION_TIMEOUT_MS,
+	cancelLocalBrowserModel,
 	getLocalBrowserModelState,
 	initializeLocalBrowserModel,
 	subscribeLocalBrowserModel,

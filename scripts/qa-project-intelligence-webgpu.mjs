@@ -104,14 +104,30 @@ async function generateExplanation(answerMessage) {
 	await controls.evaluate((node) => {
 		const states = [];
 		const statuses = [];
+		const downloadDetails = [];
+		const cancelVisibility = [];
 		const record = () => {
 			const state = node.getAttribute("data-local-ai-state") || "";
 			const status =
 				node
 					.querySelector(".project-intelligence-local-ai-status")
 					?.textContent?.trim() || "";
+			const downloadDetail =
+				node
+					.querySelector(".project-intelligence-local-ai-download-detail")
+					?.textContent?.trim() || "";
 			if (state && states.at(-1) !== state) states.push(state);
 			if (status && statuses.at(-1) !== status) statuses.push(status);
+			if (downloadDetail && downloadDetails.at(-1) !== downloadDetail) {
+				downloadDetails.push(downloadDetail);
+			}
+			const cancel = node.querySelector(
+				".project-intelligence-local-ai-cancel",
+			);
+			const cancelVisible = Boolean(cancel && !cancel.hidden);
+			if (cancelVisibility.at(-1) !== cancelVisible) {
+				cancelVisibility.push(cancelVisible);
+			}
 		};
 		const observer = new MutationObserver(record);
 		observer.observe(node, {
@@ -120,13 +136,20 @@ async function generateExplanation(answerMessage) {
 			characterData: true,
 			subtree: true,
 		});
-		Reflect.set(node, "__localAiQa", { observer, record, states, statuses });
+		Reflect.set(node, "__localAiQa", {
+			observer,
+			record,
+			states,
+			statuses,
+			downloadDetails,
+			cancelVisibility,
+		});
 		record();
 	});
 	await answerMessage
 		.getByRole("button", { name: "Generate deeper local AI explanation" })
 		.click();
-	const deadline = Date.now() + 190_000;
+	const deadline = Date.now() + 800_000;
 	while (Date.now() < deadline) {
 		const state = await controls.getAttribute("data-local-ai-state");
 		const status = (
@@ -144,7 +167,12 @@ async function generateExplanation(answerMessage) {
 				const tracker = Reflect.get(node, "__localAiQa");
 				tracker.record();
 				tracker.observer.disconnect();
-				return { statuses: tracker.statuses, states: tracker.states };
+				return {
+					statuses: tracker.statuses,
+					states: tracker.states,
+					downloadDetails: tracker.downloadDetails,
+					cancelVisibility: tracker.cancelVisibility,
+				};
 			});
 		}
 		if (state === "failed") {
@@ -228,6 +256,9 @@ try {
 		if (!firstGeneration.states.includes("generating")) {
 			throw new Error("The local model never entered generating state");
 		}
+		if (!firstGeneration.cancelVisibility.includes(true)) {
+			throw new Error("The model download never exposed its Cancel control");
+		}
 		for (const expectedStatus of [
 			"Initializing WebGPU…",
 			"Local AI ready",
@@ -237,12 +268,18 @@ try {
 				throw new Error(`Missing local-AI progress state: ${expectedStatus}`);
 			}
 		}
-		if (
-			!firstGeneration.statuses.some((status) =>
-				/^Downloading local AI model — \d+%$/.test(status),
-			)
-		) {
-			throw new Error("No real Transformers.js download percentage was shown");
+		const showedRealPercentage = firstGeneration.statuses.some((status) =>
+			/^Downloading local AI model — \d+%$/.test(status),
+		);
+		const showedUnknownTotalBytes =
+			firstGeneration.statuses.includes("Downloading local AI model…") &&
+			firstGeneration.downloadDetails.some((detail) =>
+				/^Downloaded [\d,.]+ MB$/.test(detail),
+			);
+		if (!showedRealPercentage && !showedUnknownTotalBytes) {
+			throw new Error(
+				"No honest Transformers.js download percentage or byte count was shown",
+			);
 		}
 
 		const secondAnswer = await askGrounded(
@@ -298,6 +335,29 @@ try {
 			),
 		);
 	}
+} catch (error) {
+	const localAiDiagnostics = consoleMessages.filter(
+		(message) =>
+			message.includes("[Project Intelligence Local AI]") ||
+			message.includes("Unable to determine content-length"),
+	);
+	console.error(
+		JSON.stringify(
+			{
+				status: "failed",
+				errorName: error instanceof Error ? error.name : "Error",
+				errorMessage:
+					error instanceof Error ? error.message : "Local AI QA failed",
+				localAiDiagnostics,
+				consoleErrors: consoleErrors.filter((message) =>
+					message.includes("[Project Intelligence Local AI]"),
+				),
+			},
+			null,
+			2,
+		),
+	);
+	throw error;
 } finally {
 	await context.close();
 }

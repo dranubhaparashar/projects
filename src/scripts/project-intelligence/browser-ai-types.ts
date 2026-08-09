@@ -5,11 +5,17 @@ export interface BrowserAssetUrls {
 }
 
 export interface BrowserAiProgress {
-	stage: "embedding-model" | "embedding" | "llm-model" | "generation";
+	stage:
+		| "embedding-model"
+		| "embedding"
+		| "llm-model"
+		| "model-init"
+		| "generation";
 	status: string;
 	progress?: number;
 	loaded?: number;
 	total?: number;
+	totalKnown?: boolean;
 	name?: string;
 	file?: string;
 }
