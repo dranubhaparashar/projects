@@ -2,7 +2,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
 
-const baseUrl = process.argv[2] || "http://127.0.0.1:4321/projects/";
+const baseUrl =
+	process.argv[2] || "http://127.0.0.1:4321/projects/?view=projects";
 const profile =
 	process.argv[3] || join(tmpdir(), `project-intelligence-qa-${Date.now()}`);
 const externalWrites = [];
@@ -40,21 +41,60 @@ function observe(page) {
 	page.on("pageerror", (error) => consoleErrors.push(error.message));
 }
 
-async function openAssistant(page) {
-	await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 120_000 });
+async function openDrawer(page) {
 	await page.getByRole("button", { name: "Ask about my projects" }).click();
 	await page
 		.locator("[data-project-intelligence-dialog]")
 		.waitFor({ state: "visible" });
+	const layerIsPortaled = await page.evaluate(
+		() =>
+			document.querySelector("[data-project-intelligence-layer]")
+				?.parentElement === document.body,
+	);
+	if (!layerIsPortaled) {
+		throw new Error(
+			"Project Intelligence layer is not portaled to document.body",
+		);
+	}
 }
 
-async function ask(page, question, timeout = 900_000) {
+async function openAssistant(page) {
+	await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 120_000 });
+	await openDrawer(page);
+}
+
+async function closeDrawer(page) {
+	await page
+		.getByRole("button", { name: "Close Project Intelligence" })
+		.last()
+		.click();
+	await page
+		.locator("[data-project-intelligence-layer]")
+		.waitFor({ state: "hidden" });
+}
+
+async function waitForSwupReady(page) {
+	await page.waitForFunction(
+		() => {
+			const html = document.documentElement;
+			const main = document.querySelector("main");
+			return (
+				!html.classList.contains("is-changing") &&
+				!html.classList.contains("is-animating") &&
+				!(main instanceof HTMLElement && main.inert)
+			);
+		},
+		undefined,
+		{ timeout: 30_000 },
+	);
+}
+
+async function ask(page, question, timeout = 900_000, submitWithEnter = false) {
 	const input = page.locator("[data-project-intelligence-input]");
 	const form = page.locator("[data-project-intelligence-form]");
 	const started = performance.now();
 	await input.fill(question);
-	await form.getByRole("button", { name: "Ask Project Intelligence" }).click();
-	await page.waitForFunction(
+	const loadingStarted = page.waitForFunction(
 		() =>
 			document
 				.querySelector("[data-project-intelligence-form]")
@@ -62,6 +102,14 @@ async function ask(page, question, timeout = 900_000) {
 		undefined,
 		{ timeout: 10_000 },
 	);
+	if (submitWithEnter) {
+		await input.press("Enter");
+	} else {
+		await form
+			.getByRole("button", { name: "Ask Project Intelligence" })
+			.click();
+	}
+	await loadingStarted;
 	let retrievalMs = null;
 	const deadline = Date.now() + timeout;
 	while (Date.now() < deadline) {
@@ -125,6 +173,93 @@ async function ask(page, question, timeout = 900_000) {
 		retrievalMs,
 		totalMs,
 	};
+}
+
+async function messageCounts(page) {
+	return page.evaluate(() => ({
+		browserRag: [
+			...document.querySelectorAll(".project-intelligence-mode-note"),
+		].filter((node) => node.textContent?.includes("Browser-local RAG")).length,
+		user: document.querySelectorAll(".project-intelligence-message.is-user")
+			.length,
+	}));
+}
+
+async function clickSuggestedQuestion(page, question, timeout = 300_000) {
+	const before = await messageCounts(page);
+	const loadingStarted = page.waitForFunction(
+		() =>
+			document
+				.querySelector("[data-project-intelligence-form]")
+				?.getAttribute("aria-busy") === "true",
+		undefined,
+		{ timeout: 10_000 },
+	);
+	await page.getByRole("button", { name: question, exact: true }).click();
+	await loadingStarted;
+	await page.waitForFunction(
+		({ expectedCount, expectedQuestion }) => {
+			const messages = [
+				...document.querySelectorAll(".project-intelligence-message.is-user"),
+			];
+			return (
+				messages.length === expectedCount &&
+				messages.at(-1)?.textContent?.trim() === expectedQuestion
+			);
+		},
+		{ expectedCount: before.user + 1, expectedQuestion: question },
+		{ timeout: 10_000 },
+	);
+	await page.waitForFunction(
+		(expectedCount) =>
+			[...document.querySelectorAll(".project-intelligence-mode-note")].filter(
+				(node) => node.textContent?.includes("Browser-local RAG"),
+			).length === expectedCount,
+		before.browserRag + 1,
+		{ timeout },
+	);
+	await page.waitForFunction(
+		() =>
+			document
+				.querySelector("[data-project-intelligence-form]")
+				?.getAttribute("aria-busy") !== "true",
+		undefined,
+		{ timeout: 10_000 },
+	);
+	const after = await messageCounts(page);
+	if (after.user !== before.user + 1) {
+		throw new Error(`Suggestion produced duplicate user messages: ${question}`);
+	}
+	if (after.browserRag !== before.browserRag + 1) {
+		throw new Error(`Suggestion produced duplicate RAG answers: ${question}`);
+	}
+	return { question, before, after };
+}
+
+async function verifyPortaledLink(page, selector, label) {
+	const link = page.locator(selector).last();
+	if ((await link.count()) === 0) {
+		throw new Error(
+			`No ${label} link was rendered in a Browser-local RAG answer`,
+		);
+	}
+	const href = await link.getAttribute("href");
+	if (!href) throw new Error(`${label} link has no href`);
+	await link.evaluate((node) => {
+		node.addEventListener(
+			"click",
+			(event) => {
+				event.preventDefault();
+				node.setAttribute("data-portal-qa-clicked", "true");
+			},
+			{ once: true },
+		);
+	});
+	await link.click();
+	if ((await link.getAttribute("data-portal-qa-clicked")) !== "true") {
+		throw new Error(`${label} link did not receive the portaled click`);
+	}
+	return href;
 }
 
 function assertIncludes(result, expected) {
@@ -243,6 +378,156 @@ await context.addInitScript(() => {
 		value: undefined,
 	});
 });
+
+const expectedSuggestions = [
+	"Which projects use computer vision?",
+	"Have you deployed models in production?",
+	"Show projects related to healthcare.",
+	"Which projects use Snowflake?",
+	"Which project is most relevant to logistics?",
+	"Show projects involving Generative AI.",
+	"Which projects have live demos?",
+	"Which projects use multimodal AI?",
+];
+const portalPage = await context.newPage();
+observe(portalPage);
+await openAssistant(portalPage);
+const renderedSuggestions = await portalPage
+	.locator("[data-project-intelligence-suggestion]")
+	.allTextContents();
+const normalizedSuggestions = renderedSuggestions.map((question) =>
+	question.trim(),
+);
+if (
+	JSON.stringify(normalizedSuggestions) !== JSON.stringify(expectedSuggestions)
+) {
+	throw new Error(
+		`Unexpected suggested questions: ${JSON.stringify(normalizedSuggestions)}`,
+	);
+}
+
+const portalSuggestionResults = [];
+portalSuggestionResults.push(
+	await clickSuggestedQuestion(
+		portalPage,
+		"Which projects use computer vision?",
+	),
+);
+await closeDrawer(portalPage);
+await openDrawer(portalPage);
+portalSuggestionResults.push(
+	await clickSuggestedQuestion(portalPage, "Which projects use Snowflake?"),
+);
+
+await closeDrawer(portalPage);
+await portalPage.getByRole("link", { name: "Archive" }).first().click();
+await portalPage.waitForURL(/\/archive\//, { timeout: 30_000 });
+await portalPage
+	.getByRole("link", { name: /Anubha Parashar/i })
+	.first()
+	.click();
+await portalPage.waitForURL((url) => url.pathname.endsWith("/projects/"), {
+	timeout: 30_000,
+});
+await waitForSwupReady(portalPage);
+await openDrawer(portalPage);
+portalSuggestionResults.push(
+	await clickSuggestedQuestion(
+		portalPage,
+		"Show projects related to healthcare.",
+	),
+);
+
+await closeDrawer(portalPage);
+await openDrawer(portalPage);
+const manualHealthcareBefore = await messageCounts(portalPage);
+const manualHealthcare = await ask(
+	portalPage,
+	"Show projects related to healthcare.",
+	300_000,
+);
+const manualHealthcareAfter = await messageCounts(portalPage);
+if (!/browser-local rag/i.test(manualHealthcare.mode)) {
+	throw new Error("Manual healthcare submission did not use Browser-local RAG");
+}
+if (manualHealthcareAfter.user !== manualHealthcareBefore.user + 1) {
+	throw new Error(
+		"Manual healthcare submission produced duplicate user messages",
+	);
+}
+if (
+	manualHealthcareAfter.browserRag !==
+	manualHealthcareBefore.browserRag + 1
+) {
+	throw new Error(
+		"Manual healthcare submission produced duplicate RAG answers",
+	);
+}
+
+const manualEnterBefore = await messageCounts(portalPage);
+const manualEnter = await ask(
+	portalPage,
+	"Which projects use Snowflake?",
+	300_000,
+	true,
+);
+const manualEnterAfter = await messageCounts(portalPage);
+if (!/browser-local rag/i.test(manualEnter.mode)) {
+	throw new Error("Enter-key form submission did not use Browser-local RAG");
+}
+if (manualEnterAfter.user !== manualEnterBefore.user + 1) {
+	throw new Error("Enter-key form submission produced duplicate user messages");
+}
+if (manualEnterAfter.browserRag !== manualEnterBefore.browserRag + 1) {
+	throw new Error("Enter-key form submission produced duplicate RAG answers");
+}
+
+for (const question of expectedSuggestions.filter(
+	(question) =>
+		![
+			"Which projects use computer vision?",
+			"Which projects use Snowflake?",
+			"Show projects related to healthcare.",
+		].includes(question),
+)) {
+	await closeDrawer(portalPage);
+	await openDrawer(portalPage);
+	portalSuggestionResults.push(
+		await clickSuggestedQuestion(portalPage, question),
+	);
+}
+const sourceHref = await verifyPortaledLink(
+	portalPage,
+	".project-intelligence-sources a",
+	"source",
+);
+const relatedHref = await verifyPortaledLink(
+	portalPage,
+	".project-intelligence-related a",
+	"related-project",
+);
+const portalRegression = {
+	layerParentIsBody: await portalPage.evaluate(
+		() =>
+			document.querySelector("[data-project-intelligence-layer]")
+				?.parentElement === document.body,
+	),
+	manualHealthcare: {
+		before: manualHealthcareBefore,
+		after: manualHealthcareAfter,
+		mode: manualHealthcare.mode,
+	},
+	manualEnter: {
+		before: manualEnterBefore,
+		after: manualEnterAfter,
+		mode: manualEnter.mode,
+	},
+	relatedHref,
+	sourceHref,
+	suggestions: portalSuggestionResults,
+};
+await portalPage.close();
+
 const fallbackPage = await context.newPage();
 observe(fallbackPage);
 await openAssistant(fallbackPage);
@@ -349,6 +634,7 @@ const report = {
 	qwenRequestsBeforeQuestion,
 	qwenRequestsAfterGroundedAnswer,
 	deeperExplanationButtonVisible,
+	portalRegression,
 	cold,
 	warm: retrievalResults[0],
 	retrievalResults,

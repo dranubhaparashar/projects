@@ -58,6 +58,10 @@ async function drawerSnapshot(page) {
 					.length,
 			},
 			state: {
+				rootConstructor: root?.constructor.name || null,
+				rootController: Boolean(root?.controller),
+				rootControllerPending: Boolean(root?.controllerPromise),
+				rootIsBound: root?.isBound ?? null,
 				rootOpen: root?.getAttribute("data-open"),
 				layerOpen: layer?.getAttribute("data-open"),
 				layerHidden: layer instanceof HTMLElement ? layer.hidden : null,
@@ -160,26 +164,51 @@ async function waitClosed(page) {
 
 async function clickOpen(page) {
 	await page.getByRole("button", { name: "Ask about my projects" }).click();
-	await page.waitForFunction(
-		() =>
-			document
-				.querySelector("[data-project-intelligence-layer]")
-				?.getAttribute("data-open") === "true",
-	);
-	await page.waitForFunction(() => {
-		const dialog = document.querySelector("[data-project-intelligence-dialog]");
-		if (!(dialog instanceof HTMLElement)) return false;
-		const computed = getComputedStyle(dialog);
-		return (
-			computed.visibility === "visible" &&
-			computed.opacity === "1" &&
-			(computed.transform === "none" ||
-				computed.transform === "matrix(1, 0, 0, 1, 0, 0)")
+	try {
+		await page.waitForFunction(
+			() =>
+				document
+					.querySelector("[data-project-intelligence-layer]")
+					?.getAttribute("data-open") === "true",
 		);
-	});
+		await page.waitForFunction(() => {
+			const dialog = document.querySelector(
+				"[data-project-intelligence-dialog]",
+			);
+			if (!(dialog instanceof HTMLElement)) return false;
+			const computed = getComputedStyle(dialog);
+			return (
+				computed.visibility === "visible" &&
+				computed.opacity === "1" &&
+				(computed.transform === "none" ||
+					computed.transform === "matrix(1, 0, 0, 1, 0, 0)")
+			);
+		});
+	} catch (error) {
+		throw new Error(
+			`Drawer did not become visible: ${JSON.stringify(await drawerSnapshot(page))}`,
+			{ cause: error },
+		);
+	}
 	const snapshot = await drawerSnapshot(page);
 	assertOpen(snapshot);
 	return snapshot;
+}
+
+async function waitForSwupReady(page) {
+	await page.waitForFunction(
+		() => {
+			const html = document.documentElement;
+			const main = document.querySelector("main");
+			return (
+				!html.classList.contains("is-changing") &&
+				!html.classList.contains("is-animating") &&
+				!(main instanceof HTMLElement && main.inert)
+			);
+		},
+		undefined,
+		{ timeout: 30_000 },
+	);
 }
 
 const context = await browser.newContext({ viewport: viewports[0] });
@@ -227,12 +256,16 @@ for (const viewport of viewports) {
 }
 
 await page.setViewportSize(viewports[1]);
-await page.getByRole("link", { name: "Archive" }).click();
+await page.getByRole("link", { name: "Archive" }).first().click();
 await page.waitForURL(/\/archive\//, { timeout: 30_000 });
-await page.getByRole("link", { name: /Anubha Parashar/i }).click();
+await page
+	.getByRole("link", { name: /Anubha Parashar/i })
+	.first()
+	.click();
 await page.waitForURL((url) => url.pathname.endsWith("/projects/"), {
 	timeout: 30_000,
 });
+await waitForSwupReady(page);
 const afterReturn = await clickOpen(page);
 report.swup = afterReturn;
 await page.keyboard.press("Escape");

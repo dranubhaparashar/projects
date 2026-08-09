@@ -1472,6 +1472,7 @@ export function mountProjectIntelligence(
 		layer.dataset.open = "true";
 		root.dataset.open = "true";
 		void loadIndex();
+		if (suggestions) suggestions.hidden = false;
 		input?.focus({ preventScroll: true });
 	};
 
@@ -1681,6 +1682,11 @@ export function mountProjectIntelligence(
 			body?.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
 		}
 	};
+	const ask = (question: string, projectSlug = "") => {
+		activeProjectSlug = projectSlug || root.dataset.currentProjectSlug || "";
+		open();
+		void submitQuestion(question);
+	};
 
 	for (const button of closeButtons) {
 		button.addEventListener("click", () => close(), {
@@ -1691,11 +1697,11 @@ export function mountProjectIntelligence(
 		"submit",
 		(event) => {
 			event.preventDefault();
-			if (input) void submitQuestion(input.value);
+			if (input) ask(input.value);
 		},
 		{ signal: abortController.signal },
 	);
-	root.addEventListener(
+	layer?.addEventListener(
 		"click",
 		(event) => {
 			const target =
@@ -1707,7 +1713,7 @@ export function mountProjectIntelligence(
 			if (!target) return;
 			const question =
 				target.dataset.projectIntelligenceQuery || target.textContent || "";
-			void submitQuestion(question);
+			ask(question);
 		},
 		{ signal: abortController.signal },
 	);
@@ -1743,11 +1749,7 @@ export function mountProjectIntelligence(
 
 	const controller: ProjectIntelligenceController = {
 		open,
-		ask(question: string, projectSlug = "") {
-			activeProjectSlug = projectSlug || root.dataset.currentProjectSlug || "";
-			open();
-			void submitQuestion(question);
-		},
+		ask,
 		destroy() {
 			if (destroyed) return;
 			activeAiOperation?.abort();
