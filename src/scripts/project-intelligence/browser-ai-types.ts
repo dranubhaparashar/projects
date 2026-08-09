@@ -27,6 +27,8 @@ export interface BrowserAiProgress {
 	firstTokenLatencyMs?: number;
 	generationTotalMs?: number;
 	tokensPerSecond?: number;
+	finishReason?: "completed" | "eos" | "max-new-tokens";
+	eosTokenObserved?: boolean;
 }
 
 export type BrowserLocalLlmState =

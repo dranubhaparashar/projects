@@ -21,6 +21,7 @@ declare const self: DedicatedWorkerGlobalScope;
 
 env.allowLocalModels = false;
 env.useBrowserCache = true;
+const MAX_NEW_TOKENS = 96;
 
 type WorkerRequest =
 	| { id: number; type: "initialize" }
@@ -67,6 +68,34 @@ function developmentLog(event: string, detail?: unknown): void {
 function developmentTimingLog(lines: string[]): void {
 	if (!import.meta.env.DEV) return;
 	console.info(["[Project Intelligence Local AI]", ...lines].join("\n"));
+}
+
+function developmentValidationLog(value: unknown, text: string): void {
+	if (!import.meta.env.DEV) return;
+	const candidate = Array.isArray(value) ? value[0] : undefined;
+	const generated =
+		candidate && typeof candidate === "object"
+			? (candidate as { generated_text?: unknown }).generated_text
+			: undefined;
+	const messages = Array.isArray(generated)
+		? (generated as Array<{ role?: unknown }>)
+		: [];
+	const structure = {
+		resultType: Array.isArray(value) ? "array" : typeof value,
+		resultCount: Array.isArray(value) ? value.length : 0,
+		generatedTextType: Array.isArray(generated) ? "chat" : typeof generated,
+		chatMessageCount: messages.length,
+		chatRoles: messages.map((message) =>
+			typeof message?.role === "string" ? message.role : "unknown",
+		),
+	};
+	console.info(
+		[
+			"[Project Intelligence Local AI validation]",
+			`raw output structure: ${JSON.stringify(structure)}`,
+			`raw generated assistant output: ${text}`,
+		].join("\n"),
+	);
 }
 
 function postProgress(id: number, progress: BrowserAiProgress): void {
@@ -305,6 +334,7 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 		let firstTokenAt = "";
 		let firstTokenTime: number | undefined;
 		let tokensGenerated = 0;
+		let lastGeneratedTokenId: number | undefined;
 		const stoppingCriteria = new InterruptableStoppingCriteria();
 		const stoppingCriteriaList = new StoppingCriteriaList();
 		stoppingCriteriaList.push(stoppingCriteria);
@@ -327,6 +357,10 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 			callback_function: () => {},
 			token_callback_function: (tokens) => {
 				tokensGenerated += tokens.length;
+				const lastToken = tokens.at(-1);
+				if (lastToken !== undefined) {
+					lastGeneratedTokenId = Number(lastToken);
+				}
 				if (firstTokenTime === undefined) {
 					firstTokenTime = performance.now();
 					firstTokenAt = new Date().toISOString();
@@ -351,7 +385,7 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 		});
 		try {
 			const result = await generator(request.messages, {
-				max_new_tokens: 96,
+				max_new_tokens: MAX_NEW_TOKENS,
 				do_sample: false,
 				return_full_text: false,
 				streamer,
@@ -367,6 +401,13 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 			const generationCompletedAt = new Date().toISOString();
 			const generationComplete = performance.now();
 			const generationTotalMs = generationComplete - generationStart;
+			const eosTokenObserved =
+				lastGeneratedTokenId === generator.tokenizer.eos_token_id;
+			const finishReason = eosTokenObserved
+				? "eos"
+				: tokensGenerated >= MAX_NEW_TOKENS
+					? "max-new-tokens"
+					: "completed";
 			const tokenGenerationMs = Math.max(
 				generationComplete - (firstTokenTime ?? generationStart),
 				1,
@@ -388,18 +429,23 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 				generationTotalMs,
 				tokensGenerated,
 				tokensPerSecond,
+				finishReason,
+				eosTokenObserved,
 			};
+			const extractedText = generatedText(result);
+			developmentValidationLog(result, extractedText);
 			developmentTimingLog([
 				`generation completed at: ${generationCompletedAt}`,
 				`tokens generated: ${tokensGenerated}`,
 				`generation speed: ${tokensPerSecond.toFixed(2)} tokens/sec`,
 				`generation total: ${(generationTotalMs / 1_000).toFixed(2)} seconds`,
+				`finish reason: ${finishReason}`,
 			]);
 			postProgress(request.id, timing);
 			self.postMessage({
 				id: request.id,
 				type: "result",
-				result: { text: generatedText(result), timing },
+				result: { text: extractedText, timing },
 			});
 		} finally {
 			if (activeGeneration?.id === request.id) activeGeneration = undefined;
