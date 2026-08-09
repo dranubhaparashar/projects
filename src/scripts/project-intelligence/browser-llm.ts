@@ -42,6 +42,8 @@ export {
 const INSUFFICIENT_INFORMATION =
 	"The published portfolio does not provide enough information to confirm that.";
 
+let lastLocalBrowserValidationReason: string | null = null;
+
 function xmlEscape(value: string): string {
 	return value
 		.replace(/&/g, "&amp;")
@@ -71,10 +73,36 @@ function developmentValidationLog(
 	);
 }
 
+function productionValidationWarning(
+	validation: LocalAiValidationResult,
+	finishReason: "eos" | "max-new-tokens" | "completed",
+	tokensGenerated: number,
+): void {
+	console.warn(
+		[
+			"[Project Intelligence Local AI validation]",
+			`reason: ${validation.reason}`,
+			`jsonParseSuccess: ${validation.jsonParseSuccess}`,
+			`answerFieldPresent: ${validation.answerFieldPresent}`,
+			`answerLength: ${validation.answer?.length ?? 0}`,
+			`returnedSourceIds: ${JSON.stringify(validation.returnedSourceIds)}`,
+			`allowedSourceIds: ${JSON.stringify(validation.allowedSourceIds)}`,
+			`rejectedSourceIds: ${JSON.stringify(validation.rejectedSourceIds)}`,
+			`finishReason: ${finishReason}`,
+			`tokensGenerated: ${tokensGenerated}`,
+		].join("\n"),
+	);
+}
+
+export function getLastLocalBrowserValidationReason(): string | null {
+	return lastLocalBrowserValidationReason;
+}
+
 export async function generateLocalBrowserAnswer(options: {
 	question: string;
 	retrieval: BrowserRagAnswer;
 }): Promise<BrowserRagAnswer | null> {
+	lastLocalBrowserValidationReason = null;
 	if (!options.retrieval.context.length) return null;
 	const allowedSources = options.retrieval.sources.slice(
 		0,
@@ -109,8 +137,17 @@ export async function generateLocalBrowserAnswer(options: {
 		generated,
 		allowedSources,
 	});
+	lastLocalBrowserValidationReason = validation.reason;
 	developmentValidationLog(generated, validation);
-	if (!validation.accepted || !validation.answer) return null;
+	if (!validation.accepted || !validation.answer) {
+		const timing = getLocalBrowserModelState().progress;
+		productionValidationWarning(
+			validation,
+			timing?.finishReason ?? "completed",
+			timing?.tokensGenerated ?? 0,
+		);
+		return null;
+	}
 	if (validation.answer === INSUFFICIENT_INFORMATION) {
 		return { ...options.retrieval, answer: validation.answer, sources: [] };
 	}

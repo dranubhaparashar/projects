@@ -1324,6 +1324,7 @@ async function renderLocalAiAction(options: {
 
 	button.addEventListener("click", async () => {
 		customReadyMessage = "";
+		delete controls.dataset.localAiValidationReason;
 		try {
 			await localAi.initializeLocalBrowserModel();
 			await new Promise<void>((resolve) =>
@@ -1334,6 +1335,11 @@ async function renderLocalAiAction(options: {
 				retrieval: options.retrieval,
 			});
 			if (!enhanced) {
+				const validationReason =
+					localAi.getLastLocalBrowserValidationReason?.();
+				if (validationReason) {
+					controls.dataset.localAiValidationReason = validationReason;
+				}
 				customReadyMessage =
 					"The local model did not return a grounded explanation. The grounded portfolio answer remains above.";
 				renderSnapshot(localAi.getLocalBrowserModelState());
