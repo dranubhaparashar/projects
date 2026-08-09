@@ -207,7 +207,8 @@ assert.match(
 	/The local model did not return a grounded explanation\. The grounded portfolio answer remains above\./,
 );
 assert.match(uiSource, /Local AI explanation/);
-assert.match(uiSource, /Evidence used/);
+assert.match(uiSource, /Evidence supplied to local AI/);
+assert.match(uiSource, /hybridScore/);
 
 console.log(
 	JSON.stringify(

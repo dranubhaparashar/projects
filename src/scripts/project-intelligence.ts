@@ -1364,25 +1364,49 @@ async function renderLocalAiAction(options: {
 				"Generated on this device from the grounded portfolio sources above.",
 				"project-intelligence-ai-detail",
 			);
-			const trustedEvidence = enhanced.sources.filter(
-				(source, index, sources) =>
-					sources.findIndex(
-						(candidate) => candidate.source_id === source.source_id,
-					) === index,
-			);
+			const evidenceCandidates = enhanced.sources
+				.map((source, index) => {
+					const matchingHits = enhanced.context.filter(
+						(hit) =>
+							hit.chunk.project_id === source.project_id &&
+							hit.chunk.section === source.section,
+					);
+					return {
+						source,
+						index,
+						score: Math.max(0, ...matchingHits.map((hit) => hit.hybridScore)),
+					};
+				})
+				.sort(
+					(left, right) => right.score - left.score || left.index - right.index,
+				);
+			const seenSourceIds = new Set<string>();
+			const projectCounts = new Map<string, number>();
+			const trustedEvidence: typeof enhanced.sources = [];
+			for (const candidate of evidenceCandidates) {
+				const sourceId = candidate.source.source_id.trim().toUpperCase();
+				if (seenSourceIds.has(sourceId)) continue;
+				const projectCount =
+					projectCounts.get(candidate.source.project_id) ?? 0;
+				if (projectCount >= 2) continue;
+				seenSourceIds.add(sourceId);
+				projectCounts.set(candidate.source.project_id, projectCount + 1);
+				trustedEvidence.push(candidate.source);
+				if (trustedEvidence.length === 4) break;
+			}
 			if (trustedEvidence.length) {
 				const evidenceSection = element(
 					"section",
 					"project-intelligence-local-ai-evidence",
 				);
-				appendText(evidenceSection, "h4", "Evidence used");
+				appendText(evidenceSection, "h4", "Evidence supplied to local AI");
 				const evidenceList = element(
 					"nav",
 					"project-intelligence-sources project-intelligence-local-ai-evidence-list",
 				);
 				evidenceList.setAttribute(
 					"aria-label",
-					"Trusted evidence used by the local AI explanation",
+					"Trusted evidence supplied to the local AI explanation",
 				);
 				for (const source of trustedEvidence) {
 					const chip = element("a");
