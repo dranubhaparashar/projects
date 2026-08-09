@@ -49,7 +49,10 @@ export const BROWSER_LLM_MODEL_ID = LOCAL_AI_MODEL_ID;
 export const BROWSER_LLM_DOWNLOAD_TIMEOUT_MS = 600_000;
 export const BROWSER_LLM_DOWNLOAD_STALL_TIMEOUT_MS = 90_000;
 export const BROWSER_LLM_INITIALIZATION_TIMEOUT_MS = 120_000;
-export const BROWSER_LLM_GENERATION_TIMEOUT_MS = 60_000;
+export const BROWSER_LLM_FIRST_GENERATION_FIRST_TOKEN_TIMEOUT_MS = 180_000;
+export const BROWSER_LLM_SUBSEQUENT_FIRST_TOKEN_TIMEOUT_MS = 90_000;
+export const BROWSER_LLM_TOKEN_INACTIVITY_TIMEOUT_MS = 30_000;
+export const BROWSER_LLM_GENERATION_TIMEOUT_MS = 300_000;
 
 let worker: Worker | null = null;
 let nextRequestId = 1;
@@ -57,6 +60,8 @@ const pending = new Map<number, PendingRequest>();
 const listeners = new Set<LocalLlmListener>();
 let snapshot: BrowserLocalLlmSnapshot = { state: "idle" };
 let initializationPromise: Promise<void> | null = null;
+let activeGenerationRequestId: number | null = null;
+let completedGenerations = 0;
 
 function developmentLog(event: string, detail?: unknown): void {
 	if (!import.meta.env.DEV) return;
@@ -152,6 +157,8 @@ function terminateWorker(
 	}
 	worker?.terminate();
 	worker = null;
+	activeGenerationRequestId = null;
+	completedGenerations = 0;
 	for (const request of pending.values()) request.reject(failure);
 	pending.clear();
 }
@@ -204,6 +211,12 @@ function getWorker(): Worker {
 		pending.delete(message.id);
 		if (message.type === "result") {
 			request.resolve(message.result);
+			return;
+		}
+		if (message.type === "cancelled") {
+			const error = new Error("Local AI explanation generation cancelled");
+			error.name = "AbortError";
+			request.reject(error);
 			return;
 		}
 		const diagnostic = isWorkerDiagnostic(message.diagnostic)
@@ -262,6 +275,7 @@ function requestWorker(
 	timeout?: RequestTimeout,
 ): Promise<unknown> {
 	const id = nextRequestId++;
+	if (type === "generate") activeGenerationRequestId = id;
 	return new Promise((resolve, reject) => {
 		let timeoutId: TimerId | undefined;
 		if (timeout) {
@@ -286,10 +300,12 @@ function requestWorker(
 		pending.set(id, {
 			resolve(value) {
 				clearRequestTimeout();
+				if (activeGenerationRequestId === id) activeGenerationRequestId = null;
 				resolve(value);
 			},
 			reject(error) {
 				clearRequestTimeout();
+				if (activeGenerationRequestId === id) activeGenerationRequestId = null;
 				reject(error);
 			},
 			onProgress,
@@ -415,6 +431,87 @@ function requestModelInitialization(
 	}).finally(clearAllTimers);
 }
 
+function requestGeneration(
+	messages: Array<{
+		role: "system" | "user" | "assistant";
+		content: string;
+	}>,
+	onProgress: (progress: BrowserAiProgress) => void,
+): Promise<unknown> {
+	let firstTokenTimeoutId: TimerId | undefined;
+	let inactivityTimeoutId: TimerId | undefined;
+	let overallTimeoutId: TimerId | undefined;
+	let lastTokenCount = 0;
+	let firstTokenSeen = false;
+
+	const clearTimer = (timerId: TimerId | undefined) => {
+		if (timerId !== undefined) globalThis.clearTimeout(timerId);
+	};
+	const clearAllTimers = () => {
+		clearTimer(firstTokenTimeoutId);
+		clearTimer(inactivityTimeoutId);
+		clearTimer(overallTimeoutId);
+	};
+	const failForTimeout = (reason: string, message: string) => {
+		if (activeGenerationRequestId === null) return;
+		const error = new Error(message);
+		error.name = "TimeoutError";
+		const diagnostic = createLocalAiFailureDiagnostic(
+			"generation",
+			reason,
+			error,
+		);
+		logClientFailure(diagnostic);
+		terminateWorker(new LocalAiDiagnosticError(diagnostic, true), diagnostic);
+	};
+	const resetInactivityTimeout = () => {
+		clearTimer(inactivityTimeoutId);
+		inactivityTimeoutId = globalThis.setTimeout(
+			() =>
+				failForTimeout(
+					"token-inactivity-timeout",
+					"Local AI generation stopped producing tokens for 30 seconds",
+				),
+			BROWSER_LLM_TOKEN_INACTIVITY_TIMEOUT_MS,
+		);
+	};
+
+	firstTokenTimeoutId = globalThis.setTimeout(
+		() =>
+			failForTimeout(
+				"first-token-timeout",
+				"Local AI generation did not produce a first token in time",
+			),
+		completedGenerations === 0
+			? BROWSER_LLM_FIRST_GENERATION_FIRST_TOKEN_TIMEOUT_MS
+			: BROWSER_LLM_SUBSEQUENT_FIRST_TOKEN_TIMEOUT_MS,
+	);
+	overallTimeoutId = globalThis.setTimeout(
+		() =>
+			failForTimeout(
+				"generation-timeout",
+				"Local AI explanation generation exceeded 5 minutes",
+			),
+		BROWSER_LLM_GENERATION_TIMEOUT_MS,
+	);
+
+	return requestWorker("generate", { messages }, (progress) => {
+		const tokens =
+			typeof progress.tokensGenerated === "number"
+				? progress.tokensGenerated
+				: 0;
+		if (tokens > lastTokenCount) {
+			lastTokenCount = tokens;
+			if (!firstTokenSeen) {
+				firstTokenSeen = true;
+				clearTimer(firstTokenTimeoutId);
+			}
+			resetInactivityTimeout();
+		}
+		onProgress(progress);
+	}).finally(clearAllTimers);
+}
+
 async function logModelCacheVerification(): Promise<void> {
 	if (!import.meta.env.DEV) return;
 	if (!("caches" in globalThis)) {
@@ -462,6 +559,23 @@ export function subscribeLocalBrowserModel(
 }
 
 export function cancelLocalBrowserModel(): void {
+	if (snapshot.state === "generating") {
+		if (worker && activeGenerationRequestId !== null) {
+			worker.postMessage({
+				type: "cancel-generation",
+				targetId: activeGenerationRequestId,
+			});
+			setSnapshot({
+				state: "generating",
+				progress: {
+					...snapshot.progress,
+					stage: "generation",
+					status: "cancelling",
+				},
+			});
+		}
+		return;
+	}
 	if (snapshot.state !== "loading") return;
 	const stage =
 		snapshot.progress?.stage === "model-init" ? "model-init" : "download";
@@ -543,27 +657,41 @@ export async function generateInBrowser(
 
 	setSnapshot({
 		state: "generating",
-		progress: { stage: "generation", status: "running" },
+		progress: {
+			stage: "generation",
+			status:
+				completedGenerations === 0 ? "preparing-first-generation" : "running",
+			firstGeneration: completedGenerations === 0,
+			tokensGenerated: 0,
+		},
 	});
 	developmentLog("generation start", { modelId: BROWSER_LLM_MODEL_ID });
 	try {
-		const result = await requestWorker(
-			"generate",
-			{ messages },
-			(progress) => setSnapshot({ state: "generating", progress }),
-			{
-				timeoutMs: BROWSER_LLM_GENERATION_TIMEOUT_MS,
-				message: "Local AI explanation generation timed out",
-				reason: "generation-timeout",
-			},
+		const result = await requestGeneration(messages, (progress) =>
+			setSnapshot({ state: "generating", progress }),
 		);
-		if (typeof result !== "string") {
+		if (
+			!result ||
+			typeof result !== "object" ||
+			typeof (result as { text?: unknown }).text !== "string" ||
+			!(result as { timing?: unknown }).timing ||
+			typeof (result as { timing?: unknown }).timing !== "object"
+		) {
 			throw new Error("Local AI returned an invalid explanation");
 		}
+		const generationResult = result as {
+			text: string;
+			timing: BrowserAiProgress;
+		};
+		completedGenerations += 1;
 		developmentLog("generation complete", { modelId: BROWSER_LLM_MODEL_ID });
-		setSnapshot({ state: "ready" });
-		return result;
+		setSnapshot({ state: "ready", progress: generationResult.timing });
+		return generationResult.text;
 	} catch (error) {
+		if (error instanceof Error && error.name === "AbortError") {
+			setSnapshot({ state: "ready" });
+			throw error;
+		}
 		throw fail(error, "generation", "generation-failure");
 	}
 }

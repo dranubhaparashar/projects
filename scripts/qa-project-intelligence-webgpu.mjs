@@ -172,6 +172,12 @@ async function generateExplanation(answerMessage) {
 					states: tracker.states,
 					downloadDetails: tracker.downloadDetails,
 					cancelVisibility: tracker.cancelVisibility,
+					timing: {
+						firstTokenLatencyMs: Number(node.dataset.generationFirstTokenMs),
+						generationTotalMs: Number(node.dataset.generationTotalMs),
+						tokensGenerated: Number(node.dataset.generationTokens),
+						tokensPerSecond: Number(node.dataset.generationTokensPerSecond),
+					},
 				};
 			});
 		}
@@ -262,11 +268,29 @@ try {
 		for (const expectedStatus of [
 			"Initializing WebGPU…",
 			"Local AI ready",
-			"Generating explanation…",
+			"Preparing WebGPU for first generation…",
 		]) {
 			if (!firstGeneration.statuses.includes(expectedStatus)) {
 				throw new Error(`Missing local-AI progress state: ${expectedStatus}`);
 			}
+		}
+		if (
+			!firstGeneration.statuses.some((status) =>
+				/^Generating deeper explanation… \d+ tokens?$/.test(status),
+			)
+		) {
+			throw new Error("First generation never exposed streamed token progress");
+		}
+		if (
+			firstGeneration.timing.tokensGenerated < 1 ||
+			firstGeneration.timing.tokensGenerated > 96 ||
+			firstGeneration.timing.firstTokenLatencyMs <= 0 ||
+			firstGeneration.timing.generationTotalMs <= 0 ||
+			firstGeneration.timing.tokensPerSecond <= 0
+		) {
+			throw new Error(
+				`Invalid first-generation timing: ${JSON.stringify(firstGeneration.timing)}`,
+			);
 		}
 		const showedRealPercentage = firstGeneration.statuses.some((status) =>
 			/^Downloading local AI model — \d+%$/.test(status),
@@ -292,6 +316,17 @@ try {
 		const qwenAfterSecondGeneration = qwenRequests().length;
 		if (qwenAfterSecondGeneration !== qwenAfterFirstGeneration) {
 			throw new Error("The second explanation downloaded Qwen again");
+		}
+		if (
+			secondGeneration.timing.tokensGenerated < 1 ||
+			secondGeneration.timing.tokensGenerated > 96 ||
+			secondGeneration.timing.firstTokenLatencyMs <= 0 ||
+			secondGeneration.timing.generationTotalMs <= 0 ||
+			secondGeneration.timing.tokensPerSecond <= 0
+		) {
+			throw new Error(
+				`Invalid second-generation timing: ${JSON.stringify(secondGeneration.timing)}`,
+			);
 		}
 
 		const workerUrls = await page.evaluate(

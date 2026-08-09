@@ -1169,6 +1169,34 @@ function localModelDownloadedBytes(progress?: BrowserAiProgress): string {
 	return `Downloaded ${formatMegabytes(progress.loaded)} MB`;
 }
 
+function localGenerationDetail(progress?: BrowserAiProgress): string {
+	if (
+		!progress ||
+		progress.stage !== "generation" ||
+		progress.status !== "complete"
+	) {
+		return "";
+	}
+	const parts: string[] = [];
+	if (typeof progress.tokensGenerated === "number") {
+		parts.push(
+			`Generated ${progress.tokensGenerated} token${progress.tokensGenerated === 1 ? "" : "s"}`,
+		);
+	}
+	if (typeof progress.generationTotalMs === "number") {
+		parts.push(`total ${(progress.generationTotalMs / 1_000).toFixed(1)}s`);
+	}
+	if (typeof progress.firstTokenLatencyMs === "number") {
+		parts.push(
+			`first token ${(progress.firstTokenLatencyMs / 1_000).toFixed(1)}s`,
+		);
+	}
+	if (typeof progress.tokensPerSecond === "number") {
+		parts.push(`${progress.tokensPerSecond.toFixed(2)} tokens/sec`);
+	}
+	return parts.join(" · ");
+}
+
 function localModelStatus(snapshot: BrowserLocalLlmSnapshot): string {
 	if (snapshot.state === "loading") {
 		if (snapshot.progress?.stage === "model-init") {
@@ -1180,7 +1208,22 @@ function localModelStatus(snapshot: BrowserLocalLlmSnapshot): string {
 			: `Downloading local AI model — ${percentage}%`;
 	}
 	if (snapshot.state === "ready") return "Local AI ready";
-	if (snapshot.state === "generating") return "Generating explanation…";
+	if (snapshot.state === "generating") {
+		if (snapshot.progress?.status === "cancelling") {
+			return "Cancelling generation…";
+		}
+		if (
+			typeof snapshot.progress?.tokensGenerated === "number" &&
+			snapshot.progress.tokensGenerated > 0
+		) {
+			const tokens = snapshot.progress.tokensGenerated;
+			return `Generating deeper explanation… ${tokens} token${tokens === 1 ? "" : "s"}`;
+		}
+		if (snapshot.progress?.firstGeneration) {
+			return "Preparing WebGPU for first generation…";
+		}
+		return "Generating deeper explanation…";
+	}
 	if (snapshot.state === "failed") return LOCAL_AI_FAILURE_NOTICE;
 	return "";
 }
@@ -1239,19 +1282,37 @@ async function renderLocalAiAction(options: {
 			snapshot.state === "loading" ||
 			snapshot.state === "generating" ||
 			snapshot.state === "failed";
-		cancelButton.hidden = snapshot.state !== "loading";
+		cancelButton.hidden = !["loading", "generating"].includes(snapshot.state);
+		cancelButton.disabled = snapshot.progress?.status === "cancelling";
 		const value =
 			snapshot.state === "ready" && customReadyMessage
 				? customReadyMessage
 				: localModelStatus(snapshot);
 		status.textContent = value;
 		status.hidden = !value;
-		const downloaded =
+		const detail =
 			snapshot.state === "loading"
 				? localModelDownloadedBytes(snapshot.progress)
-				: "";
-		downloadDetail.textContent = downloaded;
-		downloadDetail.hidden = !downloaded;
+				: localGenerationDetail(snapshot.progress);
+		downloadDetail.textContent = detail;
+		downloadDetail.hidden = !detail;
+		if (
+			snapshot.progress?.stage === "generation" &&
+			snapshot.progress.status === "complete"
+		) {
+			controls.dataset.generationFirstTokenMs = String(
+				snapshot.progress.firstTokenLatencyMs ?? "",
+			);
+			controls.dataset.generationTotalMs = String(
+				snapshot.progress.generationTotalMs ?? "",
+			);
+			controls.dataset.generationTokens = String(
+				snapshot.progress.tokensGenerated ?? "",
+			);
+			controls.dataset.generationTokensPerSecond = String(
+				snapshot.progress.tokensPerSecond ?? "",
+			);
+		}
 	};
 	const unsubscribe = localAi.subscribeLocalBrowserModel(renderSnapshot);
 	options.lifecycleSignal.addEventListener("abort", unsubscribe, {
@@ -1301,9 +1362,11 @@ async function renderLocalAiAction(options: {
 			customReadyMessage = "";
 			renderSnapshot(localAi.getLocalBrowserModelState());
 			options.onComplete?.();
-		} catch {
+		} catch (error) {
 			const snapshot = localAi.getLocalBrowserModelState();
-			if (snapshot.state !== "failed") {
+			if (error instanceof Error && error.name === "AbortError") {
+				customReadyMessage = "Generation cancelled. Local AI remains ready.";
+			} else if (snapshot.state !== "failed") {
 				customReadyMessage =
 					"The local explanation was unavailable. The grounded portfolio answer remains above.";
 			}

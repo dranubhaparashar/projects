@@ -18,6 +18,15 @@ export interface BrowserAiProgress {
 	totalKnown?: boolean;
 	name?: string;
 	file?: string;
+	firstGeneration?: boolean;
+	tokensGenerated?: number;
+	modelInitializedAt?: string;
+	generationStartedAt?: string;
+	firstTokenAt?: string;
+	generationCompletedAt?: string;
+	firstTokenLatencyMs?: number;
+	generationTotalMs?: number;
+	tokensPerSecond?: number;
 }
 
 export type BrowserLocalLlmState =

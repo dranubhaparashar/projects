@@ -1,6 +1,12 @@
 /// <reference lib="webworker" />
 
-import { env, pipeline } from "@huggingface/transformers";
+import {
+	env,
+	InterruptableStoppingCriteria,
+	pipeline,
+	StoppingCriteriaList,
+	TextStreamer,
+} from "@huggingface/transformers";
 import type { BrowserAiProgress } from "./browser-ai-types";
 import {
 	createLocalAiFailureDiagnostic,
@@ -18,6 +24,7 @@ env.useBrowserCache = true;
 
 type WorkerRequest =
 	| { id: number; type: "initialize" }
+	| { targetId: number; type: "cancel-generation" }
 	| {
 			id: number;
 			type: "generate";
@@ -42,6 +49,11 @@ const activeDownloads = new Set<string>();
 const downloadProgressByFile = new Map<string, DownloadFileProgress>();
 let modelArtifactDownloaded = false;
 let modelInitStagePosted = false;
+let modelInitializedAt = "";
+let completedGenerations = 0;
+let activeGeneration:
+	| { id: number; stoppingCriteria: InterruptableStoppingCriteria }
+	| undefined;
 
 function developmentLog(event: string, detail?: unknown): void {
 	if (!import.meta.env.DEV) return;
@@ -50,6 +62,11 @@ function developmentLog(event: string, detail?: unknown): void {
 		return;
 	}
 	console.info(`[Project Intelligence local AI worker] ${event}`, detail);
+}
+
+function developmentTimingLog(lines: string[]): void {
+	if (!import.meta.env.DEV) return;
+	console.info(["[Project Intelligence Local AI]", ...lines].join("\n"));
 }
 
 function postProgress(id: number, progress: BrowserAiProgress): void {
@@ -226,8 +243,10 @@ async function createGenerationPipeline(id: number) {
 	});
 	postModelInitStage(id);
 	requestStages.set(id, "model-init");
+	modelInitializedAt = new Date().toISOString();
 	developmentLog("model initialization complete", {
 		modelId: LOCAL_AI_MODEL_ID,
+		modelInitializedAt,
 	});
 	return generator;
 }
@@ -258,6 +277,12 @@ function generatedText(value: unknown): string {
 
 self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 	const request = event.data;
+	if (request.type === "cancel-generation") {
+		if (activeGeneration?.id === request.targetId) {
+			activeGeneration.stoppingCriteria.interrupt();
+		}
+		return;
+	}
 	requestStages.set(
 		request.id,
 		request.type === "generate" ? "generation" : "download",
@@ -274,20 +299,111 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 		}
 		const generator = await generationPipelinePromise;
 		requestStages.set(request.id, "generation");
-		developmentLog("generation start", { modelId: LOCAL_AI_MODEL_ID });
-		postProgress(request.id, { stage: "generation", status: "running" });
-		const result = await generator(request.messages, {
-			max_new_tokens: 240,
-			do_sample: false,
-			repetition_penalty: 1.05,
-			return_full_text: false,
+		const firstGeneration = completedGenerations === 0;
+		const generationStartedAt = new Date().toISOString();
+		const generationStart = performance.now();
+		let firstTokenAt = "";
+		let firstTokenTime: number | undefined;
+		let tokensGenerated = 0;
+		const stoppingCriteria = new InterruptableStoppingCriteria();
+		const stoppingCriteriaList = new StoppingCriteriaList();
+		stoppingCriteriaList.push(stoppingCriteria);
+		activeGeneration = { id: request.id, stoppingCriteria };
+		developmentTimingLog([
+			"generation start",
+			`model initialized at: ${modelInitializedAt}`,
+			`generation started at: ${generationStartedAt}`,
+		]);
+		postProgress(request.id, {
+			stage: "generation",
+			status: firstGeneration ? "preparing-first-generation" : "running",
+			firstGeneration,
+			modelInitializedAt,
+			generationStartedAt,
+			tokensGenerated,
 		});
-		developmentLog("generation complete", { modelId: LOCAL_AI_MODEL_ID });
-		self.postMessage({
-			id: request.id,
-			type: "result",
-			result: generatedText(result),
+		const streamer = new TextStreamer(generator.tokenizer, {
+			skip_prompt: true,
+			callback_function: () => {},
+			token_callback_function: (tokens) => {
+				tokensGenerated += tokens.length;
+				if (firstTokenTime === undefined) {
+					firstTokenTime = performance.now();
+					firstTokenAt = new Date().toISOString();
+					developmentTimingLog([
+						`first-token latency: ${(
+							(firstTokenTime - generationStart) / 1_000
+						).toFixed(2)} seconds`,
+						`first token at: ${firstTokenAt}`,
+					]);
+				}
+				postProgress(request.id, {
+					stage: "generation",
+					status: "tokens",
+					firstGeneration,
+					modelInitializedAt,
+					generationStartedAt,
+					firstTokenAt,
+					firstTokenLatencyMs: firstTokenTime - generationStart,
+					tokensGenerated,
+				});
+			},
 		});
+		try {
+			const result = await generator(request.messages, {
+				max_new_tokens: 96,
+				do_sample: false,
+				return_full_text: false,
+				streamer,
+				// The pipeline forwards this supported model.generate() option, but
+				// Transformers.js 3.8.1 omits it from TextGenerationConfig's types.
+				// @ts-expect-error stopping_criteria is a supported generation option
+				stopping_criteria: stoppingCriteriaList,
+			});
+			if (stoppingCriteria.interrupted) {
+				self.postMessage({ id: request.id, type: "cancelled" });
+				return;
+			}
+			const generationCompletedAt = new Date().toISOString();
+			const generationComplete = performance.now();
+			const generationTotalMs = generationComplete - generationStart;
+			const tokenGenerationMs = Math.max(
+				generationComplete - (firstTokenTime ?? generationStart),
+				1,
+			);
+			const tokensPerSecond = (tokensGenerated * 1_000) / tokenGenerationMs;
+			completedGenerations += 1;
+			const timing: BrowserAiProgress = {
+				stage: "generation",
+				status: "complete",
+				firstGeneration,
+				modelInitializedAt,
+				generationStartedAt,
+				firstTokenAt: firstTokenAt || undefined,
+				generationCompletedAt,
+				firstTokenLatencyMs:
+					firstTokenTime === undefined
+						? undefined
+						: firstTokenTime - generationStart,
+				generationTotalMs,
+				tokensGenerated,
+				tokensPerSecond,
+			};
+			developmentTimingLog([
+				`generation completed at: ${generationCompletedAt}`,
+				`tokens generated: ${tokensGenerated}`,
+				`generation speed: ${tokensPerSecond.toFixed(2)} tokens/sec`,
+				`generation total: ${(generationTotalMs / 1_000).toFixed(2)} seconds`,
+			]);
+			postProgress(request.id, timing);
+			self.postMessage({
+				id: request.id,
+				type: "result",
+				result: { text: generatedText(result), timing },
+			});
+		} finally {
+			if (activeGeneration?.id === request.id) activeGeneration = undefined;
+		}
 	} catch (error) {
 		const stage = classifyFailureStage(
 			error,
