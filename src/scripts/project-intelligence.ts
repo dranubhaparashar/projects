@@ -8,6 +8,8 @@ import type {
 	BrowserAiProgress,
 	BrowserAssetUrls,
 	BrowserHybridHit,
+	BrowserLocalLlmSnapshot,
+	BrowserRagAnswer,
 } from "./project-intelligence/browser-ai-types";
 
 export interface ProjectIntelligenceController {
@@ -15,6 +17,10 @@ export interface ProjectIntelligenceController {
 	ask: (question: string, projectSlug?: string) => void;
 	destroy: () => void;
 }
+
+const PANEL_TRANSITION_MS = 200;
+let activeProjectIntelligenceController: ProjectIntelligenceController | null =
+	null;
 
 export interface RankedProject {
 	project: PortfolioKnowledgeProject;
@@ -91,6 +97,8 @@ const NO_MATCH =
 	"I could not find a matching project in the published portfolio.";
 const PORTFOLIO_REDIRECT =
 	"This assistant answers questions about Anubha\u2019s published projects, technologies and research. Try asking which projects use computer vision, Snowflake or Generative AI.";
+const LOCAL_AI_FAILURE_NOTICE =
+	"Local AI could not start on this device. The grounded portfolio answer is still available.";
 
 const GENERIC_TERMS = new Set([
 	"ai",
@@ -1110,6 +1118,147 @@ function appendAiDetail(message: HTMLElement, value: string): void {
 	appendText(message, "p", value, "project-intelligence-ai-detail");
 }
 
+function localModelDownloadPercentage(
+	progress?: BrowserAiProgress,
+): number | null {
+	if (!progress || progress.stage !== "llm-model") return null;
+	if (
+		progress.status === "progress" &&
+		typeof progress.progress === "number" &&
+		Number.isFinite(progress.progress)
+	) {
+		return Math.round(Math.min(Math.max(progress.progress, 0), 100));
+	}
+	if (
+		progress.status === "progress" &&
+		typeof progress.loaded === "number" &&
+		typeof progress.total === "number" &&
+		progress.total > 0
+	) {
+		return Math.round(
+			Math.min(Math.max((progress.loaded / progress.total) * 100, 0), 100),
+		);
+	}
+	return null;
+}
+
+function localModelStatus(snapshot: BrowserLocalLlmSnapshot): string {
+	if (snapshot.state === "loading") {
+		const percentage = localModelDownloadPercentage(snapshot.progress);
+		return percentage === null
+			? "Initializing WebGPU…"
+			: `Downloading local AI model — ${percentage}%`;
+	}
+	if (snapshot.state === "ready") return "Local AI ready";
+	if (snapshot.state === "generating") return "Generating explanation…";
+	if (snapshot.state === "failed") return LOCAL_AI_FAILURE_NOTICE;
+	return "";
+}
+
+async function renderLocalAiAction(options: {
+	message: HTMLElement;
+	question: string;
+	retrieval: BrowserRagAnswer;
+	lifecycleSignal: AbortSignal;
+	onComplete?: () => void;
+}): Promise<void> {
+	const localAi = await import("./project-intelligence/browser-llm");
+	const controls = element("section", "project-intelligence-local-ai");
+	controls.setAttribute("aria-label", "Optional local AI explanation");
+	const modelName = localAi.BROWSER_LLM_MODEL.split("/").at(-1);
+	const diagnostic = appendText(
+		controls,
+		"p",
+		`Local model: ${modelName} · ${localAi.BROWSER_LLM_DTYPE} · ${localAi.BROWSER_LLM_DEVICE}`,
+		"project-intelligence-local-ai-model",
+	);
+	const button = element("button", "project-intelligence-local-ai-button");
+	button.type = "button";
+	button.dataset.projectIntelligenceLocalAi = "";
+	button.textContent = "Generate deeper local AI explanation";
+	const status = appendText(
+		controls,
+		"p",
+		"",
+		"project-intelligence-local-ai-status",
+	);
+	status.setAttribute("aria-live", "polite");
+	controls.prepend(diagnostic, button);
+	options.message.append(controls);
+
+	let completed = false;
+	let customReadyMessage = "";
+	const renderSnapshot = (snapshot: BrowserLocalLlmSnapshot) => {
+		controls.dataset.localAiState = snapshot.state;
+		button.disabled =
+			completed ||
+			snapshot.state === "loading" ||
+			snapshot.state === "generating" ||
+			snapshot.state === "failed";
+		button.hidden = completed || snapshot.state === "failed";
+		const value =
+			snapshot.state === "ready" && customReadyMessage
+				? customReadyMessage
+				: localModelStatus(snapshot);
+		status.textContent = value;
+		status.hidden = !value;
+	};
+	const unsubscribe = localAi.subscribeLocalBrowserModel(renderSnapshot);
+	options.lifecycleSignal.addEventListener("abort", unsubscribe, {
+		once: true,
+	});
+
+	button.addEventListener("click", async () => {
+		customReadyMessage = "";
+		try {
+			await localAi.initializeLocalBrowserModel();
+			await new Promise<void>((resolve) =>
+				window.requestAnimationFrame(() => resolve()),
+			);
+			const enhanced = await localAi.generateLocalBrowserAnswer({
+				question: options.question,
+				retrieval: options.retrieval,
+			});
+			if (!enhanced) {
+				customReadyMessage =
+					"The local model did not return a grounded explanation. The grounded portfolio answer remains above.";
+				renderSnapshot(localAi.getLocalBrowserModelState());
+				return;
+			}
+
+			completed = true;
+			const explanation = element(
+				"section",
+				"project-intelligence-local-ai-explanation",
+			);
+			appendText(explanation, "h3", "Deeper local AI explanation");
+			appendText(
+				explanation,
+				"p",
+				enhanced.answer,
+				"project-intelligence-local-ai-answer",
+			);
+			appendText(
+				explanation,
+				"p",
+				"Generated on this device from the grounded portfolio sources above.",
+				"project-intelligence-ai-detail",
+			);
+			controls.before(explanation);
+			customReadyMessage = "";
+			renderSnapshot(localAi.getLocalBrowserModelState());
+			options.onComplete?.();
+		} catch {
+			const snapshot = localAi.getLocalBrowserModelState();
+			if (snapshot.state !== "failed") {
+				customReadyMessage =
+					"The local explanation was unavailable. The grounded portfolio answer remains above.";
+			}
+			renderSnapshot(snapshot);
+		}
+	});
+}
+
 function progressLabel(prefix: string, progress: BrowserAiProgress): string {
 	const percentage = progress.progress;
 	if (typeof percentage === "number" && Number.isFinite(percentage)) {
@@ -1207,6 +1356,7 @@ function renderUserMessage(container: HTMLElement, query: string): void {
 export function mountProjectIntelligence(
 	root: HTMLElement,
 ): ProjectIntelligenceController {
+	activeProjectIntelligenceController?.destroy();
 	const trigger = root.querySelector<HTMLButtonElement>(
 		"[data-project-intelligence-trigger]",
 	);
@@ -1240,6 +1390,8 @@ export function mountProjectIntelligence(
 		),
 	];
 	const abortController = new AbortController();
+	let destroyed = false;
+	let closeTimer: number | null = null;
 	const state: ConversationState = { lastProjectIds: [], turns: [] };
 	let activeProjectSlug = root.dataset.currentProjectSlug || "";
 	let previouslyFocused: HTMLElement | null = null;
@@ -1250,6 +1402,12 @@ export function mountProjectIntelligence(
 		vectorMetadata: root.dataset.browserVectorMetadataUrl || "",
 		vectors: root.dataset.browserVectorsUrl || "",
 	};
+	if (layer) {
+		// Escape the transformed, overflow-clipped Swup grid so fixed positioning
+		// and the overlay z-index are relative to the viewport.
+		layer.dataset.projectIntelligencePortal = "";
+		document.body.append(layer);
+	}
 
 	const loadIndex = () => {
 		if (!indexPromise) {
@@ -1266,26 +1424,53 @@ export function mountProjectIntelligence(
 		return indexPromise;
 	};
 
-	const close = () => {
-		if (!layer || !dialog || layer.hidden) return;
-		activeAiOperation?.abort();
-		layer.hidden = true;
+	const close = (options: { immediate?: boolean } = {}) => {
+		if (!layer || !dialog) return;
+		const wasOpen = layer.dataset.open === "true";
+		if (wasOpen) activeAiOperation?.abort();
+		layer.dataset.open = "false";
+		root.dataset.open = "false";
+		layer.setAttribute("aria-hidden", "true");
+		layer.inert = true;
 		dialog.setAttribute("aria-hidden", "true");
 		trigger?.setAttribute("aria-expanded", "false");
 		document.documentElement.classList.remove("project-intelligence-open");
-		previouslyFocused?.focus({ preventScroll: true });
+		if (closeTimer !== null) window.clearTimeout(closeTimer);
+		if (options.immediate || layer.hidden) {
+			layer.hidden = true;
+			closeTimer = null;
+		} else {
+			closeTimer = window.setTimeout(() => {
+				if (layer.dataset.open !== "true") layer.hidden = true;
+				closeTimer = null;
+			}, PANEL_TRANSITION_MS);
+		}
+		if (wasOpen && previouslyFocused?.isConnected) {
+			previouslyFocused.focus({ preventScroll: true });
+		}
 	};
 
 	const open = () => {
-		if (!layer || !dialog) return;
+		if (!layer || !dialog || destroyed) return;
+		if (closeTimer !== null) {
+			window.clearTimeout(closeTimer);
+			closeTimer = null;
+		}
 		previouslyFocused =
 			document.activeElement instanceof HTMLElement
 				? document.activeElement
 				: trigger;
 		layer.hidden = false;
+		layer.dataset.open = "false";
+		root.dataset.open = "false";
+		layer.setAttribute("aria-hidden", "false");
+		layer.inert = false;
 		dialog.setAttribute("aria-hidden", "false");
 		trigger?.setAttribute("aria-expanded", "true");
 		document.documentElement.classList.add("project-intelligence-open");
+		void layer.offsetWidth;
+		layer.dataset.open = "true";
+		root.dataset.open = "true";
 		void loadIndex();
 		input?.focus({ preventScroll: true });
 	};
@@ -1430,7 +1615,7 @@ export function mountProjectIntelligence(
 				}
 				semanticStatus.element.remove();
 				quickMessage.remove();
-				let ragMessage = renderRagAnswer(
+				const ragMessage = renderRagAnswer(
 					messages,
 					browserAnswer,
 					"Browser-local RAG",
@@ -1447,50 +1632,18 @@ export function mountProjectIntelligence(
 					return;
 				}
 
-				const llmStatus = renderAiStatus(
-					messages,
-					"Loading local AI model for the first answer…",
-					() => operation.abort(),
-				);
 				try {
-					const { generateLocalBrowserAnswer } = await import(
-						"./project-intelligence/browser-llm"
-					);
-					const enhanced = await generateLocalBrowserAnswer({
+					await renderLocalAiAction({
+						message: ragMessage,
 						question: query,
 						retrieval: browserAnswer,
-						signal: operation.signal,
-						onProgress: (progress) => {
-							llmStatus.setStatus(
-								progressLabel(
-									"Loading local AI model for the first answer…",
-									progress,
-								),
-							);
+						lifecycleSignal: abortController.signal,
+						onComplete: () => {
+							if (live) live.textContent = "Local AI explanation ready.";
 						},
 					});
-					llmStatus.element.remove();
-					if (enhanced && !operation.signal.aborted) {
-						ragMessage.remove();
-						ragMessage = renderRagAnswer(
-							messages,
-							enhanced,
-							"Browser-local AI",
-						);
-						appendAiDetail(
-							ragMessage,
-							"Inference ran in this browser; source links were mapped from trusted portfolio metadata.",
-						);
-						rememberRagAnswer(enhanced);
-					}
 				} catch {
-					llmStatus.element.remove();
-					if (!operation.signal.aborted) {
-						appendAiDetail(
-							ragMessage,
-							"Local generation was unavailable; the grounded hybrid retrieval answer is shown.",
-						);
-					}
+					appendAiDetail(ragMessage, LOCAL_AI_FAILURE_NOTICE);
 				}
 				return;
 			} catch {
@@ -1530,7 +1683,7 @@ export function mountProjectIntelligence(
 	};
 
 	for (const button of closeButtons) {
-		button.addEventListener("click", close, {
+		button.addEventListener("click", () => close(), {
 			signal: abortController.signal,
 		});
 	}
@@ -1588,7 +1741,7 @@ export function mountProjectIntelligence(
 		{ signal: abortController.signal },
 	);
 
-	return {
+	const controller: ProjectIntelligenceController = {
 		open,
 		ask(question: string, projectSlug = "") {
 			activeProjectSlug = projectSlug || root.dataset.currentProjectSlug || "";
@@ -1596,9 +1749,17 @@ export function mountProjectIntelligence(
 			void submitQuestion(question);
 		},
 		destroy() {
+			if (destroyed) return;
 			activeAiOperation?.abort();
+			close({ immediate: true });
+			destroyed = true;
 			abortController.abort();
-			if (layer && !layer.hidden) close();
+			layer?.remove();
+			if (activeProjectIntelligenceController === controller) {
+				activeProjectIntelligenceController = null;
+			}
 		},
 	};
+	activeProjectIntelligenceController = controller;
+	return controller;
 }

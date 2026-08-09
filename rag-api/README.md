@@ -16,14 +16,16 @@ GitHub Pages /projects/
         |
         +-- existing lexical retrieval
         +-- Xenova/bge-small-en-v1.5 query embedding (browser WASM)
-        +-- direct normalized dot-product search + hybrid ranking
-        `-- Qwen2.5-0.5B-Instruct q4f16 (browser WebGPU, when capable)
+        `-- direct normalized dot-product search + hybrid ranking
                 |
                 v
         Grounded answer + TypeScript-mapped trusted sources
+                |
+                `-- optional visitor-triggered Qwen2.5-0.5B-Instruct q4 explanation
+                    (browser WebGPU, when capable)
 ```
 
-The default requires no API key, paid API, Python runtime, server adapter, vector database, or external inference service. Open model files are fetched from Hugging Face on first use and cached through the inference runtime; the question itself is not sent to a hosted inference API. The normal portfolio page dynamically imports Project Intelligence and does not initialize either model on page load.
+The default requires no API key, paid API, Python runtime, server adapter, vector database, or external inference service. The browser RAG answer does not load Qwen. Open model files are fetched from Hugging Face only after the visitor selects **Generate deeper local AI explanation**, cached through the inference runtime, and reused by one worker for the page session; the question itself is not sent to a hosted inference API. The normal portfolio page dynamically imports Project Intelligence and does not initialize either model on page load.
 
 Browser embedding details:
 
@@ -37,10 +39,12 @@ Optional browser generation details:
 
 - runtime: `@huggingface/transformers` 3.8.1
 - model: `onnx-community/Qwen2.5-0.5B-Instruct`
-- quantization: `q4f16`
+- quantization: `q4`
 - license: Apache-2.0
 - approximate model file download: 483 MB
 - enabled only on non-mobile, non-low-memory devices with WebGPU and `shader-f16`
+- initialization timeout: 120 seconds
+- generation timeout: 60 seconds
 
 If WebGPU is missing or generation fails, browser hybrid retrieval still returns a sourced deterministic answer. If browser embedding also fails, the original quick lexical Project Intelligence answer remains available.
 

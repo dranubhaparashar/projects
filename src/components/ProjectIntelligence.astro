@@ -31,6 +31,7 @@ const suggestions = currentProjectSlug
 ---
 
 <project-intelligence
+	data-open="false"
 	data-index-url={url("/project-intelligence-index.json")}
 	data-browser-chunks-url={url("/project-intelligence/project-chunks.json")}
 	data-browser-vector-metadata-url={url("/project-intelligence/project-vector-metadata.json")}
@@ -49,7 +50,14 @@ const suggestions = currentProjectSlug
 		<span>Ask about my projects</span>
 	</button>
 
-	<div class="project-intelligence-layer" data-project-intelligence-layer hidden>
+	<div
+		class="project-intelligence-layer"
+		data-project-intelligence-layer
+		data-open="false"
+		aria-hidden="true"
+		inert
+		hidden
+	>
 		<button
 			type="button"
 			class="project-intelligence-backdrop"
@@ -135,7 +143,7 @@ const suggestions = currentProjectSlug
 				</div>
 				<p id="project-intelligence-grounding-note">Answers use published portfolio content only.</p>
 				<p id="project-intelligence-local-note" class="project-intelligence-local-note">
-					AI answers run locally in your browser. The first use may download an open model; later uses are cached. Questions are not sent to an inference service unless an optional self-hosted portfolio API is configured.
+					Grounded portfolio answers run in your browser. An optional deeper explanation downloads the local AI model only when you request it, then reuses it for this page session. Questions are not sent to an inference service unless an optional self-hosted portfolio API is configured.
 				</p>
 			</form>
 		</section>
@@ -144,24 +152,38 @@ const suggestions = currentProjectSlug
 </project-intelligence>
 
 <script>
+	type ProjectIntelligenceController = {
+		open: () => void;
+		ask: (question: string, projectSlug?: string) => void;
+		destroy: () => void;
+	};
+
 	class ProjectIntelligenceElement extends HTMLElement {
-		controller?: {
-			open: () => void;
-			ask: (question: string, projectSlug?: string) => void;
-			destroy: () => void;
-		};
+		controller?: ProjectIntelligenceController;
+		controllerPromise?: Promise<ProjectIntelligenceController | undefined>;
 		trigger?: HTMLButtonElement;
+		isBound = false;
+		ensureController = async () => {
+			if (this.controller) return this.controller;
+			if (!this.controllerPromise) {
+				this.controllerPromise = import("../scripts/project-intelligence")
+					.then(({ mountProjectIntelligence }) => {
+						if (!this.isConnected) return undefined;
+						this.controller ||= mountProjectIntelligence(this);
+						return this.controller;
+					})
+					.finally(() => {
+						this.controllerPromise = undefined;
+					});
+			}
+			return this.controllerPromise;
+		};
 		handleOpen = async () => {
 			if (!this.trigger) return;
 			this.trigger.setAttribute("aria-busy", "true");
 			try {
-				if (!this.controller) {
-					const { mountProjectIntelligence } = await import(
-						"../scripts/project-intelligence"
-					);
-					this.controller = mountProjectIntelligence(this);
-				}
-				this.controller?.open();
+				const controller = await this.ensureController();
+				controller?.open();
 			} finally {
 				this.trigger.removeAttribute("aria-busy");
 			}
@@ -169,13 +191,8 @@ const suggestions = currentProjectSlug
 		handleContextualAsk = async (event: Event) => {
 			const detail = (event as CustomEvent<{ question?: string; slug?: string }>).detail;
 			if (!detail?.question) return;
-			if (!this.controller) {
-				const { mountProjectIntelligence } = await import(
-					"../scripts/project-intelligence"
-				);
-				this.controller = mountProjectIntelligence(this);
-			}
-			this.controller.ask(detail.question, detail.slug || "");
+			const controller = await this.ensureController();
+			controller?.ask(detail.question, detail.slug || "");
 		};
 
 		storeRecentProject() {
@@ -198,6 +215,8 @@ const suggestions = currentProjectSlug
 		}
 
 		connectedCallback() {
+			if (this.isBound) return;
+			this.isBound = true;
 			this.trigger = this.querySelector<HTMLButtonElement>(
 				"[data-project-intelligence-trigger]",
 			) || undefined;
@@ -207,6 +226,8 @@ const suggestions = currentProjectSlug
 		}
 
 		disconnectedCallback() {
+			if (!this.isBound) return;
+			this.isBound = false;
 			this.trigger?.removeEventListener("click", this.handleOpen);
 			document.removeEventListener("project-intelligence:ask", this.handleContextualAsk);
 			this.controller?.destroy();

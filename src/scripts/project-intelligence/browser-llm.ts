@@ -1,15 +1,27 @@
-import { generateInBrowser } from "./browser-ai-client";
-import type {
-	BrowserAiProgress,
-	BrowserRagAnswer,
-	BrowserRagSource,
-} from "./browser-ai-types";
+import type { BrowserRagAnswer, BrowserRagSource } from "./browser-ai-types";
+import {
+	BROWSER_LLM_GENERATION_TIMEOUT_MS,
+	BROWSER_LLM_INITIALIZATION_TIMEOUT_MS,
+	BROWSER_LLM_MODEL_ID,
+	generateInBrowser,
+	getLocalBrowserModelState,
+	initializeLocalBrowserModel,
+	subscribeLocalBrowserModel,
+} from "./browser-llm-client";
 
 export const BROWSER_LLM_RUNTIME = "@huggingface/transformers 3.8.1";
-export const BROWSER_LLM_MODEL = "onnx-community/Qwen2.5-0.5B-Instruct";
-export const BROWSER_LLM_DTYPE = "q4f16";
+export const BROWSER_LLM_MODEL = BROWSER_LLM_MODEL_ID;
+export const BROWSER_LLM_DTYPE = "q4";
+export const BROWSER_LLM_DEVICE = "WebGPU";
 export const BROWSER_LLM_LICENSE = "Apache-2.0";
 export const BROWSER_LLM_APPROX_DOWNLOAD_MB = 483;
+export {
+	BROWSER_LLM_GENERATION_TIMEOUT_MS,
+	BROWSER_LLM_INITIALIZATION_TIMEOUT_MS,
+	getLocalBrowserModelState,
+	initializeLocalBrowserModel,
+	subscribeLocalBrowserModel,
+};
 
 const INSUFFICIENT_INFORMATION =
 	"The published portfolio does not provide enough information to confirm that.";
@@ -65,8 +77,6 @@ function trustedSources(
 export async function generateLocalBrowserAnswer(options: {
 	question: string;
 	retrieval: BrowserRagAnswer;
-	onProgress?: (progress: BrowserAiProgress) => void;
-	signal?: AbortSignal;
 }): Promise<BrowserRagAnswer | null> {
 	if (!options.retrieval.context.length) return null;
 	const evidence = options.retrieval.context
@@ -85,14 +95,10 @@ export async function generateLocalBrowserAnswer(options: {
 		"Do not produce URLs or Markdown links.",
 	].join(" ");
 	const user = `Question: ${options.question}\n\nPublished evidence:\n${evidence}`;
-	const generated = await generateInBrowser(
-		[
-			{ role: "system", content: system },
-			{ role: "user", content: user },
-		],
-		options.onProgress,
-		options.signal,
-	);
+	const generated = await generateInBrowser([
+		{ role: "system", content: system },
+		{ role: "user", content: user },
+	]);
 	const parsed = parseGeneratedJson(generated);
 	if (
 		!parsed ||

@@ -10,6 +10,21 @@ export interface BrowserAiProgress {
 	progress?: number;
 	loaded?: number;
 	total?: number;
+	name?: string;
+	file?: string;
+}
+
+export type BrowserLocalLlmState =
+	| "idle"
+	| "loading"
+	| "ready"
+	| "generating"
+	| "failed";
+
+export interface BrowserLocalLlmSnapshot {
+	state: BrowserLocalLlmState;
+	progress?: BrowserAiProgress;
+	error?: string;
 }
 
 export interface BrowserConversationTurn {

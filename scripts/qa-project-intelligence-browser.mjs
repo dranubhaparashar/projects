@@ -22,7 +22,11 @@ const context = await chromium.launchPersistentContext(profile, {
 function observe(page) {
 	page.on("request", (request) => {
 		const url = request.url();
-		requests.push({ method: request.method(), url });
+		requests.push({
+			method: request.method(),
+			url,
+			postData: request.postData() || "",
+		});
 		if (
 			!/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//.test(url) &&
 			!["GET", "HEAD", "OPTIONS"].includes(request.method())
@@ -145,7 +149,7 @@ async function vectorScanBenchmark(page) {
 		const query = new Float32Array(metadata.dimensions);
 		query[0] = 1;
 		const started = performance.now();
-		let maximum = -Infinity;
+		let maximum = Number.NEGATIVE_INFINITY;
 		for (let row = 0; row < metadata.count; row += 1) {
 			let score = 0;
 			const offset = row * metadata.dimensions;
@@ -188,11 +192,50 @@ const webGpu = await enabledPage.evaluate(async () => {
 		features: adapter ? [...adapter.features] : [],
 	};
 });
+const qwenRequestsBeforeQuestion = requests.filter((request) =>
+	/Qwen2\.5-0\.5B-Instruct/i.test(request.url),
+).length;
 const cold = await ask(
 	enabledPage,
 	"Which work deals with privacy-preserving credentials?",
 );
 assertIncludes(cold, ["LightDID-ZKP"]);
+const qwenRequestsAfterGroundedAnswer = requests.filter((request) =>
+	/Qwen2\.5-0\.5B-Instruct/i.test(request.url),
+).length;
+if (qwenRequestsAfterGroundedAnswer !== qwenRequestsBeforeQuestion) {
+	throw new Error(
+		"Qwen downloaded before the visitor requested an explanation",
+	);
+}
+if (
+	(await enabledPage
+		.getByText("Loading local AI model for the first answer", { exact: false })
+		.count()) > 0
+) {
+	throw new Error("The obsolete first-answer local-model loader was rendered");
+}
+const deeperExplanationButtonVisible = await enabledPage
+	.getByRole("button", { name: "Generate deeper local AI explanation" })
+	.isVisible()
+	.catch(() => false);
+if (
+	webGpu.available &&
+	webGpu.features.includes("shader-f16") &&
+	!deeperExplanationButtonVisible
+) {
+	throw new Error("The optional local-AI explanation button was not rendered");
+}
+if (
+	deeperExplanationButtonVisible &&
+	(await enabledPage
+		.getByText("Local model: Qwen2.5-0.5B-Instruct · q4 · WebGPU", {
+			exact: true,
+		})
+		.count()) === 0
+) {
+	throw new Error("The local-AI dtype/device diagnostic was not rendered");
+}
 
 await context.addInitScript(() => {
 	Object.defineProperty(navigator, "gpu", {
@@ -266,10 +309,36 @@ for (const result of [
 		}
 	}
 }
-if (externalWrites.length)
+const askedQuestions = [
+	cold.question,
+	...retrievalResults.map((result) => result.question),
+	...hallucinationResults.map((result) => result.question),
+	mobile.question,
+];
+const questionLeaks = requests.filter(
+	(request) =>
+		!request.url.startsWith(baseUrl) &&
+		askedQuestions.some(
+			(question) =>
+				question.length >= 12 &&
+				request.postData.toLowerCase().includes(question.toLowerCase()),
+		),
+);
+const externalInferenceRequests = requests.filter((request) =>
+	/openai|anthropic|generativelanguage|api\.gemini|\/ask(?:\?|$)/i.test(
+		request.url,
+	),
+);
+if (questionLeaks.length) {
 	throw new Error(
-		`External write requests detected: ${JSON.stringify(externalWrites)}`,
+		`Question data left the browser: ${JSON.stringify(questionLeaks)}`,
 	);
+}
+if (externalInferenceRequests.length) {
+	throw new Error(
+		`External inference request detected: ${JSON.stringify(externalInferenceRequests)}`,
+	);
+}
 
 const report = {
 	baseUrl,
@@ -277,6 +346,9 @@ const report = {
 	webGpu,
 	initialModelRequestCount: initialModelRequests.length,
 	openOnlyModelRequestCount: openOnlyModelRequests.length,
+	qwenRequestsBeforeQuestion,
+	qwenRequestsAfterGroundedAnswer,
+	deeperExplanationButtonVisible,
 	cold,
 	warm: retrievalResults[0],
 	retrievalResults,
@@ -284,6 +356,8 @@ const report = {
 	mobile,
 	vectorBenchmark,
 	externalWrites,
+	questionLeaks,
+	externalInferenceRequests,
 	modelHosts: [
 		...new Set(
 			requests

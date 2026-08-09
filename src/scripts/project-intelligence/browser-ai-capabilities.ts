@@ -11,10 +11,18 @@ interface NavigatorWithAiCapabilities extends Navigator {
 
 let capabilitiesPromise: Promise<BrowserAiCapabilities> | null = null;
 
+function developmentLog(event: string, detail: unknown): void {
+	if (!import.meta.env.DEV) return;
+	console.info(`[Project Intelligence local AI] ${event}`, detail);
+}
+
 export function detectBrowserAiCapabilities(): Promise<BrowserAiCapabilities> {
 	if (capabilitiesPromise) return capabilitiesPromise;
 	capabilitiesPromise = (async () => {
 		const browserNavigator = navigator as NavigatorWithAiCapabilities;
+		developmentLog("navigator.gpu availability", {
+			available: Boolean(browserNavigator.gpu),
+		});
 		const semanticSearch =
 			typeof Worker !== "undefined" &&
 			typeof WebAssembly !== "undefined" &&
@@ -32,11 +40,19 @@ export function detectBrowserAiCapabilities(): Promise<BrowserAiCapabilities> {
 		> = null;
 		try {
 			adapter = (await browserNavigator.gpu?.requestAdapter()) ?? null;
-		} catch {
+		} catch (error) {
+			developmentLog("adapter result", {
+				available: false,
+				error: error instanceof Error ? error.message : String(error),
+			});
 			adapter = null;
 		}
 		const webGpu = Boolean(adapter);
 		const shaderF16 = Boolean(adapter?.features?.has("shader-f16"));
+		developmentLog("adapter result", {
+			available: webGpu,
+			shaderF16,
+		});
 		const localLlm = webGpu && shaderF16 && !isMobile && !isLowMemory;
 		let reason = "Local generation is available.";
 		if (!webGpu)

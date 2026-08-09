@@ -26,11 +26,11 @@ GitHub Pages
   -> browser BGE embeddings
   -> committed static vector index
   -> lexical + semantic hybrid retrieval
-  -> optional local browser Qwen model
   -> grounded answer with trusted portfolio sources
+  -> optional, visitor-triggered local browser Qwen explanation
 ```
 
-No API key or backend is required. Open model weights may be downloaded from Hugging Face on first use, but inference runs in the visitor's browser and questions are not sent to an external inference API. WebGPU-incompatible and mobile devices use the sourced retrieval answer; if semantic initialization fails, the original quick lexical search remains available.
+No API key or backend is required. The grounded answer appears without loading Qwen. If a visitor selects **Generate deeper local AI explanation**, the open model weights are downloaded from Hugging Face once and reused for that browser page session; inference runs in the visitor's browser and questions are not sent to an external inference API. WebGPU-incompatible and mobile devices continue to use the sourced retrieval answer.
 
 The optional high-power mode remains under `rag-api/`:
 
