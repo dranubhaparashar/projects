@@ -385,6 +385,7 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 		});
 		try {
 			const result = await generator(request.messages, {
+				min_new_tokens: 32,
 				max_new_tokens: MAX_NEW_TOKENS,
 				do_sample: false,
 				return_full_text: false,

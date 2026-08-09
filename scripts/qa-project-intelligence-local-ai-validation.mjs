@@ -9,6 +9,10 @@ const source = await readFile(
 	),
 	"utf8",
 );
+const uiSource = await readFile(
+	new URL("../src/scripts/project-intelligence.ts", import.meta.url),
+	"utf8",
+);
 const compiled = ts.transpileModule(source, {
 	compilerOptions: {
 		module: ts.ModuleKind.ESNext,
@@ -18,7 +22,11 @@ const compiled = ts.transpileModule(source, {
 const validationModule = await import(
 	`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`
 );
-const { parseGeneratedJson, validateGeneratedBrowserAnswer } = validationModule;
+const {
+	parseGeneratedJson,
+	validateGeneratedBrowserAnswer,
+	validateGeneratedPlainTextAnswer,
+} = validationModule;
 
 const sources = ["S1", "S2", "S3", "S4"].map((sourceId, index) => ({
 	project_id: `project-${index + 1}`,
@@ -104,11 +112,108 @@ const unsafeAnswer = validateGeneratedBrowserAnswer({
 assert.equal(unsafeAnswer.accepted, false);
 assert.equal(unsafeAnswer.reason, "validation=answer-contains-url");
 
+const insufficientInformation =
+	"The published portfolio does not provide enough information to confirm that.";
+const plain = validateGeneratedPlainTextAnswer({
+	allowedSources: sources.slice(0, 4),
+	generated: "This is a concise grounded portfolio synthesis.",
+	insufficientInformation,
+});
+assert.equal(plain.accepted, true);
+assert.deepEqual(
+	plain.sources.map((source) => source.source_id),
+	["S1", "S2", "S3", "S4"],
+);
+
+for (const generated of ["", "   "]) {
+	const empty = validateGeneratedPlainTextAnswer({
+		allowedSources: sources,
+		generated,
+		insufficientInformation,
+	});
+	assert.equal(empty.accepted, false);
+	assert.equal(empty.reason, "validation=empty-answer");
+}
+
+const plainUrl = validateGeneratedPlainTextAnswer({
+	allowedSources: sources,
+	generated: "Read https://example.com for details.",
+	insufficientInformation,
+});
+assert.equal(plainUrl.accepted, false);
+assert.equal(plainUrl.reason, "validation=answer-contains-url");
+
+const plainInsufficient = validateGeneratedPlainTextAnswer({
+	allowedSources: sources,
+	generated: insufficientInformation,
+	insufficientInformation,
+});
+assert.equal(plainInsufficient.accepted, true);
+assert.deepEqual(plainInsufficient.sources, []);
+
+const earlyEos = validateGeneratedPlainTextAnswer({
+	allowedSources: sources,
+	generated: Array.from({ length: 32 }, () => "grounded").join(" "),
+	insufficientInformation,
+});
+assert.equal(earlyEos.accepted, true);
+
+const suppliedOnly = validateGeneratedPlainTextAnswer({
+	allowedSources: [sources[1]],
+	generated: "This synthesis uses the supplied evidence.",
+	insufficientInformation,
+});
+assert.deepEqual(
+	suppliedOnly.sources.map((source) => source.source_id),
+	["S2"],
+);
+
+const duplicateSources = validateGeneratedPlainTextAnswer({
+	allowedSources: [sources[0], { ...sources[0] }],
+	generated: "This synthesis uses one deduplicated source.",
+	insufficientInformation,
+});
+assert.deepEqual(
+	duplicateSources.sources.map((source) => source.source_id),
+	["S1"],
+);
+
+const sourceIdInAnswer = validateGeneratedPlainTextAnswer({
+	allowedSources: sources,
+	generated: "This answer cites S5.",
+	insufficientInformation,
+});
+assert.equal(sourceIdInAnswer.accepted, false);
+assert.equal(sourceIdInAnswer.reason, "validation=source-id-in-answer");
+
+const jsonGarbage = validateGeneratedPlainTextAnswer({
+	allowedSources: sources,
+	generated: '{"answer":"not plain text"}',
+	insufficientInformation,
+});
+assert.equal(jsonGarbage.accepted, false);
+assert.equal(jsonGarbage.reason, "validation=json-garbage");
+
+const codeFenceGarbage = validateGeneratedPlainTextAnswer({
+	allowedSources: sources,
+	generated: "```text\nA fenced answer\n```",
+	insufficientInformation,
+});
+assert.equal(codeFenceGarbage.accepted, false);
+assert.equal(codeFenceGarbage.reason, "validation=code-fence-garbage");
+
+assert.match(
+	uiSource,
+	/The local model did not return a grounded explanation\. The grounded portfolio answer remains above\./,
+);
+assert.match(uiSource, /Local AI explanation/);
+assert.match(uiSource, /Evidence used/);
+
 console.log(
 	JSON.stringify(
 		{
 			status: "passed",
-			cases: 11,
+			cases: 22,
 			validatedSourceIds: sources.map((source) => source.source_id),
 		},
 		null,

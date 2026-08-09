@@ -1351,7 +1351,7 @@ async function renderLocalAiAction(options: {
 				"section",
 				"project-intelligence-local-ai-explanation",
 			);
-			appendText(explanation, "h3", "Deeper local AI explanation");
+			appendText(explanation, "h3", "Local AI explanation");
 			appendText(
 				explanation,
 				"p",
@@ -1364,6 +1364,41 @@ async function renderLocalAiAction(options: {
 				"Generated on this device from the grounded portfolio sources above.",
 				"project-intelligence-ai-detail",
 			);
+			const trustedEvidence = enhanced.sources.filter(
+				(source, index, sources) =>
+					sources.findIndex(
+						(candidate) => candidate.source_id === source.source_id,
+					) === index,
+			);
+			if (trustedEvidence.length) {
+				const evidenceSection = element(
+					"section",
+					"project-intelligence-local-ai-evidence",
+				);
+				appendText(evidenceSection, "h4", "Evidence used");
+				const evidenceList = element(
+					"nav",
+					"project-intelligence-sources project-intelligence-local-ai-evidence-list",
+				);
+				evidenceList.setAttribute(
+					"aria-label",
+					"Trusted evidence used by the local AI explanation",
+				);
+				for (const source of trustedEvidence) {
+					const chip = element("a");
+					chip.href = source.url;
+					chip.textContent = source.section
+						? `${source.project_title} · ${source.section}`
+						: source.project_title;
+					chip.setAttribute(
+						"aria-label",
+						`Open evidence: ${source.project_title}, ${source.section}`,
+					);
+					evidenceList.append(chip);
+				}
+				evidenceSection.append(evidenceList);
+				explanation.append(evidenceSection);
+			}
 			controls.before(explanation);
 			customReadyMessage = "";
 			renderSnapshot(localAi.getLocalBrowserModelState());

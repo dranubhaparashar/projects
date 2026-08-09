@@ -5,7 +5,11 @@ export type LocalAiValidationReason =
 	| "validation=answer-contains-url"
 	| "validation=answer-too-long"
 	| "validation=invalid-json"
+	| "validation=empty-answer"
+	| "validation=json-garbage"
+	| "validation=code-fence-garbage"
 	| "validation=missing-answer"
+	| "validation=source-id-in-answer"
 	| "validation=no-valid-source-ids"
 	| "validation=truncated-json"
 	| `validation=accepted-filtered-source-ids:${string}`
@@ -29,6 +33,16 @@ export interface LocalAiValidationResult {
 	rejectedSourceIds: string[];
 	returnedSourceIds: string[];
 	sources: BrowserRagSource[];
+}
+
+function uniqueTrustedSources(sources: BrowserRagSource[]): BrowserRagSource[] {
+	const seen = new Set<string>();
+	return sources.filter((source) => {
+		const key = source.source_id.trim().toUpperCase() || source.url.trim();
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
 }
 
 interface JsonObjectCandidate {
@@ -230,6 +244,112 @@ export function validateGeneratedBrowserAnswer(options: {
 			? `validation=accepted-filtered-source-ids:${uniqueRejectedSourceIds.join(",")}`
 			: "validation=accepted",
 		rejectedSourceIds: uniqueRejectedSourceIds,
+		sources,
+	};
+}
+
+export function validateGeneratedPlainTextAnswer(options: {
+	generated: string;
+	allowedSources: BrowserRagSource[];
+	insufficientInformation: string;
+}): LocalAiValidationResult {
+	const answer = options.generated.trim();
+	const sources = uniqueTrustedSources(options.allowedSources);
+	const base = {
+		answerFieldPresent: true,
+		allowedSourceIds: sources.map((source) => source.source_id),
+		jsonParseSuccess: true,
+		returnedSourceIds: [],
+	};
+	if (!answer) {
+		return {
+			...base,
+			accepted: false,
+			reason: "validation=empty-answer",
+			rejectedSourceIds: [],
+			sources: [],
+		};
+	}
+	if (/^```|```$/.test(answer)) {
+		return {
+			...base,
+			accepted: false,
+			answer,
+			reason: "validation=code-fence-garbage",
+			rejectedSourceIds: [],
+			sources: [],
+		};
+	}
+	if (
+		(answer.startsWith("{") && answer.endsWith("}")) ||
+		(answer.startsWith("[") && answer.endsWith("]")) ||
+		/"(?:answer|source_ids)"\s*:/i.test(answer)
+	) {
+		return {
+			...base,
+			accepted: false,
+			answer,
+			reason: "validation=json-garbage",
+			rejectedSourceIds: [],
+			sources: [],
+		};
+	}
+	if (/https?:\/\/|www\./i.test(answer)) {
+		return {
+			...base,
+			accepted: false,
+			answer,
+			reason: "validation=answer-contains-url",
+			rejectedSourceIds: [],
+			sources: [],
+		};
+	}
+	if (/\bS\d+\b/i.test(answer)) {
+		return {
+			...base,
+			accepted: false,
+			answer,
+			reason: "validation=source-id-in-answer",
+			rejectedSourceIds: [],
+			sources: [],
+		};
+	}
+	if (answer.length > 4_000) {
+		return {
+			...base,
+			accepted: false,
+			answer,
+			reason: "validation=answer-too-long",
+			rejectedSourceIds: [],
+			sources: [],
+		};
+	}
+	if (answer === options.insufficientInformation) {
+		return {
+			...base,
+			accepted: true,
+			answer,
+			reason: "validation=accepted",
+			rejectedSourceIds: [],
+			sources: [],
+		};
+	}
+	if (!sources.length) {
+		return {
+			...base,
+			accepted: false,
+			answer,
+			reason: "validation=no-valid-source-ids",
+			rejectedSourceIds: [],
+			sources: [],
+		};
+	}
+	return {
+		...base,
+		accepted: true,
+		answer,
+		reason: "validation=accepted",
+		rejectedSourceIds: [],
 		sources,
 	};
 }
