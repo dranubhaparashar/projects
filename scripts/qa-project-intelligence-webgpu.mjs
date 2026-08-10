@@ -4,6 +4,7 @@ import { chromium } from "playwright";
 
 const baseUrl = process.argv[2] || "http://127.0.0.1:4321/projects/";
 const reusedProfile = Boolean(process.argv[3]);
+const cacheOnly = process.argv.includes("--cache-only");
 const profile =
 	process.argv[3] ||
 	join(tmpdir(), `project-intelligence-webgpu-${Date.now()}`);
@@ -22,7 +23,7 @@ const context = await chromium.launchPersistentContext(profile, {
 		"--disable-backgrounding-occluded-windows",
 		"--disable-renderer-backgrounding",
 		"--no-first-run",
-		"--window-position=-32000,-32000",
+		"--window-position=40,40",
 	],
 });
 
@@ -55,6 +56,35 @@ page.on("console", (message) => {
 	if (message.type() === "error") consoleErrors.push(value);
 });
 page.on("pageerror", (error) => consoleErrors.push(error.message));
+
+if (cacheOnly) {
+	await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 120_000 });
+	const cacheReport = await page.evaluate(async () => {
+		const cache = await caches.open("transformers-cache");
+		const keys = await cache.keys();
+		const modelEntries = keys
+			.map((request) => decodeURIComponent(request.url))
+			.filter((url) => /Qwen2\.5-0\.5B-Instruct/i.test(url));
+		return {
+			cacheName: "transformers-cache",
+			modelEntries,
+			modelEntryCount: modelEntries.length,
+		};
+	});
+	console.log(
+		JSON.stringify(
+			{
+				status: "cache-inspected",
+				...cacheReport,
+				qwenNetworkRequests: qwenRequests().length,
+			},
+			null,
+			2,
+		),
+	);
+	await context.close();
+	process.exit(0);
+}
 
 function qwenRequests() {
 	return requests.filter((request) =>
