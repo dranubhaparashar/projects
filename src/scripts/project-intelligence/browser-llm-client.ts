@@ -6,6 +6,7 @@ import {
 	createLocalAiFailureDiagnostic,
 	errorFromLocalAiDiagnostic,
 	hasDeviceLostSignature,
+	hasGpuInstanceInvalidationSignature,
 	LOCAL_AI_MODEL_ID,
 	type LocalAiDiagnosticStage,
 	type LocalAiFailureDiagnostic,
@@ -29,6 +30,12 @@ interface PendingRequest {
 	onProgress?: (progress: BrowserAiProgress) => void;
 	type: LocalLlmRequestType;
 	stage: LocalAiDiagnosticStage;
+	workerEpoch: number;
+}
+
+interface LocalLlmWorker {
+	instance: Worker;
+	epoch: number;
 }
 
 class LocalAiDiagnosticError extends Error {
@@ -54,7 +61,8 @@ export const BROWSER_LLM_SUBSEQUENT_FIRST_TOKEN_TIMEOUT_MS = 90_000;
 export const BROWSER_LLM_TOKEN_INACTIVITY_TIMEOUT_MS = 30_000;
 export const BROWSER_LLM_GENERATION_TIMEOUT_MS = 300_000;
 
-let worker: Worker | null = null;
+let worker: LocalLlmWorker | null = null;
+let workerEpoch = 0;
 let nextRequestId = 1;
 const pending = new Map<number, PendingRequest>();
 const listeners = new Set<LocalLlmListener>();
@@ -87,9 +95,13 @@ function isWorkerDiagnostic(value: unknown): value is LocalAiFailureDiagnostic {
 	if (!value || typeof value !== "object") return false;
 	const record = value as Record<string, unknown>;
 	return (
-		["download", "model-init", "webgpu-init", "generation"].includes(
-			String(record.stage),
-		) &&
+		[
+			"download",
+			"model-init",
+			"webgpu-init",
+			"webgpu-runtime",
+			"generation",
+		].includes(String(record.stage)) &&
 		typeof record.cause === "string" &&
 		record.model === LOCAL_AI_MODEL_ID &&
 		record.dtype === "q4" &&
@@ -117,6 +129,17 @@ function activeStage(): LocalAiDiagnosticStage {
 	return pending.values().next().value?.stage || "model-init";
 }
 
+function isRecoverableWorkerInvalidation(
+	diagnostic: LocalAiFailureDiagnostic,
+): boolean {
+	return (
+		diagnostic.stage === "webgpu-runtime" ||
+		diagnostic.cause === "gpu-instance-invalidated" ||
+		diagnostic.cause === "swup-page-replaced" ||
+		hasGpuInstanceInvalidationSignature(diagnostic)
+	);
+}
+
 function logClientFailure(diagnostic: LocalAiFailureDiagnostic): void {
 	logLocalAiFailure(diagnostic);
 	if (
@@ -141,7 +164,10 @@ function terminateWorker(
 	failure: Error,
 	trigger: LocalAiFailureDiagnostic,
 	logTermination = true,
+	expectedEpoch?: number,
 ): void {
+	if (expectedEpoch !== undefined && worker?.epoch !== expectedEpoch) return;
+	const hadWorker = Boolean(worker);
 	if (worker && logTermination) {
 		const terminationError = new Error(
 			`Local AI worker terminated after ${trigger.cause}: ${failure.message}`,
@@ -155,12 +181,38 @@ function terminateWorker(
 			),
 		);
 	}
-	worker?.terminate();
+	worker?.instance.terminate();
 	worker = null;
+	if (hadWorker) workerEpoch += 1;
+	initializationPromise = null;
 	activeGenerationRequestId = null;
 	completedGenerations = 0;
 	for (const request of pending.values()) request.reject(failure);
 	pending.clear();
+}
+
+function invalidateWorker(
+	diagnostic: LocalAiFailureDiagnostic,
+	options: { logFailure?: boolean; logTermination?: boolean } = {},
+): LocalAiDiagnosticError {
+	const normalized = isRecoverableWorkerInvalidation(diagnostic)
+		? {
+				...diagnostic,
+				stage: "webgpu-runtime" as const,
+				cause:
+					diagnostic.cause === "swup-page-replaced"
+						? diagnostic.cause
+						: "gpu-instance-invalidated",
+			}
+		: diagnostic;
+	if (options.logFailure !== false) logClientFailure(normalized);
+	const failure = new LocalAiDiagnosticError(
+		normalized,
+		options.logFailure !== false,
+	);
+	terminateWorker(failure, normalized, options.logTermination !== false);
+	setSnapshot({ state: "stale" });
+	return failure;
 }
 
 function fail(
@@ -172,6 +224,11 @@ function fail(
 		error instanceof LocalAiDiagnosticError
 			? error.diagnostic
 			: createLocalAiFailureDiagnostic(fallbackStage, fallbackCause, error);
+	if (isRecoverableWorkerInvalidation(diagnostic)) {
+		return invalidateWorker(diagnostic, {
+			logFailure: !(error instanceof LocalAiDiagnosticError) || !error.logged,
+		});
+	}
 	if (!(error instanceof LocalAiDiagnosticError) || !error.logged) {
 		logClientFailure(diagnostic);
 	}
@@ -184,24 +241,54 @@ function fail(
 	return failure;
 }
 
-function getWorker(): Worker {
+function getWorker(): LocalLlmWorker {
 	if (worker) return worker;
-	worker = new Worker(new URL("./browser-llm.worker.ts", import.meta.url), {
-		type: "module",
-		name: "project-intelligence-local-llm",
-	});
-	worker.addEventListener("message", (event) => {
+	const epoch = workerEpoch;
+	const instance = new Worker(
+		new URL("./browser-llm.worker.ts", import.meta.url),
+		{
+			type: "module",
+			name: `project-intelligence-local-llm-${epoch}`,
+		},
+	);
+	const handle = { instance, epoch };
+	worker = handle;
+	developmentLog("worker created", { workerEpoch: epoch });
+	instance.addEventListener("message", (event) => {
 		const message = event.data as {
 			id?: number;
+			workerEpoch?: number;
 			type?: string;
 			progress?: BrowserAiProgress;
 			result?: unknown;
 			error?: string;
 			diagnostic?: unknown;
 		};
+		if (
+			worker?.instance !== instance ||
+			worker.epoch !== epoch ||
+			message.workerEpoch !== epoch
+		) {
+			developmentLog("ignored stale worker message", {
+				messageEpoch: message.workerEpoch,
+				workerEpoch,
+			});
+			return;
+		}
+		if (message.type === "fatal") {
+			const diagnostic = isWorkerDiagnostic(message.diagnostic)
+				? message.diagnostic
+				: createLocalAiFailureDiagnostic(
+						"webgpu-runtime",
+						"gpu-instance-invalidated",
+						new Error(message.error || "WebGPU runtime was invalidated"),
+					);
+			invalidateWorker(diagnostic);
+			return;
+		}
 		if (typeof message.id !== "number") return;
 		const request = pending.get(message.id);
-		if (!request) return;
+		if (!request || request.workerEpoch !== epoch) return;
 		if (message.type === "progress" && message.progress) {
 			developmentLog("progress event", message.progress);
 			request.stage = stageFromProgress(message.progress, request.stage);
@@ -228,19 +315,36 @@ function getWorker(): Worker {
 						: "generation-rejection",
 					new Error(message.error || "Local AI worker failed"),
 				);
+		if (isRecoverableWorkerInvalidation(diagnostic)) {
+			const failure = invalidateWorker(diagnostic);
+			request.reject(failure);
+			return;
+		}
 		logClientFailure(diagnostic);
 		request.reject(new LocalAiDiagnosticError(diagnostic, true));
 	});
-	worker.addEventListener("error", (event) => {
+	instance.addEventListener("error", (event) => {
+		if (worker?.instance !== instance || worker.epoch !== epoch) return;
 		const source =
 			event.error instanceof Error
 				? event.error
 				: new Error(event.message || "Local AI worker failed");
-		const diagnostic = createLocalAiFailureDiagnostic(
+		const candidate = createLocalAiFailureDiagnostic(
 			activeStage(),
 			"worker-error",
 			source,
 		);
+		const diagnostic = hasGpuInstanceInvalidationSignature(candidate)
+			? {
+					...candidate,
+					stage: "webgpu-runtime" as const,
+					cause: "gpu-instance-invalidated",
+				}
+			: candidate;
+		if (isRecoverableWorkerInvalidation(diagnostic)) {
+			invalidateWorker(diagnostic);
+			return;
+		}
 		logClientFailure(diagnostic);
 		fail(
 			new LocalAiDiagnosticError(diagnostic, true),
@@ -248,7 +352,8 @@ function getWorker(): Worker {
 			diagnostic.cause,
 		);
 	});
-	worker.addEventListener("messageerror", () => {
+	instance.addEventListener("messageerror", () => {
+		if (worker?.instance !== instance || worker.epoch !== epoch) return;
 		const error = new Error(
 			"Local AI worker sent a message that could not be decoded",
 		);
@@ -265,7 +370,7 @@ function getWorker(): Worker {
 			diagnostic.cause,
 		);
 	});
-	return worker;
+	return handle;
 }
 
 function requestWorker(
@@ -274,6 +379,18 @@ function requestWorker(
 	onProgress: ((progress: BrowserAiProgress) => void) | undefined,
 	timeout?: RequestTimeout,
 ): Promise<unknown> {
+	let targetWorker: LocalLlmWorker;
+	try {
+		targetWorker = getWorker();
+	} catch (error) {
+		const diagnostic = createLocalAiFailureDiagnostic(
+			type === "generate" ? "generation" : "model-init",
+			"worker-start-error",
+			error,
+		);
+		logClientFailure(diagnostic);
+		return Promise.reject(new LocalAiDiagnosticError(diagnostic, true));
+	}
 	const id = nextRequestId++;
 	if (type === "generate") activeGenerationRequestId = id;
 	return new Promise((resolve, reject) => {
@@ -311,9 +428,15 @@ function requestWorker(
 			onProgress,
 			type,
 			stage: type === "generate" ? "generation" : "download",
+			workerEpoch: targetWorker.epoch,
 		});
 		try {
-			getWorker().postMessage({ id, type, ...payload });
+			targetWorker.instance.postMessage({
+				id,
+				type,
+				workerEpoch: targetWorker.epoch,
+				...payload,
+			});
 		} catch (error) {
 			const request = pending.get(id);
 			pending.delete(id);
@@ -546,6 +669,45 @@ async function logModelCacheVerification(): Promise<void> {
 	}
 }
 
+function invalidateWorkerAfterPageReplacement(): void {
+	if (
+		!worker &&
+		!pending.size &&
+		!["loading", "ready", "generating"].includes(snapshot.state)
+	) {
+		return;
+	}
+	const error = new Error(
+		"The page was replaced; the WebGPU worker will reinitialize from cache when requested",
+	);
+	error.name = "WorkerStaleError";
+	const diagnostic = createLocalAiFailureDiagnostic(
+		"webgpu-runtime",
+		"swup-page-replaced",
+		error,
+	);
+	developmentLog("worker invalidated after Swup page replacement", {
+		workerEpoch: worker?.epoch ?? workerEpoch,
+	});
+	invalidateWorker(diagnostic, {
+		logFailure: false,
+		logTermination: false,
+	});
+}
+
+if (typeof document !== "undefined") {
+	document.addEventListener(
+		"swup:contentReplaced",
+		invalidateWorkerAfterPageReplacement,
+	);
+	// Some Swup/Astro integration versions expose page:view without the legacy
+	// contentReplaced event. The stale-state guard makes the fallback idempotent.
+	document.addEventListener(
+		"swup:page:view",
+		invalidateWorkerAfterPageReplacement,
+	);
+}
+
 export function getLocalBrowserModelState(): BrowserLocalLlmSnapshot {
 	return snapshot;
 }
@@ -561,9 +723,10 @@ export function subscribeLocalBrowserModel(
 export function cancelLocalBrowserModel(): void {
 	if (snapshot.state === "generating") {
 		if (worker && activeGenerationRequestId !== null) {
-			worker.postMessage({
+			worker.instance.postMessage({
 				type: "cancel-generation",
 				targetId: activeGenerationRequestId,
+				workerEpoch: worker.epoch,
 			});
 			setSnapshot({
 				state: "generating",
@@ -632,6 +795,13 @@ export function initializeLocalBrowserModel(): Promise<void> {
 				setSnapshot({ state: "idle" });
 				throw error;
 			}
+			if (
+				error instanceof LocalAiDiagnosticError &&
+				isRecoverableWorkerInvalidation(error.diagnostic)
+			) {
+				setSnapshot({ state: "stale" });
+				throw error;
+			}
 			throw fail(error, "model-init", "model-initialization-failure");
 		});
 	const trackedAttempt = attempt.finally(() => {
@@ -644,8 +814,9 @@ export function initializeLocalBrowserModel(): Promise<void> {
 export async function generateInBrowser(
 	messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
 ): Promise<string> {
-	if (snapshot.state === "idle") await initializeLocalBrowserModel();
-	else if (snapshot.state === "loading" && initializationPromise) {
+	if (["idle", "stale"].includes(snapshot.state)) {
+		await initializeLocalBrowserModel();
+	} else if (snapshot.state === "loading" && initializationPromise) {
 		await initializationPromise;
 	}
 	if (snapshot.state === "failed") {
@@ -688,6 +859,13 @@ export async function generateInBrowser(
 		setSnapshot({ state: "ready", progress: generationResult.timing });
 		return generationResult.text;
 	} catch (error) {
+		if (
+			error instanceof LocalAiDiagnosticError &&
+			isRecoverableWorkerInvalidation(error.diagnostic)
+		) {
+			setSnapshot({ state: "stale" });
+			throw error;
+		}
 		if (error instanceof Error && error.name === "AbortError") {
 			setSnapshot({ state: "ready" });
 			throw error;

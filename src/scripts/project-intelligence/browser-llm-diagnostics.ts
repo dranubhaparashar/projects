@@ -7,6 +7,7 @@ export type LocalAiDiagnosticStage =
 	| "download"
 	| "model-init"
 	| "webgpu-init"
+	| "webgpu-runtime"
 	| "generation";
 
 export interface LocalAiFailureDiagnostic {
@@ -112,5 +113,25 @@ export function hasDeviceLostSignature(
 	].join(" ");
 	return /device\s+(?:is\s+|was\s+|has\s+been\s+)?lost|GPUDevice[^\n]*lost|DXGI_ERROR_DEVICE_(?:HUNG|REMOVED|RESET)/i.test(
 		value,
+	);
+}
+
+export function hasGpuInstanceInvalidationSignature(
+	diagnostic: Pick<
+		LocalAiFailureDiagnostic,
+		"errorName" | "errorMessage" | "errorStack"
+	>,
+): boolean {
+	const value = [
+		diagnostic.errorName,
+		diagnostic.errorMessage,
+		diagnostic.errorStack || "",
+	].join(" ");
+	return (
+		diagnostic.errorName === "AbortError" ||
+		hasDeviceLostSignature(diagnostic) ||
+		/GPUBuffer[^\n]*mapAsync|mapAsync[^\n]*GPUBuffer|valid external Instance reference no longer exists|external Instance[^\n]*(?:invalid|no longer exists)|GPU(?:Adapter|Device)[^\n]*(?:invalid|lost|destroyed|unavailable)|adapter[^\n]*(?:invalidated|no longer valid)|device[^\n]*(?:invalidated|no longer valid)/i.test(
+			value,
+		)
 	);
 }

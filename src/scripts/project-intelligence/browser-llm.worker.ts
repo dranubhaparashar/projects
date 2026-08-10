@@ -11,6 +11,7 @@ import type { BrowserAiProgress } from "./browser-ai-types";
 import {
 	createLocalAiFailureDiagnostic,
 	hasDeviceLostSignature,
+	hasGpuInstanceInvalidationSignature,
 	LOCAL_AI_DTYPE,
 	LOCAL_AI_MODEL_ID,
 	type LocalAiDiagnosticStage,
@@ -24,11 +25,12 @@ env.useBrowserCache = true;
 const MAX_NEW_TOKENS = 96;
 
 type WorkerRequest =
-	| { id: number; type: "initialize" }
-	| { targetId: number; type: "cancel-generation" }
+	| { id: number; type: "initialize"; workerEpoch: number }
+	| { targetId: number; type: "cancel-generation"; workerEpoch: number }
 	| {
 			id: number;
 			type: "generate";
+			workerEpoch: number;
 			messages: Array<{
 				role: "system" | "user" | "assistant";
 				content: string;
@@ -38,6 +40,8 @@ type WorkerRequest =
 let generationPipelinePromise: ReturnType<
 	typeof createGenerationPipeline
 > | null = null;
+let workerEpoch: number | null = null;
+let gpuRuntimeInvalidated = false;
 const requestStages = new Map<number, LocalAiDiagnosticStage>();
 interface DownloadFileProgress {
 	file: string;
@@ -52,6 +56,7 @@ let modelArtifactDownloaded = false;
 let modelInitStagePosted = false;
 let modelInitializedAt = "";
 let completedGenerations = 0;
+const cancelledRequests = new Set<number>();
 let activeGeneration:
 	| { id: number; stoppingCriteria: InterruptableStoppingCriteria }
 	| undefined;
@@ -98,8 +103,65 @@ function developmentValidationLog(value: unknown, text: string): void {
 	);
 }
 
+function postWorkerMessage(message: Record<string, unknown>): void {
+	self.postMessage({ ...message, workerEpoch });
+}
+
+function activeRuntimeStage(): LocalAiDiagnosticStage {
+	if (activeGeneration) return "generation";
+	return requestStages.values().next().value || "webgpu-runtime";
+}
+
+function clearGpuRuntimeState(): void {
+	activeGeneration?.stoppingCriteria.interrupt();
+	activeGeneration = undefined;
+	generationPipelinePromise = null;
+	requestStages.clear();
+	activeDownloads.clear();
+	downloadProgressByFile.clear();
+	cancelledRequests.clear();
+	modelArtifactDownloaded = false;
+	modelInitStagePosted = false;
+	modelInitializedAt = "";
+	completedGenerations = 0;
+}
+
+function reportGpuRuntimeInvalidation(error: unknown, id?: number): void {
+	if (gpuRuntimeInvalidated) return;
+	const stage = activeRuntimeStage();
+	gpuRuntimeInvalidated = true;
+	const diagnostic = createLocalAiFailureDiagnostic(
+		"webgpu-runtime",
+		"gpu-instance-invalidated",
+		error,
+	);
+	logLocalAiFailure(diagnostic);
+	clearGpuRuntimeState();
+	postWorkerMessage({
+		id,
+		type: "fatal",
+		error: diagnostic.errorMessage,
+		diagnostic,
+		previousStage: stage,
+	});
+}
+
+self.addEventListener("unhandledrejection", (event) => {
+	event.preventDefault();
+	reportGpuRuntimeInvalidation(event.reason);
+});
+
+self.addEventListener("error", (event) => {
+	event.preventDefault();
+	reportGpuRuntimeInvalidation(
+		event.error instanceof Error
+			? event.error
+			: new Error(event.message || "Local AI worker failed"),
+	);
+});
+
 function postProgress(id: number, progress: BrowserAiProgress): void {
-	self.postMessage({
+	postWorkerMessage({
 		id,
 		type: "progress",
 		progress,
@@ -239,6 +301,9 @@ function classifyFailureStage(
 		"stage-classification",
 		error,
 	);
+	if (hasGpuInstanceInvalidationSignature(diagnostic)) {
+		return "webgpu-runtime";
+	}
 	if (
 		hasDeviceLostSignature(diagnostic) ||
 		/webgpu|GPUAdapter|requestAdapter|no available adapters|WGSL|shader/i.test(
@@ -258,6 +323,27 @@ function classifyFailureStage(
 	return fallback;
 }
 
+interface ObservableGpuDevice {
+	lost: Promise<{ message?: unknown; reason?: unknown }>;
+}
+
+function observeGpuDevice(): void {
+	const backend = env.backends.onnx as
+		| { webgpu?: { device?: ObservableGpuDevice } }
+		| undefined;
+	const device = backend?.webgpu?.device;
+	if (!device?.lost) return;
+	void device.lost
+		.then((info) => {
+			const reason = String(info?.reason || "unknown");
+			const message = String(info?.message || "WebGPU device was lost");
+			const error = new Error(`WebGPU device lost (${reason}): ${message}`);
+			error.name = "GPUDeviceLostError";
+			reportGpuRuntimeInvalidation(error);
+		})
+		.catch((error) => reportGpuRuntimeInvalidation(error));
+}
+
 async function createGenerationPipeline(id: number) {
 	requestStages.set(id, "download");
 	developmentLog("model ID", LOCAL_AI_MODEL_ID);
@@ -270,6 +356,11 @@ async function createGenerationPipeline(id: number) {
 			handlePipelineProgress(id, value);
 		},
 	});
+	if (gpuRuntimeInvalidated) {
+		throw new Error(
+			"WebGPU runtime was invalidated during model initialization",
+		);
+	}
 	postModelInitStage(id);
 	requestStages.set(id, "model-init");
 	modelInitializedAt = new Date().toISOString();
@@ -277,10 +368,16 @@ async function createGenerationPipeline(id: number) {
 		modelId: LOCAL_AI_MODEL_ID,
 		modelInitializedAt,
 	});
+	observeGpuDevice();
 	return generator;
 }
 
 function getGenerationPipeline(id: number) {
+	if (gpuRuntimeInvalidated) {
+		return Promise.reject(
+			new Error("WebGPU runtime is stale and cannot be reused"),
+		);
+	}
 	if (!generationPipelinePromise) {
 		generationPipelinePromise = createGenerationPipeline(id).catch((error) => {
 			generationPipelinePromise = null;
@@ -306,8 +403,11 @@ function generatedText(value: unknown): string {
 
 self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 	const request = event.data;
+	if (workerEpoch === null) workerEpoch = request.workerEpoch;
+	if (request.workerEpoch !== workerEpoch || gpuRuntimeInvalidated) return;
 	if (request.type === "cancel-generation") {
 		if (activeGeneration?.id === request.targetId) {
+			cancelledRequests.add(request.targetId);
 			activeGeneration.stoppingCriteria.interrupt();
 		}
 		return;
@@ -319,7 +419,7 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 	try {
 		if (request.type === "initialize") {
 			await getGenerationPipeline(request.id);
-			self.postMessage({ id: request.id, type: "result", result: "ready" });
+			postWorkerMessage({ id: request.id, type: "result", result: "ready" });
 			return;
 		}
 
@@ -396,7 +496,8 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 				stopping_criteria: stoppingCriteriaList,
 			});
 			if (stoppingCriteria.interrupted) {
-				self.postMessage({ id: request.id, type: "cancelled" });
+				cancelledRequests.delete(request.id);
+				postWorkerMessage({ id: request.id, type: "cancelled" });
 				return;
 			}
 			const generationCompletedAt = new Date().toISOString();
@@ -443,7 +544,7 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 				`finish reason: ${finishReason}`,
 			]);
 			postProgress(request.id, timing);
-			self.postMessage({
+			postWorkerMessage({
 				id: request.id,
 				type: "result",
 				result: { text: extractedText, timing },
@@ -452,6 +553,19 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 			if (activeGeneration?.id === request.id) activeGeneration = undefined;
 		}
 	} catch (error) {
+		if (cancelledRequests.delete(request.id)) {
+			postWorkerMessage({ id: request.id, type: "cancelled" });
+			return;
+		}
+		const candidate = createLocalAiFailureDiagnostic(
+			request.type === "generate" ? "generation" : "model-init",
+			"failure-classification",
+			error,
+		);
+		if (hasGpuInstanceInvalidationSignature(candidate)) {
+			reportGpuRuntimeInvalidation(error, request.id);
+			return;
+		}
 		const stage = classifyFailureStage(
 			error,
 			requestStages.get(request.id) ||
@@ -465,7 +579,7 @@ self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
 			error,
 		);
 		logLocalAiFailure(diagnostic);
-		self.postMessage({
+		postWorkerMessage({
 			id: request.id,
 			type: "error",
 			error: diagnostic.errorMessage,

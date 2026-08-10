@@ -33,6 +33,7 @@ export interface BrowserAiProgress {
 
 export type BrowserLocalLlmState =
 	| "idle"
+	| "stale"
 	| "loading"
 	| "ready"
 	| "generating"

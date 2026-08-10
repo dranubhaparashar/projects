@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 
 const baseUrl = process.argv[2] || "http://127.0.0.1:4321/projects/";
+const reusedProfile = Boolean(process.argv[3]);
 const profile =
 	process.argv[3] ||
 	join(tmpdir(), `project-intelligence-webgpu-${Date.now()}`);
@@ -17,6 +18,9 @@ const context = await chromium.launchPersistentContext(profile, {
 	args: [
 		"--enable-unsafe-webgpu",
 		"--enable-features=WebGPU",
+		"--disable-background-timer-throttling",
+		"--disable-backgrounding-occluded-windows",
+		"--disable-renderer-backgrounding",
 		"--no-first-run",
 		"--window-position=-32000,-32000",
 	],
@@ -56,6 +60,63 @@ function qwenRequests() {
 	return requests.filter((request) =>
 		/Qwen2\.5-0\.5B-Instruct/i.test(request.url),
 	);
+}
+
+async function waitForSwupReady() {
+	await page.waitForFunction(
+		() => {
+			const html = document.documentElement;
+			const main = document.querySelector("main");
+			return (
+				!html.classList.contains("is-changing") &&
+				!html.classList.contains("is-animating") &&
+				!(main instanceof HTMLElement && main.inert)
+			);
+		},
+		undefined,
+		{ timeout: 30_000 },
+	);
+}
+
+async function openDrawer() {
+	const layer = page.locator("[data-project-intelligence-layer]");
+	if ((await layer.getAttribute("data-open")) === "true") return;
+	await page.getByRole("button", { name: "Ask about my projects" }).click();
+	await page.waitForFunction(
+		() =>
+			document
+				.querySelector("[data-project-intelligence-layer]")
+				?.getAttribute("data-open") === "true",
+	);
+}
+
+async function closeDrawer() {
+	const layer = page.locator("[data-project-intelligence-layer]");
+	if ((await layer.getAttribute("data-open")) !== "true") return;
+	await page
+		.getByRole("button", { name: "Close Project Intelligence" })
+		.last()
+		.click();
+	await page.waitForFunction(
+		() =>
+			document.querySelector("[data-project-intelligence-layer]")?.hidden ===
+			true,
+	);
+}
+
+async function navigateWithSwup(path) {
+	const link = page.locator(`a[href="${path}"]`).first();
+	await link.scrollIntoViewIfNeeded();
+	await link.click();
+	await page.waitForURL((url) => url.pathname === path, { timeout: 30_000 });
+	await waitForSwupReady();
+}
+
+async function localLlmWorkerCount() {
+	const workerUrls = await page.evaluate(
+		() => window.__projectIntelligenceWorkerUrls || [],
+	);
+	return workerUrls.filter((url) => /browser-llm\.worker/i.test(url)).length;
 }
 
 async function askGrounded(question) {
@@ -217,7 +278,7 @@ try {
 		);
 		process.exitCode = 2;
 	} else {
-		await page.getByRole("button", { name: "Ask about my projects" }).click();
+		await openDrawer();
 		const qwenBeforeFirstQuestion = qwenRequests().length;
 		const firstAnswer = await askGrounded(
 			"Which work deals with privacy-preserving credentials?",
@@ -251,7 +312,7 @@ try {
 
 		const firstGeneration = await generateExplanation(firstAnswer);
 		const qwenAfterFirstGeneration = qwenRequests().length;
-		if (qwenAfterFirstGeneration <= qwenAfterFirstAnswer) {
+		if (!reusedProfile && qwenAfterFirstGeneration <= qwenAfterFirstAnswer) {
 			throw new Error(
 				"Qwen did not start downloading after the explicit click",
 			);
@@ -300,44 +361,85 @@ try {
 			firstGeneration.downloadDetails.some((detail) =>
 				/^Downloaded [\d,.]+ MB$/.test(detail),
 			);
-		if (!showedRealPercentage && !showedUnknownTotalBytes) {
+		if (!reusedProfile && !showedRealPercentage && !showedUnknownTotalBytes) {
 			throw new Error(
 				"No honest Transformers.js download percentage or byte count was shown",
 			);
 		}
 
-		const secondAnswer = await askGrounded(
+		if ((await localLlmWorkerCount()) !== 1) {
+			throw new Error("Expected one local-LLM worker before Swup navigation");
+		}
+
+		const navigationGenerations = [];
+		const navigationQuestions = [
 			"Which project involves autonomous agent orchestration?",
+			"Which work uses local AI for medical claim review?",
+			"Which projects emphasize privacy-preserving local inference?",
+		];
+		for (const [index, question] of navigationQuestions.entries()) {
+			await closeDrawer();
+			await navigateWithSwup("/projects/posts/medclaim-sentinel/");
+			await navigateWithSwup("/projects/");
+			if ((await localLlmWorkerCount()) !== index + 1) {
+				throw new Error(
+					"Swup navigation recreated the local-LLM worker before an explicit Generate click",
+				);
+			}
+			await openDrawer();
+			const answer = await askGrounded(question);
+			const controls = answer.locator(".project-intelligence-local-ai");
+			const staleStatus = (
+				(await controls
+					.locator(".project-intelligence-local-ai-status")
+					.textContent()) || ""
+			).trim();
+			if (
+				staleStatus !== "Local AI will reinitialize from cache when requested."
+			) {
+				throw new Error(`Missing stale-worker status: ${staleStatus}`);
+			}
+			const qwenBeforeRecreation = qwenRequests().length;
+			const generation = await generateExplanation(answer);
+			if ((await localLlmWorkerCount()) !== index + 2) {
+				throw new Error(
+					"Explicit Generate did not create exactly one fresh worker",
+				);
+			}
+			if (qwenRequests().length !== qwenBeforeRecreation) {
+				throw new Error(
+					"Worker recreation redownloaded Qwen instead of using cache",
+				);
+			}
+			navigationGenerations.push({ staleStatus, generation });
+		}
+
+		await closeDrawer();
+		const workerCountBeforeReopen = await localLlmWorkerCount();
+		await openDrawer();
+		const reopenedAnswer = await askGrounded(
+			"Which project uses evidence-grounded review workflows?",
 		);
-		if (qwenRequests().length !== qwenAfterFirstGeneration) {
-			throw new Error("The second RAG question triggered a Qwen request");
-		}
-		const secondGeneration = await generateExplanation(secondAnswer);
-		const qwenAfterSecondGeneration = qwenRequests().length;
-		if (qwenAfterSecondGeneration !== qwenAfterFirstGeneration) {
-			throw new Error("The second explanation downloaded Qwen again");
-		}
-		if (
-			secondGeneration.timing.tokensGenerated < 1 ||
-			secondGeneration.timing.tokensGenerated > 96 ||
-			secondGeneration.timing.firstTokenLatencyMs <= 0 ||
-			secondGeneration.timing.generationTotalMs <= 0 ||
-			secondGeneration.timing.tokensPerSecond <= 0
-		) {
+		const reopenedGeneration = await generateExplanation(reopenedAnswer);
+		if ((await localLlmWorkerCount()) !== workerCountBeforeReopen) {
 			throw new Error(
-				`Invalid second-generation timing: ${JSON.stringify(secondGeneration.timing)}`,
+				"Closing and reopening the drawer replaced a healthy worker",
+			);
+		}
+		if (qwenRequests().length !== qwenAfterFirstGeneration) {
+			throw new Error(
+				"A cached navigation/reopen generation redownloaded Qwen",
 			);
 		}
 
-		const workerUrls = await page.evaluate(
-			() => window.__projectIntelligenceWorkerUrls || [],
+		const forbiddenLifecycleErrors = consoleErrors.filter((message) =>
+			/valid external Instance reference no longer exists|GPUBuffer[^\n]*mapAsync|first-token-timeout|Uncaught \(in promise\).*AbortError/i.test(
+				message,
+			),
 		);
-		const localLlmWorkerUrls = workerUrls.filter((url) =>
-			/browser-llm\.worker/i.test(url),
-		);
-		if (localLlmWorkerUrls.length !== 1) {
+		if (forbiddenLifecycleErrors.length) {
 			throw new Error(
-				`Expected one local-LLM worker, found ${localLlmWorkerUrls.length}`,
+				`WebGPU lifecycle errors remained: ${JSON.stringify(forbiddenLifecycleErrors)}`,
 			);
 		}
 
@@ -356,12 +458,14 @@ try {
 			JSON.stringify(
 				{
 					status: "passed",
+					reusedProfile,
 					capabilities,
 					qwenRequests: qwenAfterFirstGeneration,
-					localLlmWorkerCreations: localLlmWorkerUrls.length,
+					localLlmWorkerCreations: await localLlmWorkerCount(),
 					localModelDiagnostic,
 					firstGeneration,
-					secondGeneration,
+					navigationGenerations,
+					reopenedGeneration,
 					consoleMessages,
 					consoleErrors,
 				},

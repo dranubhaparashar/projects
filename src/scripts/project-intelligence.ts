@@ -1208,6 +1208,9 @@ function localModelStatus(snapshot: BrowserLocalLlmSnapshot): string {
 			: `Downloading local AI model — ${percentage}%`;
 	}
 	if (snapshot.state === "ready") return "Local AI ready";
+	if (snapshot.state === "stale") {
+		return "Local AI will reinitialize from cache when requested.";
+	}
 	if (snapshot.state === "generating") {
 		if (snapshot.progress?.status === "cancelling") {
 			return "Cancelling generation…";
