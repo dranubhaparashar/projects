@@ -11,7 +11,8 @@ export type PortfolioActionKind =
 	| "demo"
 	| "paper"
 	| "docs"
-	| "video";
+	| "video"
+	| "pdf";
 
 export interface PortfolioAction {
 	kind: PortfolioActionKind;

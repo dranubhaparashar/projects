@@ -532,6 +532,15 @@ function normalizeGithubUrl(value: string): string {
 function linkCandidates(entry: CollectionEntry<"posts">): LinkCandidate[] {
 	const body = entry.body || "";
 	const links: LinkCandidate[] = [...extractMarkdownLinks(body)];
+	// Some posts document repository links as plain text instead of Markdown
+	// links or ::github directives. Normalize escaped URL punctuation and keep
+	// those repositories in the same metadata pipeline as other projects.
+	const normalizedBody = body.replace(/https\\:\/\//g, "https://");
+	const plainGithubPattern = /https?:\/\/github\.com\/[\w.-]+\/[\w.-]+[^\s<>)\]]*/gi;
+	for (const match of normalizedBody.matchAll(plainGithubPattern)) {
+		const url = match[0].replace(/[.,;:]+$/, "");
+		links.push({ label: "GitHub", url });
+	}
 	const add = (label: string, value?: string) => {
 		if (value?.trim()) links.unshift({ label, url: value.trim() });
 	};

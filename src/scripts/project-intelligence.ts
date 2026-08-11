@@ -909,6 +909,7 @@ function renderProjectCard(
 		demo: "Open Demo",
 		paper: "Open Paper",
 		docs: "Documentation",
+		pdf: "Open PDF",
 	};
 	for (const action of project.actions || []) {
 		const label = actionLabels[action.kind];

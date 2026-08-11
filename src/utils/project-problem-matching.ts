@@ -7,7 +7,8 @@ import {
 	projectProblems,
 } from "@/config/project-problems";
 import { formatDateToYYYYMMDD } from "./date-utils";
-import { getDir, getPostUrlBySlug } from "./url-utils";
+import { getPostPdfPath } from "./pdf-utils";
+import { getDir, getPostUrlBySlug, url } from "./url-utils";
 
 export interface ProjectProblemMatch {
 	problemId: string;
@@ -37,7 +38,7 @@ export interface ProjectProblemAction {
 	label: string;
 	url: string;
 	external: boolean;
-	kind: "demo" | "docs" | "github" | "paper" | "video";
+	kind: "demo" | "docs" | "github" | "paper" | "video" | "pdf";
 }
 
 export interface ProjectArchitecturePreview {
@@ -345,7 +346,18 @@ function getProjectActions(
 	entry: CollectionEntry<"posts">,
 ): ProjectProblemAction[] {
 	const body = entry.body || "";
-	const links = extractMarkdownLinks(body);
+	const normalizedBody = body.replace(/https\\:\/\//g, "https://");
+	const links = [
+		...extractMarkdownLinks(body),
+		...Array.from(
+			normalizedBody.matchAll(
+				/https?:\/\/github\.com\/[\w.-]+\/[\w.-]+[^\s<>)\]]*/gi,
+			),
+		).map((match) => ({
+			label: "GitHub",
+			url: match[0].replace(/[.,;:]+$/, ""),
+		})),
+	];
 	const actions: ProjectProblemAction[] = [];
 	const explicitActions: ProjectProblemAction[] = [
 		entry.data.demo_url
@@ -520,6 +532,12 @@ function getProjectActions(
 			kind: "docs",
 		});
 	}
+	actions.push({
+		label: "PDF",
+		url: url(getPostPdfPath(entry)),
+		external: false,
+		kind: "pdf",
+	});
 
 	const byKind = new Map<ProjectProblemAction["kind"], ProjectProblemAction>();
 	for (const action of [...explicitActions, ...structuredActions, ...actions]) {
