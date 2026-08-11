@@ -2,6 +2,7 @@
 title: "MedClaim Sentinel: Local Multimodal AI for Medical Insurance Claim OCR, Duplicate Detection, Clinical Consistency, and Review Chat"
 published: 2026-07-20
 description: "A local-first medical insurance claim review platform that reads multilingual claim documents, detects repeated claims and invoices, reconciles amounts, performs conservative diagnosis–medicine–bill–investigation matching, and supports evidence-grounded reviewer chat."
+image: ./cover.png
 tags:
   - Insurance AI
   - Healthcare AI
