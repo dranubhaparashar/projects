@@ -1,7 +1,7 @@
 ---
-title: IncidentGraph: Provenance-Preserving Heterogeneous Evidence Fusion for Uncertainty-Aware Multi-Camera Incident Reconstruction
+title: "IncidentGraph: Provenance-Preserving Heterogeneous Evidence Fusion for Uncertainty-Aware Multi-Camera Incident Reconstruction"
 published: 2026-08-11
-description: IncidentGraph is a research prototype for uncertainty-aware multi-camera incident reconstruction that preserves evidence provenance, contradictory hypotheses, alternatives, sensor gaps, confidence, and cross-camera associations in a typed graph.
+description: "IncidentGraph is a research prototype for uncertainty-aware multi-camera incident reconstruction that preserves evidence provenance, contradictory hypotheses, alternatives, sensor gaps, confidence, and cross-camera associations in a typed graph."
 tags:
   - Computer Vision
   - Multimodal AI
@@ -17,7 +17,7 @@ tags:
   - MEVA
   - Calibration
   - Research Prototype
-category: Self Project
+category: "Self Project"
 draft: false
 ---
 
