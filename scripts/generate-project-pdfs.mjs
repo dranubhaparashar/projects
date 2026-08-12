@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import MarkdownIt from "markdown-it";
 import { chromium } from "playwright";
-import { getGeneratedPostPdfPath, slugToPdfBasename } from "../src/utils/pdf-utils.js";
+import { getGeneratedPostPdfPathFromContentId } from "../src/utils/pdf-utils.js";
 
 const rootDir = process.cwd();
 const postsRoot = path.join(rootDir, "src", "content", "posts");
@@ -92,17 +92,6 @@ async function walkMarkdownFiles(dir) {
 	return files.sort((a, b) => a.localeCompare(b));
 }
 
-function slugifyPathSegment(segment) {
-	return String(segment || "")
-		.toLowerCase()
-		.normalize("NFKD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.replace(/[^a-z0-9\s-]/g, "")
-		.trim()
-		.replace(/\s+/g, "-")
-		.replace(/^-+|-+$/g, "");
-}
-
 function getPostSlug(postFile) {
 	const relative = path.relative(postsRoot, postFile).replace(/\\/g, "/");
 	const parsed = path.posix.parse(relative);
@@ -110,7 +99,7 @@ function getPostSlug(postFile) {
 	if (parsed.name.toLowerCase() !== "index") {
 		parts.push(parsed.name);
 	}
-	return parts.map(slugifyPathSegment).filter(Boolean).join("/");
+	return parts.filter(Boolean).join("/");
 }
 
 function explicitPdfOutputName(pdfPath) {
@@ -122,7 +111,7 @@ function explicitPdfOutputName(pdfPath) {
 function getOutputName(post) {
 	const explicit = explicitPdfOutputName(post.frontmatter.pdf);
 	if (explicit) return explicit;
-	return path.basename(getGeneratedPostPdfPath(post.slug));
+	return path.basename(getGeneratedPostPdfPathFromContentId(post.slug));
 }
 
 function extractImageRefs(markdownText) {
