@@ -12,7 +12,7 @@ export const siteConfig: SiteConfig = {
 	subtitle: "AI Projects",
 	lang: "en",
 	accentColor: {
-		position: 59,
+		position: 20,
 		fixed: false,
 	},
 	banner: {
