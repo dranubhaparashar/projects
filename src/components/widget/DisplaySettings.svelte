@@ -2,6 +2,7 @@
 import I18nKey from "@i18n/i18nKey";
 import { i18n } from "@i18n/translation";
 import Icon from "@iconify/svelte";
+import { onMount } from "svelte";
 import {
 	getAccentPosition,
 	getDefaultAccentPosition,
@@ -12,9 +13,22 @@ import {
 } from "@utils/setting-utils";
 
 let accentPosition = getAccentPosition();
-const defaultAccentPosition = getDefaultAccentPosition();
+let defaultAccentPosition = getDefaultAccentPosition();
 
 $: accentColor = getEffectiveAccentColor(accentPosition);
+
+onMount(() => {
+	const syncAccentForTheme = () => {
+		defaultAccentPosition = getDefaultAccentPosition();
+		accentPosition = getAccentPosition();
+	};
+	const themeObserver = new MutationObserver(syncAccentForTheme);
+	themeObserver.observe(document.documentElement, {
+		attributes: true,
+		attributeFilter: ["class"],
+	});
+	return () => themeObserver.disconnect();
+});
 
 function resetAccent() {
 	accentPosition = defaultAccentPosition;
