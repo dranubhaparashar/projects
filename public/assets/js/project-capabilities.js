@@ -30,12 +30,16 @@ function isExternalUrl(href) {
 	}
 }
 
+function isPdfUrl(href) {
+	return /\.pdf(?:$|[?#])/i.test(String(href || ""));
+}
+
 function createLink(label, href, className = "") {
 	const link = document.createElement("a");
 	link.href = href;
 	link.textContent = label;
 	if (className) link.className = className;
-	if (isExternalUrl(href)) {
+	if (isExternalUrl(href) || isPdfUrl(href)) {
 		link.target = "_blank";
 		link.rel = "noopener noreferrer";
 	}

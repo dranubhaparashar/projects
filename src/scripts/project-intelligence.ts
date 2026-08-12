@@ -847,7 +847,7 @@ function appendText(
 }
 
 function externalLink(anchor: HTMLAnchorElement, href: string): void {
-	if (/^https?:\/\//i.test(href)) {
+	if (/^https?:\/\//i.test(href) || /\.pdf(?:$|[?#])/i.test(href)) {
 		anchor.target = "_blank";
 		anchor.rel = "noopener noreferrer";
 	}
