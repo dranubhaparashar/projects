@@ -3,7 +3,12 @@ title: Predictive & Preventive Maintenance for Generator Reliability
 published: 2026-05-02
 description: A full-stack analytics and ML dashboard that measures PM effectiveness, forecasts 14/30-day generator failure risk, and recommends prioritized maintenance actions.
 image: ./cover.png
-tags: [AI, Predictive Maintenance, Machine Learning, Streamlit, Scikit-learn, Generator Reliability, MLOps, Hugging Face, Snowflake, Python]
+tags: [Predictive Maintenance, Generator Reliability, MLOps]
+capabilities: [Predictive Analytics, MLOps, Data Analytics]
+technologies: [Streamlit, Scikit-learn, Hugging Face Spaces, Snowflake, Python]
+status:
+  label: Live / Deployed
+  type: production
 category: Industrial Project
 pdf: /downloads/predictive-preventive-maintenance-generator-project-details.pdf
 draft: false

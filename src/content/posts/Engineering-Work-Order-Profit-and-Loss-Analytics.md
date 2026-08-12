@@ -8,14 +8,21 @@ tags:
   - Financial Analytics
   - Profit and Loss
   - Work Order Management
-  - Streamlit
-  - Snowflake
-  - Python
-  - Plotly
   - Synthetic Data
   - Risk Monitoring
   - Decision Support
   - Data Quality
+capabilities:
+  - Data Analytics
+  - Workflow Automation
+technologies:
+  - Streamlit
+  - Snowflake
+  - Python
+  - Plotly
+status:
+  label: Prototype
+  type: prototype
 category: "Industrial Project"
 draft: false
 ---

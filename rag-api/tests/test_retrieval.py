@@ -9,7 +9,7 @@ import pytest
         ("projects using Snowflake", "engineering-work-order-profit-and-loss-analytics"),
         ("zero knowledge identity", "lightdid-zkp"),
         ("automotive computer vision", "end-to-end-yolo"),
-        ("agent orchestration and tools", "my-first-post"),
+        ("agent orchestration and tools", "mcp-2-0"),
         ("dynamic service composition", "llm-agents"),
         ("generator failure prediction", "predictive-preventive-maintenance-generator"),
     ],
@@ -23,18 +23,17 @@ def test_comparison_keeps_both_named_projects(retriever):
     result = retriever.retrieve(
         "Compare MCP 2.0 and Autonomous Microservice Composition"
     )
-    assert "my-first-post" in result.project_ids
+    assert "mcp-2-0" in result.project_ids
     assert "llm-agents" in result.project_ids
     context_ids = {hit.chunk.project_id for hit in result.context}
-    assert {"my-first-post", "llm-agents"}.issubset(context_ids)
+    assert {"mcp-2-0", "llm-agents"}.issubset(context_ids)
 
 
 def test_chunks_are_section_aware_and_bounded(knowledge_base):
-    assert len(knowledge_base.projects) == 14
+    assert len(knowledge_base.projects) == 17
     assert len(knowledge_base.chunks) > len(knowledge_base.projects)
     assert all(len(chunk["text"].split()) <= 620 for chunk in knowledge_base.chunks)
     assert all(chunk["section"] for chunk in knowledge_base.chunks)
     assert len({chunk["chunk_id"] for chunk in knowledge_base.chunks}) == len(
         knowledge_base.chunks
     )
-

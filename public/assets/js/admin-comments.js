@@ -28,6 +28,7 @@ const KNOWN_POST_SLUGS = [
 	"lightdid-zkp--a-policy-and-resource-aware-framework-for-selecting-bbs-and-anoncreds-verifiable-presentations-in-decentralized-identity",
 	"lightdid-zkp-a-policy-and-resource-aware-framework-for-selecting-bbs-and-anoncreds-verifiable-presentations-in-decentralized-identity",
 	"llm-agents",
+	"mcp-2-0",
 	"my-first-post",
 	"pole-detection",
 	"predictive-preventive-maintenance-generator",

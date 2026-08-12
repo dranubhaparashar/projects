@@ -2,22 +2,32 @@
 title: "ASHU Mentor AI Studio: End-to-End AI Interview, Evaluation, Adaptive Training, and Digital-Human Lecture Platform"
 published: 2026-06-16
 description: "ASHU Mentor AI Studio is a local-first AI mentor platform that connects resume-aware interviews, JD-based evaluation, adaptive training, evidence capture, consent-based voice generation, and digital-human lecture rendering into one complete learning workflow."
+card:
+  problem: "Career preparation is fragmented across separate interview, resume, coaching, voice, and training tools."
 tags:
-  - AI Agent
-  - GenAI
-  - LLM Agents
-  - Streamlit
-  - Hugging Face
+  - Agentic AI
+  - Generative AI
   - Interview AI
   - Digital Human
   - Voice AI
-  - XTTS
-  - Wav2Lip
-  - SadTalker
   - Education AI
   - Training
   - Evidence Pack
+capabilities:
+  - Generative AI
+  - Agentic AI
+  - Multimodal AI
+  - Workflow Automation
+technologies:
+  - Streamlit
+  - Hugging Face Spaces
+  - XTTS
+  - Wav2Lip
+  - SadTalker
   - Python
+status:
+  label: Live / Deployed
+  type: production
 category: "Self Project"
 draft: false
 ---
@@ -68,7 +78,7 @@ Interview preparation, candidate screening, and technical training are usually f
 - another prepares training material,
 - and a completely separate pipeline is needed to create voice or video-based learning content.
 
-This fragmentation creates a gap: the system may ask questions, but it rarely converts the answer quality into a meaningful training pathway. It may generate lessons, but the lessons are not always linked to the candidate’s actual weaknesses. It may create videos, but the video generation workflow is often disconnected from consent, evidence, and evaluation.
+Career preparation is fragmented across separate interview, resume, coaching, voice, and training tools. A system may ask questions, but it rarely converts answer quality into a meaningful training pathway. It may generate lessons, but the lessons are not always linked to the candidate’s actual weaknesses. It may create videos, but the video generation workflow is often disconnected from consent, evidence, and evaluation.
 
 **ASHU Mentor AI Studio solves this by joining the full chain into one local-first AI mentor studio.**
 

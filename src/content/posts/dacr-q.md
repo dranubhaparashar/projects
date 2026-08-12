@@ -5,7 +5,12 @@ description: A lightweight project exploring dynamic low-rank residual correctio
 architecture:
   src: ../../assets/images/projects/covers/dacr-q.png
   alt: DACR-Q data-aware clustering, reasoning, optimization and verification framework
-tags: [LLM Inference, Quantization, Low-Rank Adaptation, PyTorch, Memory Efficiency, Edge AI]
+tags: [LLM Inference, Quantization, Low-Rank Adapters, Memory Efficiency, Edge AI]
+capabilities: [Generative AI, Edge Deployment]
+technologies: [PyTorch]
+status:
+  label: Research
+  type: research
 category: Self Project
 pdf: /downloads/dacr-q-project-details.pdf
 draft: false

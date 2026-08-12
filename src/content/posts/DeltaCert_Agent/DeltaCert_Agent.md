@@ -7,7 +7,6 @@ featured: true
 draft: false
 category: "Self Project"
 tags:
-  - LLM Agents
   - Agentic AI
   - AI Security
   - Security Testing
@@ -16,9 +15,17 @@ tags:
   - Assurance Graphs
   - Explainable AI
   - Risk-Aware Testing
+  - Reproducibility
+capabilities:
+  - Agentic AI
+  - Security
+  - Explainability
+technologies:
   - Ollama
   - Python
-  - Reproducibility
+status:
+  label: Research
+  type: research
 ---
 
 > **DeltaCert-Agent** is a research framework for **selective security recertification of evolving tool-using LLM agents**.

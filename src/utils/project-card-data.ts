@@ -217,7 +217,7 @@ const NON_ARCHITECTURE_PREVIEW_PATTERN =
 	/\b(?:cover|dashboard|interface|photo|photograph|screen(?:shot)?|ui)\b/i;
 
 const COMPACT_STATUS_LABELS: Record<ProjectCardStatusType, string> = {
-	production: "Production",
+	production: "Live / Deployed",
 	pilot: "Pilot",
 	operational: "Operational",
 	prototype: "Prototype",
@@ -423,15 +423,13 @@ export function selectProjectCapabilities(
 	entry: CollectionEntry<"posts">,
 	limit = 3,
 ): { visible: string[]; additionalCount: number } {
-	const sources = [
-		...(entry.data.capabilities || []).map((label, index) => ({
-			label,
-			weight: 80,
-			index,
-		})),
-		...(entry.data.views?.executive?.key_capabilities || []).map(
-			(label, index) => ({ label, weight: 72, index }),
-		),
+	const explicitMetadata = (entry.data.capabilities || []).map(
+		(label, index) => ({ label, weight: 80, index }),
+	);
+	const documentedCapabilities = (
+		entry.data.views?.executive?.key_capabilities || []
+	).map((label, index) => ({ label, weight: 72, index }));
+	const fallbackSources = [
 		...(entry.data.technologies || []).map((label, index) => ({
 			label,
 			weight: 58,
@@ -443,6 +441,11 @@ export function selectProjectCapabilities(
 			index,
 		})),
 	];
+	const sources = explicitMetadata.length
+		? explicitMetadata
+		: documentedCapabilities.length
+			? documentedCapabilities
+			: fallbackSources;
 	const byName = new Map<
 		string,
 		{ label: string; weight: number; index: number }
@@ -493,12 +496,7 @@ export function selectProjectCapabilities(
 		selected.push(candidate);
 		selectedKeys.add(candidate.key);
 	}
-	const documented = uniqueValues([
-		...(entry.data.capabilities || []),
-		...(entry.data.views?.executive?.key_capabilities || []),
-		...(entry.data.technologies || []),
-		...(entry.data.tags || []),
-	]);
+	const documented = uniqueValues(sources.map(({ label }) => label));
 	return {
 		visible: selected.map((item) => item.label),
 		additionalCount: Math.max(0, documented.length - selected.length),

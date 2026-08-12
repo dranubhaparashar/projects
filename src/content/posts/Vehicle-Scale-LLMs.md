@@ -5,7 +5,12 @@ description: A project walkthrough of DAC+Q4-ITS, a minimal reproducible starter
 architecture:
   src: ../../assets/images/projects/covers/vehicle-scale-llms.png
   alt: Vehicle-scale multimodal LLM for perception, reasoning, planning and safe autonomous driving
-tags: [LLM Inference, INT4 Quantization, Low-Rank Adapters, Edge AI, Automotive AI, PyTorch]
+tags: [LLM Inference, Quantization, Low-Rank Adapters, Edge AI, Automotive AI]
+capabilities: [Generative AI, Edge Deployment]
+technologies: [PyTorch, INT4]
+status:
+  label: Research
+  type: research
 category: Self Project
 pdf: /downloads/vehicle-scale-llms-project-details.pdf
 draft: false

@@ -3,7 +3,12 @@ title: AI-Powered Pole Validation
 published: 2026-03-31
 description: AI-powered pole validation using GIS, imagery, OCR, and multi-system data reconciliation.
 image: ./cover.png
-tags: [AI, Computer Vision, YOLO, GIS, OCR, Pole Validation, Infrastructure]
+tags: [Computer Vision, OCR, Pole Validation, Infrastructure]
+capabilities: [Computer Vision, Document Intelligence]
+technologies: [YOLO, GIS]
+status:
+  label: Prototype
+  type: prototype
 category: Industrial Project
 pdf: /downloads/ai-powered-pole-validation-project-details.pdf
 draft: false

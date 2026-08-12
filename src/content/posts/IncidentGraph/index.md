@@ -13,11 +13,18 @@ tags:
   - Provenance
   - Multi-Camera
   - Activity Recognition
+  - Calibration
+capabilities:
+  - Computer Vision
+  - Multimodal AI
+  - Explainability
+technologies:
   - PyTorch
   - R3D-18
   - MEVA
-  - Calibration
-  - Research Prototype
+status:
+  label: Research
+  type: research
 category: "Self Project"
 draft: false
 ---

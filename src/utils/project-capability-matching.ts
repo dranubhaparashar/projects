@@ -176,9 +176,7 @@ function createMatch(
 ): ProjectCapabilityMatch | null {
 	const metadata = entry.data as CapabilityMetadata;
 	const body = entry.body || "";
-	const explicitIds = uniqueValues(metadata.capabilities || []).map(
-		normalizeValue,
-	);
+	const explicitIds = uniqueValues(metadata.capabilities || []).map(toFilterKey);
 	const exactTagMatches = exactMatches(project.tags, definition.tags);
 	const exactTechnologyMatches = exactMatches(
 		project.technologies,
@@ -203,7 +201,7 @@ function createMatch(
 		...definition.keywords,
 	]);
 	const bodyTerms = getBodyEvidenceTerms(body, definition);
-	const isExplicit = explicitIds.includes(normalizeValue(definition.id));
+	const isExplicit = explicitIds.includes(definition.id);
 
 	const hasGroundedMatch =
 		isExplicit ||

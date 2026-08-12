@@ -14,8 +14,13 @@ tags:
   - Selective Disclosure
   - Privacy-Preserving Identity
   - CAPS-ZK
+capabilities:
+  - Security
+technologies:
   - Python
-  - Research Prototype
+status:
+  label: Research
+  type: research
 category: Self Project
 draft: false
 ---

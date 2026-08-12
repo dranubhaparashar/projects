@@ -3,22 +3,32 @@ title: "MedClaim Sentinel: Local Multimodal AI for Medical Insurance Claim OCR, 
 published: 2026-07-20
 description: "A local-first medical insurance claim review platform that reads multilingual claim documents, detects repeated claims and invoices, reconciles amounts, performs conservative diagnosis–medicine–bill–investigation matching, and supports evidence-grounded reviewer chat."
 image: ./cover.png
+card:
+  problem: "Claims reviewers must reconcile diagnoses, medicines, invoices, duplicates, and billed amounts across fragmented documents, making manual review slow and inconsistent."
 tags:
   - Insurance AI
   - Healthcare AI
   - Document Intelligence
   - OCR
   - Multimodal AI
-  - Local LLM
-  - Ollama
-  - Qwen2.5-VL
   - Duplicate Detection
   - Clinical Decision Support
   - Human-in-the-Loop
+  - Fraud Analytics
+capabilities:
+  - Document Intelligence
+  - Multimodal AI
+  - Explainability
+technologies:
+  - Local LLM
+  - Ollama
+  - Qwen2.5-VL
   - Streamlit
   - Python
   - SQLite
-  - Fraud Analytics
+status:
+  label: Prototype
+  type: prototype
 category: "Consulting Project"
 draft: false
 ---
@@ -72,7 +82,7 @@ A reviewer may need to answer several questions before a claim can move forward:
 - Which field came from which document and page?
 - What evidence is missing before a medical officer can make a decision?
 
-Manual processing makes these comparisons slow and inconsistent. MedClaim Sentinel organizes the evidence, preserves the original documents, and produces review prompts with traceable reasons.
+Claims reviewers must reconcile diagnoses, medicines, invoices, duplicates, and billed amounts across fragmented documents, making manual review slow and inconsistent. MedClaim Sentinel organizes the evidence, preserves the original documents, and produces review prompts with traceable reasons.
 
 ---
 
@@ -817,16 +827,6 @@ The platform does not treat OCR as the final answer. OCR and the local vision mo
 - [YouTube demonstration](https://www.youtube.com/watch?v=83GTzouTPqI)
 - [Embedded YouTube player](https://www.youtube.com/embed/83GTzouTPqI)
 - [Documentation pack](https://dranubhaparashar.github.io/projects/downloads/MedClaim_Sentinel_Documentation_Pack.zip)
-
-<!--
-Optional GitHub card after a public repository is created:
-
-[View the GitHub Repository](https://github.com/dranubhaparashar/MedClaim-Sentinel)
-
-::github{repo="dranubhaparashar/MedClaim-Sentinel"}
--->
-
----
 
 ## Conclusion
 

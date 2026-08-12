@@ -131,6 +131,82 @@ export function toFilterKey(value: string): string {
 		.replace(/^-+|-+$/g, "");
 }
 
+const RECOMMENDATION_DISPLAY_LABELS: Record<string, string> = {
+	ocr: "OCR",
+	llm: "LLM",
+	llminference: "LLM Inference",
+	"llm-inference": "LLM Inference",
+	computer_vision: "Computer Vision",
+	"computer-vision": "Computer Vision",
+	computervision: "Computer Vision",
+	multimodal: "Multimodal AI",
+	"multimodal-ai": "Multimodal AI",
+	genai: "Generative AI",
+	generative: "Generative AI",
+	"generative-ai": "Generative AI",
+	agent: "Agentic AI",
+	agents: "Agentic AI",
+	"agentic-ai": "Agentic AI",
+	chat: "Conversational AI",
+	retrieval: "Information Retrieval",
+	detection: "Object Detection",
+	inspection: "Visual Inspection",
+	image: "Image Analysis",
+	video: "Video Intelligence",
+	camera: "Camera Analytics",
+	maintenance: "Predictive Maintenance",
+	generator: "Generator Reliability",
+	failure: "Failure Risk Forecasting",
+	forecast: "Forecasting",
+	risk: "Risk Analysis",
+	asset: "Asset Intelligence",
+	reliability: "Reliability Engineering",
+	telemetry: "Telemetry Analytics",
+	voice: "Voice AI",
+	"digital-human": "Digital Human",
+	logistics: "Logistics Optimization",
+	routing: "Route Optimization",
+	route: "Route Optimization",
+	warehouse: "Warehouse Operations",
+	fleet: "Fleet Optimization",
+	dispatch: "Dispatch Optimization",
+	medical: "Healthcare AI",
+	healthcare: "Healthcare AI",
+	clinical: "Clinical Decision Support",
+	claim: "Claims Intelligence",
+	insurance: "Insurance AI",
+	patient: "Clinical Decision Support",
+	diagnosis: "Clinical Decision Support",
+	security: "Security",
+	identity: "Decentralized Identity",
+	credential: "Verifiable Credentials",
+	credentials: "Verifiable Credentials",
+	privacy: "Privacy Engineering",
+	proof: "Zero-Knowledge Proofs",
+	devsecops: "DevSecOps",
+	policy: "Policy Automation",
+	automation: "Workflow Automation",
+};
+
+export function toRecommendationDisplayLabel(value: string): string {
+	const raw = String(value || "").trim();
+	if (!raw) return "";
+	const normalizedKey = toFilterKey(raw);
+	const compactKey = normalizedKey.replace(/-/g, "");
+	const mapped =
+		RECOMMENDATION_DISPLAY_LABELS[raw.toLowerCase()] ||
+		RECOMMENDATION_DISPLAY_LABELS[normalizedKey] ||
+		RECOMMENDATION_DISPLAY_LABELS[compactKey];
+	if (mapped) return mapped;
+
+	return raw
+		.replace(/_+/g, " ")
+		.replace(/\b\w/g, (letter) => letter.toUpperCase())
+		.replace(/\bAi\b/g, "AI")
+		.replace(/\bMlops\b/g, "MLOps")
+		.replace(/\bLlm\b/g, "LLM");
+}
+
 function uniqueValues(values: string[]): string[] {
 	const seen = new Set<string>();
 	const unique: string[] = [];
@@ -143,13 +219,6 @@ function uniqueValues(values: string[]): string[] {
 	}
 
 	return unique;
-}
-
-function formatList(values: string[]): string {
-	if (values.length === 0) return "";
-	if (values.length === 1) return values[0];
-	if (values.length === 2) return `${values[0]} and ${values[1]}`;
-	return `${values.slice(0, -1).join(", ")} and ${values[values.length - 1]}`;
 }
 
 function includesTerm(text: string, term: string): boolean {
@@ -272,15 +341,21 @@ export function matchProjectProblems(
 
 		if (!qualifies) continue;
 
-		let matchReason = "Relevant because it matches the project summary.";
+		const displayTags = uniqueValues(
+			matchedTags.map(toRecommendationDisplayLabel),
+		).slice(0, 4);
+		const displayKeywords = uniqueValues(
+			matchedKeywords.map(toRecommendationDisplayLabel),
+		).slice(0, 4);
+		let matchReason = "Related project context.";
 		if (explicitMatch) {
-			matchReason = `Explicitly mapped to ${problem.label}.`;
+			matchReason = `Problem fit: ${problem.label}.`;
 		} else if (matchedTags.length > 0) {
-			matchReason = `Relevant because it uses: ${formatList(matchedTags.slice(0, 4))}.`;
+			matchReason = `Shared focus: ${displayTags.join(" · ")}.`;
 		} else if (matchedKeywords.length > 0) {
-			matchReason = `Relevant because it mentions: ${formatList(matchedKeywords.slice(0, 4))}.`;
+			matchReason = `Related capabilities: ${displayKeywords.join(" · ")}.`;
 		} else if (matchedCategories.length > 0) {
-			matchReason = `Relevant because of its project type: ${matchedCategories[0]}.`;
+			matchReason = `Shared project context: ${toRecommendationDisplayLabel(matchedCategories[0])}.`;
 		}
 
 		matches.push({

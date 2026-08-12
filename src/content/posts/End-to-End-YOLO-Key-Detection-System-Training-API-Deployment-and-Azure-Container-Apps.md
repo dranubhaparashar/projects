@@ -5,7 +5,12 @@ description: End-to-end key detection using YOLO, FastAPI, Docker, Hugging Face 
 architecture:
   src: ../../assets/images/projects/covers/yolo-key-detection.png
   alt: YOLO computer vision system for automotive key detection, component inspection and validation
-tags: [AI, Computer Vision, YOLO, FastAPI, Docker, Azure, Azure Container Apps, Hugging Face, MLOps]
+tags: [Computer Vision, MLOps]
+capabilities: [Computer Vision, MLOps, Cloud Deployment]
+technologies: [YOLO, FastAPI, Docker, Azure, Azure Container Apps, Hugging Face Spaces]
+status:
+  label: Live / Deployed
+  type: production
 category: Industrial Project
 pdf: /downloads/end-to-end-yolo-key-detection-system-project-details.pdf
 draft: false

@@ -84,6 +84,15 @@ const QUICK_CAPABILITY_IDS = [
 	"document-intelligence",
 ] as const;
 
+const STATUS_DISPLAY_LABELS: Record<string, string> = {
+	production: "Live / Deployed",
+	pilot: "Pilot",
+	operational: "Operational",
+	prototype: "Prototype",
+	research: "Research",
+	concept: "Concept",
+};
+
 function normalize(value: string): string {
 	return String(value || "")
 		.normalize("NFKD")
@@ -483,7 +492,9 @@ export function buildProjectDiscoveryData(
 			.filter((record) => record.status)
 			.map((record) => ({
 				id: record.status,
-				label: record.status.charAt(0).toUpperCase() + record.status.slice(1),
+				label:
+					STATUS_DISPLAY_LABELS[record.status] ||
+					record.status.charAt(0).toUpperCase() + record.status.slice(1),
 			})),
 		(value) => value.id,
 	);

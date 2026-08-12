@@ -50,8 +50,8 @@ export const navBarConfig: NavBarConfig = {
 
 export const profileConfig: ProfileConfig = {
 	avatar: "assets/images/demo-avatar.jpg",
-	name: "Anubha Parashar",
-	bio: "AI Developer specializing in GenAI, Agentic AI, and intelligent automation. Builds scalable LLM-powered systems, RAG pipelines, and multi-agent architectures. Focused on solving real-world problems with practical, production-ready AI solutions. Continuously exploring cutting-edge AI to create impactful, high-value applications.",
+	name: "Dr. Anubha Parashar",
+	bio: "Dr. Anubha Parashar is an AI researcher and practitioner at Pearce Services, with a PhD, 50+ publications, and 6 patents spanning GenAI, Agentic AI, computer vision, predictive systems, and intelligent automation.",
 	links: [
 		{
 			name: "LinkedIn",

@@ -28,6 +28,10 @@ export type PortfolioDeploymentStatus =
 	| "demo"
 	| "unspecified";
 
+type DocumentedProjectStatus = NonNullable<
+	CollectionEntry<"posts">["data"]["status"]
+>;
+
 export interface PortfolioProblemMapping {
 	id: string;
 	label: string;
@@ -297,6 +301,23 @@ function classifyDeployment(
 	};
 }
 
+function documentedDeployment(
+	status: DocumentedProjectStatus,
+	details: string,
+): PortfolioKnowledgeProject["deployment"] {
+	const normalizedStatus: PortfolioDeploymentStatus =
+		status.type === "production" || status.type === "operational"
+			? "production"
+			: status.type === "pilot" || status.type === "prototype"
+				? "prototype"
+				: status.type;
+	return {
+		status: normalizedStatus,
+		evidence: [`Documented status: ${status.label}.`],
+		details: compact(details || status.label),
+	};
+}
+
 function isPublishedPortfolioEntry(entry: CollectionEntry<"posts">): boolean {
 	const metadata = entry.data as CollectionEntry<"posts">["data"] &
 		ExtendedPortfolioMetadata;
@@ -513,11 +534,13 @@ export function buildPortfolioKnowledgeIndex(
 				.filter((related): related is string => typeof related === "string")
 				.map(toFilterKey);
 			const structuredDeployment = getStructuredDeploymentDetails(entry);
-			const deployment = classifyDeployment(
-				body,
-				structuredDeployment,
-				actions.some((action) => action.kind === "demo"),
-			);
+			const deployment = entry.data.status
+				? documentedDeployment(entry.data.status, structuredDeployment)
+				: classifyDeployment(
+						body,
+						structuredDeployment,
+						actions.some((action) => action.kind === "demo"),
+					);
 
 			const structuredSearchContent = uniqueValues([
 				...flattenStructuredValue(entry.data.views),

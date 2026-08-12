@@ -10,9 +10,6 @@ category: "Self Project"
 tags:
   - Multimodal AI
   - Computer Vision
-  - Deep Learning
-  - PyTorch
-  - R3D-18
   - Temporal Video
   - Explainable AI
   - Calibration
@@ -20,6 +17,16 @@ tags:
   - Robustness
   - Synthetic Data
   - MLOps
+capabilities:
+  - Multimodal AI
+  - Computer Vision
+  - Explainability
+technologies:
+  - PyTorch
+  - R3D-18
+status:
+  label: Research
+  type: research
 ---
 
 > **CARE-SIU** stands for **Context-Aware, Reliability-Calibrated, and Explainable Multimodal Social-Interaction Understanding for Safety-Critical Environments**.

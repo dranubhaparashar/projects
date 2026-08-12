@@ -5,7 +5,12 @@ description: A project walkthrough of an MCP control plane that combines Redis s
 architecture:
   src: ../../assets/images/projects/covers/autonomous-microservice-composition.png
   alt: Autonomous microservice composition, orchestration and self-healing architecture
-tags: [MCP, LLM Agents, FastAPI, Redis, PostgreSQL, pgvector, Orchestration, Microservices]
+tags: [MCP, Agentic AI, Orchestration, Microservices]
+capabilities: [Agentic AI, Workflow Automation, Generative AI]
+technologies: [FastAPI, Redis, PostgreSQL, pgvector, GPT-4o-mini, HTTPX, NetworkX]
+status:
+  label: Prototype
+  type: prototype
 category: Self Project
 pdf: /downloads/autonomous-microservice-composition-mcp-control-plane-project-details.pdf
 draft: false

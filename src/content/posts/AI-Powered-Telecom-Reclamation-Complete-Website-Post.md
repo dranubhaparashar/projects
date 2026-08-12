@@ -4,17 +4,24 @@ published: 2026-07-10
 description: "A decision-support and workflow-modernization platform for telecom copper reclamation that parses ACR, CAPR, and CPR reports, normalizes cable-pair evidence, generates conservative review recommendations, models With-SOW and Without-SOW processes, and provides a FastAPI and React/Vite foundation for governed automation."
 pdf: "/downloads/ai-powered-telecom-reclamation-complete-website-post-project-details.pdf"
 tags:
-  - AI
   - Telecom
   - Network Automation
   - Copper Reclamation
   - Document Intelligence
   - Workflow Automation
   - Decision Support
+capabilities:
+  - Document Intelligence
+  - Workflow Automation
+  - Data Analytics
+technologies:
   - FastAPI
   - React
   - TypeScript
   - Python
+status:
+  label: Prototype
+  type: prototype
 category: "Industrial Project"
 draft: false
 ---
