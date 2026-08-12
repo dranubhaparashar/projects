@@ -14,6 +14,11 @@ import {
 import { defaultFavicons } from "../constants/icon";
 import type { Favicon } from "../types/config";
 import { pathsEqual, url } from "../utils/url-utils";
+import {
+	DEFAULT_DARK_ACCENT,
+	DEFAULT_LIGHT_ACCENT,
+	PREMIUM_ACCENT_ANCHORS,
+} from "../utils/setting-utils";
 import "katex/dist/katex.css";
 import "../styles/global.css";
 
@@ -35,6 +40,7 @@ const isHomePage = pathsEqual(Astro.url.pathname, url("/"));
 // defines global css variables
 // why doing this in Layout instead of GlobalStyles: https://github.com/withastro/astro/issues/6728#issuecomment-1502203757
 const defaultAccentPosition = siteConfig.accentColor.position;
+const premiumAccentAnchorsJson = JSON.stringify(PREMIUM_ACCENT_ANCHORS);
 if (!banner || typeof banner !== "string" || banner.trim() === "") {
 	banner = siteConfig.banner.src;
 }
@@ -113,7 +119,7 @@ const bannerOffset =
 		))}
 
 		<!-- Set the theme before the page is rendered to avoid a flash -->
-		<script is:inline define:vars={{DEFAULT_THEME, LIGHT_MODE, DARK_MODE, AUTO_MODE, BANNER_HEIGHT_EXTEND, PAGE_WIDTH, defaultAccentPosition}}>
+		<script is:inline define:vars={{DEFAULT_THEME, LIGHT_MODE, DARK_MODE, AUTO_MODE, BANNER_HEIGHT_EXTEND, PAGE_WIDTH, defaultAccentPosition, premiumAccentAnchorsJson, DEFAULT_LIGHT_ACCENT, DEFAULT_DARK_ACCENT}}>
 			// Load the theme from local storage
 			const theme = localStorage.getItem('theme') || DEFAULT_THEME;
 			switch (theme) {
@@ -131,14 +137,7 @@ const bannerOffset =
 					}
 			}
 
-			const premiumAccentAnchors = [
-				{ position: 0, color: '#5E1F33' },
-				{ position: 20, color: '#822B41' },
-				{ position: 40, color: '#B32545' },
-				{ position: 60, color: '#C99A3F' },
-				{ position: 80, color: '#1F7A55' },
-				{ position: 100, color: '#2F5FA8' },
-			];
+			const premiumAccentAnchors = JSON.parse(premiumAccentAnchorsJson);
 			const normalizeAccentPosition = (value) => {
 				if (value === null || value === undefined || String(value).trim() === '') return defaultAccentPosition;
 				const parsed = Number(value);
@@ -173,12 +172,28 @@ const bannerOffset =
 			};
 
 			const storedAccentPosition = localStorage.getItem('premium-accent-position');
+			const storedAccentColor = localStorage.getItem('premium-accent-color');
 			const accentPosition = normalizeAccentPosition(storedAccentPosition);
-			const accentColor = interpolatePremiumColor(accentPosition);
-			localStorage.setItem('premium-accent-position', String(accentPosition));
-			localStorage.setItem('premium-accent-color', accentColor);
+			const hasCustomAccent = storedAccentPosition !== null;
+			const isDarkTheme = document.documentElement.classList.contains('dark');
+			const accentColor = hasCustomAccent
+				? (storedAccentColor || interpolatePremiumColor(accentPosition))
+				: (isDarkTheme ? DEFAULT_DARK_ACCENT : DEFAULT_LIGHT_ACCENT);
+			if (hasCustomAccent) {
+				localStorage.setItem('premium-accent-position', String(accentPosition));
+				localStorage.setItem('premium-accent-color', accentColor);
+			}
 			localStorage.removeItem('hue');
 			document.documentElement.style.setProperty('--accent-color', accentColor);
+			if (!hasCustomAccent) {
+				new MutationObserver(() => {
+					if (localStorage.getItem('premium-accent-position') !== null) return;
+					const themeDefault = document.documentElement.classList.contains('dark')
+						? DEFAULT_DARK_ACCENT
+						: DEFAULT_LIGHT_ACCENT;
+					document.documentElement.style.setProperty('--accent-color', themeDefault);
+				}).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+			}
 
 			// calculate the --banner-height-extend, which needs to be a multiple of 4 to avoid blurry text
 			let offset = Math.floor(window.innerHeight * (BANNER_HEIGHT_EXTEND / 100));

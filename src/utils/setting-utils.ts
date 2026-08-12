@@ -8,21 +8,22 @@ import { expressiveCodeConfig } from "@/config";
 import type { LIGHT_DARK_MODE } from "@/types/config";
 
 const DEFAULT_ACCENT_POSITION = 20;
+export const DEFAULT_LIGHT_ACCENT = "#822B41";
+export const DEFAULT_DARK_ACCENT = "#D6B269";
 const ACCENT_POSITION_STORAGE_KEY = "premium-accent-position";
 const ACCENT_COLOR_STORAGE_KEY = "premium-accent-color";
 const LEGACY_HUE_STORAGE_KEY = "hue";
 
-export const PREMIUM_ACCENT_GRADIENT =
-	"linear-gradient(to right, #5E1F33 0%, #822B41 20%, #B32545 40%, #C99A3F 60%, #1F7A55 80%, #2F5FA8 100%)";
-
-const PREMIUM_ACCENT_ANCHORS = [
+export const PREMIUM_ACCENT_ANCHORS = [
 	{ position: 0, color: "#5E1F33" },
-	{ position: 20, color: "#822B41" },
+	{ position: 20, color: DEFAULT_LIGHT_ACCENT },
 	{ position: 40, color: "#B32545" },
 	{ position: 60, color: "#C99A3F" },
 	{ position: 80, color: "#1F7A55" },
 	{ position: 100, color: "#2F5FA8" },
 ] as const;
+
+export const PREMIUM_ACCENT_GRADIENT = `linear-gradient(to right, ${PREMIUM_ACCENT_ANCHORS.map(({ position, color }) => `${color} ${position}%`).join(", ")})`;
 
 type RgbColor = {
 	r: number;
@@ -125,6 +126,24 @@ export function getAccentColor(position: number = getAccentPosition()): string {
 	return interpolatePremiumColor(position);
 }
 
+export function hasCustomAccent(): boolean {
+	return typeof localStorage !== "undefined" &&
+		localStorage.getItem(ACCENT_POSITION_STORAGE_KEY) !== null;
+}
+
+export function getThemeDefaultAccent(theme: LIGHT_DARK_MODE): string {
+	return theme === DARK_MODE ? DEFAULT_DARK_ACCENT : DEFAULT_LIGHT_ACCENT;
+}
+
+export function getEffectiveAccentColor(position = getAccentPosition()): string {
+	if (!hasCustomAccent() && position === getDefaultAccentPosition()) {
+		return document.documentElement.classList.contains("dark")
+			? DEFAULT_DARK_ACCENT
+			: DEFAULT_LIGHT_ACCENT;
+	}
+	return localStorage.getItem(ACCENT_COLOR_STORAGE_KEY) || interpolatePremiumColor(position);
+}
+
 export function setAccentPosition(position: number): void {
 	const normalizedPosition = normalizeAccentPosition(position);
 	const accentColor = interpolatePremiumColor(normalizedPosition);
@@ -145,6 +164,15 @@ export function setAccentPosition(position: number): void {
 	document.documentElement.style.setProperty("--accent-color", accentColor);
 }
 
+export function clearAccentCustomization(): void {
+	if (typeof localStorage !== "undefined") {
+		localStorage.removeItem(ACCENT_POSITION_STORAGE_KEY);
+		localStorage.removeItem(ACCENT_COLOR_STORAGE_KEY);
+	}
+	const theme = document.documentElement.classList.contains("dark") ? DARK_MODE : LIGHT_MODE;
+	document.documentElement.style.setProperty("--accent-color", getThemeDefaultAccent(theme));
+}
+
 export function applyThemeToDocument(theme: LIGHT_DARK_MODE): void {
 	switch (theme) {
 		case LIGHT_MODE:
@@ -160,6 +188,10 @@ export function applyThemeToDocument(theme: LIGHT_DARK_MODE): void {
 				document.documentElement.classList.remove("dark");
 			}
 			break;
+	}
+	if (!hasCustomAccent()) {
+		const activeTheme = document.documentElement.classList.contains("dark") ? DARK_MODE : LIGHT_MODE;
+		document.documentElement.style.setProperty("--accent-color", getThemeDefaultAccent(activeTheme));
 	}
 
 	// Set the theme for Expressive Code

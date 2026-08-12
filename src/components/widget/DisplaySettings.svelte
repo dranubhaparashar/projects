@@ -3,9 +3,10 @@ import I18nKey from "@i18n/i18nKey";
 import { i18n } from "@i18n/translation";
 import Icon from "@iconify/svelte";
 import {
-	getAccentColor,
 	getAccentPosition,
 	getDefaultAccentPosition,
+	getEffectiveAccentColor,
+	clearAccentCustomization,
 	PREMIUM_ACCENT_GRADIENT,
 	setAccentPosition,
 } from "@utils/setting-utils";
@@ -13,13 +14,15 @@ import {
 let accentPosition = getAccentPosition();
 const defaultAccentPosition = getDefaultAccentPosition();
 
-$: accentColor = getAccentColor(accentPosition);
-$: if (accentPosition || accentPosition === 0) {
-	setAccentPosition(accentPosition);
-}
+$: accentColor = getEffectiveAccentColor(accentPosition);
 
 function resetAccent() {
 	accentPosition = defaultAccentPosition;
+	clearAccentCustomization();
+}
+
+function updateAccent() {
+	setAccentPosition(accentPosition);
 }
 </script>
 
@@ -45,8 +48,8 @@ function resetAccent() {
         </div>
     </div>
     <div class="accent-slider-shell w-full rounded-xl select-none">
-        <input aria-label={i18n(I18nKey.themeColor)} type="range" min="0" max="100" bind:value={accentPosition}
-               class="slider" id="colorSlider" step="1" style={`width: 100%; background-image: ${PREMIUM_ACCENT_GRADIENT}`}>
+		<input aria-label={i18n(I18nKey.themeColor)} type="range" min="0" max="100" bind:value={accentPosition}
+		       on:input={updateAccent} class="slider" id="colorSlider" step="1" style={`width: 100%; background-image: ${PREMIUM_ACCENT_GRADIENT}`}>
     </div>
 </div>
 
