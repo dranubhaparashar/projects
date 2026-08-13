@@ -50,7 +50,7 @@ export const navBarConfig: NavBarConfig = {
 };
 
 export const profileConfig: ProfileConfig = {
-	avatar: "assets/images/demo-avatar.jpg",
+	avatar: "assets/images/demo-avatar-removebg-preview.png",
 	name: "Dr. Anubha Parashar",
 	bio: "Dr. Anubha Parashar is an AI researcher and practitioner at Pearce Services, with a PhD, 50+ publications, and 6 patents spanning GenAI, Agentic AI, computer vision, predictive systems, and intelligent automation.",
 	links: [
