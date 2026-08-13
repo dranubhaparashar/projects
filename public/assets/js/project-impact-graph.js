@@ -106,6 +106,7 @@ class ProjectImpactExplorer {
 			year: "",
 			selectedId: "",
 			selectedGroup: this.urlState.group,
+			focusedGroup: "",
 			hoveredId: "",
 			hoveredGroup: "",
 			activeEdgeId: "",
@@ -497,9 +498,9 @@ class ProjectImpactExplorer {
 			});
 		this.app
 			.querySelectorAll("[data-impact-clear-filters]")
-			.forEach((button) =>
-				button.addEventListener("click", () => this.clearFilters()),
-			);
+			.forEach((button) => {
+				button.addEventListener("click", () => this.clearFilters());
+			});
 		this.app
 			.querySelector("[data-impact-apply-filters]")
 			?.addEventListener("click", () =>
@@ -667,10 +668,11 @@ class ProjectImpactExplorer {
 	}
 
 	setClusterBy(mode, shouldSync = true) {
-		if (!this.modeById.has(mode)) mode = "impact-domain";
-		if (mode === this.state.clusterBy && shouldSync) return;
-		this.state.clusterBy = mode;
+		const nextMode = this.modeById.has(mode) ? mode : "impact-domain";
+		if (nextMode === this.state.clusterBy && shouldSync) return;
+		this.state.clusterBy = nextMode;
 		this.state.selectedGroup = "";
+		this.state.focusedGroup = "";
 		this.collapsedGroups.clear();
 		this.refreshClusterMode({ resetGroup: true });
 		this.applyFilters(false);
@@ -683,7 +685,10 @@ class ProjectImpactExplorer {
 	}
 
 	refreshClusterMode({ resetGroup = false } = {}) {
-		if (resetGroup) this.state.selectedGroup = "";
+		if (resetGroup) {
+			this.state.selectedGroup = "";
+			this.state.focusedGroup = "";
+		}
 		if (
 			this.state.selectedGroup &&
 			!this.activeMode.groups.some(
@@ -691,6 +696,14 @@ class ProjectImpactExplorer {
 			)
 		) {
 			this.state.selectedGroup = "";
+		}
+		if (
+			this.state.focusedGroup &&
+			!this.activeMode.groups.some(
+				(group) => group.id === this.state.focusedGroup,
+			)
+		) {
+			this.state.focusedGroup = "";
 		}
 		this.groupMeta = new Map(
 			this.activeMode.groups.map((group) => [group.id, group]),
@@ -714,14 +727,14 @@ class ProjectImpactExplorer {
 			const color = group?.color || "#475569";
 			const element = this.nodeElements.get(node.id);
 			if (!element) continue;
-			element.style.setProperty("--node-stroke", color);
+			element.style.setProperty("--node-color", color);
 			element.style.setProperty(
 				"--node-fill",
 				`color-mix(in srgb, ${color} 13%, white)`,
 			);
 			element.style.setProperty(
 				"--node-fill-dark",
-				`color-mix(in srgb, ${color} 24%, #101418)`,
+				`color-mix(in srgb, ${color} 16%, var(--impact-surface-muted))`,
 			);
 			element.setAttribute("aria-label", this.getNodeAriaLabel(node));
 		}
@@ -957,14 +970,19 @@ class ProjectImpactExplorer {
 	renderLegend() {
 		const groups = this.getVisibleGroups({ baseFiltersOnly: true });
 		const total = this.nodes.filter((node) => node.matchesBaseFilters).length;
+		const filteredGroupId =
+			this.activeMode.groups.find(
+				(group) => group.label === this.state.selectedGroup,
+			)?.id || "";
+		const selectedGroupId = this.state.focusedGroup || filteredGroupId;
 		this.legendList.innerHTML = `
-			<button type="button" class="impact-legend-item${this.state.selectedGroup ? "" : " is-active"}" data-impact-group="" aria-pressed="${String(!this.state.selectedGroup)}">
+			<button type="button" class="impact-legend-item${selectedGroupId ? "" : " is-active"}" data-impact-group="" data-impact-group-id="" aria-pressed="${String(!selectedGroupId)}">
 				<span class="impact-legend-icon" data-impact-icon="network" aria-hidden="true"></span>
 				<span>All groups</span><strong>${total}</strong>
 			</button>
 			${groups
 				.map(
-					(group) => `<button type="button" class="impact-legend-item${this.state.selectedGroup === group.label ? " is-active" : ""}" data-impact-group="${escapeHTML(group.label)}" data-impact-group-id="${escapeHTML(group.id)}" style="--group-color: ${escapeHTML(group.color)}" aria-pressed="${String(this.state.selectedGroup === group.label)}">
+					(group) => `<button type="button" class="impact-legend-item${selectedGroupId === group.id ? " is-active" : ""}${filteredGroupId === group.id ? " is-filtered" : ""}" data-impact-group="${escapeHTML(group.label)}" data-impact-group-id="${escapeHTML(group.id)}" style="--group-color: ${escapeHTML(group.color)}" aria-pressed="${String(selectedGroupId === group.id)}">
 						<span class="impact-legend-icon" data-impact-icon="${escapeHTML(group.icon)}" aria-hidden="true"></span>
 						<span>${escapeHTML(group.label)}</span><strong>${group.count}</strong>
 					</button>`,
@@ -975,14 +993,13 @@ class ProjectImpactExplorer {
 			const groupLabel = button.dataset.impactGroup || "";
 			const groupId = button.dataset.impactGroupId || "";
 			button.addEventListener("click", () => {
-				this.state.selectedGroup =
-					this.state.selectedGroup === groupLabel ? "" : groupLabel;
-				const filter = this.app.querySelector(
-					"[data-impact-cluster-filter]",
-				);
-				if (filter) filter.value = this.state.selectedGroup;
-				this.applyFilters();
-				updateExplorerUrl(this.state, true);
+				this.state.focusedGroup =
+					this.state.focusedGroup === groupId ? "" : groupId;
+				this.renderLegend();
+				this.updateHighlighting();
+				this.srSummary.textContent = groupLabel
+					? `${groupLabel} ${this.state.focusedGroup ? "focused" : "focus cleared"}.`
+					: "Group focus cleared.";
 			});
 			button.addEventListener("pointerenter", () => {
 				this.state.hoveredGroup = groupId;
@@ -1086,6 +1103,11 @@ class ProjectImpactExplorer {
 			return;
 		}
 		const assignment = this.getGroupAssignment(project);
+		const group = this.groupMeta.get(assignment.primaryClusterId);
+		this.details.style.setProperty(
+			"--detail-color",
+			group?.color || "#475569",
+		);
 		const related = this.getRelatedProjectDetails(project.id);
 		const additionalDomains = project.domains.filter(
 			(domain) => domain !== project.primaryDomain,
@@ -1174,6 +1196,11 @@ class ProjectImpactExplorer {
 		clearTimeout(this.cardTimer);
 		this.cardTimer = window.setTimeout(() => {
 			const assignment = this.getGroupAssignment(node);
+			const group = this.groupMeta.get(assignment.primaryClusterId);
+			this.hoverCard.style.setProperty(
+				"--preview-color",
+				group?.color || "#475569",
+			);
 			this.hoverCard.className = "impact-hover-card impact-node-preview";
 			this.hoverCard.innerHTML = `
 				<p class="impact-hover-kicker">Project preview</p>
@@ -1195,6 +1222,14 @@ class ProjectImpactExplorer {
 		this.cardTimer = window.setTimeout(() => {
 			const source = this.projects.get(edge.source);
 			const target = this.projects.get(edge.target);
+			const sourceNode = this.nodeById.get(edge.source);
+			const sourceGroup = sourceNode
+				? this.groupMeta.get(this.getGroupId(sourceNode))
+				: null;
+			this.hoverCard.style.setProperty(
+				"--preview-color",
+				sourceGroup?.color || "#475569",
+			);
 			const sharedCapabilities = [
 				...edge.sharedTechnologies,
 				...edge.sharedTags,
@@ -1274,6 +1309,22 @@ class ProjectImpactExplorer {
 		const selectedId = this.state.selectedId;
 		const activeId = this.state.hoveredId || selectedId;
 		const activeEdge = this.edgeById.get(this.state.activeEdgeId);
+		const activeNode = activeId ? this.nodeById.get(activeId) : null;
+		const activeNodeGroup = activeNode ? this.getGroupId(activeNode) : "";
+		const activeEdgeGroup = activeEdge?.sourceNode
+			? this.getGroupId(activeEdge.sourceNode)
+			: "";
+		const activeGroupId =
+			this.state.hoveredGroup ||
+			activeNodeGroup ||
+			activeEdgeGroup ||
+			this.state.focusedGroup;
+		const activeGroupColor =
+			this.groupMeta.get(activeGroupId)?.color || "#475569";
+		this.explorer.classList.toggle(
+			"has-group-focus",
+			Boolean(this.state.focusedGroup),
+		);
 		const connectedIds = new Set();
 		if (activeId) {
 			for (const edge of this.edges) {
@@ -1291,8 +1342,7 @@ class ProjectImpactExplorer {
 				activeEdge &&
 				(activeEdge.source === node.id || activeEdge.target === node.id);
 			const groupHighlighted =
-				this.state.hoveredGroup &&
-				this.getGroupId(node) === this.state.hoveredGroup;
+				activeGroupId && this.getGroupId(node) === activeGroupId;
 			const dimmed =
 				rendered &&
 				((activeEdge && !isEdgeEndpoint) ||
@@ -1302,7 +1352,7 @@ class ProjectImpactExplorer {
 						!connectedIds.has(node.id)) ||
 					(!activeEdge &&
 						!activeId &&
-						this.state.hoveredGroup &&
+						activeGroupId &&
 						!groupHighlighted));
 			element.classList.toggle("is-hidden", !rendered);
 			element.classList.toggle("is-selected", node.id === selectedId);
@@ -1321,11 +1371,13 @@ class ProjectImpactExplorer {
 				activeId && (edge.source === activeId || edge.target === activeId);
 			const active = activeEdge?.id === edge.id || activeForNode;
 			const groupActive =
-				this.state.hoveredGroup &&
-				(this.getGroupId(edge.sourceNode) === this.state.hoveredGroup ||
-					this.getGroupId(edge.targetNode) === this.state.hoveredGroup);
+				activeGroupId &&
+				(this.getGroupId(edge.sourceNode) === activeGroupId ||
+					this.getGroupId(edge.targetNode) === activeGroupId);
+			const highlighted = active || (!activeId && !activeEdge && groupActive);
+			element.style.setProperty("--edge-color", activeGroupColor);
 			element.classList.toggle("is-hidden", !rendered);
-			element.classList.toggle("is-active", Boolean(active));
+			element.classList.toggle("is-active", Boolean(highlighted));
 			element.classList.toggle(
 				"is-dimmed",
 				Boolean(
@@ -1334,25 +1386,31 @@ class ProjectImpactExplorer {
 							(!activeEdge && activeId && !active) ||
 							(!activeEdge &&
 								!activeId &&
-								this.state.hoveredGroup &&
+								activeGroupId &&
 								!groupActive)),
 				),
 			);
 			element.tabIndex = rendered ? 0 : -1;
 		}
 		for (const [groupId, region] of this.clusterRegionElements) {
-			const highlighted = this.state.hoveredGroup === groupId;
-			const activeNodeGroup = activeId
-				? this.getGroupId(this.nodeById.get(activeId))
-				: "";
+			const highlighted = activeGroupId === groupId;
 			region.classList.toggle("is-highlighted", highlighted);
 			region.classList.toggle(
 				"is-dimmed",
-				Boolean(
-					(this.state.hoveredGroup && !highlighted) ||
-						(activeNodeGroup && activeNodeGroup !== groupId),
-				),
+				Boolean(activeGroupId && !highlighted),
 			);
+		}
+		this.legendList
+			?.querySelectorAll("[data-impact-group-id]")
+			.forEach((item) => {
+				const matches = item.dataset.impactGroupId === activeGroupId;
+				item.classList.toggle("is-context-active", Boolean(activeGroupId && matches));
+				item.classList.toggle("is-context-muted", Boolean(activeGroupId && !matches));
+			});
+		for (const [groupId, element] of this.treeGroupElements) {
+			const matches = groupId === activeGroupId;
+			element.classList.toggle("is-context-active", Boolean(activeGroupId && matches));
+			element.classList.toggle("is-context-muted", Boolean(activeGroupId && !matches));
 		}
 	}
 
@@ -1836,6 +1894,8 @@ class ProjectImpactExplorer {
 
 	resetView() {
 		this.closeHoverCard(true);
+		this.state.focusedGroup = "";
+		this.renderLegend();
 		this.transform = { x: 0, y: 0, k: 1 };
 		if (this.state.layout === "tree") {
 			this.renderTree();

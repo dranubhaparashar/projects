@@ -218,6 +218,26 @@ try {
 	assert.equal(await impact.locator("[data-impact-zoom='in']").isVisible(), true);
 	record("Impact Domain protected controls preserved");
 
+	const lightSemanticColors = await impact.evaluate(() => {
+		const data = JSON.parse(document.querySelector("#project-impact-data")?.textContent || "{}");
+		const values = (selector, property) =>
+			Array.from(document.querySelectorAll(selector))
+				.map((element) => element.style.getPropertyValue(property).trim().toLowerCase())
+				.filter(Boolean);
+		return {
+			domains: data.domains.map((domain) => domain.color.toLowerCase()),
+			legend: values(".impact-legend-item[data-impact-group-id]:not([data-impact-group-id=''])", "--group-color"),
+			clusters: values(".impact-cluster-region", "--cluster-color"),
+			nodes: values(".impact-node", "--node-color"),
+		};
+	});
+	const canonicalDomainColors = [...new Set(lightSemanticColors.domains)].sort();
+	assert.ok(canonicalDomainColors.length >= 5);
+	assert.deepEqual([...new Set(lightSemanticColors.legend)].sort(), canonicalDomainColors);
+	assert.deepEqual([...new Set(lightSemanticColors.clusters)].sort(), canonicalDomainColors);
+	assert.ok(new Set(lightSemanticColors.nodes).size >= 5);
+	record("Impact light theme uses the canonical semantic domain palette", lightSemanticColors);
+
 	await impact.locator('[data-impact-layout="tree"]').click();
 	assert.equal(await impact.locator("[data-impact-tree='expand']").isVisible(), true);
 	assert.equal(await impact.locator("[data-impact-tree='collapse']").isVisible(), true);
@@ -244,6 +264,97 @@ try {
 	await impact.evaluate(() => window.scrollTo(0, 0));
 	await impact.screenshot({ path: path.join(outputDir, "impact-domain-desktop.png"), fullPage: false });
 	await impactContext.close();
+
+	const { context: impactDarkContext, page: impactDark } = await createPage(
+		{ width: 1440, height: 1100 },
+		"dark",
+	);
+	await impactDark.goto(new URL("impact-domain/?layout=cluster&clusterBy=impact-domain", baseUrl).href, {
+		waitUntil: "domcontentloaded",
+	});
+	await impactDark.locator("[data-impact-svg] .impact-node").first().waitFor();
+	assert.equal(await impactDark.evaluate(() => document.documentElement.classList.contains("dark")), true);
+	const darkSemanticColors = await impactDark.evaluate(() => {
+		const computedValues = (selector, property) =>
+			Array.from(document.querySelectorAll(selector))
+				.map((element) => getComputedStyle(element)[property])
+				.filter(Boolean);
+		const rawValues = (selector, property) =>
+			Array.from(document.querySelectorAll(selector))
+				.map((element) => element.style.getPropertyValue(property).trim().toLowerCase())
+				.filter(Boolean);
+		return {
+			legendRaw: rawValues(".impact-legend-item[data-impact-group-id]:not([data-impact-group-id=''])", "--group-color"),
+			legendIcons: computedValues(".impact-legend-item[data-impact-group-id]:not([data-impact-group-id='']) .impact-legend-icon", "color"),
+			clusterStrokes: computedValues(".impact-cluster-region ellipse", "stroke"),
+			nodeStrokes: computedValues(".impact-node-disc", "stroke"),
+		};
+	});
+	assert.deepEqual([...new Set(darkSemanticColors.legendRaw)].sort(), canonicalDomainColors);
+	assert.ok(new Set(darkSemanticColors.legendIcons).size >= 5);
+	assert.ok(new Set(darkSemanticColors.clusterStrokes).size >= 5);
+	assert.ok(new Set(darkSemanticColors.nodeStrokes).size >= 5);
+	record("Impact dark theme preserves distinct semantic hues", darkSemanticColors);
+
+	const visibleNodesBeforeFocus = await impactDark.locator(".impact-node:not(.is-hidden)").count();
+	const firstDomainRow = impactDark.locator(".impact-legend-item[data-impact-group-id]:not([data-impact-group-id=''])").first();
+	await firstDomainRow.focus();
+	await impactDark.keyboard.press("Enter");
+	assert.equal(await firstDomainRow.evaluate((element) => element.classList.contains("is-active")), true);
+	assert.equal(await impactDark.locator(".impact-node:not(.is-hidden)").count(), visibleNodesBeforeFocus);
+	assert.equal(await impactDark.locator(".impact-cluster-region.is-highlighted").count(), 1);
+	assert.ok(await impactDark.locator(".impact-cluster-region.is-dimmed").count() > 0);
+	assert.ok(await impactDark.locator(".impact-node.is-dimmed").count() > 0);
+	record("Domain focus emphasizes without filtering other domains");
+
+	await impactDark.locator(".impact-legend-item[data-impact-group-id='']").click();
+	const firstNode = impactDark.locator(".impact-node:not(.is-hidden)").first();
+	await firstNode.dispatchEvent("pointerenter", { clientX: 620, clientY: 520 });
+	await impactDark.locator("[data-impact-hover-card]").waitFor({ state: "visible" });
+	assert.equal(await impactDark.locator(".impact-legend-item.is-context-active").count(), 1);
+	const nodeAndPreviewAccent = await impactDark.evaluate(() => ({
+		node: getComputedStyle(document.querySelector(".impact-node.is-hovered .impact-node-disc")).stroke,
+		preview: getComputedStyle(document.querySelector("[data-impact-hover-card]")).borderTopColor,
+	}));
+	assert.equal(nodeAndPreviewAccent.preview, nodeAndPreviewAccent.node);
+	record("Node hover synchronizes graph, grouping row, and preview accent", nodeAndPreviewAccent);
+
+	await firstNode.dispatchEvent("pointerleave");
+	await firstNode.dispatchEvent("click");
+	assert.equal(await impactDark.locator("[data-impact-details]").isVisible(), true);
+	assert.equal(await impactDark.locator(".impact-node.is-selected").count(), 1);
+	await impactDark.locator("[data-impact-clear-selection]").click();
+	record("Keyboard domain focus and node selection remain available");
+
+	await impactDark.locator('[data-impact-layout="tree"]').click();
+	await impactDark.locator(".impact-tree-group").first().waitFor();
+	const treeStrokes = await impactDark.locator(".impact-tree-group rect").evaluateAll((elements) =>
+		elements.map((element) => getComputedStyle(element).stroke),
+	);
+	assert.ok(new Set(treeStrokes).size >= 5);
+	await impactDark.getByRole("tab", { name: "Accessible List" }).click();
+	const listIconColors = await impactDark.locator(".impact-list-domain-icon").evaluateAll((elements) =>
+		elements.map((element) => getComputedStyle(element).color),
+	);
+	assert.ok(new Set(listIconColors).size >= 5);
+	record("Tree and Accessible List retain semantic colors in dark mode");
+
+	await impactDark.getByRole("tab", { name: "Graph" }).click();
+	await impactDark.locator('[data-impact-layout="cluster"]').click();
+	for (const [mode, heading] of [
+		["technology", "Technologies"],
+		["industry", "Industries"],
+		["project-type", "Project Types"],
+		["impact-domain", "Impact Domains"],
+	]) {
+		await impactDark.locator("[data-impact-cluster-by]").selectOption(mode);
+		assert.equal(await impactDark.locator("[data-impact-legend-title]").textContent(), heading);
+	}
+	record("Cluster By modes remain interactive");
+	await assertNoPageOverflow(impactDark, "Impact Domain desktop dark");
+	await impactDark.evaluate(() => window.scrollTo(0, 0));
+	await impactDark.screenshot({ path: path.join(outputDir, "impact-domain-dark-desktop.png"), fullPage: false });
+	await impactDarkContext.close();
 
 	for (const width of [320, 375, 430, 768]) {
 		const { context, page } = await createPage({ width, height: 900 }, "dark");
