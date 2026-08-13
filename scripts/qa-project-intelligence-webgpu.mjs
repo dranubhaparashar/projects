@@ -3,8 +3,10 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 
 const baseUrl = process.argv[2] || "http://127.0.0.1:4321/projects/";
-const reusedProfile = Boolean(process.argv[3]);
+const reusedProfile =
+	Boolean(process.argv[3]) && !process.argv.includes("--fresh-profile");
 const cacheOnly = process.argv.includes("--cache-only");
+const cacheLifecycleOnly = process.argv.includes("--cache-lifecycle");
 const profile =
 	process.argv[3] ||
 	join(tmpdir(), `project-intelligence-webgpu-${Date.now()}`);
@@ -59,18 +61,7 @@ page.on("pageerror", (error) => consoleErrors.push(error.message));
 
 if (cacheOnly) {
 	await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 120_000 });
-	const cacheReport = await page.evaluate(async () => {
-		const cache = await caches.open("transformers-cache");
-		const keys = await cache.keys();
-		const modelEntries = keys
-			.map((request) => decodeURIComponent(request.url))
-			.filter((url) => /Qwen2\.5-0\.5B-Instruct/i.test(url));
-		return {
-			cacheName: "transformers-cache",
-			modelEntries,
-			modelEntryCount: modelEntries.length,
-		};
-	});
+	const cacheReport = await browserCacheReport();
 	console.log(
 		JSON.stringify(
 			{
@@ -84,6 +75,21 @@ if (cacheOnly) {
 	);
 	await context.close();
 	process.exit(0);
+}
+
+async function browserCacheReport() {
+	return page.evaluate(async () => {
+		const cache = await caches.open("transformers-cache");
+		const keys = await cache.keys();
+		const modelEntries = keys
+			.map((request) => decodeURIComponent(request.url))
+			.filter((url) => /Qwen2\.5-0\.5B-Instruct/i.test(url));
+		return {
+			cacheName: "transformers-cache",
+			modelEntries,
+			modelEntryCount: modelEntries.length,
+		};
+	});
 }
 
 function qwenRequests() {
@@ -111,7 +117,7 @@ async function waitForSwupReady() {
 async function openDrawer() {
 	const layer = page.locator("[data-project-intelligence-layer]");
 	if ((await layer.getAttribute("data-open")) === "true") return;
-	await page.getByRole("button", { name: "Ask about my projects" }).click();
+	await page.locator("[data-project-intelligence-trigger]").click();
 	await page.waitForFunction(
 		() =>
 			document
@@ -166,10 +172,21 @@ async function askGrounded(question) {
 		{ timeout: 10_000 },
 	);
 	await page.waitForFunction(
-		(expected) =>
-			[...document.querySelectorAll(".project-intelligence-mode-note")].filter(
-				(node) => node.textContent?.includes("Browser-local RAG"),
-			).length > expected,
+		(expected) => {
+			const ragCount = [
+				...document.querySelectorAll(".project-intelligence-mode-note"),
+			].filter((node) => node.textContent?.includes("Browser-local RAG")).length;
+			const form = document.querySelector("[data-project-intelligence-form]");
+			return (
+				ragCount > expected ||
+				(form?.getAttribute("aria-busy") !== "true" &&
+					Boolean(
+						document.querySelector(
+							".project-intelligence-message.is-assistant:not(.is-loading)",
+						),
+					))
+			);
+		},
 		existingAnswers,
 		{ timeout: 300_000 },
 	);
@@ -181,10 +198,27 @@ async function askGrounded(question) {
 		undefined,
 		{ timeout: 10_000 },
 	);
-	return page
+	const assistant = page
 		.locator(".project-intelligence-message.is-assistant")
 		.filter({ has: page.getByText("Browser-local RAG", { exact: true }) })
 		.last();
+	if ((await assistant.count()) === 0) {
+		const diagnostic = await page.evaluate(() => ({
+			modeNotes: [
+				...document.querySelectorAll(".project-intelligence-mode-note"),
+			].map((node) => node.textContent?.trim() || ""),
+			assistantMessages: [
+				...document.querySelectorAll(
+					".project-intelligence-message.is-assistant",
+				),
+			].map((node) => node.textContent?.trim().slice(0, 500) || ""),
+			statusMessages: [
+				...document.querySelectorAll(".project-intelligence-ai-status"),
+			].map((node) => node.textContent?.trim() || ""),
+		}));
+		throw new Error(`Browser RAG failed: ${JSON.stringify(diagnostic)}`);
+	}
+	return assistant;
 }
 
 async function generateExplanation(answerMessage) {
@@ -329,7 +363,16 @@ try {
 		const localModelDiagnostic = (
 			(await firstAnswer
 				.locator(".project-intelligence-local-ai-model")
-				.textContent()) || ""
+				.textContent({ timeout: 10_000 })
+				.catch(async () => {
+					const diagnostic = await firstAnswer.evaluate((node) => ({
+						text: node.textContent?.trim() || "",
+						html: node.innerHTML.slice(0, 4_000),
+					}));
+					throw new Error(
+						`Local-AI controls were not rendered: ${JSON.stringify(diagnostic)}`,
+					);
+				})) || ""
 		).trim();
 		if (
 			localModelDiagnostic !==
@@ -337,6 +380,19 @@ try {
 		) {
 			throw new Error(
 				`Unexpected local-model diagnostic: ${localModelDiagnostic}`,
+			);
+		}
+		const localCacheDiagnostic = (
+			(await firstAnswer
+				.locator(".project-intelligence-local-ai-cache")
+				.textContent()) || ""
+		).trim();
+		if (
+			localCacheDiagnostic !==
+			"Model cache: Browser Cache Storage (transformers-cache)"
+		) {
+			throw new Error(
+				`Unexpected local-model cache diagnostic: ${localCacheDiagnostic}`,
 			);
 		}
 
@@ -357,7 +413,7 @@ try {
 			throw new Error("The model download never exposed its Cancel control");
 		}
 		for (const expectedStatus of [
-			"Initializing WebGPU…",
+			"Loading local AI model…",
 			"Local AI ready",
 			"Preparing WebGPU for first generation…",
 		]) {
@@ -396,70 +452,148 @@ try {
 				"No honest Transformers.js download percentage or byte count was shown",
 			);
 		}
+		const showedNetworkDownload = firstGeneration.statuses.some((status) =>
+			status.startsWith("Downloading local AI model"),
+		);
+		if (!reusedProfile && !showedNetworkDownload) {
+			throw new Error(
+				"The first generation never exposed its network download",
+			);
+		}
+		if (reusedProfile && showedNetworkDownload) {
+			throw new Error(
+				"A cached model load was incorrectly labeled as a network download",
+			);
+		}
+		if (
+			reusedProfile &&
+			!firstGeneration.downloadDetails.some((detail) =>
+				detail.startsWith("Loaded "),
+			)
+		) {
+			throw new Error("A cached model load never exposed cached byte progress");
+		}
+		const firstCacheReport = await browserCacheReport();
+		if (firstCacheReport.modelEntryCount < 1) {
+			throw new Error("Qwen model files were not persisted in Cache Storage");
+		}
+		if (reusedProfile && qwenAfterFirstGeneration !== qwenAfterFirstAnswer) {
+			throw new Error(
+				"Reopening the browser profile redownloaded Qwen instead of using Cache Storage",
+			);
+		}
 
 		if ((await localLlmWorkerCount()) !== 1) {
 			throw new Error("Expected one local-LLM worker before Swup navigation");
 		}
+		let sameSessionGeneration = null;
+		let refreshedGeneration = null;
+		if (!reusedProfile) {
+			const qwenBeforeSecondQuestion = qwenRequests().length;
+			const secondAnswer = await askGrounded(
+				"Which project involves autonomous agent orchestration?",
+			);
+			sameSessionGeneration = await generateExplanation(secondAnswer);
+			if (qwenRequests().length !== qwenBeforeSecondQuestion) {
+				throw new Error(
+					"A second question in the same session redownloaded Qwen",
+				);
+			}
+			if (
+				sameSessionGeneration.statuses.some((status) =>
+					status.startsWith("Downloading local AI model"),
+				)
+			) {
+				throw new Error(
+					"A second question in the same session displayed a download status",
+				);
+			}
+
+			const qwenBeforeRefresh = qwenRequests().length;
+			await page.reload({ waitUntil: "networkidle", timeout: 120_000 });
+			await openDrawer();
+			const refreshedAnswer = await askGrounded(
+				"Which work uses local AI for medical claim review?",
+			);
+			refreshedGeneration = await generateExplanation(refreshedAnswer);
+			if (qwenRequests().length !== qwenBeforeRefresh) {
+				throw new Error("Refreshing the page redownloaded Qwen");
+			}
+			if (
+				!refreshedGeneration.statuses.includes("Loading local AI model…") ||
+				refreshedGeneration.statuses.some((status) =>
+					status.startsWith("Downloading local AI model"),
+				)
+			) {
+				throw new Error(
+					"A refreshed page did not identify the model as loading from cache",
+				);
+			}
+		}
 
 		const navigationGenerations = [];
-		const navigationQuestions = [
-			"Which project involves autonomous agent orchestration?",
-			"Which work uses local AI for medical claim review?",
-			"Which projects emphasize privacy-preserving local inference?",
-		];
-		for (const [index, question] of navigationQuestions.entries()) {
-			await closeDrawer();
-			await navigateWithSwup("/projects/posts/medclaim-sentinel/");
-			await navigateWithSwup("/projects/");
-			if ((await localLlmWorkerCount()) !== index + 1) {
-				throw new Error(
-					"Swup navigation recreated the local-LLM worker before an explicit Generate click",
-				);
+		let reopenedGeneration = null;
+		if (!cacheLifecycleOnly) {
+			const navigationQuestions = [
+				"Which project involves autonomous agent orchestration?",
+				"Which work uses local AI for medical claim review?",
+				"Which projects emphasize privacy-preserving local inference?",
+			];
+			for (const [index, question] of navigationQuestions.entries()) {
+				await closeDrawer();
+				await navigateWithSwup("/projects/posts/medclaim-sentinel/");
+				await navigateWithSwup("/projects/");
+				if ((await localLlmWorkerCount()) !== index + 1) {
+					throw new Error(
+						"Swup navigation recreated the local-LLM worker before an explicit Generate click",
+					);
+				}
+				await openDrawer();
+				const answer = await askGrounded(question);
+				const controls = answer.locator(".project-intelligence-local-ai");
+				const staleStatus = (
+					(await controls
+						.locator(".project-intelligence-local-ai-status")
+						.textContent()) || ""
+				).trim();
+				if (
+					staleStatus !==
+					"Local AI will reinitialize from cache when requested."
+				) {
+					throw new Error(`Missing stale-worker status: ${staleStatus}`);
+				}
+				const qwenBeforeRecreation = qwenRequests().length;
+				const generation = await generateExplanation(answer);
+				if ((await localLlmWorkerCount()) !== index + 2) {
+					throw new Error(
+						"Explicit Generate did not create exactly one fresh worker",
+					);
+				}
+				if (qwenRequests().length !== qwenBeforeRecreation) {
+					throw new Error(
+						"Worker recreation redownloaded Qwen instead of using cache",
+					);
+				}
+				navigationGenerations.push({ staleStatus, generation });
 			}
-			await openDrawer();
-			const answer = await askGrounded(question);
-			const controls = answer.locator(".project-intelligence-local-ai");
-			const staleStatus = (
-				(await controls
-					.locator(".project-intelligence-local-ai-status")
-					.textContent()) || ""
-			).trim();
-			if (
-				staleStatus !== "Local AI will reinitialize from cache when requested."
-			) {
-				throw new Error(`Missing stale-worker status: ${staleStatus}`);
-			}
-			const qwenBeforeRecreation = qwenRequests().length;
-			const generation = await generateExplanation(answer);
-			if ((await localLlmWorkerCount()) !== index + 2) {
-				throw new Error(
-					"Explicit Generate did not create exactly one fresh worker",
-				);
-			}
-			if (qwenRequests().length !== qwenBeforeRecreation) {
-				throw new Error(
-					"Worker recreation redownloaded Qwen instead of using cache",
-				);
-			}
-			navigationGenerations.push({ staleStatus, generation });
-		}
 
-		await closeDrawer();
-		const workerCountBeforeReopen = await localLlmWorkerCount();
-		await openDrawer();
-		const reopenedAnswer = await askGrounded(
-			"Which project uses evidence-grounded review workflows?",
-		);
-		const reopenedGeneration = await generateExplanation(reopenedAnswer);
-		if ((await localLlmWorkerCount()) !== workerCountBeforeReopen) {
-			throw new Error(
-				"Closing and reopening the drawer replaced a healthy worker",
+			await closeDrawer();
+			const workerCountBeforeReopen = await localLlmWorkerCount();
+			await openDrawer();
+			const reopenedAnswer = await askGrounded(
+				"Which project uses evidence-grounded review workflows?",
 			);
-		}
-		if (qwenRequests().length !== qwenAfterFirstGeneration) {
-			throw new Error(
-				"A cached navigation/reopen generation redownloaded Qwen",
-			);
+			reopenedGeneration = await generateExplanation(reopenedAnswer);
+			if ((await localLlmWorkerCount()) !== workerCountBeforeReopen) {
+				throw new Error(
+					"Closing and reopening the drawer replaced a healthy worker",
+				);
+			}
+			if (qwenRequests().length !== qwenAfterFirstGeneration) {
+				throw new Error(
+					"A cached navigation/reopen generation redownloaded Qwen",
+				);
+			}
 		}
 
 		const forbiddenLifecycleErrors = consoleErrors.filter((message) =>
@@ -489,11 +623,16 @@ try {
 				{
 					status: "passed",
 					reusedProfile,
+					cacheLifecycleOnly,
 					capabilities,
-					qwenRequests: qwenAfterFirstGeneration,
+					qwenRequests: qwenRequests().length,
 					localLlmWorkerCreations: await localLlmWorkerCount(),
 					localModelDiagnostic,
+					localCacheDiagnostic,
+					browserCache: firstCacheReport,
 					firstGeneration,
+					sameSessionGeneration,
+					refreshedGeneration,
 					navigationGenerations,
 					reopenedGeneration,
 					consoleMessages,

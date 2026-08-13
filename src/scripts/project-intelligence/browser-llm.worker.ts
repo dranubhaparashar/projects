@@ -12,6 +12,7 @@ import {
 	createLocalAiFailureDiagnostic,
 	hasDeviceLostSignature,
 	hasGpuInstanceInvalidationSignature,
+	LOCAL_AI_BROWSER_CACHE_NAME,
 	LOCAL_AI_DTYPE,
 	LOCAL_AI_MODEL_ID,
 	type LocalAiDiagnosticStage,
@@ -48,10 +49,13 @@ interface DownloadFileProgress {
 	loaded: number;
 	total: number;
 	totalKnown: boolean;
+	loadSource?: "network" | "browser-cache";
 }
 
 const activeDownloads = new Set<string>();
 const downloadProgressByFile = new Map<string, DownloadFileProgress>();
+const browserCacheLookups = new Map<string, boolean>();
+let trackedBrowserCacheConfigured = false;
 let modelArtifactDownloaded = false;
 let modelInitStagePosted = false;
 let modelInitializedAt = "";
@@ -119,6 +123,7 @@ function clearGpuRuntimeState(): void {
 	requestStages.clear();
 	activeDownloads.clear();
 	downloadProgressByFile.clear();
+	browserCacheLookups.clear();
 	cancelledRequests.clear();
 	modelArtifactDownloaded = false;
 	modelInitStagePosted = false;
@@ -172,6 +177,67 @@ function downloadKey(record: Record<string, unknown>): string {
 	return `${String(record.name || LOCAL_AI_MODEL_ID)}::${String(record.file || "unknown")}`;
 }
 
+function normalizedCacheRequest(request: RequestInfo | URL): string {
+	const raw =
+		request instanceof Request
+			? request.url
+			: request instanceof URL
+				? request.href
+				: String(request);
+	try {
+		return decodeURIComponent(raw).replace(/\\/g, "/").toLowerCase();
+	} catch {
+		return raw.replace(/\\/g, "/").toLowerCase();
+	}
+}
+
+function cacheLoadSource(
+	record: Record<string, unknown>,
+): "network" | "browser-cache" | undefined {
+	const model = String(record.name || LOCAL_AI_MODEL_ID).toLowerCase();
+	const file = String(record.file || "")
+		.replace(/\\/g, "/")
+		.toLowerCase();
+	if (!file) return undefined;
+	const matchingLookups = [...browserCacheLookups.entries()].filter(
+		([request]) => request.includes(model) && request.endsWith(file),
+	);
+	if (matchingLookups.some(([, hit]) => hit)) return "browser-cache";
+	if (matchingLookups.length) return "network";
+	return undefined;
+}
+
+async function configureTrackedBrowserCache(): Promise<void> {
+	if (trackedBrowserCacheConfigured || !("caches" in globalThis)) return;
+	try {
+		const browserCache = await caches.open(LOCAL_AI_BROWSER_CACHE_NAME);
+		env.customCache = {
+			async match(
+				request: RequestInfo | URL,
+				options?: CacheQueryOptions,
+			): Promise<Response | undefined> {
+				const response = await browserCache.match(request, options);
+				browserCacheLookups.set(
+					normalizedCacheRequest(request),
+					response !== undefined,
+				);
+				return response;
+			},
+			put(request: RequestInfo | URL, response: Response): Promise<void> {
+				return browserCache.put(request, response);
+			},
+		};
+		env.useCustomCache = true;
+		trackedBrowserCacheConfigured = true;
+		developmentLog("browser model cache configured", {
+			cacheMechanism: "Cache Storage",
+			cacheName: LOCAL_AI_BROWSER_CACHE_NAME,
+		});
+	} catch (error) {
+		developmentLog("browser model cache inspection unavailable", error);
+	}
+}
+
 function isModelArtifact(file: string): boolean {
 	return /\.onnx(?:_data(?:_\d+)?)?$/i.test(file);
 }
@@ -210,6 +276,7 @@ function updateDownloadProgress(record: Record<string, unknown>): void {
 		loaded: record.loaded,
 		total: rawTotal,
 		totalKnown,
+		loadSource: cacheLoadSource(record),
 	});
 }
 
@@ -237,6 +304,7 @@ function postDownloadProgress(
 		loaded: current?.loaded,
 		total: current?.totalKnown ? current.total : undefined,
 		totalKnown: current?.totalKnown ?? false,
+		loadSource: current?.loadSource ?? cacheLoadSource(record),
 		name: typeof record.name === "string" ? record.name : undefined,
 		file:
 			current?.file ||
@@ -347,7 +415,8 @@ function observeGpuDevice(): void {
 async function createGenerationPipeline(id: number) {
 	requestStages.set(id, "download");
 	developmentLog("model ID", LOCAL_AI_MODEL_ID);
-	postProgress(id, { stage: "llm-model", status: "preparing-download" });
+	postProgress(id, { stage: "llm-model", status: "checking-cache" });
+	await configureTrackedBrowserCache();
 	const generator = await pipeline("text-generation", LOCAL_AI_MODEL_ID, {
 		device: "webgpu",
 		dtype: LOCAL_AI_DTYPE,

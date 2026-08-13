@@ -2,6 +2,7 @@ export const LOCAL_AI_DIAGNOSTIC_PREFIX = "[Project Intelligence Local AI]";
 export const LOCAL_AI_MODEL_ID = "onnx-community/Qwen2.5-0.5B-Instruct";
 export const LOCAL_AI_DTYPE = "q4";
 export const LOCAL_AI_DEVICE = "webgpu";
+export const LOCAL_AI_BROWSER_CACHE_NAME = "transformers-cache";
 
 export type LocalAiDiagnosticStage =
 	| "download"

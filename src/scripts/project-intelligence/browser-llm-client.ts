@@ -7,6 +7,7 @@ import {
 	errorFromLocalAiDiagnostic,
 	hasDeviceLostSignature,
 	hasGpuInstanceInvalidationSignature,
+	LOCAL_AI_BROWSER_CACHE_NAME,
 	LOCAL_AI_MODEL_ID,
 	type LocalAiDiagnosticStage,
 	type LocalAiFailureDiagnostic,
@@ -645,7 +646,7 @@ async function logModelCacheVerification(): Promise<void> {
 		return;
 	}
 	try {
-		const cache = await caches.open("transformers-cache");
+		const cache = await caches.open(LOCAL_AI_BROWSER_CACHE_NAME);
 		const keys = await cache.keys();
 		const modelPath = BROWSER_LLM_MODEL_ID.toLowerCase();
 		const modelEntries = keys.filter((request) =>
@@ -656,7 +657,7 @@ async function logModelCacheVerification(): Promise<void> {
 			browserCacheAvailable: true,
 			cached: modelEntries.length > 0,
 			cachedFileCount: modelEntries.length,
-			cacheName: "transformers-cache",
+			cacheName: LOCAL_AI_BROWSER_CACHE_NAME,
 		});
 	} catch (error) {
 		developmentLog("download complete", {
@@ -775,7 +776,7 @@ export function initializeLocalBrowserModel(): Promise<void> {
 	developmentLog("model ID", BROWSER_LLM_MODEL_ID);
 	setSnapshot({
 		state: "loading",
-		progress: { stage: "llm-model", status: "preparing-download" },
+		progress: { stage: "llm-model", status: "checking-cache" },
 	});
 	const attempt = requestModelInitialization((progress) =>
 		setSnapshot({ state: "loading", progress }),

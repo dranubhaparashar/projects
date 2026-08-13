@@ -30,7 +30,7 @@ GitHub Pages
   -> optional, visitor-triggered local browser Qwen explanation
 ```
 
-No API key or backend is required. The grounded answer appears without loading Qwen. If a visitor selects **Generate deeper local AI explanation**, the open model weights are downloaded from Hugging Face once and reused for that browser page session; inference runs in the visitor's browser and questions are not sent to an external inference API. WebGPU-incompatible and mobile devices continue to use the sourced retrieval answer.
+No API key or backend is required. The grounded answer appears without loading Qwen. If a visitor selects **Generate deeper local AI explanation**, the open model weights are downloaded from Hugging Face once and persisted in the site's browser Cache Storage (`transformers-cache`). Refreshes and later visits in the same normal browser profile reuse those cached files while the site's storage remains; inference runs in the visitor's browser and questions are not sent to an external inference API. WebGPU-incompatible and mobile devices continue to use the sourced retrieval answer.
 
 The optional high-power mode remains under `rag-api/`:
 

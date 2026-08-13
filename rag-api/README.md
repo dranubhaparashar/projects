@@ -25,7 +25,7 @@ GitHub Pages /projects/
                     (browser WebGPU, when capable)
 ```
 
-The default requires no API key, paid API, Python runtime, server adapter, vector database, or external inference service. The browser RAG answer does not load Qwen. Open model files are fetched from Hugging Face only after the visitor selects **Generate deeper local AI explanation**, cached through the inference runtime, and reused by one worker for the page session; the question itself is not sent to a hosted inference API. The normal portfolio page dynamically imports Project Intelligence and does not initialize either model on page load.
+The default requires no API key, paid API, Python runtime, server adapter, vector database, or external inference service. The browser RAG answer does not load Qwen. Open model files are fetched from Hugging Face only after the visitor selects **Generate deeper local AI explanation**, persisted in the site's browser Cache Storage (`transformers-cache`), and reused across questions, refreshes, and later visits in the same normal browser profile while site storage remains; the question itself is not sent to a hosted inference API. The normal portfolio page dynamically imports Project Intelligence and does not initialize either model on page load.
 
 Browser embedding details:
 

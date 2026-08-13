@@ -18,11 +18,14 @@ import {
 	type LocalAiValidationResult,
 	validateGeneratedPlainTextAnswer,
 } from "./browser-llm-validation";
+import { LOCAL_AI_BROWSER_CACHE_NAME } from "./browser-llm-diagnostics";
 
 export const BROWSER_LLM_RUNTIME = "@huggingface/transformers 3.8.1";
 export const BROWSER_LLM_MODEL = BROWSER_LLM_MODEL_ID;
 export const BROWSER_LLM_DTYPE = "q4";
 export const BROWSER_LLM_DEVICE = "WebGPU";
+export const BROWSER_LLM_CACHE = "Browser Cache Storage";
+export const BROWSER_LLM_CACHE_NAME = LOCAL_AI_BROWSER_CACHE_NAME;
 export const BROWSER_LLM_LICENSE = "Apache-2.0";
 export const BROWSER_LLM_APPROX_DOWNLOAD_MB = 786;
 export {

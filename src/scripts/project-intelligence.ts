@@ -1159,15 +1159,17 @@ function localModelDownloadedBytes(progress?: BrowserAiProgress): string {
 			? Math.round(megabytes).toLocaleString()
 			: megabytes.toFixed(1);
 	};
+	const verb =
+		progress.loadSource === "browser-cache" ? "Loaded" : "Downloaded";
 	if (
 		progress.totalKnown === true &&
 		typeof progress.total === "number" &&
 		Number.isFinite(progress.total) &&
 		progress.total > 0
 	) {
-		return `Downloaded ${formatMegabytes(progress.loaded)} MB / ${formatMegabytes(progress.total)} MB`;
+		return `${verb} ${formatMegabytes(progress.loaded)} MB / ${formatMegabytes(progress.total)} MB`;
 	}
-	return `Downloaded ${formatMegabytes(progress.loaded)} MB`;
+	return `${verb} ${formatMegabytes(progress.loaded)} MB`;
 }
 
 function localGenerationDetail(progress?: BrowserAiProgress): string {
@@ -1200,8 +1202,11 @@ function localGenerationDetail(progress?: BrowserAiProgress): string {
 
 function localModelStatus(snapshot: BrowserLocalLlmSnapshot): string {
 	if (snapshot.state === "loading") {
-		if (snapshot.progress?.stage === "model-init") {
-			return "Initializing WebGPU…";
+		if (
+			snapshot.progress?.stage === "model-init" ||
+			snapshot.progress?.loadSource !== "network"
+		) {
+			return "Loading local AI model…";
 		}
 		const percentage = localModelDownloadPercentage(snapshot.progress);
 		return percentage === null
@@ -1249,6 +1254,12 @@ async function renderLocalAiAction(options: {
 		`Local model: ${modelName} · ${localAi.BROWSER_LLM_DTYPE} · ${localAi.BROWSER_LLM_DEVICE}`,
 		"project-intelligence-local-ai-model",
 	);
+	const cacheDiagnostic = appendText(
+		controls,
+		"p",
+		`Model cache: ${localAi.BROWSER_LLM_CACHE} (${localAi.BROWSER_LLM_CACHE_NAME})`,
+		"project-intelligence-local-ai-cache",
+	);
 	const button = element("button", "project-intelligence-local-ai-button");
 	button.type = "button";
 	button.dataset.projectIntelligenceLocalAi = "";
@@ -1273,7 +1284,7 @@ async function renderLocalAiAction(options: {
 		"",
 		"project-intelligence-local-ai-download-detail",
 	);
-	controls.prepend(diagnostic, button, cancelButton);
+	controls.prepend(diagnostic, cacheDiagnostic, button, cancelButton);
 	options.message.append(controls);
 
 	let completed = false;

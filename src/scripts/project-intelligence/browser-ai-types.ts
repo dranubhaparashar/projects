@@ -16,6 +16,7 @@ export interface BrowserAiProgress {
 	loaded?: number;
 	total?: number;
 	totalKnown?: boolean;
+	loadSource?: "network" | "browser-cache";
 	name?: string;
 	file?: string;
 	firstGeneration?: boolean;
