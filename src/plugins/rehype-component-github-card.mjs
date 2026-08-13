@@ -15,7 +15,10 @@ export function GithubCardComponent(properties, children) {
 			'Invalid directive. ("github" directive must be leaf type "::github{repo="owner/repo"}")',
 		]);
 
-	if (!properties.repo || !properties.repo.includes("/"))
+	if (
+		!properties.repo ||
+		!/^[-A-Za-z0-9_.]+\/[-A-Za-z0-9_.]+$/.test(properties.repo)
+	)
 		return h(
 			"div",
 			{ class: "hidden" },
@@ -29,7 +32,7 @@ export function GithubCardComponent(properties, children) {
 	const nLanguage = h(
 		`span#${cardUuid}-language`,
 		{ class: "gc-language" },
-		"Waiting...",
+		"Public repository",
 	);
 
 	const nTitle = h("div", { class: "gc-titlebar" }, [
@@ -47,31 +50,48 @@ export function GithubCardComponent(properties, children) {
 	const nDescription = h(
 		`div#${cardUuid}-description`,
 		{ class: "gc-description" },
-		"Waiting for api.github.com...",
+		"Open the public repository on GitHub.",
 	);
 
-	const nStars = h(`div#${cardUuid}-stars`, { class: "gc-stars" }, "00K");
-	const nForks = h(`div#${cardUuid}-forks`, { class: "gc-forks" }, "0K");
-	const nLicense = h(`div#${cardUuid}-license`, { class: "gc-license" }, "0K");
+	const nStars = h(
+		`div#${cardUuid}-stars`,
+		{ class: "gc-stars", title: "GitHub stars", "aria-label": "GitHub stars" },
+		"—",
+	);
+	const nForks = h(
+		`div#${cardUuid}-forks`,
+		{ class: "gc-forks", title: "GitHub forks", "aria-label": "GitHub forks" },
+		"—",
+	);
+	const nLicense = h(
+		`div#${cardUuid}-license`,
+		{ class: "gc-license", title: "Repository license", "aria-label": "Repository license" },
+		"License unavailable",
+	);
 
 	const nScript = h(
 		`script#${cardUuid}-script`,
 		{ type: "text/javascript", defer: true },
 		`
-      fetch('https://api.github.com/repos/${repo}', { referrerPolicy: "no-referrer" }).then(response => response.json()).then(data => {
+      fetch('https://api.github.com/repos/${repo}', { referrerPolicy: "no-referrer" }).then(response => {
+        if (!response.ok) throw new Error('GitHub metadata request failed: ' + response.status);
+        return response.json();
+      }).then(data => {
         document.getElementById('${cardUuid}-description').innerText = data.description?.replace(/:[a-zA-Z0-9_]+:/g, '') || "Description not set";
-        document.getElementById('${cardUuid}-language').innerText = data.language;
-        document.getElementById('${cardUuid}-forks').innerText = Intl.NumberFormat('en-us', { notation: "compact", maximumFractionDigits: 1 }).format(data.forks).replaceAll("\u202f", '');
-        document.getElementById('${cardUuid}-stars').innerText = Intl.NumberFormat('en-us', { notation: "compact", maximumFractionDigits: 1 }).format(data.stargazers_count).replaceAll("\u202f", '');
+        document.getElementById('${cardUuid}-language').innerText = data.language || "Public repository";
+        document.getElementById('${cardUuid}-forks').innerText = Intl.NumberFormat('en-us', { notation: "compact", maximumFractionDigits: 1 }).format(Number(data.forks_count) || 0).replaceAll("\u202f", '');
+        document.getElementById('${cardUuid}-stars').innerText = Intl.NumberFormat('en-us', { notation: "compact", maximumFractionDigits: 1 }).format(Number(data.stargazers_count) || 0).replaceAll("\u202f", '');
         const avatarEl = document.getElementById('${cardUuid}-avatar');
-        avatarEl.style.backgroundImage = 'url(' + data.owner.avatar_url + ')';
-        avatarEl.style.backgroundColor = 'transparent';
-        document.getElementById('${cardUuid}-license').innerText = data.license?.spdx_id || "no-license";
+        if (avatarEl && data.owner?.avatar_url) {
+          avatarEl.style.backgroundImage = 'url(' + data.owner.avatar_url + ')';
+          avatarEl.style.backgroundColor = 'transparent';
+        }
+        document.getElementById('${cardUuid}-license').innerText = data.license?.spdx_id || "No license";
         document.getElementById('${cardUuid}-card').classList.remove("fetch-waiting");
-        console.log("[GITHUB-CARD] Loaded card for ${repo} | ${cardUuid}.")
       }).catch(err => {
         const c = document.getElementById('${cardUuid}-card');
         c?.classList.add("fetch-error");
+        c?.classList.remove("fetch-waiting");
         console.warn("[GITHUB-CARD] (Error) Loading card for ${repo} | ${cardUuid}.")
       })
     `,
@@ -83,9 +103,12 @@ export function GithubCardComponent(properties, children) {
 			class: "card-github fetch-waiting no-styling",
 			href: `https://github.com/${repo}`,
 			target: "_blank",
+			rel: "noopener noreferrer",
+			"aria-label": `View the ${repo} repository on GitHub (opens in a new tab)`,
 			repo,
 		},
 		[
+			h("div", { class: "gc-eyebrow" }, "View the GitHub Repository"),
 			nTitle,
 			nDescription,
 			h("div", { class: "gc-infobar" }, [nStars, nForks, nLicense, nLanguage]),

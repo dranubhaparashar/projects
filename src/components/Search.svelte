@@ -144,7 +144,7 @@ $: if (initialized && keywordMobile) {
       dark:bg-white/5 dark:hover:bg-white/10 dark:focus-within:bg-white/10
 ">
     <Icon icon="material-symbols:search" class="absolute text-[1.25rem] pointer-events-none ml-3 transition my-auto text-black/30 dark:text-white/30"></Icon>
-    <input placeholder="{i18n(I18nKey.search)}" bind:value={keywordDesktop} on:focus={() => search(keywordDesktop, true)}
+    <input aria-label="Search the site" placeholder="{i18n(I18nKey.search)}" bind:value={keywordDesktop} on:focus={() => search(keywordDesktop, true)}
            class="transition-all pl-10 text-sm bg-transparent outline-0
          h-full w-40 active:w-60 focus:w-60 text-black/50 dark:text-white/50"
     >
@@ -166,13 +166,14 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
       dark:bg-white/5 dark:hover:bg-white/10 dark:focus-within:bg-white/10
   ">
         <Icon icon="material-symbols:search" class="absolute text-[1.25rem] pointer-events-none ml-3 transition my-auto text-black/30 dark:text-white/30"></Icon>
-        <input placeholder="Search" bind:value={keywordMobile}
+        <input aria-label="Search the site" placeholder="Search" bind:value={keywordMobile}
                class="pl-10 absolute inset-0 text-sm bg-transparent outline-0
                focus:w-60 text-black/50 dark:text-white/50"
         >
     </div>
 
     <!-- search results -->
+    <span class="sr-only" aria-live="polite">{isSearching ? "Searching" : keywordDesktop || keywordMobile ? `${result.length} search results` : ""}</span>
     {#each result as item}
         <a href={item.url}
            class="transition first-of-type:mt-2 lg:first-of-type:mt-0 group block
@@ -191,8 +192,27 @@ top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
   input:focus {
     outline: 0;
   }
+  #search-bar {
+    border: 1px solid var(--border-subtle);
+    background: color-mix(in srgb, var(--page-bg) 72%, var(--card-bg));
+  }
+  #search-bar:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+  }
+  #search-bar input,
+  #search-bar-inside input {
+    color: var(--text-primary);
+    font-family: var(--font-body);
+  }
+  #search-bar input::placeholder,
+  #search-bar-inside input::placeholder {
+    color: var(--text-muted);
+  }
   .search-panel {
     max-height: calc(100vh - 100px);
     overflow-y: auto;
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
   }
 </style>

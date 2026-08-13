@@ -42,6 +42,8 @@ It combines versioned agent manifests, deterministic change fingerprinting, assu
 
 ## Project Links
 
+::github{repo="dranubhaparashar/deltacert-agent"}
+
 - **GitHub:** https://github.com/dranubhaparashar/deltacert-agent
 - **Wiki:** https://github.com/dranubhaparashar/deltacert-agent/wiki
 - **Results:** https://github.com/dranubhaparashar/deltacert-agent/wiki/Results

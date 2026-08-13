@@ -41,6 +41,8 @@ The project combines temporal video understanding, multimodal reasoning, reliabi
 
 ## Project Links
 
+::github{repo="dranubhaparashar/CARE-SIU"}
+
 - **GitHub:** https://github.com/dranubhaparashar/CARE-SIU
 - **Architecture:** https://github.com/dranubhaparashar/CARE-SIU/wiki/Architecture
 - **Results:** https://github.com/dranubhaparashar/CARE-SIU/wiki/Results
