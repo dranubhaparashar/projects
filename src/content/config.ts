@@ -44,6 +44,7 @@ const postsCollection = defineCollection({
 		draft: z.boolean().optional().default(false),
 		description: z.string().optional().default(""),
 		image: z.string().optional().default(""),
+		image_dark: z.string().optional().default(""),
 		pdf: z.string().optional().default(""),
 		card_image: z
 			.object({
