@@ -1,8 +1,7 @@
 ---
 title: "CARE-SIU: Reliability-Calibrated and Explainable Multimodal Social-Interaction Understanding"
 description: "A research framework for temporal and multimodal social-interaction understanding that combines R3D-18 video encoding, reliability-aware fusion, calibration, explainability, synthetic-to-real evaluation, and leakage-resistant experimentation for safety-critical environments."
-image: ./hero-final-light.png
-image_dark: ./hero-final-dark.png
+image: ./cover.png
 pdf: /downloads/caresiuportfoliopost-caresiuportfoliopost-project-details.pdf
 published: 2026-08-11
 featured: true

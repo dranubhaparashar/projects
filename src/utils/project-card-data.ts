@@ -38,7 +38,6 @@ export interface ProjectCardEvidence {
 
 export interface ProjectCardImage {
 	src: string;
-	darkSrc?: string;
 	alt: string;
 	basePath: string;
 	fit: "cover" | "contain";
@@ -672,10 +671,6 @@ function cardImage(
 		const alt = `${title} project preview`;
 		return {
 			src: entry.data.image,
-			darkSrc:
-				entry.data.image_dark && usableImage(entry, entry.data.image_dark)
-					? entry.data.image_dark
-					: undefined,
 			alt,
 			basePath,
 			fit: fitFor(entry.data.image, alt),
