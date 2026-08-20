@@ -6,6 +6,26 @@ image: ./cover.png
 tags: [VRP, Vehicle Routing, Agentic AI, Optimization, MLOps]
 capabilities: [Optimization, Agentic AI, MLOps]
 technologies: [OR-Tools, PyVRP, Gemini, Streamlit, Hugging Face Spaces]
+github_url: "https://github.com/dranubhaparashar/Execution-Aware-Agentic-VRP-Solver-and-Benchmark-Studio"
+demo_url: "https://huggingface.co/spaces/AnubhaParashar/Execution-Aware-Agentic-VRP-Solver-and-Benchmark-Studio"
+video_url: "https://www.youtube.com/watch?v=FqVuVjW20yo"
+documentation_url: "https://github.com/dranubhaparashar/Execution-Aware-Agentic-VRP-Solver-and-Benchmark-Studio/wiki"
+project_intelligence:
+  data_basis: "Included synthetic routing benchmark, scenario orders and route state, locked execution prefixes, and precomputed artifacts for eight solver backends."
+  dataset_size: "150 orders, 20 routes, and 18 fixed operational scenarios evaluated across 8 solver backends."
+  models_methods: "Greedy, metaheuristic, constraint-programming, road-network, and cloud routing backends including OR-Tools and PyVRP, plus a Gemini 2.0 Flash agent with eight analysis and repair tools."
+  architecture_summary: "Scenario orders and baseline routes → lock completed/in-progress prefixes → solve only open orders from each vehicle's last locked state → validate assignments, lateness, overtime, and constraints → compare eight backends → Gemini agent analyzes violations and proposes reruns → maps, tables, and Excel artifacts."
+  evaluation: "The common benchmark reports assignment count, distance, lateness minutes, overtime minutes, runtime, constraint violations, and locked-prefix behavior for all eight backends over the same 18 scenarios."
+  key_results: "OR-Tools Execution-Aware assigns 150/150 orders with zero late minutes and zero overtime at 770 seconds, is the only backend meeting all four stated requirements, and is reported 11% faster than plain OR-Tools with better distance across scenario groups."
+  deployment_summary: "Dockerized public Hugging Face Space with synthetic data and precomputed benchmark artifacts; self-hosted Streamlit is the documented full-runtime option."
+  why_it_matters: "Operational routing requires preserving work already in progress and balancing feasibility, lateness, overtime, distance, and runtime rather than optimizing distance alone."
+  field_statuses:
+    dataset_size: present
+    evaluation: present
+    live_demo: present
+    video: present
+    documentation: present
+    architecture_preview: documented
 status:
   label: Live / Deployed
   type: production

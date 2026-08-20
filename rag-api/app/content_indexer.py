@@ -160,8 +160,10 @@ def _structured_section(metadata: dict[str, Any], name: str) -> str:
     technical = views.get("technical") or {}
     comparison = metadata.get("comparison") or {}
     card = metadata.get("card") or {}
+    intelligence = metadata.get("project_intelligence") or {}
     if name == "Business problem":
         values = [
+            intelligence.get("why_it_matters"),
             card.get("problem"),
             comparison.get("business_problem"),
             executive.get("business_problem"),
@@ -171,6 +173,8 @@ def _structured_section(metadata: dict[str, Any], name: str) -> str:
         ]
     elif name == "Architecture and deployment":
         values = [
+            intelligence.get("architecture_summary"),
+            intelligence.get("deployment_summary"),
             metadata.get("deployment"),
             comparison.get("deployment_status"),
             comparison.get("deployment_environment"),
@@ -182,6 +186,9 @@ def _structured_section(metadata: dict[str, Any], name: str) -> str:
         ]
     elif name == "Data and methodology":
         values = [
+            intelligence.get("data_basis"),
+            intelligence.get("dataset_size"),
+            intelligence.get("models_methods"),
             metadata.get("dataset"),
             comparison.get("dataset"),
             comparison.get("model_or_algorithm"),
@@ -192,6 +199,8 @@ def _structured_section(metadata: dict[str, Any], name: str) -> str:
         ]
     else:
         values = [
+            intelligence.get("evaluation"),
+            intelligence.get("key_results"),
             metadata.get("results"),
             comparison.get("evaluation_metrics"),
             comparison.get("limitations"),
@@ -261,8 +270,13 @@ def deployment_classification(metadata: dict[str, Any], body: str) -> tuple[str,
 def _algorithms(metadata: dict[str, Any]) -> list[str]:
     algorithms = (((metadata.get("views") or {}).get("technical") or {}).get("algorithms") or [])
     return unique(
-        str(item.get("name", "")) if isinstance(item, dict) else str(item)
-        for item in algorithms
+        [
+            *(
+                str(item.get("name", "")) if isinstance(item, dict) else str(item)
+                for item in algorithms
+            ),
+            str((metadata.get("project_intelligence") or {}).get("models_methods", "")),
+        ]
     )
 
 
@@ -273,6 +287,7 @@ def _actions(metadata: dict[str, Any]) -> list[dict[str, str]]:
         ("demo", "demo_url"),
         ("paper", "paper_url"),
         ("docs", "documentation_url"),
+        ("video", "video_url"),
     ):
         if metadata.get(key):
             candidates.append({"kind": kind, "label": kind.title(), "url": str(metadata[key])})
@@ -362,6 +377,7 @@ def build_knowledge_base(source_dir: Path, now: datetime | None = None) -> Knowl
             ]
         )
         executive = ((metadata.get("views") or {}).get("executive") or {})
+        intelligence = metadata.get("project_intelligence") or {}
         capabilities = unique(
             [
                 *flatten(metadata.get("capabilities")),
@@ -384,7 +400,7 @@ def build_knowledge_base(source_dir: Path, now: datetime | None = None) -> Knowl
         page_url = f"/projects/posts/{slug}/"
         deployment_status, deployment_evidence, deployment_details = deployment_classification(metadata, body)
         searchable_content = clean_markdown(
-            f"{body} {' '.join(flatten(metadata.get('views')))} {' '.join(flatten(comparison))}"
+            f"{body} {' '.join(flatten(intelligence))} {' '.join(flatten(metadata.get('views')))} {' '.join(flatten(comparison))}"
         )[:12000]
         related_project_ids = [
             filter_key(value)
@@ -409,6 +425,18 @@ def build_knowledge_base(source_dir: Path, now: datetime | None = None) -> Knowl
             "deployment_status": deployment_status,
             "deployment_evidence": deployment_evidence,
             "deployment_details": deployment_details,
+            "data_basis": normalize(str(intelligence.get("data_basis") or "")),
+            "dataset_size": normalize(str(intelligence.get("dataset_size") or "")),
+            "models_methods": normalize(str(intelligence.get("models_methods") or "")),
+            "architecture_summary": normalize(
+                str(intelligence.get("architecture_summary") or "")
+            ),
+            "evaluation": normalize(str(intelligence.get("evaluation") or "")),
+            "key_results": normalize(str(intelligence.get("key_results") or "")),
+            "why_it_matters": normalize(
+                str(intelligence.get("why_it_matters") or "")
+            ),
+            "field_statuses": intelligence.get("field_statuses") or {},
             "actions": _actions(metadata),
             "related_project_ids": related_project_ids,
         }
@@ -477,4 +505,3 @@ def build_knowledge_base(source_dir: Path, now: datetime | None = None) -> Knowl
         chunks=chunks,
         content_hash=hasher.hexdigest(),
     )
-

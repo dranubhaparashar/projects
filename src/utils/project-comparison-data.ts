@@ -73,7 +73,7 @@ export const projectComparisonRows: ProjectComparisonRow[] = [
 	{ id: "primary-capability", label: "Primary capability", kind: "text" },
 	{ id: "technologies", label: "Technologies", kind: "tags" },
 	{ id: "model-algorithm", label: "Model or algorithm", kind: "text" },
-	{ id: "dataset", label: "Dataset", kind: "text" },
+	{ id: "dataset", label: "Dataset / Data Basis", kind: "text" },
 	{ id: "scale", label: "Scale", kind: "text" },
 	{ id: "deployment-status", label: "Deployment status", kind: "text" },
 	{
@@ -264,6 +264,14 @@ function statusLabel(
 	return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function fieldStatusValue(
+	status: "present" | "not_applicable" | "unknown" | undefined,
+): ProjectComparisonValue | null {
+	if (status === "not_applicable") return textValue("Not applicable");
+	if (status === "unknown") return textValue("Genuinely unknown");
+	return null;
+}
+
 function buildValues(
 	entry: CollectionEntry<"posts">,
 	project: PortfolioKnowledgeProject,
@@ -310,6 +318,7 @@ function buildValues(
 		]);
 	const modelOrAlgorithm =
 		explicit.model_or_algorithm ||
+		entry.data.project_intelligence?.models_methods ||
 		getTableValues(table, [
 			"model",
 			"model or algorithm",
@@ -322,6 +331,7 @@ function buildValues(
 		]);
 	const dataset =
 		explicit.dataset ||
+		entry.data.project_intelligence?.data_basis ||
 		getTableValues(table, [
 			"dataset",
 			"dataset structure",
@@ -329,7 +339,7 @@ function buildValues(
 			"training data",
 			"evaluation data",
 		]) ||
-		project.datasetDetails;
+		project.dataBasis;
 	const deploymentEnvironment =
 		explicit.deployment_environment ||
 		getTableValues(table, [
@@ -371,6 +381,7 @@ function buildValues(
 		extractSection(body, /\bmy contribution\b/i);
 	const metrics =
 		explicit.evaluation_metrics ||
+		entry.data.project_intelligence?.evaluation ||
 		getTableValues(table, [
 			"evaluation metrics",
 			"performance",
@@ -382,6 +393,12 @@ function buildValues(
 	const demo = actionValue(project.actions, "demo");
 	const paper = actionValue(project.actions, "paper");
 	const documentation = actionValue(project.actions, "docs");
+	const fieldStatuses = entry.data.project_intelligence?.field_statuses;
+	const architectureValue = project.architecture.available
+		? linkValue("View architecture", project.architecture.url)
+		: fieldStatuses?.architecture_preview === "documented"
+			? textValue(entry.data.project_intelligence?.architecture_summary || "Architecture documented")
+			: fieldStatusValue(fieldStatuses?.architecture_preview);
 
 	return {
 		"project-type": textValue(
@@ -406,23 +423,24 @@ function buildValues(
 		dataset: textValue(dataset),
 		scale: textValue(
 			explicit.scale ||
+				entry.data.project_intelligence?.dataset_size ||
 				getTableValues(table, ["scale", "repository scope", "dataset size"]),
-		),
+		) || fieldStatusValue(fieldStatuses?.dataset_size),
 		"deployment-status": textValue(
 			explicit.deployment_status || statusLabel(project.deployment.status),
 		),
 		"deployment-environment": textValue(deploymentEnvironment),
 		infrastructure: textValue(infrastructure),
-		"evaluation-metrics": textValue(metrics),
+		"evaluation-metrics":
+			textValue(metrics) || fieldStatusValue(fieldStatuses?.evaluation),
 		explainability: textValue(explainability),
 		"human-in-loop": textValue(humanInLoop),
-		architecture: project.architecture.available
-			? linkValue("View architecture", project.architecture.url)
-			: null,
+		architecture: architectureValue,
 		github,
-		demo,
+		demo: demo || fieldStatusValue(fieldStatuses?.live_demo),
 		paper,
-		documentation,
+		documentation:
+			documentation || fieldStatusValue(fieldStatuses?.documentation),
 		limitations: textValue(limitations),
 		"my-contribution": textValue(myContribution),
 	};

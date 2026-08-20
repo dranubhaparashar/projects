@@ -8,6 +8,24 @@ architecture:
 tags: [MCP, Agentic AI, Orchestration, Microservices]
 capabilities: [Agentic AI, Workflow Automation, Generative AI]
 technologies: [FastAPI, Redis, PostgreSQL, pgvector, GPT-4o-mini, HTTPX, NetworkX]
+github_url: "https://github.com/anubhaparashar/Autonomous-Microservice-Composition-via-LLM-Agents-in-an-MCP-Control-Plane"
+documentation_url: "https://github.com/anubhaparashar/Autonomous-Microservice-Composition-via-LLM-Agents-in-an-MCP-Control-Plane#readme"
+project_intelligence:
+  data_basis: "Natural-language workflow intents, Redis service-registry metadata, input/output schemas, PostgreSQL/pgvector schema metadata, and cost, error, latency, telemetry, and audit signals."
+  dataset_size: ""
+  models_methods: "GPT-4o-mini JSON-DAG planning, Redis registry lookup, PostgreSQL/pgvector semantic metadata access, NetworkX topological scheduling, HTTPX service calls, retries, and fallback routing."
+  architecture_summary: "Natural-language intent → GPT-4o-mini DAG planner using service metadata → JSON workflow graph → Redis service registry and PostgreSQL/pgvector schema context → NetworkX/HTTPX execution → retry and fallback handling → results, errors, telemetry, and audit traces."
+  evaluation: "No complete benchmark or formal evaluation harness is published in the compact repository; the source documents implementation behavior and explicitly lists broader evaluation as a limitation."
+  key_results: "The reference implementation separates planning and execution through /plan, /execute, and /plan_and_execute endpoints, uses registry metadata instead of hardcoded services, executes dependency graphs topologically, and supports service fallbacks."
+  deployment_summary: "FastAPI/Uvicorn control-plane prototype intended for local Redis and PostgreSQL services; no public production deployment is claimed."
+  why_it_matters: "It shows how natural-language planning can be constrained by typed service knowledge and executed as an inspectable workflow graph instead of an opaque chain of model calls."
+  field_statuses:
+    dataset_size: not_applicable
+    evaluation: unknown
+    live_demo: not_applicable
+    video: not_applicable
+    documentation: present
+    architecture_preview: present
 status:
   label: Prototype
   type: prototype

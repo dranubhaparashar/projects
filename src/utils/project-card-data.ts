@@ -201,7 +201,7 @@ const EVIDENCE_ORDER = [
 	"Architecture",
 	"Paper",
 	"Video",
-	"Dataset",
+	"Data basis",
 	"Metrics",
 	"GitHub",
 	"PDF",
@@ -750,6 +750,7 @@ function evidenceData(
 	const hasDataset =
 		Boolean(linkedEvidence(/dataset|data set|kaggle/)) ||
 		Boolean(entry.data.dataset) ||
+		Boolean(entry.data.project_intelligence?.data_basis) ||
 		hasHeading(body, /dataset|data model|data source/i);
 	const hasMetrics =
 		Boolean(linkedEvidence(/metrics|evaluation results|benchmark results/)) ||
@@ -773,7 +774,7 @@ function evidenceData(
 	);
 	if (architectureUrl) add("Architecture", architectureUrl, true);
 	if (dashboardUrl) add("Dashboard", dashboardUrl, true);
-	if (datasetEvidenceUrl) add("Dataset", datasetEvidenceUrl, true);
+	if (datasetEvidenceUrl) add("Data basis", datasetEvidenceUrl, true);
 	if (metricsUrl) add("Metrics", metricsUrl, true);
 	if (hasArchitecture) add("Architecture", projectUrl, false);
 	if (hasDashboard) add("Dashboard", projectUrl, false);
@@ -786,7 +787,7 @@ function evidenceData(
 		const datasetUrl = /^https?:\/\//i.test(entry.data.dataset || "")
 			? entry.data.dataset
 			: projectUrl;
-		add("Dataset", datasetUrl, datasetUrl !== projectUrl);
+		add("Data basis", datasetUrl, datasetUrl !== projectUrl);
 	}
 	if (hasMetrics) add("Metrics", projectUrl, false);
 	const sortedEvidence = evidence.sort(
@@ -894,7 +895,7 @@ export function buildProjectCardData(
 			"Architecture",
 			"Paper",
 			"Video",
-			"Dataset",
+			"Data basis",
 			"Metrics",
 			"GitHub",
 			"PDF",

@@ -19,6 +19,24 @@ technologies:
   - React
   - TypeScript
   - Python
+github_url: "https://github.com/dranubhaparashar/AI-Powered-Telecom-Copper-Reclamation-Workflow-Automation-Platform"
+documentation_url: "https://github.com/dranubhaparashar/AI-Powered-Telecom-Copper-Reclamation-Workflow-Automation-Platform/wiki"
+project_intelligence:
+  data_basis: "ACR, CAPR, and CPR PDF reports, pair and count evidence, process-flow configuration, and the parser's CSV, JSON, and XLSX review outputs."
+  dataset_size: ""
+  models_methods: "PyMuPDF text extraction, deterministic report-family detection, pair/count parsing, conservative status normalization and decision rules, FastAPI process-flow services, and a React/Vite review interface."
+  architecture_summary: "ACR/CAPR/CPR PDFs → PyMuPDF extraction → report-family and pair/count parsing → raw-status preservation and conservative normalization → warnings and preliminary recommendation → CSV/JSON/XLSX exports, alongside FastAPI process flows and the React dashboard shell."
+  evaluation: "The prototype includes generated parser tests and documents production measures such as field precision/recall, row extraction accuracy, unparsed-row rate, false-clear rate, coverage, reviewer agreement, cycle time, rework, and exceptions; no trained or evaluated ML model or published accuracy result is claimed."
+  key_results: "Text extraction, deterministic pair/status and ACR count parsing, example CSV/JSON/XLSX outputs, process-flow API, and the React/Vite dashboard shell are implemented; parser-to-dashboard integration and production authorization remain incomplete."
+  deployment_summary: "Prototype runnable as a local Python parser with FastAPI and a React/Vite dashboard; it is not presented as a production-authorized telecom decision system."
+  why_it_matters: "It converts fragmented engineering reports and manual handoffs into traceable evidence and conservative decision support while preserving human validation for any reclamation action."
+  field_statuses:
+    dataset_size: not_applicable
+    evaluation: present
+    live_demo: not_applicable
+    video: unknown
+    documentation: present
+    architecture_preview: present
 status:
   label: Prototype
   type: prototype

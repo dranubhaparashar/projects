@@ -6,6 +6,26 @@ image: ./cover.png
 tags: [Predictive Maintenance, Generator Reliability, MLOps]
 capabilities: [Predictive Analytics, MLOps, Data Analytics]
 technologies: [Streamlit, Scikit-learn, Hugging Face Spaces, Snowflake, Python]
+github_url: "https://github.com/dranubhaparashar/Predictive_Preventive_Maintenance_for_Generator_Reliability"
+demo_url: "https://huggingface.co/spaces/AnubhaParashar/Predictive_Preventive_Maintenance_for_Generator_Reliability"
+video_url: "https://www.youtube.com/watch?v=QQSSFWxY_ro"
+documentation_url: "https://github.com/dranubhaparashar/Predictive_Preventive_Maintenance_for_Generator_Reliability/wiki"
+project_intelligence:
+  data_basis: "Seven synthetic CSV inputs covering generator assets, preventive-maintenance events, failure events, linked PM-to-failure pairs, weekly telemetry, 14/30-day failure labels, and business-impact signals."
+  dataset_size: ""
+  models_methods: "Deterministic PM-to-next-failure linking, feature engineering over weekly telemetry, Logistic Regression baseline, Random Forest classifier, 14-day and 30-day horizons, and a rule-based prescriptive action planner weighted by operational impact."
+  architecture_summary: "Seven maintenance, failure, telemetry, label, and business-impact CSVs → reliability analytics and PM-to-failure linking → Logistic Regression and Random Forest risk models → 14/30-day probabilities → risk and PM-history merge → prioritized maintenance recommendation → Streamlit dashboards and exports."
+  evaluation: "The dashboard reports accuracy, precision, recall, F1, ROC AUC, 14/30-day confusion matrices, feature importance, PM-to-failure timing, risk rankings, and action outputs; the post publishes metric types but no final numeric model scores."
+  key_results: "The implemented workflow connects deterministic PM-effectiveness measurement, two prediction horizons, interpretable and nonlinear classifiers, business-impact weighting, prescriptive actions, nine dashboard tabs, and downloadable analysis without claiming unsupported production accuracy."
+  deployment_summary: "Public Hugging Face Docker Space with embedded synthetic data and live in-browser training, plus documented local Python and Snowflake Streamlit paths."
+  why_it_matters: "It links maintenance activity to subsequent failures so teams can test whether PM schedules work, anticipate 14/30-day risk, and turn predictions into prioritized operational actions."
+  field_statuses:
+    dataset_size: unknown
+    evaluation: present
+    live_demo: present
+    video: present
+    documentation: present
+    architecture_preview: documented
 status:
   label: Live / Deployed
   type: production

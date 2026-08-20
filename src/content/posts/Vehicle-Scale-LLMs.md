@@ -4,10 +4,28 @@ published: 2025-08-22
 description: A project walkthrough of DAC+Q4-ITS, a minimal reproducible starter for INT4 quantization and low-rank adapter compensation for vehicle-scale LLM inference.
 architecture:
   src: ../../assets/images/projects/covers/vehicle-scale-llms.png
-  alt: Vehicle-scale multimodal LLM for perception, reasoning, planning and safe autonomous driving
+  alt: DAC+Q4-ITS INT4 quantization and low-rank residual pipeline for toy-transformer inference
 tags: [LLM Inference, Quantization, Low-Rank Adapters, Edge AI, Automotive AI]
 capabilities: [Generative AI, Edge Deployment]
 technologies: [PyTorch, INT4]
+github_url: "https://github.com/dranubhaparashar/Vehicle-Scale-LLMs-Integrating-Low-Rank-Residuals-and-4-Bit-Quantization-for-In-Vehicle-AI"
+documentation_url: "https://github.com/dranubhaparashar/Vehicle-Scale-LLMs-Integrating-Low-Rank-Residuals-and-4-Bit-Quantization-for-In-Vehicle-AI#readme"
+project_intelligence:
+  data_basis: "A minimal natural-language normalization corpus and calibration activations used by the repository's toy-transformer compression pipeline; it is not an automotive production dataset."
+  dataset_size: "2 published NLN input/target sample records; no production-scale corpus or benchmark size is published."
+  models_methods: "Toy transformer, ONNX export, per-row INT4 quantization, SVD/eigenspace computation, rank-8 low-rank adapters, compressed forward inference, and simple exact-match and SOFT-F1 evaluation."
+  architecture_summary: "Corpus preparation → model export → INT4 quantization → calibration activation eigenspace/SVD → low-rank U/D adapter construction and injection → compressed inference → EM and SOFT-F1 evaluation."
+  evaluation: "The starter includes an EM and SOFT-F1 demonstration and quantization tests, but publishes no final metric values, memory measurements, latency numbers, or FP16/INT8/plain-INT4 benchmark comparison."
+  key_results: "The repository provides a working modular starter for INT4 quantization with per-row scales, rank-8 residual adapters, compressed forward inference, and evaluation on a toy transformer; it does not claim a production LLaMA or vehicle deployment."
+  deployment_summary: "Research starter with a CPU development Dockerfile; Jetson/TensorRT wiring and a real LLaMA-derived model remain an upgrade path, not a completed deployment."
+  why_it_matters: "It demonstrates the complete mechanics of combining aggressive quantization with low-rank residual compensation before investing in real-model and embedded-hardware deployment."
+  field_statuses:
+    dataset_size: present
+    evaluation: present
+    live_demo: not_applicable
+    video: not_applicable
+    documentation: present
+    architecture_preview: present
 status:
   label: Research
   type: research

@@ -10,6 +10,24 @@ architecture:
 tags: [MCP, AI Infrastructure, Agentic AI, Workflow Orchestration]
 capabilities: [Agentic AI, Workflow Automation, Security]
 technologies: [gRPC, Protocol Buffers, Python, PostgreSQL]
+github_url: "https://github.com/anubhaparashar/MCP2.0"
+documentation_url: "https://github.com/anubhaparashar/MCP2.0#readme"
+project_intelligence:
+  data_basis: "Typed Protocol Buffer messages, service-registry metadata, capability and authorization context, streaming/context payloads, event-bus messages, and integration scenarios; no training dataset is required."
+  dataset_size: ""
+  models_methods: "Protocol Buffers and gRPC service contracts, service discovery and registration, capability negotiation, fine-grained authorization, middleware, streaming and multimodal channels, event-driven coordination, and agent-to-agent delegation."
+  architecture_summary: "Agents and clients → capability and policy checks → MCP 2.0 orchestration layer with discovery/registry, context/tool services, event-driven coordination, middleware, and observability → knowledge stores, enterprise tools, APIs, and other agents."
+  evaluation: "No formal benchmark or load/integration evaluation result is published; the source positions hardened identity, telemetry, recovery, load testing, and untrusted-tool isolation as production work still required."
+  key_results: "The prototype provides typed protobuf/gRPC contracts, registry, context/tool and event-bus services, authorization and middleware modules, a client example, and PostgreSQL initialization as a coherent distributed-agent control-plane foundation."
+  deployment_summary: "Distributed-systems prototype rather than a production-ready platform; deployment hardening and operational validation remain future requirements."
+  why_it_matters: "It treats multi-agent tool access, shared context, discovery, authorization, events, and delegation as governed infrastructure with inspectable contracts instead of ad hoc prompt integrations."
+  field_statuses:
+    dataset_size: not_applicable
+    evaluation: unknown
+    live_demo: not_applicable
+    video: not_applicable
+    documentation: present
+    architecture_preview: present
 status:
   label: Prototype
   type: prototype

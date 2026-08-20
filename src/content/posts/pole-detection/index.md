@@ -6,6 +6,25 @@ image: ./cover.png
 tags: [Computer Vision, OCR, Pole Validation, Infrastructure]
 capabilities: [Computer Vision, Document Intelligence]
 technologies: [YOLO, GIS]
+github_url: "https://github.com/dranubhaparashar/Pole-Detection"
+video_url: "https://www.youtube.com/watch?v=8ryD2qsKwbg"
+documentation_url: "https://github.com/dranubhaparashar/Pole-Detection#readme"
+project_intelligence:
+  data_basis: "Pole field imagery and YOLO labels combined with GIS coordinates, internal portal evidence, Frontier and AEP records, OCR, and workflow history for ownership and suitability validation."
+  dataset_size: ""
+  models_methods: "Ultralytics YOLO26n object detection (260 layers, 2.5M parameters, 36 classes) combined with GIS/OCR evidence reconciliation, confidence rules, ambiguity detection, and human-supported approval/review/rework decisions."
+  architecture_summary: "Field image and GIS/portal records → YOLO pole detection and OCR → ownership, location, structural, and workflow evidence reconciliation → confidence engine → Auto-Approve, Manual Review, or Reject/Rework recommendation → human validation."
+  evaluation: "The documented training setup is 100 epochs, batch size 16, image size 640. The published performance snapshot reports precision 0.608, recall 0.052, and mAP@0.5 0.054."
+  key_results: "The current detector demonstrates the full validation flow but its low recall and class imbalance make it unsuitable for autonomous decisions; the post explicitly retains human review and prioritizes dataset expansion and relabeling."
+  deployment_summary: "Human-assisted industrial prototype with demonstration videos; no public live application or production-autonomous deployment is claimed."
+  why_it_matters: "Pole decisions affect cost, schedule, ownership, and safety, so visual detection must be reconciled with GIS and operational evidence rather than treated as a standalone model output."
+  field_statuses:
+    dataset_size: unknown
+    evaluation: present
+    live_demo: not_applicable
+    video: present
+    documentation: present
+    architecture_preview: documented
 status:
   label: Prototype
   type: prototype

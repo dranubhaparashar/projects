@@ -64,7 +64,7 @@ export interface PortfolioKnowledgeProject {
 		evidence: string[];
 		details: string;
 	};
-	datasetDetails: string;
+	dataBasis: string;
 	resultsAndMetrics: string;
 	relatedProjectIds: string[];
 }
@@ -369,6 +369,7 @@ function getStructuredDeploymentDetails(
 	entry: CollectionEntry<"posts">,
 ): string {
 	return uniqueValues([
+		entry.data.project_intelligence?.deployment_summary || "",
 		entry.data.deployment || "",
 		entry.data.comparison?.deployment_status || "",
 		entry.data.comparison?.deployment_environment || "",
@@ -382,6 +383,8 @@ function getStructuredDeploymentDetails(
 
 function getStructuredDatasetDetails(entry: CollectionEntry<"posts">): string {
 	return uniqueValues([
+		entry.data.project_intelligence?.data_basis || "",
+		entry.data.project_intelligence?.dataset_size || "",
 		entry.data.dataset || "",
 		entry.data.comparison?.dataset || "",
 		...flattenStructuredValue(entry.data.views?.technical?.dataset),
@@ -390,6 +393,8 @@ function getStructuredDatasetDetails(entry: CollectionEntry<"posts">): string {
 
 function getStructuredResults(entry: CollectionEntry<"posts">): string {
 	return uniqueValues([
+		entry.data.project_intelligence?.evaluation || "",
+		entry.data.project_intelligence?.key_results || "",
 		entry.data.results || "",
 		entry.data.comparison?.evaluation_metrics || "",
 		...flattenStructuredValue(entry.data.views?.technical?.metrics),
@@ -525,6 +530,7 @@ export function buildPortfolioKnowledgeIndex(
 				project.architecturePreview.status !== "missing";
 			const architectureDetails = compact(
 				[
+					entry.data.project_intelligence?.architecture_summary || "",
 					entry.data.architecture?.alt || "",
 					entry.data.architecture?.caption || "",
 					extractSection(body, /\b(architecture|system design)\b/i),
@@ -543,6 +549,7 @@ export function buildPortfolioKnowledgeIndex(
 					);
 
 			const structuredSearchContent = uniqueValues([
+				...flattenStructuredValue(entry.data.project_intelligence),
 				...flattenStructuredValue(entry.data.views),
 				...flattenStructuredValue(entry.data.comparison),
 				...flattenStructuredValue(entry.data.contribution),
@@ -583,7 +590,7 @@ export function buildPortfolioKnowledgeIndex(
 					details: architectureDetails,
 				},
 				deployment,
-				datasetDetails: getDatasetDetails(
+				dataBasis: getDatasetDetails(
 					body,
 					getStructuredDatasetDetails(entry),
 				),

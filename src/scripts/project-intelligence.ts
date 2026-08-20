@@ -518,7 +518,7 @@ function detailAnswer(
 	kind: "dataset" | "results" | "architecture",
 ): AssistantAnswer {
 	const available = projects.filter((project) => {
-		if (kind === "dataset") return Boolean(project.datasetDetails);
+		if (kind === "dataset") return Boolean(project.dataBasis);
 		if (kind === "results") return Boolean(project.resultsAndMetrics);
 		return project.architecture.available;
 	});
@@ -526,7 +526,7 @@ function detailAnswer(
 	return {
 		lead:
 			kind === "dataset"
-				? "Published dataset details are available for the following project(s)."
+				? "Published dataset or data-basis details are available for the following project(s)."
 				: kind === "results"
 					? "Published results or metrics are available for the following project(s)."
 					: "Published architecture information is available for the following project(s).",
@@ -534,7 +534,7 @@ function detailAnswer(
 			project,
 			reason:
 				kind === "dataset"
-					? project.datasetDetails
+					? project.dataBasis
 					: kind === "results"
 						? project.resultsAndMetrics
 						: project.architecture.details ||

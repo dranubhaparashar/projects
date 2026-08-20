@@ -22,6 +22,24 @@ technologies:
   - PyTorch
   - R3D-18
   - MEVA
+github_url: "https://github.com/dranubhaparashar/IncidentGraph"
+documentation_url: "https://github.com/dranubhaparashar/IncidentGraph/wiki"
+project_intelligence:
+  data_basis: "A bounded, video-disjoint MEVA activity-recognition study plus IncidentGraph-Synth controlled multimodal incidents with generated correspondence, event, contradiction, and missing-evidence ground truth."
+  dataset_size: "MEVA study: 2,453 clips (1,635 train, 379 validation, 439 test) from 88 annotated videos, with 12 test source videos; controlled diagnostic: 60 generated incidents with RGB, thermal, and depth evidence."
+  models_methods: "Actor-centric R3D-18 activity recognition, appearance descriptors, confidence calibration, modality and clock correction, reliability-aware cross-camera association, contradiction preservation, missing-evidence records, and typed provenance graph reconstruction."
+  architecture_summary: "RGB, thermal, and depth camera sources → evidence records and actor tubes → activity recognition, appearance, and calibration → modality/clock-corrected fusion and cross-camera association → reasoning over entities, events, contradictions, and missing evidence → typed incident graph with timeline, confidence, provenance, and alternatives."
+  evaluation: "Real MEVA uses accuracy, macro/weighted F1, macro-mAP, raw/calibrated ECE, Brier scores, three seeds, bootstrap and source-video sensitivity. The controlled diagnostic uses entity/event/conflict/missing F1, ECE, Brier, and a diagnostic graph score."
+  key_results: "The strongest mean real-MEVA family reports macro-F1 0.0718 ± 0.0127 and macro-mAP 0.1517 ± 0.0203, documenting the bounded task's difficulty. On 60 controlled incidents, IncidentGraph reaches diagnostic graph score 0.923 ± 0.069 and is best on 45/60 incidents while preserving conflict and missing-evidence semantics."
+  deployment_summary: "Research prototype with local API/dashboard, reproducibility scripts, Docker configuration, and dataset adapters; no production incident-decision deployment is claimed."
+  why_it_matters: "Evidence fusion should preserve provenance, contradictions, alternatives, and sensor gaps so investigators can distinguish 'not observed' from 'did not occur' and audit how a reconstruction was formed."
+  field_statuses:
+    dataset_size: present
+    evaluation: present
+    live_demo: not_applicable
+    video: not_applicable
+    documentation: present
+    architecture_preview: documented
 status:
   label: Research
   type: research

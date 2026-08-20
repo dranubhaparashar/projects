@@ -35,6 +35,38 @@ const algorithm = z.union([
 	}),
 ]);
 
+const projectIntelligenceFieldStatus = z.enum([
+	"present",
+	"not_applicable",
+	"unknown",
+]);
+
+const architecturePreviewStatus = z.enum([
+	"present",
+	"documented",
+	"not_applicable",
+	"unknown",
+]);
+
+const projectIntelligence = z.object({
+	data_basis: z.string(),
+	dataset_size: z.string().optional().default(""),
+	models_methods: z.string(),
+	architecture_summary: z.string(),
+	evaluation: z.string(),
+	key_results: z.string(),
+	deployment_summary: z.string(),
+	why_it_matters: z.string(),
+	field_statuses: z.object({
+		dataset_size: projectIntelligenceFieldStatus,
+		evaluation: projectIntelligenceFieldStatus,
+		live_demo: projectIntelligenceFieldStatus,
+		video: projectIntelligenceFieldStatus,
+		documentation: projectIntelligenceFieldStatus,
+		architecture_preview: architecturePreviewStatus,
+	}),
+});
+
 const postsCollection = defineCollection({
 	schema: z.object({
 		title: z.string(),
@@ -90,6 +122,7 @@ const postsCollection = defineCollection({
 		deployment: z.string().optional().default(""),
 		dataset: z.string().optional().default(""),
 		results: z.string().optional().default(""),
+		project_intelligence: projectIntelligence.optional(),
 		related_projects: z
 			.array(
 				z.union([

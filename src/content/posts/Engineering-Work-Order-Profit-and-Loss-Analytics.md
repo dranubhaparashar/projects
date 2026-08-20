@@ -20,6 +20,24 @@ technologies:
   - Snowflake
   - Python
   - Plotly
+github_url: "https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics"
+documentation_url: "https://github.com/dranubhaparashar/Engineering-Work-Order-Profit-and-Loss-Analytics/wiki"
+project_intelligence:
+  data_basis: "Synthetic engineering work-order lifecycle data covering revenue, delivery-center labor, field labor, billing, other costs, profit/loss, and margin-risk signals."
+  dataset_size: "600 work orders; 2,660 work-unit revenue rows; 8,713 DWR activity/labor rows; 730 billing events; 977 other-cost rows; 2 labor-rate rows; and 16 milestone mappings."
+  models_methods: "Deterministic synthetic-data generation, pandas financial aggregation, configurable labor and risk rules, Streamlit/Plotly analysis, Snowflake-compatible schemas and analytical views, and pytest validation of the metric engine."
+  architecture_summary: "Synthetic CSV dimensions and facts → validated data loader → work-order financial and lifecycle summary → revenue, labor, billing, cost, margin, and risk calculations → Streamlit dashboards and exports, with equivalent Snowflake schemas/views for a governed data path."
+  evaluation: "Pytest covers core financial-metric behavior, while the application reports duplicates, orphan records, missing revenue, zero-hour events, and negative hours; no predictive-model benchmark is claimed."
+  key_results: "The implemented public MVP generates the complete synthetic dataset and provides work-order P&L, billing visibility, margin/risk classification, rate scenarios, data-quality review, Snowflake schemas/views, and automated metric tests."
+  deployment_summary: "Local Streamlit synthetic-data prototype with a documented Snowflake-backed deployment path; no public live-demo URL is published."
+  why_it_matters: "It gives engineering and finance teams earlier, explainable margin visibility across the work-order lifecycle without exposing confidential customer or employee data."
+  field_statuses:
+    dataset_size: present
+    evaluation: present
+    live_demo: not_applicable
+    video: unknown
+    documentation: present
+    architecture_preview: present
 status:
   label: Prototype
   type: prototype

@@ -4,10 +4,28 @@ published: 2025-10-14
 description: A lightweight project exploring dynamic low-rank residual correction for memory-efficient LLM inference on quantized weights.
 architecture:
   src: ../../assets/images/projects/covers/dacr-q.png
-  alt: DACR-Q data-aware clustering, reasoning, optimization and verification framework
+  alt: DACR-Q dynamic low-rank residual correction architecture for quantized linear layers
 tags: [LLM Inference, Quantization, Low-Rank Adapters, Memory Efficiency, Edge AI]
 capabilities: [Generative AI, Edge Deployment]
 technologies: [PyTorch]
+github_url: "https://github.com/dranubhaparashar/-DACR-Q-ATraining-Free-Framework-for-Memory-Efficient-LLM-Inference"
+documentation_url: "https://github.com/dranubhaparashar/-DACR-Q-ATraining-Free-Framework-for-Memory-Efficient-LLM-Inference#readme"
+project_intelligence:
+  data_basis: "Activation tensors and quantized linear weights exercised by the compact PyTorch implementation; no conventional training dataset or benchmark corpus is published."
+  dataset_size: ""
+  models_methods: "A wrapped linear layer combines quantized weights with an input-conditioned low-rank residual ΔW = U(s)V(s), where a small zero-initialized MLP derives the correction from activation mean and standard-deviation statistics."
+  architecture_summary: "Input activation → activation statistics → tiny MLP heads → dynamic low-rank residual → residual-corrected quantized linear inference output."
+  evaluation: "No benchmark suite or numeric latency, memory, quality, accuracy, or perplexity results are published in the inspected repository; the portfolio post explicitly lists those comparisons as future work."
+  key_results: "The available implementation establishes the training-free, zero-initialized dynamic residual mechanism and its configuration (default rank 16, MLP hidden size 32) without making unsupported performance claims."
+  deployment_summary: "Compact research implementation only; no production runtime or public deployment is claimed."
+  why_it_matters: "It explores whether a lightweight input-conditioned correction can retain quantized-inference efficiency while recovering expressiveness without a retraining-heavy adaptation workflow."
+  field_statuses:
+    dataset_size: not_applicable
+    evaluation: unknown
+    live_demo: not_applicable
+    video: not_applicable
+    documentation: present
+    architecture_preview: present
 status:
   label: Research
   type: research

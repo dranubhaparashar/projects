@@ -18,6 +18,24 @@ capabilities:
   - Security
 technologies:
   - Python
+github_url: "https://github.com/dranubhaparashar/LightDID-ZKP"
+documentation_url: "https://github.com/dranubhaparashar/LightDID-ZKP/wiki"
+project_intelligence:
+  data_basis: "Reproducible BBS and AnonCreds benchmark runs across verifier policies, device/resource profiles, and attribute counts from 4 through 64; this is an experiment basis, not a training dataset."
+  dataset_size: "5 warmup runs and 50 measured runs for each BBS/AnonCreds configuration at 4, 8, 16, 32, and 64 attributes, with selector, ablation, and resource-sensitivity outputs."
+  models_methods: "CAPS-ZK verifier-policy parsing, capability checks, privacy-level abstraction, resource profiling, cost scoring, BBS selective-disclosure and AnonCreds predicate adapters, and verifier metadata guards."
+  architecture_summary: "Issuer credential → holder wallet → verifier policy parser → CAPS-ZK policy/capability/resource selector → BBS selective disclosure or AnonCreds predicate presentation → verifier metadata and policy guard → policy-compliant decision."
+  evaluation: "Published summaries report proving/presentation latency, verification latency, proof and VP size, peak RSS memory, and coefficient of variation across the 50 measured runs, plus selector decisions, unsafe-fallback ablation, and resource sensitivity."
+  key_results: "The selector routes selective disclosure to BBS, predicate requirements to AnonCreds, and blocks unsafe cost-first substitution. At 64 attributes the published table reports BBS 377.45 ms presentation, 125.36 ms verification, 2,405-byte VP, and 143.00 MB RSS versus AnonCreds 190.44 ms, 186.45 ms, 29,573-byte VP, and 286.62 MB RSS."
+  deployment_summary: "Reproducible research package and selector prototype with optional real-backend benchmarks; no public production deployment is claimed."
+  why_it_matters: "A wallet must satisfy verifier semantics and privacy requirements before optimizing resource cost, otherwise an apparently cheaper proof mechanism can create an unsafe privacy downgrade."
+  field_statuses:
+    dataset_size: present
+    evaluation: present
+    live_demo: not_applicable
+    video: not_applicable
+    documentation: present
+    architecture_preview: present
 status:
   label: Research
   type: research

@@ -5,6 +5,30 @@ description: "An agentic DevSecOps cockpit for Azure Function and Python API rep
 tags: ["Agentic AI", "DevSecOps", "CI/CD", "Security", "MLOps", "Evidence Pack"]
 capabilities: ["Agentic AI", "Security", "MLOps", "Explainability"]
 technologies: ["Azure DevOps", "Azure Functions", "Streamlit", "SonarQube", "Python", "Hugging Face Spaces"]
+github_url: "https://github.com/dranubhaparashar/AegisFlow-DevSecOps-Pipeline-Orchestrator-Agent"
+demo_url: "https://huggingface.co/spaces/AnubhaParashar/AegisFlow-DevSecOps-Pipeline-Orchestrator-Agent"
+video_url: "https://www.youtube.com/watch?v=l_R8OV8VF8g"
+documentation_url: "https://github.com/dranubhaparashar/AegisFlow-DevSecOps-Pipeline-Orchestrator-Agent/wiki"
+architecture:
+  src: ./aegisflow_system_architecture.png
+  alt: AegisFlow repository validation, failure intelligence, approval, rerun, and evidence-pack architecture
+  caption: Repository evidence flows through deterministic quality, security, test, and Sonar gates before AI explanation and human-approved remediation.
+project_intelligence:
+  data_basis: "Repository source and configuration, CI/CD outputs, test and coverage artifacts, security-scanner and Sonar output, and generated evidence packs."
+  dataset_size: ""
+  models_methods: "Deterministic repository validators and runners (compile checks, Ruff, Pytest, coverage, Bandit, detect-secrets, Hadolint, and optional Sonar) with Ollama/local-LLM failure explanation and human-approved fix planning."
+  architecture_summary: "Developer or reviewer → Streamlit dashboard → AegisFlow agent → repository inspector → validation, security, test, and Sonar runners → failure intelligence → AI fix plan → human approval → targeted rerun → evidence pack and PR governance summary."
+  evaluation: "Acceptance-criteria states plus compile, lint, security, test, coverage, and Sonar gates; skipped Sonar checks retain an explicit reason, and evidence packs preserve logs, XML, Markdown, and JSON outputs."
+  key_results: "The implemented workflow connects repository preflight, deterministic validation, explainable failure triage, reviewable fix diffs, reruns, and portable audit evidence without allowing AI to silently approve risky changes."
+  deployment_summary: "The Hugging Face Space is a public UI demonstration; full private-repository validation and Git, SonarScanner, Hadolint, and Ollama workflows run locally or in WSL, with Azure DevOps integration as the enterprise target."
+  why_it_matters: "It turns fragmented CI/CD failures and scanner logs into one evidence-backed, human-governed readiness decision for developers, reviewers, security teams, and auditors."
+  field_statuses:
+    dataset_size: not_applicable
+    evaluation: present
+    live_demo: present
+    video: present
+    documentation: present
+    architecture_preview: present
 status:
   label: Live / Deployed
   type: production

@@ -525,6 +525,7 @@ export function buildProjectViewData(
 	const attributes = parseAttributes(sections);
 	const executive = entry.data.views?.executive;
 	const technical = entry.data.views?.technical;
+	const intelligence = entry.data.project_intelligence;
 
 	const derivedBusiness = sectionValue(sections, executiveAliases.business);
 	const businessFromAttributes = attribute(attributes, "problem-statement");
@@ -552,7 +553,9 @@ export function buildProjectViewData(
 	const outcomeMarkdown = outcomeIsObject
 		? textToMarkdown((structuredOutcome as { summary: TextOrList }).summary)
 		: textToMarkdown(structuredOutcome as TextOrList | undefined) ||
-			entry.data.results;
+			entry.data.results ||
+			intelligence?.key_results ||
+			"";
 	const outcomeStatus = outcomeIsObject
 		? (structuredOutcome as { status?: "achieved" | "prototype" | "expected" })
 				.status
@@ -571,7 +574,7 @@ export function buildProjectViewData(
 		textToMarkdown(executive?.deployment_context?.details) ||
 		(deploymentAttributeDetails.length
 			? deploymentAttributeDetails.map((item) => `- ${item}`).join("\n")
-			: deploymentSection?.markdown || "");
+			: intelligence?.deployment_summary || deploymentSection?.markdown || "");
 	const inferredDeploymentStatus = detectStatus(entry.body);
 	const conservativeBodyStatus = [
 		"Production Deployment",
@@ -635,7 +638,7 @@ export function buildProjectViewData(
 		github: "GitHub",
 		paper: "Paper",
 		documentation: "Documentation",
-		dataset: "Dataset",
+		dataset: "Data basis",
 		report: "Download Report",
 		video: "Watch Video",
 	};
@@ -739,13 +742,26 @@ export function buildProjectViewData(
 			summaryMarkdown:
 				textToMarkdown(technical?.summary) || entry.data.description.trim(),
 			processingPipeline: technical?.processing_pipeline || [],
-			algorithms: (technical?.algorithms || []) as StructuredAlgorithm[],
+			algorithms: (technical?.algorithms?.length
+				? technical.algorithms
+				: intelligence?.models_methods
+					? [intelligence.models_methods]
+					: []) as StructuredAlgorithm[],
+			architectureSummaryMarkdown: intelligence?.architecture_summary || "",
 			dataset:
 				technical?.dataset ||
-				(entry.data.dataset ? { source: entry.data.dataset } : undefined),
-			trainingEvaluationMarkdown: textToMarkdown(
-				technical?.training_evaluation,
-			),
+				(intelligence
+					? {
+							source: intelligence.data_basis,
+							size: intelligence.dataset_size || undefined,
+						}
+					: entry.data.dataset
+						? { source: entry.data.dataset }
+						: undefined),
+			trainingEvaluationMarkdown:
+				textToMarkdown(technical?.training_evaluation) ||
+				intelligence?.evaluation ||
+				"",
 			metrics: (technical?.metrics || []) as StructuredMetric[],
 			infrastructure: normalizeInfrastructure(technical?.infrastructure),
 			deploymentArchitectureMarkdown: textToMarkdown(
@@ -754,7 +770,16 @@ export function buildProjectViewData(
 			limitations: technical?.limitations || [],
 			futureImprovements: technical?.future_improvements || [],
 			reproducibilityLinks: technical?.reproducibility_links || [],
-			signals,
+			signals: intelligence
+				? {
+						...signals,
+						architecture: true,
+						algorithms: true,
+						dataset: true,
+						evaluation: true,
+						deployment: true,
+					}
+				: signals,
 		},
 	};
 }

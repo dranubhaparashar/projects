@@ -24,6 +24,24 @@ capabilities:
 technologies:
   - PyTorch
   - R3D-18
+github_url: "https://github.com/dranubhaparashar/CARE-SIU"
+documentation_url: "https://github.com/dranubhaparashar/CARE-SIU/wiki/Architecture"
+project_intelligence:
+  data_basis: "RWF-2000 real-video evaluation plus CARE-Synth-XL synthetic interaction clips, with RGB, audio, pose, trajectory, missingness, corruption, calibration, and explanation evidence."
+  dataset_size: "RWF-2000 is the primary real benchmark; the audited CARE-Synth-XL corpus contains 10,000 clips/rows. Experiments use seeds 1, 7, 21, 42, and 84."
+  models_methods: "R3D-18 temporal video encoder, modality-specific audio/pose/trajectory encoders, reliability-aware fusion, calibration, evidence generation, synthetic-to-real transfer, leakage auditing, and human-review deferral."
+  architecture_summary: "RGB, audio, pose, and trajectory inputs → modality encoders plus availability/corruption reliability estimation → reliability-aware fusion → temporal interaction reasoning → interaction prediction, calibration, explanation, and human-review deferral."
+  evaluation: "Five-seed RWF-2000 reporting uses macro-F1, AUROC, AUPRC, and ECE; synthetic-to-real differences use paired tests, and the 10,000-row synthetic corpus is audited for cross-split template duplication before claims are accepted."
+  key_results: "Temporal R3D-18 real-only macro-F1 is 0.8134 ± 0.0121 versus the earlier 0.6661 ± 0.0067 baseline. Synthetic-to-real macro-F1 is 0.8062 ± 0.0080, with mean delta -0.0072 and no supported classification gain; the audit exposed template memorization in the original synthetic protocol."
+  deployment_summary: "Research and reproducibility artifact with edge-export and federated/continual-learning branches; it is not presented as a deployed safety-critical decision system."
+  why_it_matters: "Safety-critical interaction understanding must expose evidence quality, uncertainty, calibration, missing modalities, and evaluation leakage instead of returning an unexplained label."
+  field_statuses:
+    dataset_size: present
+    evaluation: present
+    live_demo: not_applicable
+    video: not_applicable
+    documentation: present
+    architecture_preview: documented
 status:
   label: Research
   type: research

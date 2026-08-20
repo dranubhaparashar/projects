@@ -25,6 +25,30 @@ technologies:
   - Wav2Lip
   - SadTalker
   - Python
+github_url: "https://github.com/dranubhaparashar/ASHU-Mentor-AI-Studio"
+demo_url: "https://huggingface.co/spaces/AnubhaParashar/ASHU"
+video_url: "https://www.youtube.com/watch?v=2XXnTbtjREs"
+documentation_url: "https://github.com/dranubhaparashar/ASHU-Mentor-AI-Studio/wiki"
+architecture:
+  src: ./ashu-mentor-ai-studio-architecture.png
+  alt: ASHU Mentor AI Studio interview, evaluation, training, voice, lip-sync, and evidence-report architecture
+  caption: A consent-aware local-first pipeline separates candidate evidence, presenter assets, authorized voice input, generated media, and report exports.
+project_intelligence:
+  data_basis: "Resume and job-description inputs, candidate responses and evidence, sample_data, recordings, generated report exports, and consented presenter and voice assets used for digital-human output."
+  dataset_size: ""
+  models_methods: "Local LLM orchestration for question generation, answer evaluation, feedback and training scripts; XTTS/Coqui speech generation; SadTalker or Wav2Lip lip-sync; FFmpeg browser-safe rendering; Streamlit workflow and evidence export."
+  architecture_summary: "Streamlit UI → local LLM and interview/training orchestrator → resume/JD question generation → answer evaluation → adaptive training planner → XTTS voice generation → SadTalker/Wav2Lip rendering → generated lecture video and evidence-backed reports."
+  evaluation: "Candidate responses are scored for answer quality, clarity, role fit, confidence, and readiness; exports preserve transcripts, score JSON, strengths, weaknesses, learning gaps, logs, and media manifests. No cross-candidate benchmark claim is made."
+  key_results: "The platform connects resume-aware interviews, JD-aware evaluation, adaptive training, consent-controlled voice and presenter generation, browser-safe video, and auditable report exports in one workflow."
+  deployment_summary: "A public Hugging Face Space demonstrates the Streamlit interface; local or WSL execution is recommended for private files, voice cloning, and heavier SadTalker/Wav2Lip rendering."
+  why_it_matters: "It closes the gap between asking interview questions and turning evidence from the answers into an explainable learning plan, teaching content, and reviewable report."
+  field_statuses:
+    dataset_size: not_applicable
+    evaluation: present
+    live_demo: present
+    video: present
+    documentation: present
+    architecture_preview: present
 status:
   label: Live / Deployed
   type: production

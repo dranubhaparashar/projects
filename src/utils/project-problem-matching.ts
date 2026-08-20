@@ -696,7 +696,11 @@ function getArchitecturePreview(
 	if (fromDirectory) return fromDirectory;
 
 	const body = entry.body || "";
+	const documentedPreview =
+		entry.data.project_intelligence?.field_statuses.architecture_preview;
 	if (
+		documentedPreview === "documented" ||
+		Boolean(entry.data.project_intelligence?.architecture_summary) ||
 		isArchitectureCandidate(
 			`${entry.data.title} ${entry.data.description} ${body}`,
 		) ||

@@ -8,6 +8,26 @@ architecture:
 tags: [Computer Vision, MLOps]
 capabilities: [Computer Vision, MLOps, Cloud Deployment]
 technologies: [YOLO, FastAPI, Docker, Azure, Azure Container Apps, Hugging Face Spaces]
+github_url: "https://github.com/dranubhaparashar/End-to-End-YOLO-Key-Detection-System-Training-API-Deployment-and-Azure-Container-Apps"
+demo_url: "https://huggingface.co/spaces/AnubhaParashar/Key-detection"
+video_url: "https://www.youtube.com/watch?v=1zjIFHmvf2g"
+documentation_url: "https://github.com/dranubhaparashar/End-to-End-YOLO-Key-Detection-System-Training-API-Deployment-and-Azure-Container-Apps#readme"
+project_intelligence:
+  data_basis: "EV_Keys_2 key-detection image dataset, YOLO annotations, preprocessing inputs, and training/evaluation artifacts under runs/detect/train14."
+  dataset_size: ""
+  models_methods: "YOLO object detection for uploaded RGB images, a best.pt inference artifact, FastAPI health and API-key-protected prediction endpoints, Docker packaging, and Azure Container Apps deployment."
+  architecture_summary: "EV_Keys_2 dataset and preprocessing → YOLO training and evaluation → runs/detect/train14 outputs and best.pt → FastAPI inference → Docker image → Azure Container Registry → Azure Container Apps, with a Hugging Face demo surface."
+  evaluation: "The repository and portfolio source preserve YOLO training/evaluation artifacts under runs/detect/train14. Exact image counts and numeric evaluation metrics are not stated in the current portfolio source, so none are inferred."
+  key_results: "The project connects dataset preparation and YOLO training to a reusable model artifact, protected REST inference, container packaging, Azure deployment instructions, health monitoring, and a public demonstration."
+  deployment_summary: "Public Hugging Face demonstration plus a documented Docker → Azure Container Registry → Azure Container Apps deployment path for the FastAPI service."
+  why_it_matters: "It covers the operational gap between a trained detector and a servable, testable, containerized, cloud-deployable inference system."
+  field_statuses:
+    dataset_size: unknown
+    evaluation: present
+    live_demo: present
+    video: present
+    documentation: present
+    architecture_preview: present
 status:
   label: Live / Deployed
   type: production
