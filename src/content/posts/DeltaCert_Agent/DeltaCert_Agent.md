@@ -23,6 +23,24 @@ capabilities:
 technologies:
   - Ollama
   - Python
+github_url: "https://github.com/dranubhaparashar/deltacert-agent"
+documentation_url: "https://github.com/dranubhaparashar/deltacert-agent/wiki"
+project_intelligence:
+  data_basis: "DeltaBench scenarios and mutations, versioned agent manifests, assurance/impact graphs, policy profiles, and resumable runtime traces from repeated local Ollama executions."
+  dataset_size: "31,396 recorded evidence rows from five repetitions of the completed journal run across Qwen3 4B, Gemma3 4B, Llama 3.2 3B, and Phi-4 Mini."
+  models_methods: "Change fingerprinting, assurance/impact-graph traversal, selective test planning, risk-triggered sentinel tests, escalation to full recertification, equal-budget random selection baseline, and local Ollama model execution."
+  architecture_summary: "Versioned agent manifest → change fingerprint → assurance/impact graph → selective test planner → DeltaBench execution and oracles → runtime evidence and traces → certificate status, with ambiguous or high-risk impact escalating to full recertification."
+  evaluation: "Primary measures are regression-detection recall and test-reduction ratio, with task success, malicious-proposal rate, runtime containment, attack success, latency, bootstrap confidence intervals, McNemar's exact test, paired permutation testing, and paired effect size."
+  key_results: "Mean regression-detection recall improves from the equal-budget random baseline's 0.5501 to 0.7502 while executing 61.35% fewer tests on average; 95% recall CI is 0.7153–0.7841 across 31,396 evidence rows."
+  deployment_summary: "Local research framework using Ollama and resumable experiment scripts; no public production deployment is claimed."
+  why_it_matters: "It makes security recertification proportional to bounded change impact while retaining a conservative path to full-suite testing whenever selective evidence is unsafe."
+  field_statuses:
+    dataset_size: present
+    evaluation: present
+    live_demo: not_applicable
+    video: not_applicable
+    documentation: present
+    architecture_preview: documented
 status:
   label: Research
   type: research
@@ -191,15 +209,15 @@ DeltaCert-Agent computes a deterministic change fingerprint.
 
 Conceptually:
 
-\[
+$$
 \Delta = C_{new} \ominus C_{old}
-\]
+$$
 
 where:
 
-- \(C_{old}\) is the previously evaluated configuration,
-- \(C_{new}\) is the candidate configuration,
-- \(\Delta\) is the security-relevant configuration delta.
+- $C_{old}$ is the previously evaluated configuration,
+- $C_{new}$ is the candidate configuration,
+- $\Delta$ is the security-relevant configuration delta.
 
 The fingerprint identifies which security-relevant components changed.
 
@@ -241,29 +259,30 @@ This provides the basis for change-aware test selection.
 
 ## 4. Selective Test Planner
 
+# Selective Test Set
+
 Let:
 
-- \(\mathcal{T}\) be the full security test suite,
-- \(\mathcal{T}_{\Delta}\subseteq\mathcal{T}\) be tests selected because of the observed change,
-- \(\mathcal{T}_{S}\) be risk-triggered sentinel tests.
+- $\mathcal{T}$ be the full security test suite,
+- $\mathcal{T}_{\Delta}\subseteq\mathcal{T}$ be tests selected because of the observed change,
+- $\mathcal{T}_{S}$ be risk-triggered sentinel tests.
 
 The final selective suite is:
 
-\[
-\mathcal{T}_{sel}
-=
+$$
+\mathcal{T}_{sel} =
 \mathcal{T}_{\Delta}
 \cup
 \mathcal{T}_{S}
-\]
+$$
 
 The planner is not required to remain selective.
 
 When impact cannot be bounded safely:
 
-\[
+$$
 \mathcal{T}_{sel} \rightarrow \mathcal{T}
-\]
+$$
 
 meaning the system escalates to full recertification.
 
@@ -277,28 +296,30 @@ The central experimental question is:
 
 For a changed configuration, let:
 
-- \(R\) be the set of regressions revealed by the full suite,
-- \(R_{sel}\) be regressions detected by DeltaCert's selected tests.
+- $R$ be the set of regressions revealed by the full suite,
+- $R_{sel}$ be regressions detected by DeltaCert's selected tests.
+
+# Recall
 
 Regression-detection recall is:
 
-\[
-\mathrm{Recall}
-=
+$$
+\mathrm{Recall} =
 \frac{|R_{sel}|}{|R|}
-\]
+$$
 
 when at least one regression is present.
 
+# Reduction
+
 The efficiency measure is test reduction:
 
-\[
-\mathrm{Reduction}
-=
+$$
+\mathrm{Reduction} =
 1 -
 \frac{|\mathcal{T}_{sel}|}
 {|\mathcal{T}|}
-\]
+$$
 
 A strong result therefore requires **both**:
 
@@ -339,7 +360,7 @@ The experiment was intentionally resumable so that failures such as model-server
 | **Equal-budget random recall** | **0.5501** |
 | **Mean test reduction** | **0.6135** |
 | **95% bootstrap CI for test reduction** | **0.5873 – 0.6390** |
-| **Paired Cohen's \(d\)** | **0.5042** |
+| **Paired Cohen's $d$** | **0.5042** |
 | **McNemar exact p-value** | **4.14 × 10⁻¹⁷** |
 | **Paired permutation p-value** | **9.999 × 10⁻⁵** |
 | **Recorded API cost** | **$0.00** |
@@ -472,21 +493,21 @@ The final experiment reports multiple forms of statistical evidence.
 
 ### McNemar's Exact Test
 
-\[
+$$
 p = 4.14 \times 10^{-17}
-\]
+$$
 
 ### Paired Permutation Test
 
-\[
+$$
 p \approx 9.999 \times 10^{-5}
-\]
+$$
 
 ### Paired Effect Size
 
-\[
+$$
 d \approx 0.504
-\]
+$$
 
 The result therefore is not presented merely as a difference between two point estimates.
 
