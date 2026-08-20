@@ -698,9 +698,24 @@ function getArchitecturePreview(
 	const body = entry.body || "";
 	const documentedPreview =
 		entry.data.project_intelligence?.field_statuses.architecture_preview;
+	if (documentedPreview === "present" || documentedPreview === "documented") {
+		return {
+			src: "",
+			alt: "",
+			status: "inside-project",
+		};
+	}
 	if (
-		documentedPreview === "documented" ||
-		Boolean(entry.data.project_intelligence?.architecture_summary) ||
+		documentedPreview === "not_applicable" ||
+		documentedPreview === "unknown"
+	) {
+		return {
+			src: "",
+			alt: "",
+			status: "missing",
+		};
+	}
+	if (
 		isArchitectureCandidate(
 			`${entry.data.title} ${entry.data.description} ${body}`,
 		) ||

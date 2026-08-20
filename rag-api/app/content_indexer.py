@@ -270,13 +270,8 @@ def deployment_classification(metadata: dict[str, Any], body: str) -> tuple[str,
 def _algorithms(metadata: dict[str, Any]) -> list[str]:
     algorithms = (((metadata.get("views") or {}).get("technical") or {}).get("algorithms") or [])
     return unique(
-        [
-            *(
-                str(item.get("name", "")) if isinstance(item, dict) else str(item)
-                for item in algorithms
-            ),
-            str((metadata.get("project_intelligence") or {}).get("models_methods", "")),
-        ]
+        str(item.get("name", "")) if isinstance(item, dict) else str(item)
+        for item in algorithms
     )
 
 

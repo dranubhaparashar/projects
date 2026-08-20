@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 
 const root = resolve("public/project-intelligence");
@@ -22,6 +22,23 @@ const unquote = (value) =>
 	String(value || "")
 		.trim()
 		.replace(/^(["'])(.*)\1$/, "$2");
+
+const normalizeIndexedText = (value) =>
+	String(value || "")
+		.normalize("NFKD")
+		.replace(/\p{M}/gu, "")
+		.replace(/\s+/g, " ")
+		.trim();
+
+function isTechnologyLabel(value) {
+	const label = String(value || "").trim();
+	return (
+		label.length > 0 &&
+		label.length <= 64 &&
+		label.split(/\s+/).length <= 8 &&
+		!/[\r\n]/.test(label)
+	);
+}
 
 function parseAuditFrontmatter(raw, file) {
 	const match = raw.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n?/);
@@ -78,7 +95,9 @@ async function walkMarkdown(directory) {
 function isPublishedProject(project) {
 	if (project.metadata.draft === "true") return false;
 	const published = new Date(project.metadata.published);
-	return Number.isFinite(published.getTime()) && published.getTime() <= Date.now();
+	return (
+		Number.isFinite(published.getTime()) && published.getTime() <= Date.now()
+	);
 }
 
 function hasArchitectureSource(project) {
@@ -107,7 +126,9 @@ function auditStatus(value) {
 }
 
 function compactTitle(title) {
-	const value = String(title || "Untitled").split(":")[0].trim();
+	const value = String(title || "Untitled")
+		.split(":")[0]
+		.trim();
 	return value.length <= 28 ? value : `${value.slice(0, 27)}…`;
 }
 
@@ -138,7 +159,8 @@ for (const project of projects) {
 		"deployment_summary",
 		"why_it_matters",
 	]) {
-		if (!intelligence[key]) auditErrors.push(`${label}: missing project_intelligence.${key}`);
+		if (!intelligence[key])
+			auditErrors.push(`${label}: missing project_intelligence.${key}`);
 	}
 	for (const key of [
 		"dataset_size",
@@ -150,20 +172,49 @@ for (const project of projects) {
 	]) {
 		const status = fieldStatuses[key];
 		if (!status) auditErrors.push(`${label}: missing field status ${key}`);
+		const allowedStatuses =
+			key === "architecture_preview"
+				? ["present", "documented", "not_applicable", "unknown"]
+				: ["present", "not_applicable", "unknown"];
+		if (status && !allowedStatuses.includes(status)) {
+			auditErrors.push(`${label}: invalid field status ${key}=${status}`);
+		}
 		if (status === "not_applicable") notApplicable.push(`${label} — ${key}`);
 		if (status === "unknown") genuinelyUnknown.push(`${label} — ${key}`);
 	}
 	if (fieldStatuses.dataset_size === "present" && !intelligence.dataset_size) {
-		auditErrors.push(`${label}: dataset_size is present but its value is empty`);
+		auditErrors.push(
+			`${label}: dataset_size is present but its value is empty`,
+		);
 	}
-	if (hasArchitectureSource(project) && fieldStatuses.architecture_preview === "unknown") {
-		auditErrors.push(`${label}: architecture exists in source but preview status is unknown`);
+	if (
+		["not_applicable", "unknown"].includes(fieldStatuses.dataset_size) &&
+		intelligence.dataset_size
+	) {
+		auditErrors.push(
+			`${label}: dataset_size must be empty when its status is ${fieldStatuses.dataset_size}`,
+		);
 	}
-	if (fieldStatuses.architecture_preview === "present" && !hasArchitectureSource(project)) {
-		auditErrors.push(`${label}: architecture preview is present but no source asset/diagram was found`);
+	if (
+		hasArchitectureSource(project) &&
+		fieldStatuses.architecture_preview === "unknown"
+	) {
+		auditErrors.push(
+			`${label}: architecture exists in source but preview status is unknown`,
+		);
+	}
+	if (
+		fieldStatuses.architecture_preview === "present" &&
+		!hasArchitectureSource(project)
+	) {
+		auditErrors.push(
+			`${label}: architecture preview is present but no source asset/diagram was found`,
+		);
 	}
 	if (hasEvaluationSource(project) && fieldStatuses.evaluation === "unknown") {
-		auditErrors.push(`${label}: evaluation evidence exists in source but metadata says unknown`);
+		auditErrors.push(
+			`${label}: evaluation evidence exists in source but metadata says unknown`,
+		);
 	}
 	for (const [statusKey, urlKey] of [
 		["live_demo", "demo_url"],
@@ -172,15 +223,25 @@ for (const project of projects) {
 	]) {
 		const hasUrl = Boolean(metadata[urlKey]);
 		if (fieldStatuses[statusKey] === "present" && !hasUrl) {
-			auditErrors.push(`${label}: ${statusKey} is present but ${urlKey} is empty`);
+			auditErrors.push(
+				`${label}: ${statusKey} is present but ${urlKey} is empty`,
+			);
 		}
 		if (hasUrl && fieldStatuses[statusKey] !== "present") {
-			auditErrors.push(`${label}: ${urlKey} exists but ${statusKey} is not present`);
+			auditErrors.push(
+				`${label}: ${urlKey} exists but ${statusKey} is not present`,
+			);
 		}
 	}
 	if (!metadata.github_url) auditErrors.push(`${label}: github_url is empty`);
-	if (/Architecture preview not added|Dataset details are not published/i.test(body)) {
-		auditErrors.push(`${label}: source contains a false-missing fallback phrase`);
+	if (
+		/Architecture preview not added|Dataset details are not published/i.test(
+			body,
+		)
+	) {
+		auditErrors.push(
+			`${label}: source contains a false-missing fallback phrase`,
+		);
 	}
 }
 
@@ -210,7 +271,64 @@ console.log(
 	`GENUINELY_UNKNOWN (${genuinelyUnknown.length}): ${genuinelyUnknown.join("; ") || "none"}`,
 );
 if (auditErrors.length) {
-	throw new Error(`Project-intelligence metadata audit failed:\n- ${auditErrors.join("\n- ")}`);
+	throw new Error(
+		`Project-intelligence metadata audit failed:\n- ${auditErrors.join("\n- ")}`,
+	);
+}
+
+const indexedProjects = Array.isArray(chunks.projects) ? chunks.projects : [];
+if (indexedProjects.length !== projects.length) {
+	fail(
+		`project count mismatch between sources (${projects.length}) and browser assets (${indexedProjects.length})`,
+	);
+}
+const indexedProjectsByTitle = new Map(
+	indexedProjects.map((project) => [String(project.title || ""), project]),
+);
+for (const project of projects) {
+	const title = project.metadata.title;
+	const indexed = indexedProjectsByTitle.get(title);
+	if (!indexed) fail(`missing indexed project: ${title}`);
+
+	for (const key of [
+		"data_basis",
+		"dataset_size",
+		"models_methods",
+		"architecture_summary",
+		"evaluation",
+		"key_results",
+		"why_it_matters",
+	]) {
+		if (
+			normalizeIndexedText(indexed[key]) !==
+			normalizeIndexedText(project.intelligence[key])
+		) {
+			fail(`${title}: indexed ${key} does not match project frontmatter`);
+		}
+	}
+
+	for (const [key, status] of Object.entries(project.fieldStatuses)) {
+		if (indexed.field_statuses?.[key] !== status) {
+			fail(`${title}: indexed field status ${key} does not match ${status}`);
+		}
+	}
+
+	if (!Array.isArray(indexed.technologies)) {
+		fail(`${title}: indexed technologies must be an array`);
+	}
+	for (const technology of indexed.technologies) {
+		if (!isTechnologyLabel(technology)) {
+			fail(
+				`${title}: technology value is prose rather than a label: ${technology}`,
+			);
+		}
+		if (
+			normalizeIndexedText(technology) ===
+			normalizeIndexedText(project.intelligence.models_methods)
+		) {
+			fail(`${title}: models_methods leaked into technologies`);
+		}
+	}
 }
 
 if (metadata.model !== "BAAI/bge-small-en-v1.5")

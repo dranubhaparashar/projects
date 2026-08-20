@@ -379,25 +379,30 @@ function buildValues(
 		explicit.my_contribution ||
 		getTableValue(table, ["my contribution", "contribution"]) ||
 		extractSection(body, /\bmy contribution\b/i);
+	const fieldStatuses = entry.data.project_intelligence?.field_statuses;
 	const metrics =
-		explicit.evaluation_metrics ||
-		entry.data.project_intelligence?.evaluation ||
-		getTableValues(table, [
-			"evaluation metrics",
-			"performance",
-			"performance snapshot",
-			"benchmark results",
-		]) ||
-		project.resultsAndMetrics;
+		fieldStatuses?.evaluation && fieldStatuses.evaluation !== "present"
+			? ""
+			: explicit.evaluation_metrics ||
+				entry.data.project_intelligence?.evaluation ||
+				getTableValues(table, [
+					"evaluation metrics",
+					"performance",
+					"performance snapshot",
+					"benchmark results",
+				]) ||
+				project.resultsAndMetrics;
 	const github = actionValue(project.actions, "github");
 	const demo = actionValue(project.actions, "demo");
 	const paper = actionValue(project.actions, "paper");
 	const documentation = actionValue(project.actions, "docs");
-	const fieldStatuses = entry.data.project_intelligence?.field_statuses;
 	const architectureValue = project.architecture.available
 		? linkValue("View architecture", project.architecture.url)
 		: fieldStatuses?.architecture_preview === "documented"
-			? textValue(entry.data.project_intelligence?.architecture_summary || "Architecture documented")
+			? textValue(
+					entry.data.project_intelligence?.architecture_summary ||
+						"Architecture documented",
+				)
 			: fieldStatusValue(fieldStatuses?.architecture_preview);
 
 	return {
@@ -421,18 +426,19 @@ function buildValues(
 		),
 		"model-algorithm": textValue(modelOrAlgorithm),
 		dataset: textValue(dataset),
-		scale: textValue(
-			explicit.scale ||
-				entry.data.project_intelligence?.dataset_size ||
-				getTableValues(table, ["scale", "repository scope", "dataset size"]),
-		) || fieldStatusValue(fieldStatuses?.dataset_size),
+		scale:
+			textValue(
+				explicit.scale ||
+					entry.data.project_intelligence?.dataset_size ||
+					getTableValues(table, ["scale", "repository scope", "dataset size"]),
+			) || fieldStatusValue(fieldStatuses?.dataset_size),
 		"deployment-status": textValue(
 			explicit.deployment_status || statusLabel(project.deployment.status),
 		),
 		"deployment-environment": textValue(deploymentEnvironment),
 		infrastructure: textValue(infrastructure),
 		"evaluation-metrics":
-			textValue(metrics) || fieldStatusValue(fieldStatuses?.evaluation),
+			fieldStatusValue(fieldStatuses?.evaluation) || textValue(metrics),
 		explainability: textValue(explainability),
 		"human-in-loop": textValue(humanInLoop),
 		architecture: architectureValue,

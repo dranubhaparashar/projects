@@ -666,6 +666,24 @@ export function buildProjectViewData(
 			description: project.description,
 		}));
 	const signals = technicalSignals(sections);
+	const intelligenceStatuses = intelligence?.field_statuses;
+	const architectureStatus = intelligenceStatuses?.architecture_preview;
+	const evaluationStatus = intelligenceStatuses?.evaluation;
+	const intelligenceSignals = intelligence
+		? {
+				architecture: architectureStatus
+					? ["present", "documented"].includes(architectureStatus)
+					: signals.architecture,
+				algorithms:
+					signals.algorithms || Boolean(intelligence.models_methods.trim()),
+				dataset: signals.dataset || Boolean(intelligence.data_basis.trim()),
+				evaluation: evaluationStatus
+					? evaluationStatus === "present"
+					: signals.evaluation,
+				deployment:
+					signals.deployment || Boolean(intelligence.deployment_summary.trim()),
+			}
+		: undefined;
 
 	return {
 		overviewMarkdown:
@@ -770,14 +788,10 @@ export function buildProjectViewData(
 			limitations: technical?.limitations || [],
 			futureImprovements: technical?.future_improvements || [],
 			reproducibilityLinks: technical?.reproducibility_links || [],
-			signals: intelligence
+			signals: intelligenceSignals
 				? {
 						...signals,
-						architecture: true,
-						algorithms: true,
-						dataset: true,
-						evaluation: true,
-						deployment: true,
+						...intelligenceSignals,
 					}
 				: signals,
 		},
