@@ -42,7 +42,7 @@ function observe(page) {
 }
 
 async function openDrawer(page) {
-	await page.getByRole("button", { name: "Ask about my projects" }).click();
+	await page.getByRole("button", { name: "Ask about my work" }).click();
 	await page
 		.locator("[data-project-intelligence-dialog]")
 		.waitFor({ state: "visible" });
@@ -309,7 +309,7 @@ const initialModelRequests = requests.filter((request) =>
 	/huggingface|onnx|project-vectors|ort-wasm/i.test(request.url),
 );
 await enabledPage
-	.getByRole("button", { name: "Ask about my projects" })
+	.getByRole("button", { name: "Ask about my work" })
 	.click();
 await enabledPage
 	.locator("[data-project-intelligence-dialog]")

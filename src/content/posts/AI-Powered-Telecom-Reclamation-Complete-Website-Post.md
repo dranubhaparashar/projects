@@ -29,7 +29,7 @@ project_intelligence:
   evaluation: "The prototype includes generated parser tests and documents production measures such as field precision/recall, row extraction accuracy, unparsed-row rate, false-clear rate, coverage, reviewer agreement, cycle time, rework, and exceptions; no trained or evaluated ML model or published accuracy result is claimed."
   key_results: "Text extraction, deterministic pair/status and ACR count parsing, example CSV/JSON/XLSX outputs, process-flow API, and the React/Vite dashboard shell are implemented; parser-to-dashboard integration and production authorization remain incomplete."
   deployment_summary: "Prototype runnable as a local Python parser with FastAPI and a React/Vite dashboard; it is not presented as a production-authorized telecom decision system."
-  why_it_matters: "It converts fragmented engineering reports and manual handoffs into traceable evidence and conservative decision support while preserving human validation for any reclamation action."
+  why_it_matters: "Reclamation decisions worth millions hinge on evidence scattered across ACR, CAPR, and CPR reports that no one reads end-to-end."
   field_statuses:
     dataset_size: not_applicable
     evaluation: present

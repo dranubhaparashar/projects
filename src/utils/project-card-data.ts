@@ -2,6 +2,7 @@ import type { CollectionEntry } from "astro:content";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { generateProjectCardCover } from "./project-card-cover";
+import { resolveProjectDisplayTitle } from "./project-display-title";
 import { getProjectDomainPresentation } from "./project-impact-data";
 import { getDocumentedProjectMaturity } from "./project-view-data";
 import { getDir } from "./url-utils";
@@ -240,31 +241,6 @@ function comparisonKey(value: string): string {
 		.trim();
 }
 
-const DISPLAY_TITLE_ALIASES: Array<{ pattern: RegExp; title: string }> = [
-	{ pattern: /^DACR-Q\b/i, title: "DACR-Q" },
-	{ pattern: /^Vehicle-Scale LLMs\b/i, title: "Vehicle-Scale LLMs" },
-	{
-		pattern: /^Autonomous Microservice Composition\b/i,
-		title: "Autonomous Microservice Composition",
-	},
-	{ pattern: /^MCP 2\.0\b/i, title: "MCP 2.0" },
-];
-
-function compactDisplayTitle(value: string): string {
-	const explicitAlias = DISPLAY_TITLE_ALIASES.find(({ pattern }) =>
-		pattern.test(value.trim()),
-	)?.title;
-	if (explicitAlias) return explicitAlias;
-	let compact = value
-		.replace(/\bProfit and Loss\b/gi, "P&L")
-		.replace(/\bArtificial Intelligence\b/gi, "AI")
-		.replace(/\bLarge Language Models?\b/gi, "LLMs")
-		.trim();
-	const aiPowered = compact.match(/^AI[- ]Powered\s+(.+)$/i)?.[1]?.trim();
-	if (aiPowered) compact = `${aiPowered} AI`;
-	return compact;
-}
-
 function uniqueValues(values: string[]): string[] {
 	const seen = new Set<string>();
 	return values.filter((value) => {
@@ -391,6 +367,7 @@ function getWhyItMatters(
 			description,
 		);
 	const candidate =
+		textValue(entry.data.project_intelligence?.why_it_matters) ||
 		textValue(entry.data.views?.executive?.cost_risk_reduction) ||
 		outcomeSummary ||
 		problem ||
@@ -828,12 +805,9 @@ export function buildProjectCardData(
 ): ProjectCardData {
 	const fullTitle = entry.data.title.trim();
 	const explicitCardTitle = entry.data.card_title?.trim();
-	const titledProjectName = fullTitle.match(/^([^:]{2,80}):\s+/)?.[1]?.trim();
-	const displayTitle = compactDisplayTitle(
-		explicitCardTitle || titledProjectName || fullTitle,
-	);
-	const hasDisplayTitle = Boolean(
-		explicitCardTitle || titledProjectName || displayTitle !== fullTitle,
+	const { displayTitle, hasDisplayTitle } = resolveProjectDisplayTitle(
+		fullTitle,
+		explicitCardTitle,
 	);
 	const summary = stripMarkdown(entry.data.description || "");
 	let problem = getProblem(entry);

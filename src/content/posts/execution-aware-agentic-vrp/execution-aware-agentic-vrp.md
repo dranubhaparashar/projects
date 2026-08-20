@@ -1,9 +1,9 @@
 ---
 title: Execution-Aware Agentic VRP Solver and Benchmark Studio
 published: 2026-04-23
-description: Production-grade Vehicle Routing Problem solver with 8 solver backends, 18 operational scenarios, and an Agentic AI layer powered by Google Gemini 2.0 Flash.
+description: An end-to-end execution-aware Vehicle Routing Problem platform with 8 solver backends, 18 operational scenarios, and an Agentic AI layer powered by Google Gemini 2.0 Flash.
 image: ./cover.png
-tags: [VRP, Vehicle Routing, Agentic AI, Optimization, MLOps]
+tags: [Vehicle Routing, Agentic AI, Optimization, MLOps]
 capabilities: [Optimization, Agentic AI, MLOps]
 technologies: [OR-Tools, PyVRP, Gemini, Streamlit, Hugging Face Spaces]
 github_url: "https://github.com/dranubhaparashar/Execution-Aware-Agentic-VRP-Solver-and-Benchmark-Studio"

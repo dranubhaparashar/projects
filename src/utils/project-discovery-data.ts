@@ -15,6 +15,7 @@ import {
 	buildProjectProblemExplorerData,
 	toFilterKey,
 } from "./project-problem-matching";
+import { canonicalizeTaxonomyValues } from "./project-taxonomy";
 import { getPostUrlBySlug, url } from "./url-utils";
 
 export interface ProjectDiscoveryRelatedProject {
@@ -357,10 +358,10 @@ export function buildProjectDiscoveryData(
 		const impactDomains = impactProject?.domains || [];
 		const industries = inferIndustries(entry, problemIds, impactDomains);
 		const technologyLabels = unique(
-			[
+			canonicalizeTaxonomyValues([
 				...(capabilityProject?.technologies || []),
 				...(problemProject?.technologyTags || []),
-			],
+			]),
 			(value) => toFilterKey(value),
 		);
 		const capabilityIds = capabilityProject?.capabilityIds || [];

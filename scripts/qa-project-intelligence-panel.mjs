@@ -163,7 +163,7 @@ async function waitClosed(page) {
 }
 
 async function clickOpen(page) {
-	await page.getByRole("button", { name: "Ask about my projects" }).click();
+	await page.getByRole("button", { name: "Ask about my work" }).click();
 	try {
 		await page.waitForFunction(
 			() =>

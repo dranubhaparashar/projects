@@ -2,6 +2,7 @@ import type {
 	ProjectDiscoveryData,
 	ProjectSearchSuggestion,
 } from "../utils/project-discovery-data";
+import { canonicalTaxonomyFilterKey } from "../utils/project-taxonomy";
 
 type ClientData = Pick<ProjectDiscoveryData, "suggestions"> & {
 	projects: Array<{ id: string; slug: string; title: string; url: string }>;
@@ -36,6 +37,53 @@ function isTypingTarget(target: EventTarget | null): boolean {
 		target.isContentEditable ||
 		Boolean(target.closest("[contenteditable='true']"))
 	);
+}
+
+function actionButton(label: string, dataAttribute: string): HTMLButtonElement {
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "btn-regular";
+	button.textContent = label;
+	button.setAttribute(dataAttribute, "");
+	return button;
+}
+
+function createBrowseEmptyState(): HTMLElement {
+	const empty = document.createElement("div");
+	empty.className = "project-discovery-empty card-base";
+	empty.setAttribute("data-project-empty", "");
+	const title = document.createElement("h2");
+	title.textContent = "No projects match this view";
+	const message = document.createElement("p");
+	message.textContent =
+		"Try a broader search or clear one of the active filters.";
+	empty.append(
+		title,
+		message,
+		actionButton("Clear filters", "data-project-clear-all"),
+	);
+	return empty;
+}
+
+function createProblemEmptyState(): HTMLElement {
+	const empty = document.createElement("div");
+	empty.className = "problem-empty-state card-base";
+	empty.setAttribute("data-problem-empty", "");
+	const title = document.createElement("h3");
+	title.textContent = "No matching projects found";
+	const message = document.createElement("p");
+	message.textContent =
+		"Try clearing the technology filter or searching with a broader term.";
+	const actions = document.createElement("div");
+	actions.className = "problem-empty-actions";
+	actions.append(
+		actionButton("Clear search", "data-clear-search"),
+		actionButton("Clear technology filter", "data-clear-technology"),
+		actionButton("Clear use case filter", "data-clear-use-case"),
+		actionButton("View all projects", "data-view-projects"),
+	);
+	empty.append(title, message, actions);
+	return empty;
 }
 
 function parseClientData(): ClientData {
@@ -434,7 +482,11 @@ class ProjectDiscoveryController {
 		if (count)
 			count.textContent = `${visible} ${visible === 1 ? "project" : "projects"}`;
 		const empty = this.root.querySelector<HTMLElement>("[data-project-empty]");
-		if (empty) empty.hidden = visible > 0;
+		if (visible === 0 && !empty) {
+			this.grid?.insertAdjacentElement("afterend", createBrowseEmptyState());
+		} else if (visible > 0) {
+			empty?.remove();
+		}
 		for (const button of this.capabilityButtons) {
 			const id = button.dataset.projectCapability || "";
 			const countForCurrentContext = this.cards.filter(
@@ -816,7 +868,7 @@ class ProjectDiscoveryController {
 		);
 		this.state.technology = this.validSelectValue(
 			"technology",
-			params.get("technology"),
+			canonicalTaxonomyFilterKey(params.get("technology") || ""),
 		);
 		this.state.category = this.validSelectValue("category", params.get("type"));
 		this.state.status = this.validSelectValue("status", params.get("status"));
@@ -856,7 +908,9 @@ class ProjectDiscoveryController {
 					"[data-problem-search]",
 				);
 				if (input) input.value = params.get("problemSearch") || "";
-				detail.dataset.activeTechnology = params.get("problemTechnology") || "";
+				detail.dataset.activeTechnology = canonicalTaxonomyFilterKey(
+					params.get("problemTechnology") || "",
+				);
 				detail.dataset.activeUseCase = params.get("useCase") || "";
 				this.applyProblemFilters(detail, "none");
 			}
@@ -1069,7 +1123,13 @@ class ProjectDiscoveryController {
 		if (count)
 			count.textContent = `${visible} ${visible === 1 ? "project" : "projects"}`;
 		const empty = detail.querySelector<HTMLElement>("[data-problem-empty]");
-		if (empty) empty.hidden = visible > 0;
+		if (visible === 0 && !empty) {
+			detail
+				.querySelector<HTMLElement>("[data-problem-results]")
+				?.insertAdjacentElement("afterend", createProblemEmptyState());
+		} else if (visible > 0) {
+			empty?.remove();
+		}
 		for (const button of detail.querySelectorAll<HTMLElement>(
 			"[data-technology-filter]",
 		)) {

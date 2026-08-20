@@ -1,7 +1,7 @@
 ---
 title: Autonomous Microservice Composition via LLM Agents in an MCP Control Plane
 published: 2025-06-15
-description: A project walkthrough of an MCP control plane that combines Redis service registry, GPT-4o-mini DAG planning, PostgreSQL pgvector metadata, and FastAPI-based orchestration.
+description: An agentic MCP control plane that converts natural-language intent into executable service DAGs using registry metadata, schema retrieval, orchestration, retries, and telemetry.
 architecture:
   src: ../../assets/images/projects/covers/autonomous-microservice-composition.png
   alt: Autonomous microservice composition, orchestration and self-healing architecture

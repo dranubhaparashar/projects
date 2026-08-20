@@ -526,8 +526,9 @@ export function buildPortfolioKnowledgeIndex(
 			}));
 			const actions = mergeActions(extractedActions, metadata);
 			const architectureHeading = headingAnchor(body, /architecture/i);
-			const architectureAvailable =
-				project.architecturePreview.status !== "missing";
+			const architectureAvailable = ["available", "inside-project"].includes(
+				project.architecturePreview.status,
+			);
 			const architectureDetails = compact(
 				[
 					entry.data.project_intelligence?.architecture_summary || "",

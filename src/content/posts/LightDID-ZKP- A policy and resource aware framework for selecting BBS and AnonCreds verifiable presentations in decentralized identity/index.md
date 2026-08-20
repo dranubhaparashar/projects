@@ -1,7 +1,7 @@
 ---
 title: "LightDID-ZKP: Policy- and Resource-Aware Selection of BBS and AnonCreds Verifiable Presentations"
 published: 2026-06-23
-description: "LightDID-ZKP is a self research project that introduces CAPS-ZK, a policy- and resource-aware selector for choosing between BBS selective-disclosure presentations and AnonCreds predicate presentations in privacy-preserving decentralized identity systems."
+description: "LightDID-ZKP is a research framework introducing CAPS-ZK, a policy- and resource-aware selector for BBS and AnonCreds privacy-preserving verifiable presentations."
 architecture:
   src: ../../../assets/images/projects/covers/lightdid-zkp.png
   alt: LightDID-ZKP decentralized identity, verifiable credentials and zero-knowledge proof architecture
@@ -28,7 +28,7 @@ project_intelligence:
   evaluation: "Published summaries report proving/presentation latency, verification latency, proof and VP size, peak RSS memory, and coefficient of variation across the 50 measured runs, plus selector decisions, unsafe-fallback ablation, and resource sensitivity."
   key_results: "The selector routes selective disclosure to BBS, predicate requirements to AnonCreds, and blocks unsafe cost-first substitution. At 64 attributes the published table reports BBS 377.45 ms presentation, 125.36 ms verification, 2,405-byte VP, and 143.00 MB RSS versus AnonCreds 190.44 ms, 186.45 ms, 29,573-byte VP, and 286.62 MB RSS."
   deployment_summary: "Reproducible research package and selector prototype with optional real-backend benchmarks; no public production deployment is claimed."
-  why_it_matters: "A wallet must satisfy verifier semantics and privacy requirements before optimizing resource cost, otherwise an apparently cheaper proof mechanism can create an unsafe privacy downgrade."
+  why_it_matters: "Choosing the wrong proof scheme leaks more identity data or burns more compute than the policy requires."
   field_statuses:
     dataset_size: present
     evaluation: present

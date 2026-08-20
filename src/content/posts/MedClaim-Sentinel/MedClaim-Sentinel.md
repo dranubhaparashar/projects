@@ -37,7 +37,7 @@ project_intelligence:
   evaluation: "The repository includes 16 automated tests covering clinical matching, deletion, duplicate detection, local AI, metadata, and risk behavior; larger multilingual OCR, clinical/fraud validation, concurrency, and production security benchmarks remain future work."
   key_results: "The local MVP implements multi-document upload, printed/handwritten Hindi-English OCR, Ollama vision extraction, resumable processing, duplicate and financial checks, four-dimension clinical review, Claim 360°, controlled chat corrections, protected deletion, and audit evidence."
   deployment_summary: "Local consulting MVP and reference architecture; sensitive documents and clinical review remain local and human-authorized, with no public live application claimed."
-  why_it_matters: "It helps reviewers reconcile fragmented claim evidence while keeping OCR uncertainty, source visibility, clinical boundaries, correction approval, privacy, and human authority explicit."
+  why_it_matters: "Claims reviewers must reconcile diagnoses, medicines, invoices, duplicate claims, and billed amounts across fragmented documents, making manual review slow and inconsistent."
   field_statuses:
     dataset_size: not_applicable
     evaluation: present

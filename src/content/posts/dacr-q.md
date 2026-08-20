@@ -1,11 +1,11 @@
 ---
 title: "DACR-Q: A Training-Free Framework for Memory-Efficient LLM Inference"
 published: 2025-10-14
-description: A lightweight project exploring dynamic low-rank residual correction for memory-efficient LLM inference on quantized weights.
+description: A training-free inference framework that compensates INT4 quantization error with dynamic low-rank residual correction for memory-constrained LLM deployment.
 architecture:
   src: ../../assets/images/projects/covers/dacr-q.png
   alt: DACR-Q dynamic low-rank residual correction architecture for quantized linear layers
-tags: [LLM Inference, Quantization, Low-Rank Adapters, Memory Efficiency, Edge AI]
+tags: [LLM Inference, Quantization, Low-Rank Adaptation, Memory Efficiency, Edge AI]
 capabilities: [Generative AI, Edge Deployment]
 technologies: [PyTorch]
 github_url: "https://github.com/dranubhaparashar/-DACR-Q-ATraining-Free-Framework-for-Memory-Efficient-LLM-Inference"

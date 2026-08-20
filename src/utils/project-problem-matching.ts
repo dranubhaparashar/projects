@@ -8,6 +8,11 @@ import {
 } from "@/config/project-problems";
 import { formatDateToYYYYMMDD } from "./date-utils";
 import { getPostPdfPath } from "./pdf-utils";
+import { resolveProjectDisplayTitle } from "./project-display-title";
+import {
+	canonicalizeTaxonomyLabel,
+	canonicalizeTaxonomyValues,
+} from "./project-taxonomy";
 import { getDir, getPostUrlBySlug, url } from "./url-utils";
 
 export interface ProjectProblemMatch {
@@ -44,7 +49,7 @@ export interface ProjectProblemAction {
 export interface ProjectArchitecturePreview {
 	src: string;
 	alt: string;
-	status: "available" | "inside-project" | "missing";
+	status: "available" | "inside-project" | "missing" | "not-applicable";
 }
 
 export interface ProjectProblemProject {
@@ -198,6 +203,8 @@ export function toRecommendationDisplayLabel(value: string): string {
 		RECOMMENDATION_DISPLAY_LABELS[normalizedKey] ||
 		RECOMMENDATION_DISPLAY_LABELS[compactKey];
 	if (mapped) return mapped;
+	const canonical = canonicalizeTaxonomyLabel(raw);
+	if (canonical !== raw) return canonical;
 
 	return raw
 		.replace(/_+/g, " ")
@@ -382,7 +389,10 @@ function getTechnologyTags(
 	tags: string[],
 	explicitTechnologies: string[] = [],
 ): string[] {
-	const candidates = uniqueValues([...explicitTechnologies, ...tags]);
+	const candidates = canonicalizeTaxonomyValues([
+		...explicitTechnologies,
+		...tags,
+	]);
 	const specific = candidates.filter(
 		(tag) => !genericProblemTags.has(normalizeValue(tag)),
 	);
@@ -705,10 +715,14 @@ function getArchitecturePreview(
 			status: "inside-project",
 		};
 	}
-	if (
-		documentedPreview === "not_applicable" ||
-		documentedPreview === "unknown"
-	) {
+	if (documentedPreview === "not_applicable") {
+		return {
+			src: "",
+			alt: "",
+			status: "not-applicable",
+		};
+	}
+	if (documentedPreview === "unknown") {
 		return {
 			src: "",
 			alt: "",
@@ -785,7 +799,10 @@ function buildProjectRecord(
 
 	return {
 		id: toFilterKey(entry.slug),
-		title: entry.data.title,
+		title: resolveProjectDisplayTitle(
+			entry.data.title,
+			entry.data.card_title,
+		).displayTitle,
 		url: getPostUrlBySlug(entry.slug),
 		date: formatDateToYYYYMMDD(entry.data.published),
 		year: String(entry.data.published.getFullYear()),

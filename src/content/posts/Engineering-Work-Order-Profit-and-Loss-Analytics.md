@@ -30,7 +30,7 @@ project_intelligence:
   evaluation: "Pytest covers core financial-metric behavior, while the application reports duplicates, orphan records, missing revenue, zero-hour events, and negative hours; no predictive-model benchmark is claimed."
   key_results: "The implemented public MVP generates the complete synthetic dataset and provides work-order P&L, billing visibility, margin/risk classification, rate scenarios, data-quality review, Snowflake schemas/views, and automated metric tests."
   deployment_summary: "Local Streamlit synthetic-data prototype with a documented Snowflake-backed deployment path; no public live-demo URL is published."
-  why_it_matters: "It gives engineering and finance teams earlier, explainable margin visibility across the work-order lifecycle without exposing confidential customer or employee data."
+  why_it_matters: "Without unified P&L per work order, margin leaks hide inside labor and billing noise until quarter-end."
   field_statuses:
     dataset_size: present
     evaluation: present

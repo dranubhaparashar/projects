@@ -41,7 +41,7 @@ project_intelligence:
   evaluation: "Candidate responses are scored for answer quality, clarity, role fit, confidence, and readiness; exports preserve transcripts, score JSON, strengths, weaknesses, learning gaps, logs, and media manifests. No cross-candidate benchmark claim is made."
   key_results: "The platform connects resume-aware interviews, JD-aware evaluation, adaptive training, consent-controlled voice and presenter generation, browser-safe video, and auditable report exports in one workflow."
   deployment_summary: "A public Hugging Face Space demonstrates the Streamlit interface; local or WSL execution is recommended for private files, voice cloning, and heavier SadTalker/Wav2Lip rendering."
-  why_it_matters: "It closes the gap between asking interview questions and turning evidence from the answers into an explainable learning plan, teaching content, and reviewable report."
+  why_it_matters: "Career preparation is fragmented across separate interview, resume, evaluation, coaching, voice, and digital-human training tools."
   field_statuses:
     dataset_size: not_applicable
     evaluation: present

@@ -58,12 +58,54 @@ try {
 	assert.equal(await desktop.locator(".project-capability-scroll button").count() > 0, true);
 	assert.equal(await desktop.locator("#categories").isVisible(), true);
 	assert.equal(await desktop.locator("#tags").isVisible(), true);
+	assert.equal(await desktop.locator("[data-project-card]").count(), 17);
+	assert.equal(await desktop.locator("[data-project-empty]").count(), 0);
+	const browseTitles = await desktop
+		.locator("[data-project-card]")
+		.evaluateAll((cards) =>
+			cards.map((card) => card.getAttribute("data-project-title") || ""),
+		);
+	for (const title of [
+		"MedClaim Sentinel",
+		"ASHU Mentor AI Studio",
+		"LightDID-ZKP",
+		"DACR-Q",
+		"Vehicle-Scale LLMs",
+		"AegisFlow",
+		"MCP 2.0",
+	]) {
+		assert.equal(browseTitles.includes(title), true, `Missing concise title: ${title}`);
+	}
+	const semanticBlocks = await desktop
+		.locator("[data-project-card]")
+		.evaluateAll((cards) =>
+			cards.map((card) => ({
+				why: [...card.querySelectorAll("h3")].filter(
+					(heading) => heading.textContent?.trim() === "Why it matters",
+				).length,
+				ask: card.querySelectorAll(".project-ask-menu").length,
+			})),
+		);
+	assert.equal(
+		semanticBlocks.every(({ why, ask }) => why === 1 && ask === 1),
+		true,
+		"Each project card must expose one why-it-matters block and one Ask control",
+	);
+	assert.equal(
+		(await desktop.locator("body").textContent())?.includes(
+			"Why this project matters",
+		),
+		false,
+	);
 	record("Projects discovery controls preserved");
 
 	const careCard = desktop.locator('[data-project-card][data-project-slug*="care_siu"]');
 	assert.equal(await careCard.count(), 1);
 	const careImage = await careCard.locator(".project-card-image-element").getAttribute("src");
-	assert.match(careImage || "", /cover(?:\.[a-z0-9]+)?\.png|cover\.png/i);
+	assert.match(
+		careImage || "",
+		/\/cover(?:\.[a-z0-9_-]+)?\.(?:png|webp)(?:[?#]|$)/i,
+	);
 	assert.doesNotMatch(careImage || "", /hero-final/i);
 	const careUrl = await careCard.locator(".project-card-title a").getAttribute("href");
 	assert.ok(careUrl);
@@ -82,12 +124,37 @@ try {
 	});
 	assert.match((await desktop.locator("[data-project-result-count]").textContent()) || "", /^0 projects/);
 	await desktop.locator("[data-project-empty] [data-project-clear-all]").click();
-	assert.equal(await desktop.locator("[data-project-empty]").isHidden(), true);
+	assert.equal(await desktop.locator("[data-project-empty]").count(), 0);
 	assert.equal(await desktop.locator("[data-project-result-count]").textContent(), initialCount);
 	record("Project search and canonical empty state");
 
 	await desktop.getByRole("tab", { name: "Choose a Problem" }).click();
 	assert.equal(await desktop.locator(".problem-option-card").first().isVisible(), true);
+	const problemTitles = await desktop
+		.locator("[data-problem-card] h3 a")
+		.allTextContents();
+	assert.equal(
+		problemTitles.every((title) => browseTitles.includes(title.trim())),
+		true,
+		"Problem discovery titles must match Browse Projects titles",
+	);
+	const recommendationText = (
+		await desktop.locator(".problem-match-summary").allTextContents()
+	).join(" ");
+	assert.doesNotMatch(
+		recommendationText,
+		/(^|[\s·:])(ocr|genai|llm inference|devsecops|computer_vision|multimodal|chat|detection|security)(?=[\s·.]|$)/,
+	);
+	await desktop.locator("[data-problem-option]").first().click();
+	const activeProblem = desktop.locator("[data-problem-detail]:not([hidden])");
+	assert.equal(await activeProblem.locator("[data-problem-empty]").count(), 0);
+	await activeProblem
+		.locator("[data-problem-search]")
+		.fill("no-such-problem-project-qa");
+	await activeProblem.locator("[data-problem-empty]").waitFor();
+	assert.equal(await activeProblem.locator("[data-problem-empty]").count(), 1);
+	await activeProblem.locator("[data-clear-search]").click();
+	assert.equal(await activeProblem.locator("[data-problem-empty]").count(), 0);
 	await desktop.getByRole("tab", { name: "Browse Projects" }).click();
 
 	const compareControls = desktop.locator("[data-project-compare]");
@@ -153,7 +220,10 @@ try {
 	});
 	await detail.locator("#post-container").waitFor();
 	const detailCover = await detail.locator("#post-cover img").getAttribute("src");
-	assert.match(detailCover || "", /cover\.png/i);
+	assert.match(
+		detailCover || "",
+		/\/cover(?:\.[a-z0-9_-]+)?\.(?:png|webp)(?:[?#]|$)/i,
+	);
 	assert.doesNotMatch(detailCover || "", /hero-final/i);
 	assert.equal(
 		await detail.locator('a.card-github[href="https://github.com/dranubhaparashar/CARE-SIU"]').count(),
