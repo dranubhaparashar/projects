@@ -292,24 +292,24 @@ A stronger local activity model, re-identification model, detector, or tracking 
 
 Conceptually, each observation is represented as:
 
-\[
+$$
 o_i =
 (c_i, m_i, k_i, e_i, t_i^s, t_i^e, x_i, a_i, q_i, p_i)
-\]
+$$
 
 where:
 
 | Symbol | Meaning |
 |---|---|
-| \(c_i\) | Camera identifier |
-| \(m_i\) | Modality |
-| \(k_i\) | Local track identifier |
-| \(e_i\) | Entity type |
-| \(t_i^s, t_i^e\) | Start and end time |
-| \(x_i\) | World-space location |
-| \(a_i\) | Appearance descriptor |
-| \(q_i\) | Observation quality |
-| \(p_i\) | Immutable evidence reference |
+| $c_i$ | Camera identifier |
+| $m_i$ | Modality |
+| $k_i$ | Local track identifier |
+| $e_i$ | Entity type |
+| $t_i^s, t_i^e$ | Start and end time |
+| $x_i$ | World-space location |
+| $a_i$ | Appearance descriptor |
+| $q_i$ | Observation quality |
+| $p_i$ | Immutable evidence reference |
 
 This neutral interface allows multiple evidence sources to enter the same graph layer.
 
@@ -329,16 +329,16 @@ A future implementation can therefore combine camera observations with:
 
 The reconstruction output is represented conceptually as:
 
-\[
+$$
 G = (V, E, C, M)
-\]
+$$
 
 where:
 
-- \(V\) contains entity and location nodes,
-- \(E\) contains event relations,
-- \(C\) contains contradiction groups and alternatives,
-- \(M\) contains missing-evidence objects.
+- $V$ contains entity and location nodes,
+- $E$ contains event relations,
+- $C$ contains contradiction groups and alternatives,
+- $M$ contains missing-evidence objects.
 
 An accepted event edge stores:
 
@@ -356,9 +356,9 @@ An accepted event edge stores:
 
 A core evidentiary requirement is:
 
-\[
+$$
 \forall e \in E,\; P(e) \neq \emptyset
-\]
+$$
 
 In practical terms:
 
@@ -384,15 +384,15 @@ flowchart LR
 
 This distinction prevents the logical error:
 
-\[
+$$
 \text{not observed} \Rightarrow \text{did not occur}
-\]
+$$
 
 The correct interpretation is:
 
-\[
+$$
 \text{not observed} \Rightarrow \text{unknown from this source}
-\]
+$$
 
 ---
 
@@ -452,8 +452,8 @@ The evaluated backbone is **R3D-18**, initialized from video pretraining and fol
 | Clip Length | 16 frames |
 | Spatial Size | 112 × 112 |
 | Optimizer | AdamW |
-| Learning Rate | \(10^{-4}\) |
-| Weight Decay | \(10^{-4}\) |
+| Learning Rate | $10^{-4}$ |
+| Weight Decay | $10^{-4}$ |
 | Label Smoothing | 0.05 |
 | Gradient Clip | 1 |
 | Scheduler | ReduceLROnPlateau |
@@ -704,9 +704,9 @@ Three complementary summaries are used:
 
 The main tables report:
 
-\[
+$$
 \text{mean} \pm \text{sample standard deviation}
-\]
+$$
 
 across the three principal random seeds.
 

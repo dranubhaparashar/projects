@@ -190,27 +190,27 @@ Synthetic transfer produced a small calibration improvement even though it did n
 
 ## Reliability-Aware Multimodal Reasoning
 
-For modality \(m\):
+For modality $m$:
 
-\[
+$$
 z_m = E_m(x_m)
-\]
+$$
 
 and a generic reliability-aware fusion layer can combine modality representations as:
 
-\[
-z = \sum_m lpha_m z_m
-\]
+$$
+z = \sum_m \alpha_m z_m
+$$
 
 with:
 
-\[
-lpha_m =
+$$
+\alpha_m =
 \frac{a_m \exp(r_m)}
 {\sum_j a_j \exp(r_j)}
-\]
+$$
 
-where \(a_m\) indicates availability and \(r_m\) represents estimated modality reliability.
+where $a_m$ indicates availability and $r_m$ represents estimated modality reliability.
 
 The design goal is that missing or corrupted evidence should not receive the same influence as clean evidence.
 

@@ -259,7 +259,7 @@ This provides the basis for change-aware test selection.
 
 ## 4. Selective Test Planner
 
-# Selective Test Set
+## Selective Test Set
 
 Let:
 
@@ -299,7 +299,7 @@ For a changed configuration, let:
 - $R$ be the set of regressions revealed by the full suite,
 - $R_{sel}$ be regressions detected by DeltaCert's selected tests.
 
-# Recall
+## Recall
 
 Regression-detection recall is:
 
@@ -310,7 +310,7 @@ $$
 
 when at least one regression is present.
 
-# Reduction
+## Reduction
 
 The efficiency measure is test reduction:
 
