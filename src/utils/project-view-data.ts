@@ -149,6 +149,27 @@ function textToMarkdown(value?: TextOrList) {
 		: value.trim();
 }
 
+function hasMeaningfulMarkdown(value?: string) {
+	const markdown = String(value || "").trim();
+	if (!markdown) return false;
+	if (/!\[[^\]]*\]\([^)]+\)|<img\b/i.test(markdown)) return true;
+
+	const visibleText = markdown
+		.replace(/<!--[\s\S]*?-->/g, " ")
+		.replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, " ")
+		.replace(/^\s*(?:```|~~~)[^\r\n]*$/gm, " ")
+		.replace(/^\s*:::[^\r\n]*$/gm, " ")
+		.replace(/<[^>]*>/g, " ")
+		.replace(/[|:*_=~`#>()[\]{}-]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+
+	if (!visibleText) return false;
+	return !/^(?:unknown|n\s*\/?\s*a|not applicable|not available)$/i.test(
+		visibleText,
+	);
+}
+
 function limitMarkdown(value: string, limit = 1800) {
 	const cleaned = value
 		.replace(/^:::\w+(?:\[[^\]]*\])?(?:\{[^}]*\})?\s*$/gm, "")
@@ -688,7 +709,7 @@ export function buildProjectViewData(
 	return {
 		overviewMarkdown:
 			textToMarkdown(executive?.overview) || entry.data.description.trim(),
-		businessProblem: businessMarkdown
+		businessProblem: hasMeaningfulMarkdown(businessMarkdown)
 			? {
 					markdown: limitMarkdown(businessMarkdown),
 					source: executive?.business_problem
@@ -698,7 +719,7 @@ export function buildProjectViewData(
 							: derivedBusiness?.source,
 				}
 			: undefined,
-		solution: solutionMarkdown
+		solution: hasMeaningfulMarkdown(solutionMarkdown)
 			? {
 					markdown: limitMarkdown(solutionMarkdown),
 					source:
@@ -710,7 +731,8 @@ export function buildProjectViewData(
 				}
 			: undefined,
 		outcome:
-			outcomeMarkdown || derivedOutcome?.markdown || outcomeMetrics.length
+			hasMeaningfulMarkdown(outcomeMarkdown || derivedOutcome?.markdown) ||
+			outcomeMetrics.length
 				? {
 						markdown: outcomeMarkdown || derivedOutcome?.markdown || "",
 						status: outcomeStatus,
@@ -723,7 +745,8 @@ export function buildProjectViewData(
 			"Quantified financial impact has not yet been documented.",
 		hasDocumentedCostRisk: Boolean(executive?.cost_risk_reduction),
 		deployment:
-			deploymentMarkdown || deploymentStatus
+			hasMeaningfulMarkdown(deploymentMarkdown) ||
+			hasMeaningfulMarkdown(deploymentStatus)
 				? {
 						markdown: deploymentMarkdown,
 						status: deploymentStatus,
@@ -743,7 +766,8 @@ export function buildProjectViewData(
 		youtube,
 		actions: [...actions.values()],
 		contribution:
-			contributionMarkdown || entry.data.contribution?.role
+			hasMeaningfulMarkdown(contributionMarkdown) ||
+			hasMeaningfulMarkdown(entry.data.contribution?.role)
 				? {
 						role: entry.data.contribution?.role || "",
 						markdown: contributionMarkdown,
