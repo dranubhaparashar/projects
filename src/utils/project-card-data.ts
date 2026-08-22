@@ -1,6 +1,7 @@
 import type { CollectionEntry } from "astro:content";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import type { Publication } from "@/data/credentials";
 import {
 	formatEvaluationScope,
 	type ProjectEvaluation,
@@ -10,6 +11,10 @@ import { generateProjectCardCover } from "./project-card-cover";
 import { resolveProjectDisplayTitle } from "./project-display-title";
 import { getProjectDomainPresentation } from "./project-impact-data";
 import { getDocumentedProjectMaturity } from "./project-view-data";
+import {
+	getPublicationSectionId,
+	getRelatedPublications,
+} from "./publications";
 import { getDir } from "./url-utils";
 
 type TextOrList = string | string[];
@@ -31,8 +36,9 @@ export type ProjectCardStatusType =
 export interface ProjectCardAction {
 	label: string;
 	url: string;
-	kind: "demo" | "github" | "video" | "pdf";
+	kind: "demo" | "github" | "video" | "pdf" | "publication";
 	external: boolean;
+	ariaLabel?: string;
 }
 
 export interface ProjectCardEvidence {
@@ -77,6 +83,7 @@ export interface ProjectCardData {
 		url: string;
 		external: boolean;
 	}>;
+	relatedPublicationCount: number;
 }
 
 type LinkCandidate = { label: string; url: string };
@@ -793,18 +800,50 @@ function evidenceData(
 
 function actionData(
 	entry: CollectionEntry<"posts">,
+	projectUrl: string,
 	pdfUrl: string,
+	relatedPublications: Publication[],
 ): ProjectCardAction[] {
 	const direct = directLinks(entry);
 	const actions: ProjectCardAction[] = [];
-	const add = (label: string, url: string, kind: ProjectCardAction["kind"]) => {
+	const add = (
+		label: string,
+		url: string,
+		kind: ProjectCardAction["kind"],
+		ariaLabel?: string,
+	) => {
 		if (!url || actions.some((action) => action.kind === kind)) return;
-		actions.push({ label, url, kind, external: /^https?:\/\//i.test(url) });
+		actions.push({
+			label,
+			url,
+			kind,
+			external: /^https?:\/\//i.test(url),
+			ariaLabel,
+		});
 	};
 	add("Demo", direct.demo, "demo");
 	add("GitHub", direct.github, "github");
 	add("Video", direct.video, "video");
-	if (pdfUrl && verifiedPublicAsset(pdfUrl)) add("PDF", pdfUrl, "pdf");
+	if (pdfUrl && verifiedPublicAsset(pdfUrl)) {
+		add("PDF", pdfUrl, "pdf", `Open project PDF: ${entry.data.title}`);
+	}
+	if (relatedPublications.length === 1) {
+		const publication = relatedPublications[0];
+		add(
+			"Research Paper ↗",
+			publication.doiUrl,
+			"publication",
+			`Open research paper: ${publication.title}`,
+		);
+	} else if (relatedPublications.length > 1) {
+		const sectionId = getPublicationSectionId(entry.slug, "technical");
+		add(
+			`Research · ${relatedPublications.length} ↗`,
+			`${projectUrl}?view=technical#${sectionId}`,
+			"publication",
+			`View ${relatedPublications.length} research publications for ${entry.data.title}`,
+		);
+	}
 	return actions;
 }
 
@@ -812,6 +851,7 @@ export function buildProjectCardData(
 	entry: CollectionEntry<"posts">,
 	projectUrl: string,
 	pdfUrl: string,
+	relatedPublications: Publication[] = getRelatedPublications(entry),
 ): ProjectCardData {
 	const fullTitle = entry.data.title.trim();
 	const explicitCardTitle = entry.data.card_title?.trim();
@@ -831,11 +871,11 @@ export function buildProjectCardData(
 	const capabilityData = selectProjectCapabilities(entry, 2);
 	const capabilities = capabilityData.visible;
 	const additionalCapabilityCount = capabilityData.additionalCount;
-	const allActions = actionData(entry, pdfUrl);
+	const allActions = actionData(entry, projectUrl, pdfUrl, relatedPublications);
 	const actionByKind = new Map(
 		allActions.map((action) => [action.kind, action]),
 	);
-	const fixedFooterActions = (["github", "pdf"] as const)
+	const fixedFooterActions = (["github", "pdf", "publication"] as const)
 		.map((kind) => actionByKind.get(kind))
 		.filter((action): action is ProjectCardAction => Boolean(action));
 	const supportingFooterActions = (["demo", "video"] as const)
@@ -845,15 +885,18 @@ export function buildProjectCardData(
 		"demo",
 		"github",
 		"pdf",
+		"publication",
 		"video",
 	];
-	const actions = [...fixedFooterActions, ...supportingFooterActions]
-		.slice(0, 2)
-		.sort(
-			(left, right) =>
-				footerDisplayOrder.indexOf(left.kind) -
-				footerDisplayOrder.indexOf(right.kind),
-		);
+	const supportingActionSlots = Math.max(0, 2 - fixedFooterActions.length);
+	const actions = [
+		...fixedFooterActions,
+		...supportingFooterActions.slice(0, supportingActionSlots),
+	].sort(
+		(left, right) =>
+			footerDisplayOrder.indexOf(left.kind) -
+			footerDisplayOrder.indexOf(right.kind),
+	);
 	const footerActionUrls = new Set(actions.map(({ url }) => url));
 	const footerActionLabels = new Set(
 		actions.map(({ label }) => normalize(label)),
@@ -995,5 +1038,6 @@ export function buildProjectCardData(
 		whyItMatters: getWhyItMatters(entry, problem),
 		evaluation,
 		quickActions,
+		relatedPublicationCount: relatedPublications.length,
 	};
 }

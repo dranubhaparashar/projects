@@ -26,6 +26,21 @@ Structured records live in `src/data/credentials.ts`. The selected-publication d
 
 The patent dataset and Google Scholar URL remain empty because no verified patent registry records or Scholar profile URL have been supplied. For a future publication, provide the complete author order, title, journal/venue, year, bibliographic fields, and DOI or publisher URL. For a patent, provide title, application/patent number, status, year, and official registry URL. Add the verified Scholar URL to `googleScholarUrl` only after it has been checked.
 
+To associate a verified publication with a project or post, add its canonical record once in `src/data/credentials.ts`, then reference only its ID in content frontmatter:
+
+```yaml
+related_publications:
+  - vehicle-scale-llms-2026
+```
+
+Project cards, Technical and Business project views, search metadata, related Archive posts, and page-level JSON-LD resolve from that relationship automatically. A deep-dive post can inherit the project's publications without copying IDs or citation fields:
+
+```yaml
+project_id: vehicle-scale-llms
+```
+
+When a post has both `related_publications` and `project_id`, explicit post publications are resolved first, project publications are added second, and duplicate IDs are removed.
+
 ## Recorded project demos
 
 No local WebM, MP4, or GIF project recording exists in the repository. Existing external demo videos are documented for AegisFlow, ASHU Mentor AI Studio, End-to-End YOLO Key Detection, Execution-Aware VRP, MedClaim Sentinel, AI-Powered Pole Validation, and Generator Reliability.

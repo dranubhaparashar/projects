@@ -4,6 +4,7 @@ import defaultSocialImage from "@assets/images/social-card.jpg";
 import License from "@components/misc/License.astro";
 import Markdown from "@components/misc/Markdown.astro";
 import ProjectViews from "@components/ProjectViews.astro";
+import RelatedResearch from "@components/RelatedResearch.astro";
 import MainGridLayout from "@layouts/MainGridLayout.astro";
 import { getSortedPosts } from "@utils/content-utils";
 import { getPostPdfPath } from "@utils/pdf-utils";
@@ -12,6 +13,11 @@ import {
 	getRelatedProjects,
 	isEnhancedProject,
 } from "@utils/project-view-data";
+import {
+	buildScholarlyArticleJsonLd,
+	getPublicationSectionId,
+	getRelatedPublications,
+} from "@utils/publications";
 import { getDir, getPostUrlBySlug, url } from "@utils/url-utils";
 import { Icon } from "astro-icon/components";
 import { licenseConfig } from "src/config";
@@ -36,10 +42,12 @@ const postId = normalizePostId(entry.slug);
 const pdfPath = getPostPdfPath(entry);
 const pdfUrl = /^https?:\/\//i.test(pdfPath) ? pdfPath : url(pdfPath);
 const enhancedProject = isEnhancedProject(entry);
-const allPosts = enhancedProject ? await getSortedPosts() : [];
+const allPosts = await getSortedPosts();
 const relatedProjects = enhancedProject
 	? getRelatedProjects(entry, allPosts, getPostUrlBySlug)
 	: [];
+const relatedPublications = getRelatedPublications(entry, allPosts);
+const relatedResearchPostId = getPublicationSectionId(entry.slug, "post");
 const configuredSocialImage = entry.data.social_image?.trim() || "";
 const postSocialImage: { src: string; width?: number; height?: number } =
 	(() => {
@@ -80,6 +88,14 @@ const jsonLd = {
 		? entry.data.lang.replace("_", "-")
 		: siteConfig.lang.replace("_", "-"),
 	image: new URL(postSocialImage.src, Astro.site).href,
+	...(relatedPublications.length > 0
+		? {
+				citation: relatedPublications.map((publication) =>
+					buildScholarlyArticleJsonLd(publication, `${Astro.site}#person`),
+				),
+				isBasedOn: relatedPublications.map((publication) => publication.doiUrl),
+			}
+		: {}),
 };
 ---
 
@@ -165,6 +181,7 @@ const jsonLd = {
 					basePath={path.join("content/posts/", getDir(entry.id))}
 					pdfUrl={pdfUrl}
 					relatedProjects={relatedProjects}
+					relatedPublications={relatedPublications}
 				>
 					<Content slot="technical" />
 				</ProjectViews>
@@ -172,6 +189,11 @@ const jsonLd = {
 				<Markdown class="mb-6 markdown-content onload-animation">
 					<Content />
 				</Markdown>
+				<RelatedResearch
+					publications={relatedPublications}
+					variant="post"
+					id={relatedResearchPostId}
+				/>
 			)}
 
 			{licenseConfig.enable && (

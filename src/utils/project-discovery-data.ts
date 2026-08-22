@@ -16,6 +16,7 @@ import {
 	toFilterKey,
 } from "./project-problem-matching";
 import { canonicalizeTaxonomyValues } from "./project-taxonomy";
+import { getRelatedPublications } from "./publications";
 import { getPostUrlBySlug, url } from "./url-utils";
 
 export interface ProjectDiscoveryRelatedProject {
@@ -42,6 +43,8 @@ export interface ProjectDiscoveryRecord {
 	problemIds: string[];
 	impactDomains: string[];
 	status: string;
+	hasPublication: boolean;
+	publicationIds: string[];
 	searchText: string;
 	relatedProjects: ProjectDiscoveryRelatedProject[];
 	card: ProjectCardData;
@@ -369,6 +372,7 @@ export function buildProjectDiscoveryData(
 			(capabilityId) => capabilityLabels.get(capabilityId) || capabilityId,
 		);
 		const category = entry.data.category?.trim() || "Uncategorized";
+		const relatedPublications = getRelatedPublications(entry, published);
 		const searchText = [
 			entry.data.title,
 			entry.data.description,
@@ -383,8 +387,20 @@ export function buildProjectDiscoveryData(
 			entry.data.evaluation?.value || "",
 			entry.data.evaluation?.label || "",
 			entry.data.evaluation?.context || "",
+			...relatedPublications.flatMap((publication) => [
+				publication.title,
+				publication.journal,
+				publication.publisher,
+				publication.doi,
+				String(publication.year),
+			]),
 		].join(" ");
-		const card = buildProjectCardData(entry, projectUrl, pdfUrl);
+		const card = buildProjectCardData(
+			entry,
+			projectUrl,
+			pdfUrl,
+			relatedPublications,
+		);
 		return {
 			id,
 			slug: entry.slug,
@@ -408,6 +424,8 @@ export function buildProjectDiscoveryData(
 			problemIds,
 			impactDomains,
 			status: card.status?.type || "",
+			hasPublication: relatedPublications.length > 0,
+			publicationIds: relatedPublications.map((publication) => publication.id),
 			searchText: normalize(searchText),
 			relatedProjects: [],
 			card,

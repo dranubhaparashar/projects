@@ -10,6 +10,7 @@ capabilities: [Generative AI, Edge Deployment]
 technologies: [PyTorch, INT4]
 github_url: "https://github.com/dranubhaparashar/Vehicle-Scale-LLMs-Integrating-Low-Rank-Residuals-and-4-Bit-Quantization-for-In-Vehicle-AI"
 documentation_url: "https://github.com/dranubhaparashar/Vehicle-Scale-LLMs-Integrating-Low-Rank-Residuals-and-4-Bit-Quantization-for-In-Vehicle-AI#readme"
+related_publications: [vehicle-scale-llms-2026]
 project_intelligence:
   data_basis: "A minimal natural-language normalization corpus and calibration activations used by the repository's toy-transformer compression pipeline; it is not an automotive production dataset."
   dataset_size: "2 published NLN input/target sample records; no production-scale corpus or benchmark size is published."

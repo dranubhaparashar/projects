@@ -155,6 +155,8 @@ const postsCollection = defineCollection({
 		demo_url: z.string().optional().default(""),
 		paper_url: z.string().optional().default(""),
 		documentation_url: z.string().optional().default(""),
+		project_id: z.string().optional().default(""),
+		related_publications: z.array(z.string()).optional().default([]),
 		deployment: z.string().optional().default(""),
 		dataset: z.string().optional().default(""),
 		results: z.string().optional().default(""),
