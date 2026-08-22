@@ -26,6 +26,14 @@ technologies:
   - R3D-18
 github_url: "https://github.com/dranubhaparashar/CARE-SIU"
 documentation_url: "https://github.com/dranubhaparashar/CARE-SIU/wiki/Architecture"
+evaluation:
+  value: "0.8134 ± 0.0121"
+  label: "macro-F1"
+  scope: "benchmark"
+  context: "RWF-2000 real-video benchmark · five seeds"
+  baseline: "Earlier real-only baseline: 0.6661 ± 0.0067 macro-F1."
+  methodology: "Temporal R3D-18 was evaluated over seeds 1, 7, 21, 42, and 84 with macro-F1, AUROC, AUPRC, and calibration reporting."
+  source: "https://github.com/dranubhaparashar/CARE-SIU/wiki/Results"
 project_intelligence:
   data_basis: "RWF-2000 real-video evaluation plus CARE-Synth-XL synthetic interaction clips, with RGB, audio, pose, trajectory, missingness, corruption, calibration, and explanation evidence."
   dataset_size: "RWF-2000 is the primary real benchmark; the audited CARE-Synth-XL corpus contains 10,000 clips/rows. Experiments use seeds 1, 7, 21, 42, and 84."

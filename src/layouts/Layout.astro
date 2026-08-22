@@ -1,6 +1,8 @@
 ---
+import avatarImage from "@assets/images/demo-avatar-removebg-preview.png";
+import socialCardImage from "@assets/images/social-card.jpg";
 import ConfigCarrier from "@components/ConfigCarrier.astro";
-import { profileConfig, siteConfig } from "@/config";
+import { profileConfig, siteConfig, siteDescription } from "@/config";
 import {
 	AUTO_MODE,
 	BANNER_HEIGHT_CSS,
@@ -12,7 +14,6 @@ import {
 } from "../constants/constants";
 import { defaultFavicons } from "../constants/icon";
 import type { Favicon } from "../types/config";
-import { pathsEqual, url } from "../utils/url-utils";
 import {
 	ACCENT_STORAGE_KEYS,
 	DEFAULT_DARK_ACCENT,
@@ -20,6 +21,7 @@ import {
 	DEFAULT_LIGHT_ACCENT,
 	PREMIUM_ACCENT_ANCHORS,
 } from "../utils/setting-utils";
+import { pathsEqual, url } from "../utils/url-utils";
 import "katex/dist/katex.css";
 import "../styles/global.css";
 
@@ -29,9 +31,23 @@ interface Props {
 	description?: string;
 	lang?: string;
 	setOGTypeArticle?: boolean;
+	socialImage?: string;
+	socialImageWidth?: number;
+	socialImageHeight?: number;
+	publishedTime?: string;
 }
 
-let { title, banner, description, lang, setOGTypeArticle } = Astro.props;
+let {
+	title,
+	banner,
+	description,
+	lang,
+	setOGTypeArticle,
+	socialImage,
+	socialImageWidth,
+	socialImageHeight,
+	publishedTime,
+} = Astro.props;
 
 // apply a class to the body element to decide the height of the banner, only used for initial page load
 // Swup can update the body for each page visit, but it's after the page transition, causing a delay for banner height change
@@ -75,6 +91,43 @@ const bannerOffsetByPosition = {
 };
 const bannerOffset =
 	bannerOffsetByPosition[siteConfig.banner.position || "center"];
+const metaDescription = description?.trim() || siteDescription;
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
+const resolvedSocialImage = new URL(
+	socialImage?.trim() || socialCardImage.src,
+	Astro.site,
+);
+const resolvedSocialImageWidth =
+	socialImageWidth || (!socialImage ? socialCardImage.width : undefined);
+const resolvedSocialImageHeight =
+	socialImageHeight || (!socialImage ? socialCardImage.height : undefined);
+const resolvedAvatarImage = new URL(avatarImage.src, Astro.site);
+const goatCounterCode = import.meta.env.PUBLIC_GOATCOUNTER_CODE?.trim() || "";
+const goatCounterEndpoint = goatCounterCode
+	? /^https?:\/\//i.test(goatCounterCode)
+		? goatCounterCode.replace(/\/$/, "")
+		: `https://${goatCounterCode}.goatcounter.com/count`
+	: "";
+const analyticsEnabled = import.meta.env.PROD && Boolean(goatCounterEndpoint);
+const personJsonLd = {
+	"@context": "https://schema.org",
+	"@type": "Person",
+	"@id": `${Astro.site}#person`,
+	name: profileConfig.name,
+	url: Astro.site,
+	image: resolvedAvatarImage.href,
+	jobTitle: "AI Researcher and Practitioner",
+	knowsAbout: [
+		"AI engineering",
+		"Machine learning",
+		"Generative AI",
+		"Agentic AI",
+		"Computer vision",
+		"Optimization",
+		"Predictive systems",
+	],
+	sameAs: profileConfig.links.map((link) => link.url),
+};
 ---
 
 <!DOCTYPE html>
@@ -86,23 +139,34 @@ const bannerOffset =
 		<title>{pageTitle}</title>
 
 		<meta charset="UTF-8" />
-		<meta name="description" content={description || pageTitle}>
+		<meta name="description" content={metaDescription}>
 		<meta name="author" content={profileConfig.name}>
+		<link rel="canonical" href={canonicalUrl} />
 
 		<meta property="og:site_name" content={siteConfig.title}>
-		<meta property="og:url" content={Astro.url}>
+		<meta property="og:url" content={canonicalUrl}>
 		<meta property="og:title" content={pageTitle}>
-		<meta property="og:description" content={description || pageTitle}>
+		<meta property="og:description" content={metaDescription}>
+		<meta property="og:image" content={resolvedSocialImage}>
+		{resolvedSocialImageWidth && <meta property="og:image:width" content={String(resolvedSocialImageWidth)} />}
+		{resolvedSocialImageHeight && <meta property="og:image:height" content={String(resolvedSocialImageHeight)} />}
+		<meta property="og:image:alt" content="AI engineering landscape with connected data systems">
 		{setOGTypeArticle ? (
         <meta property="og:type" content="article" />
         ) : (
         <meta property="og:type" content="website" />
-        )}
+		)}
+		{setOGTypeArticle && publishedTime && (
+			<meta property="article:published_time" content={publishedTime} />
+		)}
 
 		<meta name="twitter:card" content="summary_large_image">
-		<meta property="twitter:url" content={Astro.url}>
+		<meta property="twitter:url" content={canonicalUrl}>
 		<meta name="twitter:title" content={pageTitle}>
-		<meta name="twitter:description" content={description || pageTitle}>
+		<meta name="twitter:description" content={metaDescription}>
+		<meta name="twitter:image" content={resolvedSocialImage}>
+		<meta name="twitter:image:alt" content="AI engineering landscape with connected data systems">
+		<script is:inline type="application/ld+json" set:html={JSON.stringify(personJsonLd)}></script>
 
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
@@ -214,16 +278,16 @@ const bannerOffset =
 
 		<slot name="head"></slot>
 
-		<script
-			is:inline
-			data-goatcounter="https://anubhaparashar.goatcounter.com/count"
-			data-goatcounter-settings='{"allow_local": true, "no_onload": true}'
-			async
-			src="//gc.zgo.at/count.js">
-		</script>
+		{analyticsEnabled && (
+			<script
+				is:inline
+				data-goatcounter={goatCounterEndpoint}
+				data-goatcounter-settings='{"no_onload": true}'
+				async
+				src="https://gc.zgo.at/count.js">
+			</script>
+		)}
 
-
-<link rel="alternate" type="application/rss+xml" title={profileConfig.name} href={`${Astro.site}rss.xml`}/>
 
 		<link rel="alternate" type="application/rss+xml" title={profileConfig.name} href={`${Astro.site}rss.xml`}/>
 
@@ -466,6 +530,7 @@ function refreshGoatCounterViews() {
 }
 
 function trackGoatCounterPageview() {
+	if (!document.querySelector("script[data-goatcounter]")) return;
 	const currentPath = window.location.pathname + window.location.search;
 	if (lastGoatCounterPath === currentPath) {
 		refreshGoatCounterViews();
@@ -492,9 +557,27 @@ function trackGoatCounterPageview() {
 	count();
 }
 
+function trackGoatCounterInteraction(event: Event) {
+	const target = event.target as Element | null;
+	const tracked = target?.closest<HTMLElement>("[data-analytics-event]");
+	if (!tracked || !window.goatcounter?.count) return;
+	const eventName = tracked.dataset.analyticsEvent?.trim();
+	if (!eventName) return;
+	const label = tracked.dataset.analyticsLabel?.trim() || tracked.textContent?.trim() || eventName;
+	window.goatcounter.count({
+		path: `event/${eventName}`,
+		title: label.slice(0, 160),
+		event: true,
+	});
+}
+
 /* Load settings when entering the site */
 init();
 trackGoatCounterPageview();
+if (!window.__portfolioAnalyticsBound) {
+	document.addEventListener("click", trackGoatCounterInteraction);
+	window.__portfolioAnalyticsBound = true;
+}
 
 const setup = () => {
 	// TODO: temp solution to change the height of the banner

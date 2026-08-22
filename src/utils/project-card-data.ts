@@ -1,6 +1,11 @@
 import type { CollectionEntry } from "astro:content";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import {
+	formatEvaluationScope,
+	type ProjectEvaluation,
+	resolveEvaluationSource,
+} from "./evaluation";
 import { generateProjectCardCover } from "./project-card-cover";
 import { resolveProjectDisplayTitle } from "./project-display-title";
 import { getProjectDomainPresentation } from "./project-impact-data";
@@ -63,6 +68,10 @@ export interface ProjectCardData {
 	featuredEvidence?: ProjectCardEvidence;
 	maturitySummary: string[];
 	whyItMatters: string;
+	evaluation?: ProjectEvaluation & {
+		scopeLabel: string;
+		sourceUrl: string;
+	};
 	quickActions: Array<{
 		label: "Architecture" | "Live Demo";
 		url: string;
@@ -511,7 +520,8 @@ function linkCandidates(entry: CollectionEntry<"posts">): LinkCandidate[] {
 	// links or ::github directives. Normalize escaped URL punctuation and keep
 	// those repositories in the same metadata pipeline as other projects.
 	const normalizedBody = body.replace(/https\\:\/\//g, "https://");
-	const plainGithubPattern = /https?:\/\/github\.com\/[\w.-]+\/[\w.-]+[^\s<>)\]]*/gi;
+	const plainGithubPattern =
+		/https?:\/\/github\.com\/[\w.-]+\/[\w.-]+[^\s<>)\]]*/gi;
 	for (const match of normalizedBody.matchAll(plainGithubPattern)) {
 		const url = match[0].replace(/[.,;:]+$/, "");
 		links.push({ label: "GitHub", url });
@@ -951,6 +961,16 @@ export function buildProjectCardData(
 		fit: "cover",
 		generated: true,
 	};
+	const evaluation = entry.data.evaluation
+		? {
+				...entry.data.evaluation,
+				scopeLabel: formatEvaluationScope(entry.data.evaluation.scope),
+				sourceUrl: resolveEvaluationSource(
+					entry.data.evaluation.source,
+					projectUrl,
+				),
+			}
+		: undefined;
 	return {
 		fullTitle,
 		displayTitle,
@@ -973,6 +993,7 @@ export function buildProjectCardData(
 		featuredEvidence,
 		maturitySummary,
 		whyItMatters: getWhyItMatters(entry, problem),
+		evaluation,
 		quickActions,
 	};
 }

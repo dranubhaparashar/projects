@@ -13,9 +13,10 @@ interface Props {
 	fit?: "cover" | "contain" | "fill";
 	overlay?: boolean;
 	loading?: "eager" | "lazy";
+	priority?: boolean;
 }
 
-import { Image } from "astro:assets";
+import { getImage, Image } from "astro:assets";
 import { url } from "../../utils/url-utils";
 
 const {
@@ -28,6 +29,7 @@ const {
 	fit = "cover",
 	overlay = true,
 	loading,
+	priority = false,
 } = Astro.props;
 const className = Astro.props.class;
 const imgClassName = Astro.props.imgClass || "";
@@ -58,9 +60,8 @@ const darkPublicSrc = darkSrc
 
 // TODO temporary workaround for images dynamic import
 // https://github.com/withastro/astro/issues/3373
-// biome-ignore lint/suspicious/noImplicitAnyLet: <check later>
-let img;
-let darkImg;
+let img: ImageMetadata | undefined;
+let darkImg: ImageMetadata | undefined;
 const files = import.meta.glob<ImageMetadata>("../../**", {
 	import: "default",
 });
@@ -84,6 +85,25 @@ if (darkSrc && isDarkLocal) {
 	darkImg = await loadLocalImage(darkSrc);
 }
 
+const optimizedLight =
+	hasDarkVariant && img
+		? await getImage({ src: img, format: "webp", quality: 82 })
+		: undefined;
+const optimizedDark =
+	hasDarkVariant && darkImg
+		? await getImage({ src: darkImg, format: "webp", quality: 82 })
+		: undefined;
+const lightVariantSrc = isLocal
+	? optimizedLight?.src || img?.src || ""
+	: isPublic
+		? publicSrc
+		: src;
+const darkVariantSrc = isDarkLocal
+	? optimizedDark?.src || darkImg?.src || ""
+	: isDarkPublic
+		? darkPublicSrc
+		: darkSrc || "";
+
 const imageClass =
 	fit === "contain"
 		? "w-auto h-auto max-w-full max-h-full object-contain"
@@ -94,22 +114,49 @@ const imageStyle = `object-position: ${position}`;
 ---
 <div id={id} class:list={[className, 'overflow-hidden relative']}>
     {overlay && <div class="transition absolute inset-0 dark:bg-black/10 bg-opacity-50 pointer-events-none"></div>}
-    {isLocal && img && <Image src={img} alt={alt || ""} class={[imageClass, imgClassName, hasDarkVariant ? "theme-image-light" : ""].filter(Boolean).join(" ")} style={imageStyle} loading={loading}/>}
-    {!isLocal && <img src={isPublic ? publicSrc : src} alt={alt || ""} class={[imageClass, imgClassName, hasDarkVariant ? "theme-image-light" : ""].filter(Boolean).join(" ")} style={imageStyle} loading={loading}/>}
-    {hasDarkVariant && isDarkLocal && darkImg && <Image src={darkImg} alt={alt || ""} class={[imageClass, imgClassName, "theme-image-dark"].filter(Boolean).join(" ")} style={imageStyle} loading={loading}/>}
-    {hasDarkVariant && !isDarkLocal && darkSrc && <img src={isDarkPublic ? darkPublicSrc : darkSrc} alt={alt || ""} class={[imageClass, imgClassName, "theme-image-dark"].filter(Boolean).join(" ")} style={imageStyle} loading={loading}/>}
+    {!hasDarkVariant && isLocal && img && <Image src={img} alt={alt || ""} class={[imageClass, imgClassName].filter(Boolean).join(" ")} style={imageStyle} loading={loading} decoding="async"/>}
+    {!hasDarkVariant && !isLocal && <img src={isPublic ? publicSrc : src} alt={alt || ""} class={[imageClass, imgClassName].filter(Boolean).join(" ")} style={imageStyle} loading={loading} decoding="async" />}
+    {hasDarkVariant && lightVariantSrc && darkVariantSrc && (
+		<img
+			src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+			data-theme-image
+			data-light-src={lightVariantSrc}
+			data-dark-src={darkVariantSrc}
+			alt={alt || ""}
+			class={[imageClass, imgClassName].filter(Boolean).join(" ")}
+			style={imageStyle}
+			loading={priority ? "eager" : loading}
+			decoding="async"
+			fetchpriority={priority ? "high" : undefined}
+			width={img?.width}
+			height={img?.height}
+		/>
+	)}
+	{hasDarkVariant && lightVariantSrc && (
+		<noscript>
+			<img src={lightVariantSrc} alt={alt || ""} class={[imageClass, imgClassName].filter(Boolean).join(" ")} style={imageStyle} loading={priority ? "eager" : loading} decoding="async" />
+		</noscript>
+	)}
 </div>
 
-<style>
-	.theme-image-dark {
-		display: none;
-	}
-
-	:global(.dark) .theme-image-light {
-		display: none;
-	}
-
-	:global(.dark) .theme-image-dark {
-		display: block;
-	}
-</style>
+{hasDarkVariant && (
+	<script is:inline>
+		(() => {
+			const script = document.currentScript;
+			const wrapper = script?.previousElementSibling;
+			const image = wrapper?.querySelector?.("[data-theme-image]");
+			if (!(image instanceof HTMLImageElement)) return;
+			const sync = () => {
+				const selected = document.documentElement.classList.contains("dark")
+					? image.dataset.darkSrc
+					: image.dataset.lightSrc;
+				if (selected && image.getAttribute("src") !== selected) image.src = selected;
+			};
+			sync();
+			new MutationObserver(sync).observe(document.documentElement, {
+				attributes: true,
+				attributeFilter: ["class"],
+			});
+		})();
+	</script>
+)}

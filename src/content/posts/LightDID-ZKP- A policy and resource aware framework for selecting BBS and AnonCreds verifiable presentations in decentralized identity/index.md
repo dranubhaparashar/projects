@@ -20,6 +20,14 @@ technologies:
   - Python
 github_url: "https://github.com/dranubhaparashar/LightDID-ZKP"
 documentation_url: "https://github.com/dranubhaparashar/LightDID-ZKP/wiki"
+evaluation:
+  value: "2,405-byte VP"
+  label: "BBS presentation size at 64 attributes"
+  scope: "controlled-evaluation"
+  context: "50 measured runs per configuration"
+  baseline: "AnonCreds VP size at 64 attributes: 29,573 bytes."
+  methodology: "Five warmups preceded 50 measured BBS and AnonCreds runs at each attribute count from 4 through 64, with presentation latency, verification latency, size, memory, and variability recorded."
+  source: "https://github.com/dranubhaparashar/LightDID-ZKP/wiki/Results-and-Figures"
 project_intelligence:
   data_basis: "Reproducible BBS and AnonCreds benchmark runs across verifier policies, device/resource profiles, and attribute counts from 4 through 64; this is an experiment basis, not a training dataset."
   dataset_size: "5 warmup runs and 50 measured runs for each BBS/AnonCreds configuration at 4, 8, 16, 32, and 64 attributes, with selector, ablation, and resource-sensitivity outputs."

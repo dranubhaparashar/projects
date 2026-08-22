@@ -1,5 +1,6 @@
 ---
 import path from "node:path";
+import defaultSocialImage from "@assets/images/social-card.jpg";
 import License from "@components/misc/License.astro";
 import Markdown from "@components/misc/Markdown.astro";
 import ProjectViews from "@components/ProjectViews.astro";
@@ -39,6 +40,28 @@ const allPosts = enhancedProject ? await getSortedPosts() : [];
 const relatedProjects = enhancedProject
 	? getRelatedProjects(entry, allPosts, getPostUrlBySlug)
 	: [];
+const configuredSocialImage = entry.data.social_image?.trim() || "";
+const postSocialImage: { src: string; width?: number; height?: number } =
+	(() => {
+		if (!configuredSocialImage) {
+			return {
+				src: defaultSocialImage.src,
+				width: defaultSocialImage.width,
+				height: defaultSocialImage.height,
+			};
+		}
+		if (/^https?:\/\//i.test(configuredSocialImage)) {
+			return { src: configuredSocialImage };
+		}
+		if (configuredSocialImage.startsWith("/")) {
+			return { src: url(configuredSocialImage) };
+		}
+		return {
+			src: defaultSocialImage.src,
+			width: defaultSocialImage.width,
+			height: defaultSocialImage.height,
+		};
+	})();
 
 const jsonLd = {
 	"@context": "https://schema.org",
@@ -48,6 +71,7 @@ const jsonLd = {
 	keywords: entry.data.tags,
 	author: {
 		"@type": "Person",
+		"@id": `${Astro.site}#person`,
 		name: profileConfig.name,
 		url: Astro.site,
 	},
@@ -55,16 +79,20 @@ const jsonLd = {
 	inLanguage: entry.data.lang
 		? entry.data.lang.replace("_", "-")
 		: siteConfig.lang.replace("_", "-"),
-	// TODO include cover image here
+	image: new URL(postSocialImage.src, Astro.site).href,
 };
 ---
 
 <MainGridLayout
 	banner={entry.data.image}
-	title={entry.data.title}
+	title={entry.data.seo_title || entry.data.title}
 	description={entry.data.description}
 	lang={entry.data.lang}
 	setOGTypeArticle={true}
+	socialImage={postSocialImage.src}
+	socialImageWidth={postSocialImage.width}
+	socialImageHeight={postSocialImage.height}
+	publishedTime={entry.data.published.toISOString()}
 	headings={headings}
 	currentProjectSlug={entry.slug}
 >

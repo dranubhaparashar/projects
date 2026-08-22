@@ -24,6 +24,14 @@ technologies:
   - MEVA
 github_url: "https://github.com/dranubhaparashar/IncidentGraph"
 documentation_url: "https://github.com/dranubhaparashar/IncidentGraph/wiki"
+evaluation:
+  value: "0.923 ± 0.069"
+  label: "diagnostic graph score"
+  scope: "controlled-evaluation"
+  context: "60 synthetic multimodal incidents"
+  baseline: "Compared with component and fusion ablations; best on 45 of 60 incidents."
+  methodology: "Controlled incidents provided correspondence, event, contradiction, and missing-evidence ground truth; entity, event, conflict, missing-evidence, calibration, and composite graph scores were reported."
+  source: "https://github.com/dranubhaparashar/IncidentGraph/wiki/Synthetic-Diagnostic"
 project_intelligence:
   data_basis: "A bounded, video-disjoint MEVA activity-recognition study plus IncidentGraph-Synth controlled multimodal incidents with generated correspondence, event, contradiction, and missing-evidence ground truth."
   dataset_size: "MEVA study: 2,453 clips (1,635 train, 379 validation, 439 test) from 88 annotated videos, with 12 test source videos; controlled diagnostic: 60 generated incidents with RGB, thermal, and depth evidence."

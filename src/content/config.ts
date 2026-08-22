@@ -14,6 +14,7 @@ const projectLink = z.object({
 			"dataset",
 			"report",
 			"video",
+			"deep-dive",
 		])
 		.optional(),
 });
@@ -22,6 +23,39 @@ const metric = z.object({
 	label: z.string(),
 	value: z.string(),
 	context: z.string().optional(),
+});
+
+const evaluation = z.object({
+	value: z.string(),
+	label: z.string(),
+	scope: z.enum([
+		"benchmark",
+		"held-out-test",
+		"synthetic-evaluation",
+		"controlled-evaluation",
+		"internal-benchmark",
+		"validation-set",
+		"production",
+	]),
+	context: z.string(),
+	baseline: z.string().optional(),
+	methodology: z.string().optional(),
+	source: z.string().optional(),
+});
+
+const projectDemo = z.object({
+	src: z.string(),
+	poster: z.string().optional(),
+	type: z.enum(["video", "gif"]).default("video"),
+	caption: z.string().optional(),
+	description: z.string(),
+});
+
+const deepDive = z.object({
+	title: z.string(),
+	url: z.string(),
+	description: z.string().optional(),
+	published: z.date().optional(),
 });
 
 const algorithm = z.union([
@@ -75,6 +109,8 @@ const postsCollection = defineCollection({
 		updated: z.date().optional(),
 		draft: z.boolean().optional().default(false),
 		description: z.string().optional().default(""),
+		seo_title: z.string().optional().default(""),
+		social_image: z.string().optional().default(""),
 		image: z.string().optional().default(""),
 		pdf: z.string().optional().default(""),
 		card_image: z
@@ -122,6 +158,9 @@ const postsCollection = defineCollection({
 		deployment: z.string().optional().default(""),
 		dataset: z.string().optional().default(""),
 		results: z.string().optional().default(""),
+		evaluation: evaluation.optional(),
+		demo: projectDemo.optional(),
+		deep_dives: z.array(deepDive).optional().default([]),
 		project_intelligence: projectIntelligence.optional(),
 		related_projects: z
 			.array(

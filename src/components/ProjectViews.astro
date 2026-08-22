@@ -2,6 +2,11 @@
 import type { CollectionEntry } from "astro:content";
 import ImageWrapper from "@components/misc/ImageWrapper.astro";
 import Markdown from "@components/misc/Markdown.astro";
+import ProjectDemo from "@components/ProjectDemo.astro";
+import {
+	formatEvaluationScope,
+	resolveEvaluationSource,
+} from "@utils/evaluation";
 import MarkdownIt from "markdown-it";
 import sanitizeHtml from "sanitize-html";
 import "../styles/project-views.css";
@@ -115,6 +120,13 @@ const reproducibilityLinks = viewData.technical.reproducibilityLinks.length
 				url: action.url,
 				external: action.external,
 			}));
+const evaluation = entry.data.evaluation;
+const evaluationScope = evaluation
+	? formatEvaluationScope(evaluation.scope)
+	: "";
+const evaluationSource = evaluation
+	? resolveEvaluationSource(evaluation.source, Astro.url.pathname)
+	: "";
 ---
 
 <project-view-switcher class="project-view-shell" data-project-view-root>
@@ -163,6 +175,33 @@ const reproducibilityLinks = viewData.technical.reproducibilityLinks.length
 		data-project-view-panel="executive"
 	>
 		<div class="executive-section-grid">
+			{evaluation && (
+				<section class="project-view-card full-width project-evaluation-evidence" aria-labelledby={`${idBase}-result`}>
+					<div class="project-view-heading-row">
+						<h2 id={`${idBase}-result`}>Result</h2>
+						<span class="project-status-badge">{evaluationScope}</span>
+					</div>
+					<p class="project-evaluation-headline">
+						<strong>{evaluation.value}</strong>
+						<span>{evaluation.label}</span>
+					</p>
+					<p class="project-evaluation-context">{evaluation.context}</p>
+					<details class="project-evaluation-details">
+						<summary>How was this measured?</summary>
+						<dl class="technical-definition-grid">
+							<div><dt>Evaluation</dt><dd>{evaluation.context}</dd></div>
+							<div><dt>Scope</dt><dd>{evaluationScope}</dd></div>
+							{evaluation.baseline && <div><dt>Baseline</dt><dd>{evaluation.baseline}</dd></div>}
+							{evaluation.methodology && <div><dt>Method</dt><dd>{evaluation.methodology}</dd></div>}
+						</dl>
+						{evaluationSource && (
+							<a class="project-evaluation-source" href={evaluationSource} target={/^https?:\/\//i.test(evaluationSource) ? "_blank" : undefined} rel={/^https?:\/\//i.test(evaluationSource) ? "noopener noreferrer" : undefined} data-analytics-event="evaluation-source" data-analytics-label={entry.data.title}>
+								Review the evaluation source
+							</a>
+						)}
+					</details>
+				</section>
+			)}
 			{viewData.businessProblem && (
 				<section class="project-view-card" aria-labelledby={`${idBase}-business-problem`}>
 					<h2 id={`${idBase}-business-problem`}>Business Problem</h2>
@@ -236,6 +275,13 @@ const reproducibilityLinks = viewData.technical.reproducibilityLinks.length
 				</section>
 			)}
 
+			{entry.data.demo && (
+				<section class="project-view-card full-width" aria-labelledby={`${idBase}-recorded-demo`}>
+					<h2 id={`${idBase}-recorded-demo`}>Recorded Demo</h2>
+					<ProjectDemo demo={entry.data.demo} title={entry.data.title} />
+				</section>
+			)}
+
 			{viewData.capabilities.length > 0 && (
 				<section class="project-view-card full-width" aria-labelledby={`${idBase}-capabilities`}>
 					<h2 id={`${idBase}-capabilities`}>Key Capabilities</h2>
@@ -250,7 +296,7 @@ const reproducibilityLinks = viewData.technical.reproducibilityLinks.length
 				<div class="project-action-row">
 					<button type="button" class="project-primary-action" data-switch-to-technical>View Technical Details</button>
 					{viewData.actions.map((action) => (
-						<a href={action.url} target={opensInNewTab(action.url, action.external) ? "_blank" : undefined} rel={opensInNewTab(action.url, action.external) ? "noopener noreferrer" : undefined}>
+						<a href={action.url} target={opensInNewTab(action.url, action.external) ? "_blank" : undefined} rel={opensInNewTab(action.url, action.external) ? "noopener noreferrer" : undefined} data-analytics-event={action.kind === "github" ? "github-cta" : `project-${action.kind}`} data-analytics-label={entry.data.title}>
 							{action.label}
 						</a>
 					))}
@@ -272,6 +318,20 @@ const reproducibilityLinks = viewData.technical.reproducibilityLinks.length
 					<div class="related-project-grid">
 						{viewData.relatedProjects.map((project) => (
 							<a href={project.url}><strong>{project.title}</strong>{project.description && <span>{project.description}</span>}</a>
+						))}
+					</div>
+				</section>
+			)}
+
+			{entry.data.deep_dives.length > 0 && (
+				<section class="project-view-card full-width" aria-labelledby={`${idBase}-deep-dives`}>
+					<h2 id={`${idBase}-deep-dives`}>Technical Deep Dives</h2>
+					<div class="related-project-grid">
+						{entry.data.deep_dives.map((deepDive) => (
+							<a href={deepDive.url} data-analytics-event="technical-deep-dive" data-analytics-label={deepDive.title}>
+								<strong>{deepDive.title}</strong>
+								{deepDive.description && <span>{deepDive.description}</span>}
+							</a>
 						))}
 					</div>
 				</section>
@@ -400,7 +460,7 @@ const reproducibilityLinks = viewData.technical.reproducibilityLinks.length
 		{reproducibilityLinks.length > 0 && (
 			<section class="technical-section" aria-labelledby={`${idBase}-reproducibility`}>
 				<h2 id={`${idBase}-reproducibility`}>Reproducibility Links</h2>
-				<div class="project-action-row">{reproducibilityLinks.map((link) => <a href={link.url} target={opensInNewTab(link.url, link.external) ? "_blank" : undefined} rel={opensInNewTab(link.url, link.external) ? "noopener noreferrer" : undefined}>{link.label}</a>)}</div>
+				<div class="project-action-row">{reproducibilityLinks.map((link) => <a href={link.url} target={opensInNewTab(link.url, link.external) ? "_blank" : undefined} rel={opensInNewTab(link.url, link.external) ? "noopener noreferrer" : undefined} data-analytics-event="project-evidence-link" data-analytics-label={`${entry.data.title}: ${link.label}`}>{link.label}</a>)}</div>
 			</section>
 		)}
 

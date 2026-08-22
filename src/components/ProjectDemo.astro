@@ -1,0 +1,125 @@
+---
+import type { CollectionEntry } from "astro:content";
+import { url } from "@utils/url-utils";
+
+type Demo = NonNullable<CollectionEntry<"posts">["data"]["demo"]>;
+
+interface Props {
+	demo: Demo;
+	title: string;
+}
+
+const { demo, title } = Astro.props;
+const resolveAsset = (src?: string) => {
+	if (!src) return "";
+	return /^(?:https?:|data:)/i.test(src) ? src : url(src);
+};
+const src = resolveAsset(demo.src);
+const poster = resolveAsset(demo.poster);
+const descriptionId = `project-demo-${title
+	.toLowerCase()
+	.replace(/[^a-z0-9]+/g, "-")
+	.replace(/^-|-$/g, "")}-description`;
+---
+
+<figure class="project-demo">
+	{demo.type === "gif" ? (
+		<img
+			src={src}
+			alt={demo.description}
+			loading="lazy"
+			decoding="async"
+			width="1280"
+			height="720"
+		/>
+	) : (
+		<project-demo-player>
+			<video
+				muted
+				loop
+				playsinline
+				preload="none"
+				poster={poster || undefined}
+				controls
+				aria-describedby={descriptionId}
+			>
+				<source src={src} type={src.toLowerCase().endsWith(".webm") ? "video/webm" : "video/mp4"} />
+				<a href={src}>Open the {title} demo recording</a>
+			</video>
+		</project-demo-player>
+	)}
+	<figcaption id={descriptionId}>
+		{demo.caption || demo.description}
+	</figcaption>
+</figure>
+
+<script>
+	class ProjectDemoPlayer extends HTMLElement {
+		video: HTMLVideoElement | null = null;
+		reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+		connectedCallback() {
+			this.video = this.querySelector("video");
+			if (!this.video) return;
+			this.addEventListener("pointerenter", this.playPreview);
+			this.addEventListener("pointerleave", this.pausePreview);
+			this.addEventListener("focusin", this.playPreview);
+			this.addEventListener("focusout", this.pausePreview);
+		}
+
+		disconnectedCallback() {
+			this.removeEventListener("pointerenter", this.playPreview);
+			this.removeEventListener("pointerleave", this.pausePreview);
+			this.removeEventListener("focusin", this.playPreview);
+			this.removeEventListener("focusout", this.pausePreview);
+		}
+
+		playPreview = () => {
+			if (this.reducedMotion.matches || !this.video) return;
+			this.video.play().catch(() => undefined);
+		};
+
+		pausePreview = () => {
+			this.video?.pause();
+		};
+	}
+
+	if (!customElements.get("project-demo-player")) {
+		customElements.define("project-demo-player", ProjectDemoPlayer);
+	}
+</script>
+
+<style>
+	.project-demo {
+		margin: 0;
+	}
+
+	project-demo-player,
+	.project-demo video,
+	.project-demo img {
+		display: block;
+		width: 100%;
+	}
+
+	.project-demo video,
+	.project-demo img {
+		aspect-ratio: 16 / 9;
+		border: 1px solid var(--line-divider);
+		border-radius: 0.85rem;
+		background: #05070a;
+		object-fit: cover;
+	}
+
+	.project-demo figcaption {
+		margin-top: 0.55rem;
+		color: var(--text-muted);
+		font-size: 0.75rem;
+		line-height: 1.5;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.project-demo video {
+			scroll-behavior: auto;
+		}
+	}
+</style>

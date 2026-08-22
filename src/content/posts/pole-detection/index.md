@@ -9,6 +9,13 @@ technologies: [YOLO, GIS]
 github_url: "https://github.com/dranubhaparashar/Pole-Detection"
 video_url: "https://www.youtube.com/watch?v=8ryD2qsKwbg"
 documentation_url: "https://github.com/dranubhaparashar/Pole-Detection#readme"
+evaluation:
+  value: "0.054 mAP@0.5"
+  label: "current detector performance"
+  scope: "validation-set"
+  context: "Published training snapshot · 100 epochs · 640px images"
+  methodology: "The documented YOLO26n run used batch size 16 and reports precision 0.608, recall 0.052, and mAP@0.5 0.054; the dataset size and split are not documented."
+  source: "#performance-snapshot"
 project_intelligence:
   data_basis: "Pole field imagery and YOLO labels combined with GIS coordinates, internal portal evidence, Frontier and AEP records, OCR, and workflow history for ownership and suitability validation."
   dataset_size: ""

@@ -10,6 +10,14 @@ github_url: "https://github.com/dranubhaparashar/Execution-Aware-Agentic-VRP-Sol
 demo_url: "https://huggingface.co/spaces/AnubhaParashar/Execution-Aware-Agentic-VRP-Solver-and-Benchmark-Studio"
 video_url: "https://www.youtube.com/watch?v=FqVuVjW20yo"
 documentation_url: "https://github.com/dranubhaparashar/Execution-Aware-Agentic-VRP-Solver-and-Benchmark-Studio/wiki"
+evaluation:
+  value: "150/150 orders"
+  label: "assigned with 0 late minutes and 0 overtime"
+  scope: "synthetic-evaluation"
+  context: "18 fixed scenarios · 8 solver backends"
+  baseline: "Seven alternative solver backends evaluated on the same fixed scenario suite."
+  methodology: "All backends were compared on assignment count, distance, lateness, overtime, runtime, constraint violations, and preservation of locked execution prefixes."
+  source: "#the-8-solver-backends-benchmark-results"
 project_intelligence:
   data_basis: "Included synthetic routing benchmark, scenario orders and route state, locked execution prefixes, and precomputed artifacts for eight solver backends."
   dataset_size: "150 orders, 20 routes, and 18 fixed operational scenarios evaluated across 8 solver backends."

@@ -380,6 +380,9 @@ export function buildProjectDiscoveryData(
 			...problemIds.map(
 				(problemId) => problemLabels.get(problemId) || problemId,
 			),
+			entry.data.evaluation?.value || "",
+			entry.data.evaluation?.label || "",
+			entry.data.evaluation?.context || "",
 		].join(" ");
 		const card = buildProjectCardData(entry, projectUrl, pdfUrl);
 		return {

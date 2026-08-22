@@ -5,8 +5,9 @@ declare global {
 		// type from '@swup/astro' is incorrect
 		swup: AstroIntegration;
 		goatcounter?: {
-			count: (event: { path: string; title?: string }) => void;
+			count: (event: { path: string; title?: string; event?: boolean }) => void;
 		};
+		__portfolioAnalyticsBound?: boolean;
 		pagefind: {
 			search: (query: string) => Promise<{
 				results: Array<{

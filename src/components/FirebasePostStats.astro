@@ -24,6 +24,12 @@ const {
 	showCommentsCount = false,
 	class: className = "",
 } = Astro.props;
+const goatCounterCode = import.meta.env.PUBLIC_GOATCOUNTER_CODE?.trim() || "";
+const goatCounterBaseUrl = goatCounterCode
+	? /^https?:\/\//i.test(goatCounterCode)
+		? goatCounterCode.replace(/\/count\/?$/, "/counter/")
+		: `https://${goatCounterCode}.goatcounter.com/counter/`
+	: "";
 ---
 
 <span
@@ -36,6 +42,7 @@ const {
 	data-increment-views={String(incrementViews)}
 	data-show-like={String(showLike)}
 	data-show-comments-count={String(showCommentsCount)}
+	data-goatcounter-base={goatCounterBaseUrl}
 >
 	<span class="inline-flex items-center shrink-0 whitespace-nowrap">
 		<span class="meta-icon">
@@ -51,6 +58,8 @@ const {
 			rel="noopener noreferrer"
 			class="theme-pill inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[0.7rem] font-semibold leading-none transition"
 			aria-label="Open project PDF"
+			data-analytics-event="project-report-download"
+			data-analytics-label={title}
 		>
 			<Icon name="material-symbols:download-rounded" class="text-[0.95rem]"></Icon>
 			<span>PDF</span>
@@ -94,7 +103,9 @@ const {
 		updateDoc,
 	} from "firebase/firestore";
 
-	const goatCounterBaseUrl = "https://anubhaparashar.goatcounter.com/counter/";
+	const goatCounterBaseUrl =
+		document.querySelector<HTMLElement>("[data-firebase-post-stats]")?.dataset
+			.goatcounterBase || "";
 
 	function numberValue(value: unknown): number {
 		return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -122,6 +133,7 @@ const {
 	}
 
 	async function fetchGoatCounterCount(path: string): Promise<number> {
+		if (!goatCounterBaseUrl) return 0;
 		const candidates = Array.from(new Set([path, normalizePath(path)]));
 
 		for (const candidate of candidates) {

@@ -25,6 +25,14 @@ technologies:
   - Python
 github_url: "https://github.com/dranubhaparashar/deltacert-agent"
 documentation_url: "https://github.com/dranubhaparashar/deltacert-agent/wiki"
+evaluation:
+  value: "0.7502 recall"
+  label: "regression detection vs 0.5501 equal-budget random"
+  scope: "controlled-evaluation"
+  context: "31,396 evidence rows · four local models · five repetitions"
+  baseline: "Equal-budget random test selection (mean recall 0.5501)."
+  methodology: "DeltaBench mutations were evaluated across four local Ollama models in five repetitions; recall and test reduction were aggregated from resumable evidence traces."
+  source: "https://github.com/dranubhaparashar/deltacert-agent/wiki/Results"
 project_intelligence:
   data_basis: "DeltaBench scenarios and mutations, versioned agent manifests, assurance/impact graphs, policy profiles, and resumable runtime traces from repeated local Ollama executions."
   dataset_size: "31,396 recorded evidence rows from five repetitions of the completed journal run across Qwen3 4B, Gemma3 4B, Llama 3.2 3B, and Phi-4 Mini."
