@@ -22,9 +22,9 @@ Provide the raw evaluation output plus the dataset/split/scenario definition, ba
 
 ## Publications and patents
 
-Structured records live in `src/data/credentials.ts`. The repository currently contains no publication titles, venues, DOI links, patent/application numbers, registry links, or Google Scholar profile URL. Keep the arrays empty until those records can be verified.
+Structured records live in `src/data/credentials.ts`. The selected-publication dataset currently contains one DOI-verified Array article: “Vehicle-Scale LLMs: Integrating low-rank residuals and 4-bit quantization for in-vehicle AI” (2026), DOI `10.1016/j.array.2026.100709`.
 
-For a publication, provide title, venue, year, and DOI or publisher URL. For a patent, provide title, application/patent number, status, year, and official registry URL. Add the verified Scholar URL to `googleScholarUrl`.
+The patent dataset and Google Scholar URL remain empty because no verified patent registry records or Scholar profile URL have been supplied. For a future publication, provide the complete author order, title, journal/venue, year, bibliographic fields, and DOI or publisher URL. For a patent, provide title, application/patent number, status, year, and official registry URL. Add the verified Scholar URL to `googleScholarUrl` only after it has been checked.
 
 ## Recorded project demos
 
