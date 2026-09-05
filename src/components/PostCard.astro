@@ -36,6 +36,10 @@ const assistantQuestions = [
 ];
 const opensInNewTab = (href: string, external: boolean) =>
 	external || /\.pdf(?:$|[?#])/i.test(href);
+const relatedProjects = discovery?.relatedProjects ?? [];
+const hasHoverDetail =
+	Boolean(discovery) &&
+	(Boolean(card.whyItMatters) || relatedProjects.length > 0);
 ---
 
 <article
@@ -147,6 +151,8 @@ const opensInNewTab = (href: string, external: boolean) =>
 
 		{card.summary && <p class='project-card-summary'>{card.summary}</p>}
 
+		<div class:list={['project-card-stage', { 'has-hover-detail': hasHoverDetail }]}>
+		<div class='project-card-rest-content'>
 		{card.evaluation && (
 			<section class='project-card-proof' aria-label={`Measured result for ${card.fullTitle}`}>
 				<p class='project-card-proof-result'>
@@ -201,21 +207,43 @@ const opensInNewTab = (href: string, external: boolean) =>
 				</ul>
 			</section>
 		)}
+		</div>
 
-		{discovery && card.whyItMatters && (
-			<section class='project-card-why' aria-labelledby={`${cardId}-why`}>
-				<h3 id={`${cardId}-why`}>Why it matters</h3>
-				<p>{card.whyItMatters}</p>
-			</section>
+		{hasHoverDetail && (
+			<div class='project-card-hover-content' aria-label={`Context for ${card.fullTitle}`}>
+				{card.whyItMatters && (
+					<section class='project-card-why'>
+						<h3>Why it matters</h3>
+						<p>{card.whyItMatters}</p>
+					</section>
+				)}
+				{relatedProjects.length > 0 && (
+					<nav class='project-card-related' aria-label={`Related projects to ${card.fullTitle}`}>
+						<h3>Related projects</h3>
+						<div class='project-card-related-links'>
+							{relatedProjects.map((related) => <a href={related.url}>{related.title}</a>)}
+						</div>
+					</nav>
+				)}
+			</div>
 		)}
+		</div>
 
-		{discovery && discovery.relatedProjects.length > 0 && (
-			<nav class='project-card-related' aria-label={`Related projects to ${card.fullTitle}`}>
-				<h3>Related projects</h3>
-				<div class='project-card-related-links'>
-					{discovery.relatedProjects.map((related) => <a href={related.url}>{related.title}</a>)}
+		{hasHoverDetail && (
+			<details class='project-card-why-disclosure'>
+				<summary>Why it matters</summary>
+				<div class='project-card-why-disclosure-body'>
+					{card.whyItMatters && <p>{card.whyItMatters}</p>}
+					{relatedProjects.length > 0 && (
+						<nav class='project-card-related' aria-label={`Related projects to ${card.fullTitle}`}>
+							<h3>Related projects</h3>
+							<div class='project-card-related-links'>
+								{relatedProjects.map((related) => <a href={related.url}>{related.title}</a>)}
+							</div>
+						</nav>
+					)}
 				</div>
-			</nav>
+			</details>
 		)}
 
 		<footer class='project-card-actions'>
@@ -715,8 +743,35 @@ const opensInNewTab = (href: string, external: boolean) =>
 		line-height: 1.4;
 	}
 
-	/* Why it matters + related projects: understated label and copy that sit in
-	   normal document flow between the capabilities and the card footer. */
+	/* Reveal stage: the rest layer (metric, maturity, capabilities) and the hover
+	   layer (why it matters, related projects) share one grid cell, so the cell is
+	   always as tall as the taller layer. Nothing is absolutely positioned, the
+	   card height never changes on hover, and only one layer is visible at a time. */
+	.project-card-stage {
+		display: grid;
+		min-width: 0;
+		gap: inherit;
+	}
+
+	.project-card-stage > * {
+		grid-area: 1 / 1;
+		min-width: 0;
+	}
+
+	.project-card-rest-content {
+		display: flex;
+		flex-direction: column;
+		gap: inherit;
+		transition: opacity 320ms ease, transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	.project-card-hover-content {
+		display: none;
+		flex-direction: column;
+		gap: inherit;
+		align-self: start;
+	}
+
 	.project-card-why,
 	.project-card-related {
 		display: block;
@@ -725,10 +780,6 @@ const opensInNewTab = (href: string, external: boolean) =>
 		max-height: none;
 		overflow: visible;
 		transform: none;
-	}
-
-	.project-card-why {
-		margin-top: 0.5rem;
 	}
 
 	.project-card-why h3,
@@ -753,8 +804,59 @@ const opensInNewTab = (href: string, external: boolean) =>
 		overflow-wrap: anywhere;
 	}
 
-	.project-card-related {
-		margin-top: 0.3rem;
+	/* Touch / no-hover devices: a tap-to-expand disclosure instead of hover. */
+	.project-card-why-disclosure {
+		min-width: 0;
+	}
+
+	.project-card-why-disclosure summary {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		width: max-content;
+		max-width: 100%;
+		min-height: 2.2rem;
+		padding: 0.4rem 0;
+		color: var(--primary);
+		font-size: 0.73rem;
+		font-weight: 750;
+		list-style: none;
+		cursor: pointer;
+	}
+
+	.project-card-why-disclosure summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.project-card-why-disclosure summary::before {
+		content: '';
+		width: 0.42rem;
+		height: 0.42rem;
+		flex: 0 0 auto;
+		border-right: 1.5px solid currentColor;
+		border-bottom: 1.5px solid currentColor;
+		transform: rotate(-45deg);
+		transition: transform 220ms ease;
+	}
+
+	.project-card-why-disclosure[open] summary::before {
+		transform: rotate(45deg);
+	}
+
+	.project-card-why-disclosure-body {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 0.62rem;
+		padding-top: 0.2rem;
+	}
+
+	.project-card-why-disclosure-body p {
+		margin: 0;
+		color: var(--text-secondary);
+		font-size: 0.8rem;
+		line-height: 1.6;
+		overflow-wrap: anywhere;
 	}
 
 	.project-card-related-links {
@@ -1055,6 +1157,49 @@ const opensInNewTab = (href: string, external: boolean) =>
 		.project-card-media-shell:focus-within::after {
 			opacity: 0.92;
 		}
+
+		/* Hover / focus reveal. The rest layer recedes first, then the context
+		   layer fades up into the same reserved region. Hidden layers are also
+		   visibility:hidden so they are neither clickable nor focusable. */
+		.project-card-why-disclosure {
+			display: none;
+		}
+
+		.project-card-hover-content {
+			display: flex;
+			visibility: hidden;
+			opacity: 0;
+			pointer-events: none;
+			transform: translateY(0.5rem);
+			transition:
+				opacity 300ms ease,
+				transform 360ms cubic-bezier(0.16, 1, 0.3, 1),
+				visibility 0s linear 300ms;
+		}
+
+		.project-case-card:hover .project-card-stage.has-hover-detail .project-card-rest-content,
+		.project-case-card:focus-within .project-card-stage.has-hover-detail .project-card-rest-content {
+			visibility: hidden;
+			opacity: 0;
+			pointer-events: none;
+			transform: translateY(-0.3rem);
+			transition:
+				opacity 180ms ease,
+				transform 220ms ease,
+				visibility 0s linear 180ms;
+		}
+
+		.project-case-card:hover .project-card-hover-content,
+		.project-case-card:focus-within .project-card-hover-content {
+			visibility: visible;
+			opacity: 1;
+			pointer-events: auto;
+			transform: none;
+			transition:
+				opacity 320ms ease 90ms,
+				transform 380ms cubic-bezier(0.16, 1, 0.3, 1) 90ms,
+				visibility 0s linear 0s;
+		}
 	}
 
 	@media (max-width: 640px) {
@@ -1183,9 +1328,17 @@ const opensInNewTab = (href: string, external: boolean) =>
 		.project-case-card,
 		.project-card-media :global(.project-card-image-element),
 		.project-card-discovery-panel,
+		.project-card-rest-content,
+		.project-card-hover-content,
+		.project-card-why-disclosure summary::before,
 		.project-thumbnail-actions,
 		.project-card-media-shell::after {
 			transition: none;
+		}
+
+		.project-card-hover-content,
+		.project-card-rest-content {
+			transform: none !important;
 		}
 
 		.project-case-card:hover,
