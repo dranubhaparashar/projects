@@ -9,8 +9,8 @@ import type { LIGHT_DARK_MODE } from "@/types/config";
 
 export const DEFAULT_LIGHT_ACCENT_POSITION = 20;
 export const DEFAULT_DARK_ACCENT_POSITION = 60;
-export const DEFAULT_LIGHT_ACCENT = "#145CE6";
-export const DEFAULT_DARK_ACCENT = "#45D8FF";
+export const DEFAULT_LIGHT_ACCENT = "#1264E8";
+export const DEFAULT_DARK_ACCENT = "#43D7FF";
 export const ACCENT_STORAGE_KEYS = {
 	light: {
 		position: "premium-accent-position-light",
@@ -28,12 +28,12 @@ export const ACCENT_STORAGE_KEYS = {
 const LEGACY_HUE_STORAGE_KEY = "hue";
 
 export const PREMIUM_ACCENT_ANCHORS = [
-	{ position: 0, color: "#0B4FCC" },
+	{ position: 0, color: "#0D4FC7" },
 	{ position: 20, color: DEFAULT_LIGHT_ACCENT },
-	{ position: 40, color: "#3487FF" },
+	{ position: 40, color: "#2488FF" },
 	{ position: DEFAULT_DARK_ACCENT_POSITION, color: DEFAULT_DARK_ACCENT },
-	{ position: 80, color: "#596BFF" },
-	{ position: 100, color: "#8B7CFF" },
+	{ position: 80, color: "#5B70FF" },
+	{ position: 100, color: "#8178FF" },
 ] as const;
 
 export const PREMIUM_ACCENT_GRADIENT = `linear-gradient(to right, ${PREMIUM_ACCENT_ANCHORS.map(({ position, color }) => `${color} ${position}%`).join(", ")})`;
