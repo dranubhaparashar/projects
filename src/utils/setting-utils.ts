@@ -8,9 +8,9 @@ import { expressiveCodeConfig } from "@/config";
 import type { LIGHT_DARK_MODE } from "@/types/config";
 
 export const DEFAULT_LIGHT_ACCENT_POSITION = 20;
-export const DEFAULT_DARK_ACCENT_POSITION = 70;
-export const DEFAULT_LIGHT_ACCENT = "#822B41";
-export const DEFAULT_DARK_ACCENT = "#D6B269";
+export const DEFAULT_DARK_ACCENT_POSITION = 60;
+export const DEFAULT_LIGHT_ACCENT = "#145CE6";
+export const DEFAULT_DARK_ACCENT = "#45D8FF";
 export const ACCENT_STORAGE_KEYS = {
 	light: {
 		position: "premium-accent-position-light",
@@ -28,13 +28,12 @@ export const ACCENT_STORAGE_KEYS = {
 const LEGACY_HUE_STORAGE_KEY = "hue";
 
 export const PREMIUM_ACCENT_ANCHORS = [
-	{ position: 0, color: "#5E1F33" },
+	{ position: 0, color: "#0B4FCC" },
 	{ position: 20, color: DEFAULT_LIGHT_ACCENT },
-	{ position: 40, color: "#B32545" },
-	{ position: 60, color: "#C99A3F" },
+	{ position: 40, color: "#3487FF" },
 	{ position: DEFAULT_DARK_ACCENT_POSITION, color: DEFAULT_DARK_ACCENT },
-	{ position: 80, color: "#1F7A55" },
-	{ position: 100, color: "#2F5FA8" },
+	{ position: 80, color: "#596BFF" },
+	{ position: 100, color: "#8B7CFF" },
 ] as const;
 
 export const PREMIUM_ACCENT_GRADIENT = `linear-gradient(to right, ${PREMIUM_ACCENT_ANCHORS.map(({ position, color }) => `${color} ${position}%`).join(", ")})`;
