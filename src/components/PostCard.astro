@@ -37,9 +37,31 @@ const assistantQuestions = [
 const opensInNewTab = (href: string, external: boolean) =>
 	external || /\.pdf(?:$|[?#])/i.test(href);
 const relatedProjects = discovery?.relatedProjects ?? [];
-const hasHoverDetail =
-	Boolean(discovery) &&
-	(Boolean(card.whyItMatters) || relatedProjects.length > 0);
+const textKey = (value: string) =>
+	value
+		.normalize("NFKD")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, " ")
+		.trim();
+// Why it matters is dropped when it merely repeats the summary already shown
+// in the body, so the same sentence is never rendered twice on one card.
+const whyItMatters =
+	card.whyItMatters &&
+	!textKey(card.summary).startsWith(textKey(card.whyItMatters))
+		? card.whyItMatters
+		: "";
+const hasInsight = Boolean(whyItMatters) || relatedProjects.length > 0;
+// Content-aware composition. A card with a measured-result block is dense: its
+// body is already full, so context (why it matters, related projects) lives in
+// the hover reveal. A card without one is sparse: the same context renders in
+// flow after capabilities so the body is composed from real data rather than
+// left empty. No height is ever reserved for either treatment.
+const isDense = Boolean(card.evaluation);
+// Long full titles step down one type size so they hold to two lines and do
+// not push a neighbouring card's footer down by a whole extra title line.
+const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
+const showInsightSlot = hasInsight && !isDense;
+const hasHoverDetail = hasInsight && isDense && Boolean(discovery);
 ---
 
 <article
@@ -141,7 +163,7 @@ const hasHoverDetail =
 
 			<h2
 				id={`${cardId}-title`}
-				class:list={['project-card-title', { 'has-short-title': card.hasDisplayTitle }]}
+				class:list={['project-card-title', { 'has-short-title': card.hasDisplayTitle, 'has-long-title': hasLongTitle }]}
 			>
 				<a href={url} title={card.fullTitle} aria-label={card.fullTitle} data-analytics-event="project-card-open" data-analytics-label={card.fullTitle}>
 					{card.displayTitle}
@@ -211,10 +233,10 @@ const hasHoverDetail =
 
 		{hasHoverDetail && (
 			<div class='project-card-hover-content' aria-label={`Context for ${card.fullTitle}`}>
-				{card.whyItMatters && (
+				{whyItMatters && (
 					<section class='project-card-why'>
 						<h3>Why it matters</h3>
-						<p>{card.whyItMatters}</p>
+						<p>{whyItMatters}</p>
 					</section>
 				)}
 				{relatedProjects.length > 0 && (
@@ -233,7 +255,7 @@ const hasHoverDetail =
 			<details class='project-card-why-disclosure'>
 				<summary>Why it matters</summary>
 				<div class='project-card-why-disclosure-body'>
-					{card.whyItMatters && <p>{card.whyItMatters}</p>}
+					{whyItMatters && <p>{whyItMatters}</p>}
 					{relatedProjects.length > 0 && (
 						<nav class='project-card-related' aria-label={`Related projects to ${card.fullTitle}`}>
 							<h3>Related projects</h3>
@@ -244,6 +266,25 @@ const hasHoverDetail =
 					)}
 				</div>
 			</details>
+		)}
+
+		{showInsightSlot && (
+			<div class='project-insight-slot' aria-label={`Context for ${card.fullTitle}`}>
+				{whyItMatters && (
+					<section class='project-card-why'>
+						<h3>Why it matters</h3>
+						<p>{whyItMatters}</p>
+					</section>
+				)}
+				{relatedProjects.length > 0 && (
+					<nav class='project-card-related' aria-label={`Related projects to ${card.fullTitle}`}>
+						<h3>Related projects</h3>
+						<div class='project-card-related-links'>
+							{relatedProjects.map((related) => <a href={related.url}>{related.title}</a>)}
+						</div>
+					</nav>
+				)}
+			</div>
 		)}
 
 		<footer class='project-card-actions'>
@@ -575,7 +616,6 @@ const hasHoverDetail =
 	}
 
 	.project-card-title {
-		min-height: calc(1.16em * 2);
 		margin: 0;
 		font-size: clamp(1.25rem, 2vw, 1.55rem);
 		line-height: 1.08;
@@ -596,13 +636,17 @@ const hasHoverDetail =
 		-webkit-line-clamp: 2;
 	}
 
+	.project-card-title.has-long-title {
+		font-size: clamp(1.15rem, 1.65vw, 1.38rem);
+		line-height: 1.14;
+	}
+
 	.project-card-title a:hover {
 		color: var(--primary);
 	}
 
 	.project-card-summary {
 		display: -webkit-box;
-		min-height: calc(1.42em * 2);
 		overflow: hidden;
 		margin: 0;
 		color: var(--text-secondary);
@@ -746,7 +790,11 @@ const hasHoverDetail =
 	/* Reveal stage: the rest layer (metric, maturity, capabilities) and the hover
 	   layer (why it matters, related projects) share one grid cell, so the cell is
 	   always as tall as the taller layer. Nothing is absolutely positioned, the
-	   card height never changes on hover, and only one layer is visible at a time. */
+	   card height never changes on hover, and only one layer is visible at a time.
+	   The hover layer is rendered only on dense cards (those with a measured
+	   result), where the rest layer is the taller one, so the cell never reserves
+	   blank height for hidden hover copy. Sparse cards render the same context in
+	   flow via .project-insight-slot instead. */
 	.project-card-stage {
 		display: grid;
 		min-width: 0;
@@ -802,6 +850,41 @@ const hasHoverDetail =
 		font-size: 0.8rem;
 		line-height: 1.6;
 		overflow-wrap: anywhere;
+	}
+
+	/* Insight slot: in-flow context for sparse cards. Sized purely by its content,
+	   so it consumes body space that would otherwise sit empty above the footer. */
+	.project-insight-slot {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 0.62rem;
+	}
+
+	/* In the slot, related projects read as one editorial line: label, then links,
+	   wrapping only when a title is long. */
+	.project-insight-slot .project-card-related {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.2rem 0.6rem;
+	}
+
+	.project-insight-slot .project-card-related h3 {
+		margin: 0;
+	}
+
+	.project-insight-slot .project-card-related-links {
+		gap: 0.2rem 0.5rem;
+	}
+
+	.project-insight-slot .project-card-related-links a:not(:last-child)::after {
+		display: inline-block;
+		margin-left: 0.5rem;
+		color: var(--text-muted);
+		content: '·';
+		font-weight: 400;
+		text-decoration: none;
 	}
 
 	/* Touch / no-hover devices: a tap-to-expand disclosure instead of hover. */
@@ -1284,12 +1367,10 @@ const hasHoverDetail =
 		}
 
 		.project-card-title {
-			min-height: 0;
 			font-size: 1.22rem;
 		}
 
 		.project-card-summary {
-			min-height: 0;
 			-webkit-line-clamp: 3;
 		}
 
