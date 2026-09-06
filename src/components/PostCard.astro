@@ -50,10 +50,10 @@ const whyItMatters =
 	!textKey(card.summary).startsWith(textKey(card.whyItMatters))
 		? card.whyItMatters
 		: "";
-// Every card shares one interaction: the existing project image is the reveal
-// surface. Why it matters and related projects appear inside the media area on
-// hover (or on tap on touch devices), so no body height is ever reserved.
-const hasMediaContext = Boolean(whyItMatters) || relatedProjects.length > 0;
+// One interaction for every card: the lower detail stage shows technical
+// details at rest and swaps to why it matters + related projects on hover
+// (or via the tap toggle on touch devices).
+const hasHoverDetail = Boolean(whyItMatters) || relatedProjects.length > 0;
 // Long full titles step down one type size so they hold to two lines and do
 // not push a neighbouring card's footer down by a whole extra title line.
 const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
@@ -118,41 +118,6 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 			</span>
 		)}
 	</a>
-	{hasMediaContext && (
-		<div class='project-media-overlay' id={`${cardId}-context`} aria-label={`Context for ${card.fullTitle}`}>
-			<button
-				type='button'
-				class='project-media-overlay-close'
-				data-project-overlay-toggle
-				aria-controls={`${cardId}-context`}
-				aria-expanded='false'
-				aria-label={`Hide context for ${card.fullTitle}`}
-			>×</button>
-			{whyItMatters && (
-				<section class='project-card-why'>
-					<h3>Why it matters</h3>
-					<p>{whyItMatters}</p>
-				</section>
-			)}
-			{relatedProjects.length > 0 && (
-				<nav class='project-card-related' aria-label={`Related projects to ${card.fullTitle}`}>
-					<h3>Related projects</h3>
-					<div class='project-card-related-links'>
-						{relatedProjects.map((related) => <a href={related.url} title={related.title}>{related.title}</a>)}
-					</div>
-				</nav>
-			)}
-		</div>
-	)}
-	{hasMediaContext && (
-		<button
-			type='button'
-			class='project-media-context-toggle'
-			data-project-overlay-toggle
-			aria-controls={`${cardId}-context`}
-			aria-expanded='false'
-		>Why it matters</button>
-	)}
 	<nav class='project-thumbnail-actions' aria-label={`Quick actions for ${card.fullTitle}`}>
 		<a href={url}>View Project</a>
 		{card.quickActions.map((action) => (
@@ -203,6 +168,8 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 
 		{card.summary && <p class='project-card-summary'>{card.summary}</p>}
 
+		<div class='project-detail-stage'>
+		<div class='project-card-details-normal'>
 		{card.evaluation && (
 			<section class='project-card-proof' aria-label={`Measured result for ${card.fullTitle}`}>
 				<p class='project-card-proof-result'>
@@ -257,6 +224,41 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 				</ul>
 			</section>
 		)}
+		</div>
+
+		{hasHoverDetail && (
+			<div class='project-card-details-hover project-card-hover-content' id={`${cardId}-context`} aria-label={`Context for ${card.fullTitle}`}>
+				{whyItMatters && (
+					<section class='project-card-why'>
+						<h3>Why it matters</h3>
+						<p>{whyItMatters}</p>
+					</section>
+				)}
+				{relatedProjects.length > 0 && (
+					<nav class='project-card-related' aria-label={`Related projects to ${card.fullTitle}`}>
+						<h3>Related projects</h3>
+						<div class='project-card-related-links'>
+							{relatedProjects.map((related) => <a href={related.url}>{related.title}</a>)}
+						</div>
+					</nav>
+				)}
+			</div>
+		)}
+		</div>
+
+		{hasHoverDetail && (
+			<button
+				type='button'
+				class='project-detail-toggle'
+				data-project-detail-toggle
+				aria-controls={`${cardId}-context`}
+				aria-expanded='false'
+			>
+				<span class='project-detail-toggle-show'>Why it matters</span>
+				<span class='project-detail-toggle-hide'>Technical details</span>
+			</button>
+		)}
+
 		<footer class='project-card-actions'>
 			<a
 				class='project-primary-action btn-regular'
@@ -315,7 +317,7 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 		display: flex;
 		position: relative;
 		min-width: 0;
-		height: auto;
+		height: 100%;
 		flex-direction: column;
 		overflow: hidden;
 		background: var(--card-bg);
@@ -406,7 +408,7 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms ease, opacity 300ms ease;
+		transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms ease;
 	}
 
 	.project-card-media[data-image-fit='contain'] {
@@ -429,7 +431,6 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 		position: absolute;
 		right: 0.45rem;
 		bottom: 0.4rem;
-		transition: opacity 200ms ease;
 		align-items: center;
 		padding: 0.2rem 0.42rem;
 		border: 1px solid color-mix(in srgb, var(--card-border) 82%, transparent);
@@ -446,6 +447,7 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 	.project-card-body {
 		display: flex;
 		min-width: 0;
+		flex: 1;
 		flex-direction: column;
 		gap: 0.62rem;
 		padding: 1rem 1.05rem 1.05rem;
@@ -757,191 +759,74 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 		line-height: 1.4;
 	}
 
-	/* Media context overlay: why it matters + related projects revealed inside
-	   the existing image area. It is absolutely positioned within the media
-	   shell, so it adds zero layout height and the card never changes size. One
-	   implementation for every card; hover on pointer devices, tap on touch. */
-	.project-card-media-shell {
-		container-type: inline-size;
-	}
-
-	.project-media-overlay {
-		display: flex;
-		position: absolute;
-		z-index: 3;
-		inset: 0;
-		box-sizing: border-box;
-		flex-direction: column;
-		justify-content: flex-start;
-		gap: 0.5rem;
-		padding: 0.8rem 0.9rem 2.75rem;
-		overflow: hidden;
-		border-radius: inherit;
-		background: linear-gradient(160deg, var(--overlay-navy), var(--overlay-navy-strong));
-		color: var(--overlay-text-soft);
-		visibility: hidden;
-		opacity: 0;
-		pointer-events: none;
-		transform: translateY(6px);
-		transition:
-			opacity 300ms ease,
-			transform 320ms cubic-bezier(0.16, 1, 0.3, 1),
-			visibility 0s linear 300ms;
-	}
-
-	.project-media-overlay a,
-	.project-media-overlay button {
-		pointer-events: auto;
-	}
-
-	.project-case-card .project-media-overlay .project-card-why h3,
-	.project-case-card .project-media-overlay .project-card-related h3 {
-		margin: 0 0 0.3rem;
-		color: var(--overlay-label);
-	}
-
-	.project-case-card .project-media-overlay .project-card-why p {
-		display: -webkit-box;
-		overflow: hidden;
-		color: var(--overlay-text-soft);
-		font-size: clamp(0.7rem, 3.1cqw, 0.8rem);
-		line-height: 1.5;
-		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 5;
-	}
-
-	.project-case-card .project-media-overlay .project-card-related {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0.15rem 0.6rem;
-	}
-
-	.project-case-card .project-media-overlay .project-card-related h3 {
-		margin: 0;
-	}
-
-	.project-case-card .project-media-overlay .project-card-related-links {
-		gap: 0.15rem 0.5rem;
-	}
-
-	/* !important: the global link layer sets card link colours with !important;
-	   inside the navy overlay the links must use the overlay tokens instead. */
-	.project-case-card .project-media-overlay .project-card-related a {
-		color: var(--overlay-link) !important;
-		font-size: clamp(0.68rem, 2.9cqw, 0.74rem);
-		text-decoration-color: rgba(143, 211, 238, 0.4) !important;
-	}
-
-	.project-case-card .project-media-overlay .project-card-related a:hover {
-		color: var(--overlay-link-hover) !important;
-	}
-
-	.project-case-card .project-media-overlay .project-card-related-links a:not(:last-child)::after {
-		display: inline-block;
-		margin-left: 0.5rem;
-		color: var(--overlay-text-soft);
-		content: '·';
-		font-weight: 400;
-		opacity: 0.7;
-		text-decoration: none;
-	}
-
-	/* Narrow media (two columns beside the sidebar): tighten the overlay so the
-	   copy and the quick-action pills share the image height without meeting. */
-	@container (max-width: 380px) {
-		.project-media-overlay {
-			gap: 0.25rem;
-			padding: 0.45rem 0.7rem 2.3rem;
-		}
-
-		.project-case-card .project-media-overlay .project-card-why h3,
-		.project-case-card .project-media-overlay .project-card-related h3 {
-			margin-bottom: 0.12rem;
-		}
-
-		.project-case-card .project-media-overlay .project-card-why p {
-			line-height: 1.42;
-			-webkit-line-clamp: 4;
-		}
-
-		/* Each related link holds to one line here; the full title stays in the
-		   link tooltip and on the linked project page. */
-		.project-case-card .project-media-overlay .project-card-related a {
-			display: inline-block;
-			max-width: 100%;
-			overflow: hidden;
-			font-size: 0.66rem;
-			line-height: 1.35;
-			text-overflow: ellipsis;
-			vertical-align: bottom;
-			white-space: nowrap;
-		}
-
-		.project-thumbnail-actions a {
-			min-height: 1.75rem;
-			padding: 0.26rem 0.48rem;
-			font-size: 0.64rem;
-		}
-	}
-
-	/* Touch affordances: a discreet pill on the image opens the overlay, a close
-	   control inside it restores the image. Both hidden on pointer devices. */
-	.project-media-context-toggle {
-		display: inline-flex;
-		position: absolute;
-		z-index: 4;
-		top: 0.55rem;
-		right: 0.55rem;
-		align-items: center;
-		min-height: 1.9rem;
-		padding: 0.3rem 0.6rem;
-		border: 1px solid color-mix(in srgb, var(--card-border) 72%, var(--text-primary));
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--card-bg) 92%, transparent);
-		color: var(--text-primary);
-		font: inherit;
-		font-size: 0.66rem;
-		font-weight: 750;
-		cursor: pointer;
-	}
-
-	.project-media-overlay-close {
+	/* Detail stage. The normal layer (metric, maturity, capabilities) and the
+	   hover layer (why it matters, related projects) share one grid cell, so the
+	   stage is as tall as the taller layer and then grows to absorb whatever
+	   height the equal-height row gives the card. Each layer spreads that height
+	   as even breathing room between its own sections, so no card ever shows one
+	   large empty block. Only one layer is visible at a time and the card never
+	   changes size on hover. */
+	.project-detail-stage {
 		display: grid;
-		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
-		width: 1.9rem;
-		height: 1.9rem;
-		padding: 0;
-		border: 1px solid rgba(201, 214, 225, 0.35);
-		border-radius: 999px;
-		background: rgba(3, 8, 14, 0.5);
-		color: var(--overlay-text-soft);
-		font: inherit;
-		font-size: 1rem;
-		line-height: 1;
-		place-items: center;
-		cursor: pointer;
+		min-width: 0;
+		min-height: 0;
+		flex: 1 1 auto;
 	}
 
-	.project-case-card[data-overlay-open] .project-media-overlay {
-		visibility: visible;
-		opacity: 1;
-		transform: none;
+	.project-detail-stage > * {
+		grid-area: 1 / 1;
+		min-width: 0;
+	}
+
+	.project-card-details-normal,
+	.project-card-details-hover {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-evenly;
+		gap: inherit;
+	}
+
+	.project-card-details-normal {
 		transition:
-			opacity 300ms ease,
-			transform 320ms cubic-bezier(0.16, 1, 0.3, 1),
+			opacity 160ms ease,
+			transform 200ms ease,
 			visibility 0s linear 0s;
 	}
 
-	.project-case-card[data-overlay-open] .project-card-media :global(.project-card-image-element),
-	.project-case-card[data-overlay-open] .project-card-architecture-label {
-		opacity: 0.16;
+	.project-card-details-hover {
+		visibility: hidden;
+		opacity: 0;
+		pointer-events: none;
+		transform: translateY(5px);
+		transition:
+			opacity 240ms ease,
+			transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+			visibility 0s linear 240ms;
 	}
 
-	.project-case-card[data-overlay-open] .project-media-context-toggle {
+	/* Swapped state, set by the tap toggle on touch devices and by hover/focus
+	   on pointer devices below. The normal layer leaves first; the hover layer
+	   arrives after it has gone, so the two never read on top of each other. */
+	.project-case-card[data-detail-open] .project-card-details-normal {
 		visibility: hidden;
+		opacity: 0;
+		pointer-events: none;
+		transform: translateY(-3px);
+		transition:
+			opacity 160ms ease,
+			transform 200ms ease,
+			visibility 0s linear 160ms;
+	}
+
+	.project-case-card[data-detail-open] .project-card-details-hover {
+		visibility: visible;
+		opacity: 1;
+		pointer-events: auto;
+		transform: none;
+		transition:
+			opacity 260ms ease 160ms,
+			transform 300ms cubic-bezier(0.16, 1, 0.3, 1) 160ms,
+			visibility 0s linear 160ms;
 	}
 
 	.project-card-why,
@@ -974,6 +859,49 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 		font-size: 0.8rem;
 		line-height: 1.6;
 		overflow-wrap: anywhere;
+	}
+
+	/* Touch / no-hover devices: a discreet control under the stage swaps the
+	   detail region between technical details and why it matters. */
+	.project-detail-toggle {
+		display: inline-flex;
+		width: max-content;
+		max-width: 100%;
+		min-height: 2.1rem;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.35rem 0;
+		border: 0;
+		background: none;
+		color: var(--primary);
+		font: inherit;
+		font-size: 0.73rem;
+		font-weight: 750;
+		cursor: pointer;
+	}
+
+	.project-detail-toggle::before {
+		content: '';
+		width: 0.42rem;
+		height: 0.42rem;
+		flex: 0 0 auto;
+		border-right: 1.5px solid currentColor;
+		border-bottom: 1.5px solid currentColor;
+		transform: rotate(-45deg);
+		transition: transform 220ms ease;
+	}
+
+	.project-case-card[data-detail-open] .project-detail-toggle::before {
+		transform: rotate(45deg);
+	}
+
+	.project-detail-toggle-hide,
+	.project-case-card[data-detail-open] .project-detail-toggle-show {
+		display: none;
+	}
+
+	.project-case-card[data-detail-open] .project-detail-toggle-hide {
+		display: inline;
 	}
 
 	.project-card-related-links {
@@ -1124,6 +1052,7 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 		min-height: 2.9rem;
 		grid-template-columns: auto minmax(0, 1fr);
 		align-items: center;
+		margin-top: auto;
 		gap: 0.65rem;
 		padding-top: 0.58rem;
 		border-top: 1px solid color-mix(in srgb, var(--project-accent) 22%, var(--card-border));
@@ -1274,29 +1203,34 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 			opacity: 0.92;
 		}
 
-		/* Hover / focus reveal inside the media area only: the image recedes and
-		   the context overlay fades up. Card geometry is untouched. */
-		.project-media-context-toggle,
-		.project-media-overlay-close {
+		/* Hover / focus swap inside the detail stage. Pointer devices hide the tap
+		   toggle; the swap is the same one the toggle drives on touch. */
+		.project-detail-toggle {
 			display: none;
 		}
 
-		.project-case-card:hover .project-media-overlay,
-		.project-case-card:focus-within .project-media-overlay {
-			visibility: visible;
-			opacity: 1;
-			transform: none;
+		.project-case-card:hover .project-card-details-normal,
+		.project-case-card:focus-within .project-card-details-normal {
+			visibility: hidden;
+			opacity: 0;
+			pointer-events: none;
+			transform: translateY(-3px);
 			transition:
-				opacity 300ms ease,
-				transform 320ms cubic-bezier(0.16, 1, 0.3, 1),
-				visibility 0s linear 0s;
+				opacity 160ms ease,
+				transform 200ms ease,
+				visibility 0s linear 160ms;
 		}
 
-		.project-case-card:hover .project-card-media :global(.project-card-image-element),
-		.project-case-card:focus-within .project-card-media :global(.project-card-image-element),
-		.project-case-card:hover .project-card-architecture-label,
-		.project-case-card:focus-within .project-card-architecture-label {
-			opacity: 0.16;
+		.project-case-card:hover .project-card-details-hover,
+		.project-case-card:focus-within .project-card-details-hover {
+			visibility: visible;
+			opacity: 1;
+			pointer-events: auto;
+			transform: none;
+			transition:
+				opacity 260ms ease 160ms,
+				transform 300ms cubic-bezier(0.16, 1, 0.3, 1) 160ms,
+				visibility 0s linear 160ms;
 		}
 	}
 
@@ -1307,10 +1241,6 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 
 		.project-thumbnail-actions {
 			display: none;
-		}
-
-		.project-media-overlay {
-			padding-bottom: 0.8rem;
 		}
 
 		.project-card-kicker-actions {
@@ -1428,14 +1358,16 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 		.project-case-card,
 		.project-card-media :global(.project-card-image-element),
 		.project-card-discovery-panel,
-		.project-media-overlay,
-		.project-card-architecture-label,
+		.project-card-details-normal,
+		.project-card-details-hover,
+		.project-detail-toggle::before,
 		.project-thumbnail-actions,
 		.project-card-media-shell::after {
 			transition: none;
 		}
 
-		.project-media-overlay {
+		.project-card-details-hover,
+		.project-card-details-normal {
 			transform: none !important;
 		}
 
@@ -1447,7 +1379,7 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 </style>
 
 <script>
-	const TOGGLE_SELECTOR = "[data-project-overlay-toggle]";
+	const TOGGLE_SELECTOR = "[data-project-detail-toggle]";
 	document.addEventListener("click", (event) => {
 		const target = event.target instanceof Element ? event.target : null;
 		const toggle = target?.closest(TOGGLE_SELECTOR);
@@ -1455,9 +1387,7 @@ const hasLongTitle = !card.hasDisplayTitle && card.displayTitle.length > 48;
 		event.preventDefault();
 		const card = toggle.closest("[data-project-card]");
 		if (!card) return;
-		const open = card.toggleAttribute("data-overlay-open");
-		for (const control of card.querySelectorAll(TOGGLE_SELECTOR)) {
-			control.setAttribute("aria-expanded", String(open));
-		}
+		const open = card.toggleAttribute("data-detail-open");
+		toggle.setAttribute("aria-expanded", String(open));
 	});
 </script>
