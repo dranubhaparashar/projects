@@ -36,7 +36,7 @@ export type ProjectCardStatusType =
 export interface ProjectCardAction {
 	label: string;
 	url: string;
-	kind: "demo" | "github" | "video" | "pdf" | "publication";
+	kind: "documentation" | "demo" | "github" | "video" | "pdf" | "publication";
 	external: boolean;
 	ariaLabel?: string;
 }
@@ -821,6 +821,13 @@ function actionData(
 			ariaLabel,
 		});
 	};
+	// Only an explicit project_links documentation entry is promoted to a
+	// footer action, so documentation_url evidence links stay where they are.
+	const documentation = (entry.data.project_links || []).find(
+		(link) => link.kind === "documentation" && link.url.trim(),
+	);
+	if (documentation)
+		add(documentation.label, documentation.url.trim(), "documentation");
 	add("Demo", direct.demo, "demo");
 	add("GitHub", direct.github, "github");
 	add("Video", direct.video, "video");
@@ -875,13 +882,16 @@ export function buildProjectCardData(
 	const actionByKind = new Map(
 		allActions.map((action) => [action.kind, action]),
 	);
-	const fixedFooterActions = (["github", "pdf", "publication"] as const)
+	const fixedFooterActions = (
+		["documentation", "github", "pdf", "publication"] as const
+	)
 		.map((kind) => actionByKind.get(kind))
 		.filter((action): action is ProjectCardAction => Boolean(action));
 	const supportingFooterActions = (["demo", "video"] as const)
 		.map((kind) => actionByKind.get(kind))
 		.filter((action): action is ProjectCardAction => Boolean(action));
 	const footerDisplayOrder: ProjectCardAction["kind"][] = [
+		"documentation",
 		"demo",
 		"github",
 		"pdf",
