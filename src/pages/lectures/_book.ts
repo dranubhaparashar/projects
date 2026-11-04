@@ -176,12 +176,25 @@ export const tracks: Track[] = [
 			{
 				title: "Decision Trees",
 				summary:
-					"Twenty questions, learned from data: entropy and Gini impurity, information gain, growing a tree split by split, and pruning it before it memorises.",
+					"Twenty questions, learned from data: one split at a time, Gini and entropy, information gain by hand, growing a tree split by split, pruning it before it memorises, regression trees — and a Palmer Penguins project that prints its rules in plain words.",
 				topics: [
 					"Entropy & Gini",
 					"Information gain",
 					"Growing a tree",
 					"Pruning",
+				],
+				href: "/lectures/decision-trees/",
+				length: "~25 min",
+				index: [
+					["why", "Twenty questions, learned from data"],
+					["split", "One question at a time"],
+					["impurity", "Gini vs entropy: measuring a mess"],
+					["gain", "Information gain, by hand"],
+					["grow", "Growing a tree, split by split"],
+					["prune", "Pruning before it memorises"],
+					["regression", "Trees for numbers"],
+					["project", "Telling penguins apart"],
+					["summary", "Five lines to remember"],
 				],
 			},
 			{

@@ -1,0 +1,1045 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on decision trees: one split at a time, Gini and entropy, information gain by hand, growing a tree greedily, pruning, regression trees, and a Palmer Penguins species project with a readable rule list.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Decision Trees</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.cf-track.one::after { display: none; }
+.treebox { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow-x: auto; overflow-y: hidden; }
+.treebox canvas { display: block; }
+.sl3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 10px; }
+.cm { max-width: 520px; }
+.cm td { font-size: 1.15rem; text-align: center; }
+.cm td.ok { background: color-mix(in srgb, var(--cA) 12%, transparent); }
+.cm td.bad { background: color-mix(in srgb, var(--qda) 14%, transparent); }
+.cm th { white-space: nowrap; }
+.pax { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; }
+.pax-name { font-family: var(--f-display); font-size: 1.6rem; font-weight: 600; line-height: 1.2; }
+table.tennis td, table.tennis th { padding: 5px 8px; font-size: 0.86rem; }
+.yn { font: inherit; font-size: 0.82rem; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; cursor: pointer; background: var(--surface); color: var(--ink); }
+.yn.yes { background: color-mix(in srgb, var(--cA) 16%, var(--surface)); border-color: color-mix(in srgb, var(--cA) 50%, var(--line)); }
+.yn.no { background: color-mix(in srgb, var(--qda) 12%, var(--surface)); border-color: color-mix(in srgb, var(--qda) 40%, var(--line)); }
+.rules { margin: 14px 0 0; padding-left: 1.4em; display: grid; gap: 8px; max-width: 900px; font-size: 0.95rem; }
+.rules b { font-weight: 600; font-family: var(--f-mono); font-size: 0.88em; }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Decision Trees <span>&middot; twenty questions, learned from data</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Why</a>
+      <a href="#split">One split</a>
+      <a href="#impurity">Impurity</a>
+      <a href="#gain">Gain by hand</a>
+      <a href="#grow">Growing</a>
+      <a href="#prune">Pruning</a>
+      <a href="#regression">Regression</a>
+      <a href="#project">Penguins</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.7 · trees</div>
+      <h1>Decision Trees</h1>
+      <div class="sub">A flowchart of yes/no questions that a computer writes for you</div>
+      <p class="lead">A doctor triaging a patient, a bank approving a loan, a child playing twenty questions: all of them ask one question, then choose the next question based on the answer. A decision tree learns exactly such a flowchart from data. It is the most <em>readable</em> model in machine learning &mdash; you can print it and follow it with a finger &mdash; and the building block of random forests and gradient boosting. On the right: a tree that identifies Antarctic penguins with two questions. <strong>Move the sliders</strong> and follow the path.</p>
+      <dl class="facts">
+        <div><dt>Model</dt><dd>Nested if/else rules; each leaf predicts a class or a number</dd></div>
+        <div><dt>Learns by</dt><dd>Greedily choosing the split that makes groups purest</dd></div>
+        <div><dt>Watch out</dt><dd>Grown fully, it memorises: prune it</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="treebox"><canvas id="hero-tree" aria-label="A depth-2 decision tree for penguin species, with the path of the current penguin highlighted"></canvas></div>
+      <div class="sl3" id="hero-sl"></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>9 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Twenty questions, learned from data</a></li>
+    <li><a href="#split"><i>02</i>One question at a time</a></li>
+    <li><a href="#impurity"><i>03</i>Gini vs entropy: measuring a mess</a></li>
+    <li><a href="#gain"><i>04</i>Information gain, by hand</a></li>
+    <li><a href="#grow"><i>05</i>Growing a tree, split by split</a></li>
+    <li><a href="#prune"><i>06</i>Pruning before it memorises</a></li>
+    <li><a href="#regression"><i>07</i>Trees for numbers</a></li>
+    <li><a href="#project"><i>08</i>Telling penguins apart</a></li>
+    <li><a href="#summary"><i>09</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">Foundations</div>
+    <h2>Twenty questions, learned from data</h2>
+    <div class="prose">
+      <p>A decision tree splits the data with one simple question at a time &mdash; &ldquo;is flipper length &le; 206.5 mm?&rdquo; &mdash; sending each example left or right. Each branch is split again, and again, until the groups at the bottom (the <em class="term">leaves</em>) are nearly pure. To predict, a new example just walks from the top (the <em class="term">root</em>) down to a leaf and takes that leaf's majority answer.</p>
+      <p>Geometrically, every question is a cut parallel to one axis, so a tree carves the feature space into rectangles. Algebraically, it learns no weights at all &mdash; only which feature to ask about, and where to cut. The algorithm used almost everywhere is <em class="term">CART</em> (Breiman et al., 1984).</p>
+    </div>
+    <div class="uses">
+      <div><span class="which a-c">Medicine</span><h4>Triage &amp; diagnosis</h4><p>Clinical rules a nurse can follow on paper: &ldquo;if blood pressure &lt; 90 and age &gt; 62.5&hellip;&rdquo;</p></div>
+      <div><span class="which a-c">Finance</span><h4>Credit decisions</h4><p>Regulators require explanations: a tree's path <em>is</em> the explanation.</p></div>
+      <div><span class="which a-c">Operations</span><h4>Customer churn</h4><p>&ldquo;Contract month-to-month and support calls &gt; 3&rdquo; flags who will leave.</p></div>
+      <div><span class="which b-c">Data science</span><h4>Mixed, messy data</h4><p>No scaling needed; numbers and categories together; robust to outliers.</p></div>
+      <div><span class="which b-c">Ensembles</span><h4>Forests &amp; boosting</h4><p>Hundreds of trees together win most tabular-data competitions (next chapter).</p></div>
+      <div><span class="which b-c">Explainability</span><h4>A model you can print</h4><p>Show the whole thing on one slide; every prediction has a reason.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- SPLIT -->
+<section class="chap" id="split">
+  <div class="wrap">
+    <div class="tag">The building block</div>
+    <h2>One question at a time</h2>
+    <div class="prose"><p>A split is one feature and one threshold. Good splits send the two classes to opposite sides. <strong>Drag the threshold</strong> (or switch feature) and watch the purity of each side &mdash; then let the computer try <em>every</em> possible threshold and pick the best. The curve below the plot is the score of each threshold: the lowest point is the best question.</p></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="sp-cv" aria-label="Two classes with a movable split line"></canvas></div></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="sp-curve" aria-label="Weighted Gini impurity for every possible threshold"></canvas></div><figcaption>Weighted Gini impurity of the two sides, for every threshold on this feature. Lower is better; the dashed line is your threshold.</figcaption></figure>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <div class="seg" role="group" aria-label="Feature"><button type="button" data-spf="0" aria-pressed="true">Split on x&#8321;</button><button type="button" data-spf="1" aria-pressed="false">Split on x&#8322;</button></div>
+          <div class="ctrl"><div class="top"><label for="sp-t">Threshold</label><output id="sp-t-o"></output></div><input type="range" id="sp-t" min="-3" max="3" step="0.01" value="1.2"></div>
+          <div class="btns"><button type="button" class="btn primary" id="sp-best">Find the best split</button></div>
+        </div>
+        <div class="grp"><div class="stats" id="sp-stats"></div><p class="note" id="sp-say"></p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- IMPURITY -->
+<section class="chap" id="impurity">
+  <div class="wrap">
+    <div class="tag">Scoring a group</div>
+    <h2>Gini vs entropy: measuring a mess</h2>
+    <div class="prose"><p>We need a number for &ldquo;how mixed is this group?&rdquo;: 0 when everyone is the same class, largest when the classes are evenly mixed. Two classic choices: <em class="term">Gini impurity</em> (the chance two random members disagree) and <em class="term">entropy</em> (how many yes/no questions, on average, you'd still need to guess the class). Slide the mix:</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \text{Gini}(S) = 1 - \sum_{c} p_c^2 \]</div><div class="read"><b>Read it as:</b> p<sub>c</sub> is the share of class c in the group. Pick two members at random (with replacement): Gini is the probability they belong to different classes.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Gini is one minus the sum of the squared class proportions.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ H(S) = -\sum_{c} p_c \log_2 p_c \]</div><div class="read"><b>Read it as:</b> entropy, in bits. A 50/50 group has 1 bit of uncertainty; a pure group has 0. It comes from information theory (Shannon, 1948).</div><div class="eq-say"><b>Say it</b><em>&ldquo;Entropy is minus the sum of p times log base two of p.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="ctrl" style="flex:1;max-width:420px"><div class="top"><label for="im-p">Share of class 1 in the group</label><output id="im-p-o"></output></div><input type="range" id="im-p" min="0" max="1" step="0.01" value="0.3"></div></div>
+        <div class="plot ar-16x10"><canvas id="im-cv" aria-label="Gini, entropy and misclassification error against the share of class 1"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9644;</span> entropy (bits) &nbsp; <span style="color:var(--cC)">&#9644;</span> Gini &nbsp; <span style="color:var(--muted)">&#9644; &#9644;</span> misclassification rate. All are 0 for a pure group and peak at 50/50.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp"><div class="stats" id="im-stats"></div><div class="eq-run" id="run-im" style="margin-top:6px"></div></div>
+      </div>
+    </div>
+    <h3>Why not just count mistakes?</h3>
+    <div class="prose"><p>The misclassification rate seems most natural, but it is too blunt for growing trees. Two candidate splits of 80 examples (40 per class):</p></div>
+    <div class="tbl-wrap block"><table class="hand" id="im-tbl"></table></div>
+    <p class="note" style="max-width:72ch;margin-top:8px">Both splits make 20 mistakes, so the error rate can't choose. Gini and entropy prefer split B because it creates a <b>pure</b> group, which can stop growing &mdash; they reward progress the error rate can't see.</p>
+  </div>
+</section>
+
+<!-- GAIN -->
+<section class="chap" id="gain">
+  <div class="wrap">
+    <div class="tag">Worked example</div>
+    <h2>Information gain, by hand</h2>
+    <div class="prose"><p>The classic textbook example (Quinlan, 1986): 14 days, four weather features, and whether tennis was played. Which question should the tree ask first? For each feature, compute the entropy left after splitting; the drop from the starting entropy is the <em class="term">information gain</em>. <strong>Click any &ldquo;Play&rdquo; cell</strong> to flip it and watch every gain recompute.</p></div>
+    <div class="eq"><div class="m">\[ \text{Gain}(S, A) = H(S) - \sum_{v \,\in\, \text{values}(A)} \frac{|S_v|}{|S|}\, H(S_v) \]</div><div class="read"><b>Read it as:</b> starting uncertainty, minus the weighted average uncertainty of the groups after splitting on feature A. Big gain = the question removed a lot of uncertainty.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Gain is the entropy before, minus the weighted entropy of the children.&rdquo;</em></div><div class="eq-run" id="run-gain"></div></div>
+    <div class="two block">
+      <div class="tbl-wrap"><table class="hand tennis" id="gn-data"></table></div>
+      <div>
+        <h4 class="mini">Gain of each feature</h4>
+        <div class="coefs" id="gn-bars"></div>
+        <h4 class="mini" style="margin-top:16px">Inside the winner</h4>
+        <div class="tbl-wrap"><table class="hand" id="gn-detail"></table></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- GROW -->
+<section class="chap" id="grow">
+  <div class="wrap">
+    <div class="tag">The algorithm</div>
+    <h2>Growing a tree, split by split</h2>
+    <div class="prose"><p>CART is <em class="term">greedy</em>: at every leaf it tries every feature and every threshold, takes the best split, and repeats on the children. It never goes back to reconsider. <strong>Press Grow</strong> to make one split at a time (the leaf whose split helps most goes first) and watch the rectangles and the flowchart grow together.</p></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="gr-cv" aria-label="Rectangles carved by the tree so far"></canvas></div></figure>
+        <div class="treebox" style="margin-top:12px"><canvas id="gr-tree" aria-label="The tree so far"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <div class="btns"><button type="button" class="btn primary" id="gr-step">Grow one split</button><button type="button" class="btn" id="gr-all">Grow to the end</button><button type="button" class="btn" id="gr-reset">Reset</button></div>
+          <div class="stats"><div class="stat"><div class="v" id="gr-n"></div><div class="k">leaves</div></div><div class="stat"><div class="v" id="gr-acc"></div><div class="k">training accuracy</div></div></div>
+          <p class="note" id="gr-say"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRUNE -->
+<section class="chap" id="prune">
+  <div class="wrap">
+    <div class="tag">Taming it</div>
+    <h2>Pruning before it memorises</h2>
+    <div class="prose"><p>Left alone, a tree keeps splitting until every leaf is pure &mdash; even if that means a leaf for one noisy point. Training accuracy reaches 100%; test accuracy falls. Three ways to stop it: limit the <strong>depth</strong>, demand a minimum number of examples per <strong>leaf</strong>, or grow fully then <strong>prune</strong> back branches that don't earn their keep (cost-complexity pruning, with penalty &alpha; per leaf).</p></div>
+    <div class="eq"><div class="m">\[ R_\alpha(T) = R(T) + \alpha\,|T| \]</div><div class="read"><b>Read it as:</b> R(T) is the tree's total (weighted) impurity on the training data; |T| is its number of leaves. Each leaf costs &alpha;. As &alpha; grows, branches whose impurity reduction is worth less than their extra leaves get cut.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The cost of a tree is its impurity plus alpha times its number of leaves.&rdquo;</em></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="pr-cv" aria-label="Decision regions for the chosen limits on noisy data"></canvas></div></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="pr-chart" aria-label="Training and test accuracy against maximum depth"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> training accuracy &nbsp; <span style="color:var(--qda)">&#9644;</span> test accuracy, by maximum depth (other limits as set). Dashed: your depth.</figcaption></figure>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="pr-d">Maximum depth</label><output id="pr-d-o"></output></div><input type="range" id="pr-d" min="1" max="16" step="1" value="16"></div>
+          <div class="ctrl"><div class="top"><label for="pr-l">Minimum examples per leaf</label><output id="pr-l-o"></output></div><input type="range" id="pr-l" min="1" max="30" step="1" value="1"></div>
+          <div class="ctrl"><div class="top"><label for="pr-a">Cost-complexity &alpha;</label><output id="pr-a-o"></output></div><input type="range" id="pr-a" min="0" max="40" step="1" value="0"></div>
+        </div>
+        <div class="grp"><div class="stats"><div class="stat"><div class="v" id="pr-tr"></div><div class="k">training accuracy</div></div><div class="stat"><div class="v" id="pr-te"></div><div class="k">test accuracy</div></div><div class="stat"><div class="v" id="pr-n"></div><div class="k">leaves</div></div></div><p class="note" id="pr-say"></p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- REGRESSION -->
+<section class="chap" id="regression">
+  <div class="wrap">
+    <div class="tag">Numbers too</div>
+    <h2>Trees for numbers</h2>
+    <div class="prose"><p>For a numeric target, each leaf predicts the <em>average</em> of its training examples, and the split criterion becomes the squared error (variance) of the two sides. The result is a staircase: depth 1 is a single step, depth 6 is 64 tiny steps that start chasing noise.</p></div>
+    <div class="eq"><div class="m">\[ \text{split score} = \frac{n_L}{n}\,\text{Var}(y_L) + \frac{n_R}{n}\,\text{Var}(y_R), \qquad \hat{y}_{\text{leaf}} = \bar{y}_{\text{leaf}} \]</div><div class="read"><b>Read it as:</b> choose the cut that leaves the least spread of y on each side; each leaf predicts its mean. Same greedy algorithm, different impurity.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Minimise the weighted variance of the two sides; predict the mean in each leaf.&rdquo;</em></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="rt-cv" aria-label="Regression tree staircase on noisy data"></canvas></div></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="rt-d">Maximum depth</label><output id="rt-d-o"></output></div><input type="range" id="rt-d" min="1" max="8" step="1" value="3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="rt-tr"></div><div class="k">train RMSE</div></div><div class="stat"><div class="v" id="rt-te"></div><div class="k">test RMSE</div></div></div>
+        <p class="note" id="rt-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: telling penguins apart</h2>
+    <div class="prose">
+      <p>The <strong>Palmer Penguins</strong> (Gorman, Williams &amp; Fraser, 2014; Horst et al., 2020): 342 penguins measured at Palmer Station, Antarctica &mdash; 151 Ad&eacute;lie, 68 Chinstrap, 123 Gentoo. Four measurements each: bill length, bill depth, flipper length and body mass. We grow a tree on 256 birds and test it on 86. Can a handful of yes/no questions tell the species apart?</p>
+    </div>
+    <div class="lab">
+      <div>
+        <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+          <div class="stat"><div class="v" id="pj-te"></div><div class="k">test accuracy</div></div>
+          <div class="stat"><div class="v" id="pj-tr"></div><div class="k">training accuracy</div></div>
+          <div class="stat"><div class="v" id="pj-n"></div><div class="k">leaves (rules)</div></div>
+          <div class="stat"><div class="v" id="pj-d"></div><div class="k">depth</div></div>
+        </div>
+        <p class="say-line" id="pj-say"></p>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-dep">Maximum depth</label><output id="pj-dep-o"></output></div><input type="range" id="pj-dep" min="1" max="8" step="1" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="pj-leaf">Minimum per leaf</label><output id="pj-leaf-o"></output></div><input type="range" id="pj-leaf" min="1" max="20" step="1" value="1"></div>
+        <div class="seg" role="group" aria-label="Criterion"><button type="button" data-pc="gini" aria-pressed="true">Gini</button><button type="button" data-pc="entropy" aria-pressed="false">Entropy</button></div>
+      </div></div>
+    </div>
+    <h3>The tree itself</h3>
+    <div class="treebox block"><canvas id="pj-tree" aria-label="The fitted penguin tree with the current penguin's path"></canvas></div>
+    <p class="note" style="margin-top:6px">Each box: the question (or, in a leaf, the predicted species), how many training penguins reached it, and the species mix. The highlighted path is the penguin you set below.</p>
+    <div class="lab">
+      <div>
+        <h4 class="mini">Classify a penguin</h4>
+        <div class="btns" id="pj-presets" style="margin-bottom:10px"></div>
+        <div class="two" style="gap:14px" id="pj-sliders"></div>
+        <div class="pax" style="margin-top:14px"><div class="pax-name" id="pj-pred"></div><div class="note" id="pj-path"></div></div>
+      </div>
+      <div class="panel">
+        <div class="grp"><h4>Feature importance</h4><div class="coefs" id="pj-imp"></div><p class="note">Total impurity removed by each feature's splits, weighted by how many penguins they split.</p></div>
+        <div class="grp"><h4>Test confusion</h4><div class="tbl-wrap"><table class="cm" id="pj-cm"></table></div></div>
+      </div>
+    </div>
+    <h3>The rules, in plain words</h3>
+    <ol class="rules" id="pj-rules"></ol>
+
+    <h3>The same project in scikit-learn</h3>
+<pre class="code"><code>import numpy as np
+from sklearn.datasets import fetch_openml
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier, export_text
+
+df = fetch_openml(data_id=42585, as_frame=True).frame          # Palmer penguins
+cols = ["culmen_length_mm", "culmen_depth_mm", "flipper_length_mm", "body_mass_g"]
+df = df.dropna(subset=cols)
+X, y = df[cols].astype(float).values, df.species.astype(str).values
+X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
+
+for depth in (1, 2, 3, None):
+    tree = DecisionTreeClassifier(max_depth=depth, random_state=0).fit(X_tr, y_tr)
+    print(f"depth={depth}: {tree.get_n_leaves():2d} leaves  train {tree.score(X_tr, y_tr):.4f}  test {tree.score(X_te, y_te):.4f}")
+
+tree = DecisionTreeClassifier(max_depth=3, random_state=0).fit(X_tr, y_tr)
+print(export_text(tree, feature_names=["bill_length", "bill_depth", "flipper", "mass"]))</code></pre>
+<pre class="code out"><code>depth=1:  2 leaves  train 0.7891  test 0.8023
+depth=2:  4 leaves  train 0.9570  test 0.9884
+depth=3:  7 leaves  train 0.9648  test 0.9884
+depth=None: 14 leaves  train 1.0000  test 0.9884
+|--- flipper &lt;= 206.50
+|   |--- bill_length &lt;= 43.35
+|   |   |--- bill_length &lt;= 42.30   → Adelie
+|   |   |--- bill_length &gt;  42.30   → Adelie
+|   |--- bill_length &gt;  43.35
+|   |   |--- mass &lt;= 4125.00        → Chinstrap
+|   |   |--- mass &gt;  4125.00        → Chinstrap
+|--- flipper &gt;  206.50
+|   |--- bill_depth &lt;= 17.55        → Gentoo
+|   |--- bill_depth &gt;  17.55
+|   |   |--- bill_depth &lt;= 18.95    → Adelie
+|   |   |--- bill_depth &gt;  18.95    → Chinstrap</code></pre>
+    <p class="note" style="max-width:70ch" id="pj-parity">The page grows these trees in JavaScript with a faithful port of scikit-learn's splitter &mdash; including its random feature order, which decides between exactly tied splits &mdash; so every tree, accuracy, feature importance and pruning result above matches scikit-learn exactly.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>A decision tree is a learned flowchart: each node asks &ldquo;is feature &le; threshold?&rdquo;, each leaf gives an answer.</li>
+      <li>It is grown greedily: at each node, choose the split that most reduces impurity (Gini or entropy for classes, variance for numbers).</li>
+      <li>It carves space into axis-aligned rectangles, needs no feature scaling, and handles mixed data.</li>
+      <li>Grown fully it memorises the training set; limit depth, require bigger leaves, or prune with cost-complexity &alpha;.</li>
+      <li>Single trees are readable but unstable; averaging many of them (forests, boosting) is the next chapter.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A group has 30 of class A and 10 of class B. What are its Gini impurity and entropy?</summary><p>p = (0.75, 0.25). Gini = 1 &minus; (0.75&sup2; + 0.25&sup2;) = 0.375. Entropy = &minus;(0.75 log&#8322; 0.75 + 0.25 log&#8322; 0.25) &asymp; 0.811 bits. Check it with the impurity slider.</p></details>
+      <details class="q"><summary>Why does a decision tree not need features to be standardised, unlike k-NN?</summary><p>A split only asks whether a value is above or below a threshold. Rescaling a feature moves the threshold with it but never changes which examples go left or right.</p></details>
+      <details class="q"><summary>Why is the tree-growing algorithm called greedy, and what can go wrong?</summary><p>It picks the best split at each node without looking ahead. On XOR-like data no single first split helps, so a greedy tree may choose a poor first question even though a perfect two-level tree exists.</p></details>
+      <details class="q"><summary>Your fully grown tree has 100% training accuracy and 71% test accuracy. Name three fixes.</summary><p>Limit max_depth, raise min_samples_leaf, or prune with ccp_alpha (chosen by cross-validation). Or switch to a random forest, which averages many deep trees.</p></details>
+      <details class="q"><summary>In the penguin tree, why is flipper length the first question?</summary><p>It gives the biggest impurity reduction: Gentoos have much longer flippers (over ~207 mm), so one question separates almost all of them from the other two species.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn" href="../k-nearest-neighbours/">&larr; Previous: k-Nearest Neighbours</a>
+      <a class="btn" href="../supervised-learning/#overfit">The overfitting lab (trees)</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Breiman, Friedman, Olshen &amp; Stone (1984). <em>Classification and Regression Trees</em> &mdash; the CART book.</li>
+      <li>Quinlan, J. R. (1986). Induction of decision trees. <em>Machine Learning</em> 1(1) &mdash; ID3, information gain and the tennis example.</li>
+      <li>Horst, Hill &amp; Gorman (2020). <a href="https://allisonhorst.github.io/palmerpenguins/" target="_blank" rel="noopener">palmerpenguins</a> &mdash; the dataset; data collected by Dr. Kristen Gorman, Palmer Station LTER.</li>
+      <li>scikit-learn. <a href="https://scikit-learn.org/stable/modules/tree.html" target="_blank" rel="noopener">Decision trees user guide</a>.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+
+const C0 = () => ({ c: [css('--cA'), css('--cB'), css('--cC')], q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), soft: css('--soft'), line: css('--line') });
+const pct = p => fmt(p * 100, 1) + '%';
+
+/* ---------- CART ---------- */
+function impurity(cnt, n, crit) {
+  if (!n) return 0; let s = crit === 'entropy' ? 0 : 1;
+  for (let c = 0; c < cnt.length; c++) { const p = cnt[c] / n; if (crit === 'entropy') { if (p > 0) s -= p * Math.log2(p); } else s -= p * p; }
+  return Math.max(0, s);
+}
+const argmax = a => a.reduce((b, v, i) => v > a[b] ? i : b, 0);
+/* order in which features are tried; on an exact tie the first one tried wins */
+let FEAT_ORDER = d => [...Array(d).keys()];
+function bestSplit(X, y, idx, K, crit, minLeaf, feats) {
+  const n = idx.length, tot = new Array(K).fill(0); idx.forEach(i => tot[y[i]]++); const imp = impurity(tot, n, crit);
+  let best = null;
+  (feats || FEAT_ORDER(X[0].length)).forEach(f => {
+    const s = idx.slice().sort((a, b) => X[a][f] - X[b][f] || a - b), L = new Array(K).fill(0), R = tot.slice();
+    for (let k = 0; k < n - 1; k++) {
+      const i = s[k]; L[y[i]]++; R[y[i]]--; const nl = k + 1, nr = n - nl;
+      if (nl < minLeaf) continue; if (nr < minLeaf) break;
+      const v = X[i][f], v2 = X[s[k + 1]][f]; if (v2 <= v + 1e-9) continue;
+      const child = (nl * impurity(L, nl, crit) + nr * impurity(R, nr, crit)) / n, gain = imp - child;
+      if (!best || gain > best.gain + 1e-12) best = { f, t: (v + v2) / 2, gain, child };
+    }
+  });
+  return best;
+}
+function grow(X, y, idx, o, depth) {
+  const cnt = new Array(o.K).fill(0); idx.forEach(i => cnt[y[i]]++);
+  const node = { n: idx.length, cnt, imp: impurity(cnt, idx.length, o.crit), depth, pred: argmax(cnt), idx };
+  if (depth >= o.maxDepth || idx.length < 2 * o.minLeaf || idx.length < 2 || node.imp <= 1e-12) return node;
+  const s = bestSplit(X, y, idx, o.K, o.crit, o.minLeaf); if (!s) return node;
+  node.f = s.f; node.t = s.t; node.gain = s.gain;
+  node.l = grow(X, y, idx.filter(i => X[i][s.f] <= s.t), o, depth + 1); node.r = grow(X, y, idx.filter(i => X[i][s.f] > s.t), o, depth + 1);
+  return node;
+}
+/* A faithful port of scikit-learn's BestSplitter + depth-first builder (random_state = 0):
+   features are drawn per node by Fisher–Yates with sklearn's xorshift RNG, so exact ties
+   between splits are broken the same way scikit-learn breaks them. */
+function growSK(X, y, idx0, o) {
+  const F = X[0].length, features = [...Array(F).keys()], constF = new Array(F).fill(0), EPS = 2.220446049250313e-16;
+  let seed = 209652396 >>> 0;
+  const rnd = () => { if (seed === 0) seed = 1; seed = (seed ^ (seed << 13)) >>> 0; seed = (seed ^ (seed >>> 17)) >>> 0; seed = (seed ^ (seed << 5)) >>> 0; return seed % 2147483648; };
+  const randInt = (lo, hi) => lo + rnd() % (hi - lo);
+  const imp = (cnt, n) => { if (!n) return 0; if (o.crit === 'entropy') { let e = 0; cnt.forEach(c => { if (c > 0) { const p = c / n; e -= p * (Math.log(p) / Math.LN2); } }); return e; } let sq = 0; cnt.forEach(c => { sq += c * c; }); return 1 - sq / (n * n); };
+  function nodeSplit(idx, nKnown) {
+    const n = idx.length, tot = new Array(o.K).fill(0); idx.forEach(i => tot[y[i]]++);
+    let fi = F, nVis = 0, nFound = 0, nDrawn = 0, nTot = nKnown, best = null, bestProxy = -Infinity;
+    while (fi > nTot && (nVis < F || nVis <= nFound + nDrawn)) {
+      nVis++;
+      let fj = randInt(nDrawn, fi - nFound);
+      if (fj < nKnown) { [features[nDrawn], features[fj]] = [features[fj], features[nDrawn]]; nDrawn++; continue; }
+      fj += nFound; const f = features[fj];
+      const s = idx.slice().sort((a, b) => X[a][f] - X[b][f]);
+      if (X[s[n - 1]][f] <= X[s[0]][f] + 1e-7) { [features[fj], features[nTot]] = [features[nTot], features[fj]]; nFound++; nTot++; continue; }
+      fi--; [features[fi], features[fj]] = [features[fj], features[fi]];
+      const L = new Array(o.K).fill(0), R = tot.slice();
+      for (let p = 1; p < n; p++) {
+        const i = s[p - 1]; L[y[i]]++; R[y[i]]--;
+        if (X[s[p]][f] <= X[s[p - 1]][f] + 1e-7) continue;
+        const nl = p, nr = n - p; if (nl < o.minLeaf || nr < o.minLeaf) continue;
+        const proxy = -nr * imp(R, nr) - nl * imp(L, nl);
+        if (proxy > bestProxy) { bestProxy = proxy; best = { f, t: X[s[p - 1]][f] / 2 + X[s[p]][f] / 2, child: -proxy / n }; }
+      }
+    }
+    for (let k = 0; k < nKnown; k++) features[k] = constF[k];
+    for (let k = 0; k < nFound; k++) constF[nKnown + k] = features[nKnown + k];
+    return { best, nConst: nTot };
+  }
+  function build(idx, depth, nKnown) {
+    const cnt = new Array(o.K).fill(0); idx.forEach(i => cnt[y[i]]++);
+    const n = idx.length, node = { n, cnt, imp: imp(cnt, n), depth, pred: argmax(cnt), idx };
+    if (depth >= o.maxDepth || n < 2 || n < 2 * o.minLeaf || node.imp <= EPS) return node;
+    const { best, nConst } = nodeSplit(idx, nKnown); if (!best) return node;
+    node.f = best.f; node.t = best.t; node.gain = node.imp - best.child;
+    node.l = build(idx.filter(i => X[i][best.f] <= best.t), depth + 1, nConst);
+    node.r = build(idx.filter(i => X[i][best.f] > best.t), depth + 1, nConst);
+    return node;
+  }
+  return build(idx0, 0, 0);
+}
+const isLeaf = n => !n.l;
+const predict = (node, x) => { while (!isLeaf(node)) node = x[node.f] <= node.t ? node.l : node.r; return node; };
+const leaves = n => isLeaf(n) ? [n] : [...leaves(n.l), ...leaves(n.r)];
+const depthOf = n => isLeaf(n) ? 0 : 1 + Math.max(depthOf(n.l), depthOf(n.r));
+const internals = n => isLeaf(n) ? [] : [n, ...internals(n.l), ...internals(n.r)];
+/* minimal cost-complexity pruning (weakest link), as in scikit-learn */
+function prune(root, alpha, N) {
+  if (alpha <= 0) return root;
+  const R = n => n.n / N * n.imp;
+  for (;;) {
+    let best = null, bg = Infinity;
+    internals(root).forEach(t => { const L = leaves(t), g = (R(t) - L.reduce((a, l) => a + R(l), 0)) / (L.length - 1); if (g < bg - 1e-15) { bg = g; best = t; } });
+    if (!best || bg > alpha) break; delete best.l; delete best.r; delete best.f; delete best.t;
+  }
+  return root;
+}
+const clone = n => isLeaf(n) ? { ...n } : { ...n, l: clone(n.l), r: clone(n.r) };
+function importances(root, nf, N) { const imp = new Array(nf).fill(0); internals(root).forEach(t => { imp[t.f] += t.n / N * t.imp - t.l.n / N * t.l.imp - t.r.n / N * t.r.imp; }); const s = imp.reduce((a, b) => a + b, 0); return imp.map(v => s > 0 ? v / s : 0); }
+
+/* ---------- tree diagram ---------- */
+function drawTree(cv, root, o) {
+  const L = leaves(root), D = depthOf(root), box = cv.parentElement, minW = L.length * (o.leafW || 92);
+  const W = Math.max(box.clientWidth || 600, minW), H = (D + 1) * (o.rowH || 74) + 16;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const d = window.devicePixelRatio || 1; cv.width = Math.round(W * d); cv.height = Math.round(H * d); const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, W, H);
+  let li = 0; const pos = new Map();
+  (function lay(n) { if (isLeaf(n)) { pos.set(n, [(li + .5) * W / L.length, 10 + n.depth * (o.rowH || 74)]); li++; return; } lay(n.l); lay(n.r); pos.set(n, [(pos.get(n.l)[0] + pos.get(n.r)[0]) / 2, 10 + n.depth * (o.rowH || 74)]); })(root);
+  const C = C0(), path = o.path || new Set(), bw = Math.min(160, Math.max(64, W / L.length - 6)), bh = 46;
+  (function edges(n) { if (isLeaf(n)) return; [n.l, n.r].forEach((ch, k) => { const [x0, y0] = pos.get(n), [x1, y1] = pos.get(ch), on = path.has(n) && path.has(ch);
+    c.strokeStyle = on ? C.q : C.line; c.lineWidth = on ? 3 : 1.4; c.beginPath(); c.moveTo(x0, y0 + bh); c.lineTo(x1, y1); c.stroke();
+    c.fillStyle = C.muted; c.font = '10px ' + css('--f-mono'); c.textAlign = 'center'; c.fillText(k ? 'no' : 'yes', (x0 + x1) / 2 + (k ? 10 : -10), (y0 + bh + y1) / 2); edges(ch); }); })(root);
+  pos.forEach(([x, y], n) => {
+    const leaf = isLeaf(n), on = path.has(n), x0 = x - bw / 2;
+    c.save(); c.beginPath(); if (c.roundRect) c.roundRect(x0, y, bw, bh, 7); else c.rect(x0, y, bw, bh);
+    c.fillStyle = C.surf; c.fill(); if (leaf) { c.fillStyle = o.cols[n.pred]; c.globalAlpha = .18; c.fill(); c.globalAlpha = 1; }
+    c.strokeStyle = on ? C.q : leaf ? o.cols[n.pred] : C.line; c.lineWidth = on ? 2.6 : 1.3; c.stroke(); c.restore();
+    c.fillStyle = C.q; c.textAlign = 'center';
+    let txt = leaf ? o.names[n.pred] : `${o.feat[n.f]} ≤ ${o.fmtT ? o.fmtT(n.f, n.t) : fmt(n.t, 2)}`, fs = 12;
+    const setF = () => { c.font = (leaf ? '600 ' : '') + fs + 'px ' + css(leaf ? '--f-body' : '--f-mono'); };
+    setF(); while (c.measureText(txt).width > bw - 8 && fs > 8.5) { fs -= 0.5; setF(); }
+    if (c.measureText(txt).width > bw - 8 && !leaf) { txt = txt.replace('bill length', 'bill len').replace('bill depth', 'bill dep').replace('body mass', 'mass'); }
+    c.fillText(txt, x, y + 17);
+    // class mix bar
+    const bx = x0 + 8, bwid = bw - 16; let acc = 0; n.cnt.forEach((k, ci) => { if (!k) return; c.fillStyle = o.cols[ci]; c.fillRect(bx + acc / n.n * bwid, y + 26, k / n.n * bwid, 6); acc += k; });
+    c.fillStyle = C.muted; c.font = '10px ' + css('--f-mono'); c.fillText(`n=${n.n}`, x, y + 42);
+  });
+}
+function pathTo(root, x) { const s = new Set(); let n = root; s.add(n); while (!isLeaf(n)) { n = x[n.f] <= n.t ? n.l : n.r; s.add(n); } return s; }
+
+/* ---------- 2-D helpers ---------- */
+function gen2(spec, seed) { const r = mulberry32(seed), P = []; spec.forEach(([mx, my, s, n, c]) => { for (let i = 0; i < n; i++) P.push([mx + s * gaussOf(r), my + s * gaussOf(r), c]); }); return P; }
+const X2 = P => P.map(p => [p[0], p[1]]), Y2 = P => P.map(p => p[2]);
+function paintTree(v, root, cols, alpha) { const c = v.ctx, cell = 6; c.save(); for (let py = v.pad.t; py < v.pad.t + v.ph; py += cell) for (let px = v.pad.l; px < v.pad.l + v.pw; px += cell) { c.globalAlpha = alpha || .2; c.fillStyle = cols[predict(root, [v.iX(px + cell / 2), v.iY(py + cell / 2)]).pred]; c.fillRect(px, py, cell + .5, cell + .5); } c.restore(); }
+function splitLines(v, node, b, col) { if (isLeaf(node)) return; const [x0, x1, y0, y1] = b; if (node.f === 0) { seg(v, node.t, y0, node.t, y1, col, 1.6); splitLines(v, node.l, [x0, node.t, y0, y1], col); splitLines(v, node.r, [node.t, x1, y0, y1], col); } else { seg(v, x0, node.t, x1, node.t, col, 1.6); splitLines(v, node.l, [x0, x1, y0, node.t], col); splitLines(v, node.r, [x0, x1, node.t, y1], col); } }
+const acc = (root, X, y) => X.filter((x, i) => predict(root, x).pred === y[i]).length / X.length;
+
+/* ---------- one split ---------- */
+const SP = { P: gen2([[-0.8, -0.3, .85, 40, 0], [1.0, 0.6, .85, 40, 1]], 3), f: 0, t: 0.6, v: null };
+function spScore(f, t) { const L = [0, 0], R = [0, 0]; SP.P.forEach(p => { (p[f] <= t ? L : R)[p[2]]++; }); const nl = L[0] + L[1], nr = R[0] + R[1], n = nl + nr, gl = impurity(L, nl), gr = impurity(R, nr); return { L, R, nl, nr, gl, gr, w: (nl * gl + nr * gr) / n, g0: impurity([40, 40], 80) }; }
+function drawSP() {
+  const C = C0(), cols = [C.c[1], C.c[0]], v = SP.v = frame($('#sp-cv'), [-3, 3], [-3, 3], null, true); axes(v, 'x₁', 'x₂', { sx: 1, sy: 1 }); clip(v);
+  const c = v.ctx; c.save(); c.globalAlpha = .07; c.fillStyle = C.q; if (SP.f === 0) c.fillRect(v.pad.l, v.pad.t, v.X(SP.t) - v.pad.l, v.ph); else c.fillRect(v.pad.l, v.Y(SP.t), v.pw, v.pad.t + v.ph - v.Y(SP.t)); c.restore();
+  if (SP.f === 0) seg(v, SP.t, -9, SP.t, 9, C.q, 2.6); else seg(v, -9, SP.t, 9, SP.t, C.q, 2.6);
+  SP.P.forEach(p => dot(v, p[0], p[1], cols[p[2]], 4.5)); c.restore();
+  const s = spScore(SP.f, SP.t);
+  { const v2 = frame($('#sp-curve'), [-3, 3], [0, 0.55], { b: 26 }); axes(v2, SP.f ? 'threshold on x₂' : 'threshold on x₁', 'weighted Gini', { ny: 3 }); clip(v2);
+    const c2 = v2.ctx; c2.strokeStyle = C.lda; c2.lineWidth = 2.4; c2.beginPath(); for (let i = 0; i <= 300; i++) { const t = -3 + 6 * i / 300, w = spScore(SP.f, t).w; i ? c2.lineTo(v2.X(t), v2.Y(w)) : c2.moveTo(v2.X(t), v2.Y(w)); } c2.stroke();
+    seg(v2, -3, s.g0, 3, s.g0, C.muted, 1, [3, 3]); seg(v2, SP.t, 0, SP.t, 0.55, C.q, 1.2, [4, 4]); dot(v2, SP.t, s.w, C.q, 5); c2.restore(); }
+  $('#sp-t-o').textContent = fmt(SP.t, 2);
+  const cellS = (lab, cnt, n, g) => `<div class="stat"><div class="v">${tip(fmt(g, 3), `Gini = 1 − (${cnt[0]}/${n})² − (${cnt[1]}/${n})²`)}</div><div class="k">${lab}: ${cnt[1]} <span style="color:var(--cA)">●</span> · ${cnt[0]} <span style="color:var(--cB)">●</span></div></div>`;
+  $('#sp-stats').innerHTML = cellS(SP.f ? 'below' : 'left', s.L, s.nl, s.gl) + cellS(SP.f ? 'above' : 'right', s.R, s.nr, s.gr)
+    + `<div class="stat"><div class="v">${tip(fmt(s.w, 3), `(${s.nl} × ${fmt(s.gl, 3)} + ${s.nr} × ${fmt(s.gr, 3)}) ÷ 80`)}</div><div class="k">weighted Gini</div></div><div class="stat"><div class="v">${tip(fmt(s.g0 - s.w, 3), `parent ${fmt(s.g0, 3)} − children ${fmt(s.w, 3)}`)}</div><div class="k">impurity removed</div></div>`;
+  $('#sp-say').innerHTML = `Before splitting the 80 points are 50/50 (Gini ${fmt(s.g0, 2)}). This question leaves a weighted Gini of ${fmt(s.w, 3)}. ${s.g0 - s.w > 0.17 ? 'A strong question.' : s.g0 - s.w < 0.03 ? 'Nearly useless: both sides are still mixed.' : ''}`;
+}
+$('#sp-t').addEventListener('input', e => { SP.t = +e.target.value; drawSP(); });
+seg1('[data-spf]', 'data-spf', k => { SP.f = +k; drawSP(); });
+$('#sp-best').addEventListener('click', () => { const b = bestSplit(X2(SP.P), Y2(SP.P), SP.P.map((_, i) => i), 2, 'gini', 1); SP.f = b.f; SP.t = +b.t.toFixed(2); $('#sp-t').value = SP.t; $$('[data-spf]').forEach(x => x.setAttribute('aria-pressed', +x.dataset.spf === SP.f ? 'true' : 'false')); drawSP(); $('#sp-say').innerHTML += ` <b>The computer tried all ${2 * 79} thresholds</b> and picked x${SP.f ? '₂' : '₁'} ≤ ${fmt(b.t, 2)} (midway between two neighbouring points).`; });
+dragPoint: { const cv = $('#sp-cv'); let dn = false; const set = e => { const v = SP.v; if (!v) return; const [px, py] = evPos(cv, e); SP.t = +clamp(SP.f ? v.iY(py) : v.iX(px), -3, 3).toFixed(2); $('#sp-t').value = SP.t; drawSP(); };
+  cv.addEventListener('pointerdown', e => { dn = true; cv.setPointerCapture(e.pointerId); set(e); e.preventDefault(); }); cv.addEventListener('pointermove', e => { if (dn) set(e); }); cv.addEventListener('pointerup', () => { dn = false; }); cv.addEventListener('pointercancel', () => { dn = false; }); cv.style.cursor = 'col-resize'; }
+fig($('#sp-cv'), drawSP); fig($('#sp-curve'), drawSP);
+
+/* ---------- impurity ---------- */
+function drawIM() {
+  const C = C0(), p = +$('#im-p').value, v = frame($('#im-cv'), [0, 1], [0, 1.05]); axes(v, 'share of class 1', 'impurity', { sx: 0.25, sy: 0.25 }); clip(v);
+  curve(v, q => q <= 0 || q >= 1 ? 0 : -(q * Math.log2(q) + (1 - q) * Math.log2(1 - q)), C.lda, 2.8);
+  curve(v, q => 1 - q * q - (1 - q) * (1 - q), C.c[2], 2.8); curve(v, q => Math.min(q, 1 - q), C.muted, 2, [7, 5]);
+  seg(v, p, 0, p, 1.05, C.q, 1.2, [4, 4]); v.ctx.restore();
+  const H = p <= 0 || p >= 1 ? 0 : -(p * Math.log2(p) + (1 - p) * Math.log2(1 - p)), G = 1 - p * p - (1 - p) ** 2, E = Math.min(p, 1 - p);
+  $('#im-p-o').textContent = fmt(p, 2);
+  $('#im-stats').innerHTML = [['entropy (bits)', H], ['Gini', G], ['misclassification', E]].map(([k, x]) => `<div class="stat"><div class="v">${fmt(x, 3)}</div><div class="k">${k}</div></div>`).join('');
+  $('#run-im').innerHTML = `<b>Running example</b>: p = (${fmt(1 - p, 2)}, ${fmt(p, 2)}). Gini = 1 − ${fmt(1 - p, 2)}² − ${fmt(p, 2)}² = ${tip(fmt(G, 3), `1 − ${fmt((1 - p) ** 2, 4)} − ${fmt(p * p, 4)}`)}; entropy = −(${fmt(1 - p, 2)} log₂ ${fmt(1 - p, 2)} + ${fmt(p, 2)} log₂ ${fmt(p, 2)}) = ${tip(fmt(H, 3), 'bits of uncertainty left')}.`;
+}
+$('#im-p').addEventListener('input', drawIM); fig($('#im-cv'), drawIM);
+{
+  const rows = [['Split A', [30, 10], [10, 30]], ['Split B', [20, 40], [20, 0]]], w = (L, R, f) => ((L[0] + L[1]) * f(L) + (R[0] + R[1]) * f(R)) / 80;
+  const g = a => impurity(a, a[0] + a[1], 'gini'), h = a => impurity(a, a[0] + a[1], 'entropy'), e = a => Math.min(...a) / (a[0] + a[1]);
+  $('#im-tbl').innerHTML = '<thead><tr><th></th><th>left group</th><th>right group</th><th>mistakes</th><th>error rate</th><th>weighted Gini</th><th>weighted entropy</th></tr></thead><tbody>' + rows.map(([n, L, R]) => `<tr><td><b>${n}</b></td><td class="num">${L[0]} / ${L[1]}</td><td class="num">${R[0]} / ${R[1]}</td><td class="num">${Math.min(...L) + Math.min(...R)}</td><td class="num">${fmt(w(L, R, e), 3)}</td><td class="num">${tip(fmt(w(L, R, g), 3), `(${L[0] + L[1]} × ${fmt(g(L), 3)} + ${R[0] + R[1]} × ${fmt(g(R), 3)}) ÷ 80`)}</td><td class="num">${tip(fmt(w(L, R, h), 3), `(${L[0] + L[1]} × ${fmt(h(L), 3)} + ${R[0] + R[1]} × ${fmt(h(R), 3)}) ÷ 80`)}</td></tr>`).join('') + '</tbody>';
+}
+
+/* ---------- information gain by hand: Quinlan's tennis ---------- */
+const TN = { feats: ['Outlook', 'Temperature', 'Humidity', 'Wind'], rows: [
+  ['Sunny', 'Hot', 'High', 'Weak', 0], ['Sunny', 'Hot', 'High', 'Strong', 0], ['Overcast', 'Hot', 'High', 'Weak', 1], ['Rain', 'Mild', 'High', 'Weak', 1], ['Rain', 'Cool', 'Normal', 'Weak', 1], ['Rain', 'Cool', 'Normal', 'Strong', 0], ['Overcast', 'Cool', 'Normal', 'Strong', 1],
+  ['Sunny', 'Mild', 'High', 'Weak', 0], ['Sunny', 'Cool', 'Normal', 'Weak', 1], ['Rain', 'Mild', 'Normal', 'Weak', 1], ['Sunny', 'Mild', 'Normal', 'Strong', 1], ['Overcast', 'Mild', 'High', 'Strong', 1], ['Overcast', 'Hot', 'Normal', 'Weak', 1], ['Rain', 'Mild', 'High', 'Strong', 0]] };
+const H2 = (y, n) => impurity([n - y, y], n, 'entropy');
+function drawGN() {
+  const R = TN.rows, n = R.length, yes = R.filter(r => r[4]).length, H0 = H2(yes, n);
+  $('#gn-data').innerHTML = '<thead><tr><th>day</th>' + TN.feats.map(f => `<th>${f}</th>`).join('') + '<th>Play?</th></tr></thead><tbody>' + R.map((r, i) => `<tr><td class="num">${i + 1}</td>${r.slice(0, 4).map(v => `<td>${v}</td>`).join('')}<td><button type="button" class="yn ${r[4] ? 'yes' : 'no'}" data-tn="${i}">${r[4] ? 'Yes' : 'No'}</button></td></tr>`).join('') + '</tbody>';
+  const G = TN.feats.map((f, j) => { const vals = [...new Set(R.map(r => r[j]))], parts = vals.map(v => { const S = R.filter(r => r[j] === v), y = S.filter(r => r[4]).length; return { v, n: S.length, y, H: H2(y, S.length) }; }); const rem = parts.reduce((a, p) => a + p.n / n * p.H, 0); return { f, parts, rem, gain: H0 - rem }; });
+  const mx = Math.max(...G.map(g => g.gain), 1e-9), best = G.reduce((a, g) => g.gain > a.gain + 1e-12 ? g : a);
+  $('#gn-bars').innerHTML = G.map(g => `<div class="cf"><span>${g.f}</span><span class="cf-track one"><i style="left:0;width:${g.gain / mx * 100}%;background:${g === best ? 'var(--lda)' : 'var(--muted)'}"></i></span><span class="num">${tip(fmt(g.gain, 3), `${fmt(H0, 3)} − (${g.parts.map(p => `${p.n}/14 × ${fmt(p.H, 3)}`).join(' + ')})`)}</span></div>`).join('');
+  $('#gn-detail').innerHTML = `<thead><tr><th>${best.f}</th><th>days</th><th>yes</th><th>no</th><th>entropy</th></tr></thead><tbody>` + best.parts.map(p => `<tr><td>${p.v}</td><td class="num">${p.n}</td><td class="num">${p.y}</td><td class="num">${p.n - p.y}</td><td class="num">${tip(fmt(p.H, 3), p.y === 0 || p.y === p.n ? 'pure: 0 bits' : `−(${p.y}/${p.n} log₂ ${p.y}/${p.n} + ${p.n - p.y}/${p.n} log₂ ${p.n - p.y}/${p.n})`)}</td></tr>`).join('') + '</tbody>';
+  $('#run-gain').innerHTML = `<b>Running example</b>: ${yes} yes and ${n - yes} no &rarr; H(S) = −(${yes}/14 log₂ ${yes}/14 + ${n - yes}/14 log₂ ${n - yes}/14) = ${tip(fmt(H0, 3), 'bits of uncertainty before any question')}. Gain(${best.f}) = ${fmt(H0, 3)} − (${best.parts.map(p => `${p.n}/14 × ${fmt(p.H, 3)}`).join(' + ')}) = <b>${fmt(best.gain, 3)}</b> &mdash; the biggest, so the tree asks about <b>${best.f}</b> first.`;
+}
+$('#gn-data').addEventListener('click', e => { const b = e.target.closest('[data-tn]'); if (!b) return; const r = TN.rows[+b.dataset.tn]; r[4] = 1 - r[4]; drawGN(); });
+
+/* ---------- growing, split by split ---------- */
+const GR = (() => { const r = mulberry32(21), P = []; for (let i = 0; i < 130; i++) { const x = -3 + 6 * r(), y = -2.5 + 5 * r(); let c = (x > 0.4 && y > -0.6) || (x < -1.1 && y < 0.2) ? 1 : 0; if (r() < 0.06) c = 1 - c; P.push([x, y, c]); } return { P, root: null, log: [] }; })();
+function grReset() { const X = X2(GR.P), y = Y2(GR.P), idx = GR.P.map((_, i) => i), cnt = [0, 0]; idx.forEach(i => cnt[y[i]]++); GR.root = { n: idx.length, cnt, imp: impurity(cnt, idx.length), depth: 0, pred: argmax(cnt), idx }; GR.log = []; drawGR(); }
+function grStep() {
+  const X = X2(GR.P), y = Y2(GR.P), N = GR.P.length; let best = null;
+  leaves(GR.root).forEach(l => { if (l.imp <= 1e-12 || l.n < 2) return; const s = bestSplit(X, y, l.idx, 2, 'gini', 1); if (s && (!best || s.gain * l.n > best.s.gain * best.l.n + 1e-12)) best = { l, s }; });
+  if (!best) return false;
+  const { l, s } = best, mk = idx => { const cnt = [0, 0]; idx.forEach(i => cnt[y[i]]++); return { n: idx.length, cnt, imp: impurity(cnt, idx.length), depth: l.depth + 1, pred: argmax(cnt), idx }; };
+  l.f = s.f; l.t = s.t; l.gain = s.gain; l.l = mk(l.idx.filter(i => X[i][s.f] <= s.t)); l.r = mk(l.idx.filter(i => X[i][s.f] > s.t));
+  GR.log.push(`Split ${GR.log.length + 1}: x${s.f ? '₂' : '₁'} ≤ ${fmt(s.t, 2)} on a group of ${l.n} (Gini ${fmt(l.imp, 2)} → ${fmt(s.child, 2)})`); return true;
+}
+function drawGR() {
+  const C = C0(), cols = [C.c[1], C.c[0]], v = frame($('#gr-cv'), [-3, 3], [-2.5, 2.5], null, true); axes(v, 'x₁', 'x₂', { sx: 1, sy: 1 }); clip(v);
+  paintTree(v, GR.root, cols, .22); splitLines(v, GR.root, [-9, 9, -9, 9], C.q); GR.P.forEach(p => dot(v, p[0], p[1], cols[p[2]], 4)); v.ctx.restore();
+  drawTree($('#gr-tree'), GR.root, { cols, names: ['class 0', 'class 1'], feat: ['x₁', 'x₂'], leafW: 74, rowH: 66 });
+  const L = leaves(GR.root); $('#gr-n').textContent = L.length; $('#gr-acc').textContent = pct(acc(GR.root, X2(GR.P), Y2(GR.P)));
+  $('#gr-say').innerHTML = GR.log.length ? GR.log.slice(-3).map(s => escA(s)).join('<br>') + (L.every(l => l.imp <= 1e-12) ? '<br><b>Every leaf is pure</b>: 100% training accuracy &mdash; including leaves built around single noisy points. That is overfitting; see the next section.' : '') : 'One leaf: the whole dataset, predicting its majority class. Press <b>Grow one split</b>.';
+}
+$('#gr-step').addEventListener('click', () => { grStep(); drawGR(); });
+$('#gr-all').addEventListener('click', () => { let k = 0; while (grStep() && k < 200) k++; drawGR(); });
+$('#gr-reset').addEventListener('click', grReset);
+fig($('#gr-cv'), drawGR);
+
+/* ---------- pruning ---------- */
+const PR = (() => { const g = (n, s) => { const r = mulberry32(s), P = []; for (let i = 0; i < n; i++) { const x = -3 + 6 * r(), y = -2.5 + 5 * r(); let c = Math.sin(x * 1.3) * 1.2 > y ? 1 : 0; if (r() < 0.14) c = 1 - c; P.push([x, y, c]); } return P; }; return { tr: g(240, 31), te: g(600, 32), d: 16, l: 1, aI: 0 }; })();
+const prAlpha = () => PR.aI * 0.0025;
+function prFit(d) { const X = X2(PR.tr), y = Y2(PR.tr); return prune(grow(X, y, PR.tr.map((_, i) => i), { K: 2, crit: 'gini', maxDepth: d, minLeaf: PR.l }, 0), prAlpha(), PR.tr.length); }
+function drawPR() {
+  const C = C0(), cols = [C.c[1], C.c[0]], T = prFit(PR.d), v = frame($('#pr-cv'), [-3, 3], [-2.5, 2.5], null, true); axes(v, 'x₁', 'x₂', { sx: 1, sy: 1 }); clip(v);
+  paintTree(v, T, cols, .24); curve(v, x => Math.sin(x * 1.3) * 1.2, C.q, 1.4, [6, 5]); PR.tr.forEach(p => dot(v, p[0], p[1], cols[p[2]], 3.6)); v.ctx.restore();
+  const curves = []; for (let d = 1; d <= 16; d++) { const t = prFit(d); curves.push([acc(t, X2(PR.tr), Y2(PR.tr)), acc(t, X2(PR.te), Y2(PR.te))]); }
+  { const v2 = frame($('#pr-chart'), [0.5, 16.5], [0.6, 1.01], { b: 26 }); axes(v2, 'maximum depth', 'accuracy', { sx: 1, ny: 3, fy: y => fmt(y * 100, 0) + '%' }); clip(v2);
+    const c = v2.ctx; [[0, C.c[0]], [1, C.bad]].forEach(([k, col]) => { c.strokeStyle = col; c.lineWidth = 2.2; c.beginPath(); curves.forEach((q, i) => { i ? c.lineTo(v2.X(i + 1), v2.Y(q[k])) : c.moveTo(v2.X(i + 1), v2.Y(q[k])); }); c.stroke(); });
+    seg(v2, PR.d, 0.6, PR.d, 1.01, C.q, 1.2, [4, 4]); c.restore(); }
+  const a = acc(T, X2(PR.tr), Y2(PR.tr)), b = acc(T, X2(PR.te), Y2(PR.te)), nl = leaves(T).length, bestTe = Math.max(...curves.map(q => q[1]));
+  $('#pr-d-o').textContent = PR.d >= 16 ? '16 (no limit)' : PR.d; $('#pr-l-o').textContent = PR.l; $('#pr-a-o').textContent = fmt(prAlpha(), 4);
+  $('#pr-tr').textContent = pct(a); $('#pr-te').innerHTML = tip(pct(b), 'on 600 fresh points; 14% of labels are noise,\nso about 86% is the best possible'); $('#pr-n').textContent = nl;
+  $('#pr-say').innerHTML = a > 0.97 && b < bestTe - 0.03 ? `<b>Memorising.</b> ${nl} leaves, ${pct(a)} on training data but ${pct(b)} on new data: many leaves exist only to fit noisy points. Lower the depth, raise the leaf minimum, or raise &alpha;.`
+    : nl <= 3 ? `<b>Too simple.</b> ${nl} leaves can't follow the wave: ${pct(b)} on new data.` : `${nl} leaves: ${pct(a)} training, ${pct(b)} test. ${b >= bestTe - 0.01 ? '<b>Near the best possible</b> for this noisy data.' : ''}`;
+}
+$('#pr-d').addEventListener('input', e => { PR.d = +e.target.value; drawPR(); });
+$('#pr-l').addEventListener('input', e => { PR.l = +e.target.value; drawPR(); });
+$('#pr-a').addEventListener('input', e => { PR.aI = +e.target.value; drawPR(); });
+fig($('#pr-cv'), drawPR);
+
+/* ---------- regression tree ---------- */
+const RT = (() => { const f = x => Math.sin(x) + 0.3 * x, r = mulberry32(44), tr = [], te = []; for (let i = 0; i < 60; i++) { const x = 10 * r(); tr.push([x, f(x) + .35 * gaussOf(r)]); } for (let i = 0; i < 300; i++) { const x = 10 * r(); te.push([x, f(x) + .35 * gaussOf(r)]); } return { f, tr, te, d: 3 }; })();
+function rtGrow(idx, depth) {
+  const ys = idx.map(i => RT.tr[i][1]), n = idx.length, m = ys.reduce((a, b) => a + b, 0) / n, node = { n, m, depth };
+  if (depth >= RT.d || n < 2) return node;
+  const s = idx.slice().sort((a, b) => RT.tr[a][0] - RT.tr[b][0]); let sl = 0, sl2 = 0; const st = ys.reduce((a, b) => a + b, 0), st2 = ys.reduce((a, b) => a + b * b, 0); let best = null;
+  for (let k = 0; k < n - 1; k++) { const yv = RT.tr[s[k]][1]; sl += yv; sl2 += yv * yv; const nl = k + 1, nr = n - nl, x0 = RT.tr[s[k]][0], x1 = RT.tr[s[k + 1]][0]; if (x1 <= x0) continue;
+    const sse = (sl2 - sl * sl / nl) + ((st2 - sl2) - (st - sl) ** 2 / nr); if (!best || sse < best.sse - 1e-12) best = { sse, t: (x0 + x1) / 2 }; }
+  if (!best) return node; node.t = best.t; node.l = rtGrow(idx.filter(i => RT.tr[i][0] <= best.t), depth + 1); node.r = rtGrow(idx.filter(i => RT.tr[i][0] > best.t), depth + 1); return node;
+}
+const rtPred = (n, x) => { while (n.l) n = x <= n.t ? n.l : n.r; return n.m; };
+function drawRT() {
+  const C = C0(), T = rtGrow(RT.tr.map((_, i) => i), 0), v = frame($('#rt-cv'), [0, 10], [-1.8, 4.6]); axes(v, 'x', 'y'); clip(v);
+  curve(v, RT.f, C.muted, 1.4, [6, 5]);
+  const c = v.ctx; c.strokeStyle = C.lda; c.lineWidth = 2.8; c.beginPath(); let prev = null; for (let i = 0; i <= 1000; i++) { const x = i / 100, y = rtPred(T, x); if (prev == null) c.moveTo(v.X(x), v.Y(y)); else { if (y !== prev) c.lineTo(v.X(x), v.Y(prev)); c.lineTo(v.X(x), v.Y(y)); } prev = y; } c.stroke();
+  RT.tr.forEach(p => dot(v, p[0], p[1], C.c[0], 4)); c.restore();
+  const rm = P => Math.sqrt(P.reduce((a, p) => a + (p[1] - rtPred(T, p[0])) ** 2, 0) / P.length);
+  $('#rt-d-o').textContent = RT.d; $('#rt-tr').textContent = fmt(rm(RT.tr), 3); $('#rt-te').innerHTML = tip(fmt(rm(RT.te), 3), 'on 300 fresh points\n(noise alone gives about 0.35)');
+  $('#rt-say').innerHTML = RT.d <= 2 ? `Depth ${RT.d}: only ${2 ** RT.d} steps, too coarse for the wave.` : RT.d >= 6 ? `Depth ${RT.d}: up to ${2 ** RT.d} steps for 60 points; the staircase starts tracing individual noisy points.` : `Depth ${RT.d}: ${2 ** RT.d} steps follow the wave's shape.`;
+}
+$('#rt-d').addEventListener('input', e => { RT.d = +e.target.value; drawRT(); });
+fig($('#rt-cv'), drawRT);
+
+/* ---------- penguins ---------- */
+const PG = {"X":[[39.1,18.7,181.0,3750.0],[39.5,17.4,186.0,3800.0],[40.3,18.0,195.0,3250.0],[36.7,19.3,193.0,3450.0],[39.3,20.6,190.0,3650.0],[38.9,17.8,181.0,3625.0],[39.2,19.6,195.0,4675.0],[34.1,18.1,193.0,3475.0],[42.0,20.2,190.0,4250.0],[37.8,17.1,186.0,3300.0],[37.8,17.3,180.0,3700.0],[41.1,17.6,182.0,3200.0],[38.6,21.2,191.0,3800.0],[34.6,21.1,198.0,4400.0],[36.6,17.8,185.0,3700.0],[38.7,19.0,195.0,3450.0],[42.5,20.7,197.0,4500.0],[34.4,18.4,184.0,3325.0],[46.0,21.5,194.0,4200.0],[37.8,18.3,174.0,3400.0],[37.7,18.7,180.0,3600.0],[35.9,19.2,189.0,3800.0],[38.2,18.1,185.0,3950.0],[38.8,17.2,180.0,3800.0],[35.3,18.9,187.0,3800.0],[40.6,18.6,183.0,3550.0],[40.5,17.9,187.0,3200.0],[37.9,18.6,172.0,3150.0],[40.5,18.9,180.0,3950.0],[39.5,16.7,178.0,3250.0],[37.2,18.1,178.0,3900.0],[39.5,17.8,188.0,3300.0],[40.9,18.9,184.0,3900.0],[36.4,17.0,195.0,3325.0],[39.2,21.1,196.0,4150.0],[38.8,20.0,190.0,3950.0],[42.2,18.5,180.0,3550.0],[37.6,19.3,181.0,3300.0],[39.8,19.1,184.0,4650.0],[36.5,18.0,182.0,3150.0],[40.8,18.4,195.0,3900.0],[36.0,18.5,186.0,3100.0],[44.1,19.7,196.0,4400.0],[37.0,16.9,185.0,3000.0],[39.6,18.8,190.0,4600.0],[41.1,19.0,182.0,3425.0],[37.5,18.9,179.0,2975.0],[36.0,17.9,190.0,3450.0],[42.3,21.2,191.0,4150.0],[39.6,17.7,186.0,3500.0],[40.1,18.9,188.0,4300.0],[35.0,17.9,190.0,3450.0],[42.0,19.5,200.0,4050.0],[34.5,18.1,187.0,2900.0],[41.4,18.6,191.0,3700.0],[39.0,17.5,186.0,3550.0],[40.6,18.8,193.0,3800.0],[36.5,16.6,181.0,2850.0],[37.6,19.1,194.0,3750.0],[35.7,16.9,185.0,3150.0],[41.3,21.1,195.0,4400.0],[37.6,17.0,185.0,3600.0],[41.1,18.2,192.0,4050.0],[36.4,17.1,184.0,2850.0],[41.6,18.0,192.0,3950.0],[35.5,16.2,195.0,3350.0],[41.1,19.1,188.0,4100.0],[35.9,16.6,190.0,3050.0],[41.8,19.4,198.0,4450.0],[33.5,19.0,190.0,3600.0],[39.7,18.4,190.0,3900.0],[39.6,17.2,196.0,3550.0],[45.8,18.9,197.0,4150.0],[35.5,17.5,190.0,3700.0],[42.8,18.5,195.0,4250.0],[40.9,16.8,191.0,3700.0],[37.2,19.4,184.0,3900.0],[36.2,16.1,187.0,3550.0],[42.1,19.1,195.0,4000.0],[34.6,17.2,189.0,3200.0],[42.9,17.6,196.0,4700.0],[36.7,18.8,187.0,3800.0],[35.1,19.4,193.0,4200.0],[37.3,17.8,191.0,3350.0],[41.3,20.3,194.0,3550.0],[36.3,19.5,190.0,3800.0],[36.9,18.6,189.0,3500.0],[38.3,19.2,189.0,3950.0],[38.9,18.8,190.0,3600.0],[35.7,18.0,202.0,3550.0],[41.1,18.1,205.0,4300.0],[34.0,17.1,185.0,3400.0],[39.6,18.1,186.0,4450.0],[36.2,17.3,187.0,3300.0],[40.8,18.9,208.0,4300.0],[38.1,18.6,190.0,3700.0],[40.3,18.5,196.0,4350.0],[33.1,16.1,178.0,2900.0],[43.2,18.5,192.0,4100.0],[35.0,17.9,192.0,3725.0],[41.0,20.0,203.0,4725.0],[37.7,16.0,183.0,3075.0],[37.8,20.0,190.0,4250.0],[37.9,18.6,193.0,2925.0],[39.7,18.9,184.0,3550.0],[38.6,17.2,199.0,3750.0],[38.2,20.0,190.0,3900.0],[38.1,17.0,181.0,3175.0],[43.2,19.0,197.0,4775.0],[38.1,16.5,198.0,3825.0],[45.6,20.3,191.0,4600.0],[39.7,17.7,193.0,3200.0],[42.2,19.5,197.0,4275.0],[39.6,20.7,191.0,3900.0],[42.7,18.3,196.0,4075.0],[38.6,17.0,188.0,2900.0],[37.3,20.5,199.0,3775.0],[35.7,17.0,189.0,3350.0],[41.1,18.6,189.0,3325.0],[36.2,17.2,187.0,3150.0],[37.7,19.8,198.0,3500.0],[40.2,17.0,176.0,3450.0],[41.4,18.5,202.0,3875.0],[35.2,15.9,186.0,3050.0],[40.6,19.0,199.0,4000.0],[38.8,17.6,191.0,3275.0],[41.5,18.3,195.0,4300.0],[39.0,17.1,191.0,3050.0],[44.1,18.0,210.0,4000.0],[38.5,17.9,190.0,3325.0],[43.1,19.2,197.0,3500.0],[36.8,18.5,193.0,3500.0],[37.5,18.5,199.0,4475.0],[38.1,17.6,187.0,3425.0],[41.1,17.5,190.0,3900.0],[35.6,17.5,191.0,3175.0],[40.2,20.1,200.0,3975.0],[37.0,16.5,185.0,3400.0],[39.7,17.9,193.0,4250.0],[40.2,17.1,193.0,3400.0],[40.6,17.2,187.0,3475.0],[32.1,15.5,188.0,3050.0],[40.7,17.0,190.0,3725.0],[37.3,16.8,192.0,3000.0],[39.0,18.7,185.0,3650.0],[39.2,18.6,190.0,4250.0],[36.6,18.4,184.0,3475.0],[36.0,17.8,195.0,3450.0],[37.8,18.1,193.0,3750.0],[36.0,17.1,187.0,3700.0],[41.5,18.5,201.0,4000.0],[46.5,17.9,192.0,3500.0],[50.0,19.5,196.0,3900.0],[51.3,19.2,193.0,3650.0],[45.4,18.7,188.0,3525.0],[52.7,19.8,197.0,3725.0],[45.2,17.8,198.0,3950.0],[46.1,18.2,178.0,3250.0],[51.3,18.2,197.0,3750.0],[46.0,18.9,195.0,4150.0],[51.3,19.9,198.0,3700.0],[46.6,17.8,193.0,3800.0],[51.7,20.3,194.0,3775.0],[47.0,17.3,185.0,3700.0],[52.0,18.1,201.0,4050.0],[45.9,17.1,190.0,3575.0],[50.5,19.6,201.0,4050.0],[50.3,20.0,197.0,3300.0],[58.0,17.8,181.0,3700.0],[46.4,18.6,190.0,3450.0],[49.2,18.2,195.0,4400.0],[42.4,17.3,181.0,3600.0],[48.5,17.5,191.0,3400.0],[43.2,16.6,187.0,2900.0],[50.6,19.4,193.0,3800.0],[46.7,17.9,195.0,3300.0],[52.0,19.0,197.0,4150.0],[50.5,18.4,200.0,3400.0],[49.5,19.0,200.0,3800.0],[46.4,17.8,191.0,3700.0],[52.8,20.0,205.0,4550.0],[40.9,16.6,187.0,3200.0],[54.2,20.8,201.0,4300.0],[42.5,16.7,187.0,3350.0],[51.0,18.8,203.0,4100.0],[49.7,18.6,195.0,3600.0],[47.5,16.8,199.0,3900.0],[47.6,18.3,195.0,3850.0],[52.0,20.7,210.0,4800.0],[46.9,16.6,192.0,2700.0],[53.5,19.9,205.0,4500.0],[49.0,19.5,210.0,3950.0],[46.2,17.5,187.0,3650.0],[50.9,19.1,196.0,3550.0],[45.5,17.0,196.0,3500.0],[50.9,17.9,196.0,3675.0],[50.8,18.5,201.0,4450.0],[50.1,17.9,190.0,3400.0],[49.0,19.6,212.0,4300.0],[51.5,18.7,187.0,3250.0],[49.8,17.3,198.0,3675.0],[48.1,16.4,199.0,3325.0],[51.4,19.0,201.0,3950.0],[45.7,17.3,193.0,3600.0],[50.7,19.7,203.0,4050.0],[42.5,17.3,187.0,3350.0],[52.2,18.8,197.0,3450.0],[45.2,16.6,191.0,3250.0],[49.3,19.9,203.0,4050.0],[50.2,18.8,202.0,3800.0],[45.6,19.4,194.0,3525.0],[51.9,19.5,206.0,3950.0],[46.8,16.5,189.0,3650.0],[45.7,17.0,195.0,3650.0],[55.8,19.8,207.0,4000.0],[43.5,18.1,202.0,3400.0],[49.6,18.2,193.0,3775.0],[50.8,19.0,210.0,4100.0],[50.2,18.7,198.0,3775.0],[46.1,13.2,211.0,4500.0],[50.0,16.3,230.0,5700.0],[48.7,14.1,210.0,4450.0],[50.0,15.2,218.0,5700.0],[47.6,14.5,215.0,5400.0],[46.5,13.5,210.0,4550.0],[45.4,14.6,211.0,4800.0],[46.7,15.3,219.0,5200.0],[43.3,13.4,209.0,4400.0],[46.8,15.4,215.0,5150.0],[40.9,13.7,214.0,4650.0],[49.0,16.1,216.0,5550.0],[45.5,13.7,214.0,4650.0],[48.4,14.6,213.0,5850.0],[45.8,14.6,210.0,4200.0],[49.3,15.7,217.0,5850.0],[42.0,13.5,210.0,4150.0],[49.2,15.2,221.0,6300.0],[46.2,14.5,209.0,4800.0],[48.7,15.1,222.0,5350.0],[50.2,14.3,218.0,5700.0],[45.1,14.5,215.0,5000.0],[46.5,14.5,213.0,4400.0],[46.3,15.8,215.0,5050.0],[42.9,13.1,215.0,5000.0],[46.1,15.1,215.0,5100.0],[44.5,14.3,216.0,4100.0],[47.8,15.0,215.0,5650.0],[48.2,14.3,210.0,4600.0],[50.0,15.3,220.0,5550.0],[47.3,15.3,222.0,5250.0],[42.8,14.2,209.0,4700.0],[45.1,14.5,207.0,5050.0],[59.6,17.0,230.0,6050.0],[49.1,14.8,220.0,5150.0],[48.4,16.3,220.0,5400.0],[42.6,13.7,213.0,4950.0],[44.4,17.3,219.0,5250.0],[44.0,13.6,208.0,4350.0],[48.7,15.7,208.0,5350.0],[42.7,13.7,208.0,3950.0],[49.6,16.0,225.0,5700.0],[45.3,13.7,210.0,4300.0],[49.6,15.0,216.0,4750.0],[50.5,15.9,222.0,5550.0],[43.6,13.9,217.0,4900.0],[45.5,13.9,210.0,4200.0],[50.5,15.9,225.0,5400.0],[44.9,13.3,213.0,5100.0],[45.2,15.8,215.0,5300.0],[46.6,14.2,210.0,4850.0],[48.5,14.1,220.0,5300.0],[45.1,14.4,210.0,4400.0],[50.1,15.0,225.0,5000.0],[46.5,14.4,217.0,4900.0],[45.0,15.4,220.0,5050.0],[43.8,13.9,208.0,4300.0],[45.5,15.0,220.0,5000.0],[43.2,14.5,208.0,4450.0],[50.4,15.3,224.0,5550.0],[45.3,13.8,208.0,4200.0],[46.2,14.9,221.0,5300.0],[45.7,13.9,214.0,4400.0],[54.3,15.7,231.0,5650.0],[45.8,14.2,219.0,4700.0],[49.8,16.8,230.0,5700.0],[46.2,14.4,214.0,4650.0],[49.5,16.2,229.0,5800.0],[43.5,14.2,220.0,4700.0],[50.7,15.0,223.0,5550.0],[47.7,15.0,216.0,4750.0],[46.4,15.6,221.0,5000.0],[48.2,15.6,221.0,5100.0],[46.5,14.8,217.0,5200.0],[46.4,15.0,216.0,4700.0],[48.6,16.0,230.0,5800.0],[47.5,14.2,209.0,4600.0],[51.1,16.3,220.0,6000.0],[45.2,13.8,215.0,4750.0],[45.2,16.4,223.0,5950.0],[49.1,14.5,212.0,4625.0],[52.5,15.6,221.0,5450.0],[47.4,14.6,212.0,4725.0],[50.0,15.9,224.0,5350.0],[44.9,13.8,212.0,4750.0],[50.8,17.3,228.0,5600.0],[43.4,14.4,218.0,4600.0],[51.3,14.2,218.0,5300.0],[47.5,14.0,212.0,4875.0],[52.1,17.0,230.0,5550.0],[47.5,15.0,218.0,4950.0],[52.2,17.1,228.0,5400.0],[45.5,14.5,212.0,4750.0],[49.5,16.1,224.0,5650.0],[44.5,14.7,214.0,4850.0],[50.8,15.7,226.0,5200.0],[49.4,15.8,216.0,4925.0],[46.9,14.6,222.0,4875.0],[48.4,14.4,203.0,4625.0],[51.1,16.5,225.0,5250.0],[48.5,15.0,219.0,4850.0],[55.9,17.0,228.0,5600.0],[47.2,15.5,215.0,4975.0],[49.1,15.0,228.0,5500.0],[47.3,13.8,216.0,4725.0],[46.8,16.1,215.0,5500.0],[41.7,14.7,210.0,4700.0],[53.4,15.8,219.0,5500.0],[43.3,14.0,208.0,4575.0],[48.1,15.1,209.0,5500.0],[50.5,15.2,216.0,5000.0],[49.8,15.9,229.0,5950.0],[43.5,15.2,213.0,4650.0],[51.5,16.3,230.0,5500.0],[46.2,14.1,217.0,4375.0],[55.1,16.0,230.0,5850.0],[44.5,15.7,217.0,4875.0],[48.8,16.2,222.0,6000.0],[47.2,13.7,214.0,4925.0],[46.8,14.3,215.0,4850.0],[50.4,15.7,222.0,5750.0],[45.2,14.8,212.0,5200.0],[49.9,16.1,213.0,5400.0]],"y":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"island":["Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Torgersen","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Dream","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe","Biscoe"],"sex":["MALE","FEMALE","FEMALE","FEMALE","MALE","FEMALE","MALE",NaN,NaN,NaN,NaN,"FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE",NaN,"FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE",NaN,"MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE",NaN,"MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE",NaN,"MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","FEMALE","MALE","_","MALE","FEMALE","FEMALE","MALE","FEMALE","MALE"],"train":[0,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17,18,19,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,38,39,40,42,43,44,45,47,49,51,53,55,56,60,62,63,64,65,66,67,68,69,70,72,73,75,76,77,78,80,81,82,83,84,85,86,89,93,94,95,96,97,98,100,101,104,105,108,109,110,111,112,113,114,115,117,120,122,123,124,125,126,127,128,131,132,133,134,135,136,137,138,139,140,142,143,144,146,147,149,151,153,154,155,158,159,160,161,162,164,166,167,168,169,170,171,174,175,176,177,180,181,183,184,185,187,188,189,190,191,194,196,197,198,199,200,202,204,205,206,207,208,210,211,212,213,214,215,216,217,218,219,222,223,224,225,226,227,228,230,231,232,233,236,239,240,241,243,244,245,246,247,248,249,251,252,253,255,257,258,259,260,261,263,264,265,266,267,268,269,270,272,275,276,278,279,280,281,282,283,284,285,289,290,292,294,295,296,297,299,300,301,302,303,305,306,307,309,310,312,313,314,317,319,320,321,322,323,325,326,327,328,329,330,331,332,333,334,337,338,339,340,341]};
+const SPN = ['Adélie', 'Chinstrap', 'Gentoo'], FN = ['bill length', 'bill depth', 'flipper', 'body mass'], FU = ['mm', 'mm', 'mm', 'g'];
+const PCOL = () => [css('--cB'), css('--cC'), css('--cA')];
+const PTR = new Set(PG.train), TRI = [], TEI = []; PG.y.forEach((_, i) => (PTR.has(i) ? TRI : TEI).push(i));
+const PJ = { d: 3, l: 1, crit: 'gini', x: [39, 18.5, 190, 3700] };
+const fmtT = (f, t) => f === 3 ? fmt(t, 0) : fmt(t, 2).replace(/0$/, '');
+function pgFit(d, l, crit) { return growSK(PG.X, PG.y, TRI, { K: 3, crit, maxDepth: d, minLeaf: l }); }
+const pgAcc = (T, I) => I.filter(i => predict(T, PG.X[i]).pred === PG.y[i]).length / I.length;
+function rulesOf(T) { const out = []; (function walk(n, conds) { if (isLeaf(n)) { out.push({ conds, n }); return; } walk(n.l, [...conds, `${FN[n.f]} ≤ ${fmtT(n.f, n.t)} ${FU[n.f]}`]); walk(n.r, [...conds, `${FN[n.f]} > ${fmtT(n.f, n.t)} ${FU[n.f]}`]); })(T, []); return out; }
+function drawPJ() {
+  const T = pgFit(PJ.d, PJ.l, PJ.crit), cols = PCOL(), te = pgAcc(T, TEI), tr = pgAcc(T, TRI), L = leaves(T), D = depthOf(T);
+  $('#pj-dep-o').textContent = PJ.d >= 8 ? '8+' : PJ.d; $('#pj-leaf-o').textContent = PJ.l;
+  $('#pj-te').innerHTML = tip(pct(te), `${Math.round(te * TEI.length)} of ${TEI.length} test penguins`); $('#pj-tr').textContent = pct(tr); $('#pj-n').textContent = L.length; $('#pj-d').textContent = D;
+  $('#pj-say').innerHTML = D === 1 ? `One question &mdash; flipper length &mdash; already gets ${pct(te)}: it picks out the Gentoos, but can't separate Ad&eacute;lie from Chinstrap.` : D === 2 ? `<b>Two questions, ${pct(te)}.</b> Flipper length finds the Gentoos; bill length then separates Ad&eacute;lie (short bill) from Chinstrap (long bill).` : tr === 1 ? `Grown until every leaf is pure: 100% on training data, but still ${pct(te)} on the test birds. The extra ${L.length - 4} leaves learned nothing new.` : `${L.length} rules, ${pct(te)} on penguins the tree never saw.`;
+  const path = pathTo(T, PJ.x), leaf = predict(T, PJ.x);
+  drawTree($('#pj-tree'), T, { cols, names: SPN, feat: FN, fmtT, path, leafW: 96, rowH: 72 });
+  $('#pj-pred').innerHTML = `<span style="color:${cols[leaf.pred]}">${SPN[leaf.pred]}</span>`;
+  const steps = []; let n = T; while (!isLeaf(n)) { const yes = PJ.x[n.f] <= n.t; steps.push(`${FN[n.f]} ${fmt(PJ.x[n.f], n.f === 3 ? 0 : 1)} ${yes ? '≤' : '>'} ${fmtT(n.f, n.t)}`); n = yes ? n.l : n.r; }
+  $('#pj-path').innerHTML = `Path: ${steps.join(' &rarr; ') || '(root is a leaf)'} &rarr; leaf with ${leaf.n} training penguins: ${leaf.cnt.map((k, i) => k ? `${k} ${SPN[i]}` : '').filter(Boolean).join(', ')}.`;
+  const imp = importances(T, 4, TRI.length);
+  $('#pj-imp').innerHTML = imp.map((v, f) => `<div class="cf"><span>${FN[f]}</span><span class="cf-track one"><i style="left:0;width:${v * 100}%;background:var(--lda)"></i></span><span class="num">${tip(fmt(v, 3), 'share of all impurity removed\nby splits on this feature')}</span></div>`).join('');
+  const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; TEI.forEach(i => { M[PG.y[i]][predict(T, PG.X[i]).pred]++; });
+  $('#pj-cm').innerHTML = '<thead><tr><th>true \\ predicted</th>' + SPN.map(s => `<th>${s}</th>`).join('') + '</tr></thead><tbody>' + M.map((r, a) => `<tr><th>${SPN[a]}</th>${r.map((k, b) => `<td class="num ${a === b ? 'ok' : k ? 'bad' : ''}">${k}</td>`).join('')}</tr>`).join('') + '</tbody>';
+  $('#pj-rules').innerHTML = rulesOf(T).map(({ conds, n }) => `<li><span class="note">IF</span> ${conds.length ? conds.map(c => `<b>${c}</b>`).join(' <span class="note">AND</span> ') : '<b>always</b>'} <span class="note">THEN</span> <span style="color:${cols[n.pred]};font-weight:600">${SPN[n.pred]}</span> <span class="note">(${n.cnt[n.pred]} of ${n.n} training penguins)</span></li>`).join('');
+}
+const PRANGE = [[32, 60, 0.1], [13, 22, 0.1], [170, 235, 1], [2700, 6300, 25]];
+$('#pj-sliders').innerHTML = FN.map((f, j) => `<div class="ctrl"><div class="top"><label for="ps-${j}">${f} (${FU[j]})</label><output id="ps-${j}-o"></output></div><input type="range" id="ps-${j}" min="${PRANGE[j][0]}" max="${PRANGE[j][1]}" step="${PRANGE[j][2]}" value="${PJ.x[j]}"></div>`).join('');
+function syncPS() { FN.forEach((_, j) => { $(`#ps-${j}`).value = PJ.x[j]; $(`#ps-${j}-o`).textContent = fmt(PJ.x[j], j === 3 ? 0 : 1); }); }
+FN.forEach((_, j) => $(`#ps-${j}`).addEventListener('input', e => { PJ.x[j] = +e.target.value; syncPS(); drawPJ(); }));
+const firstOf = s => TEI.find(i => PG.y[i] === s);
+const PRESETS = [['A test Adélie', firstOf(0)], ['A test Chinstrap', firstOf(1)], ['A test Gentoo', firstOf(2)]];
+$('#pj-presets').innerHTML = PRESETS.map(([n, i], k) => `<button type="button" class="btn" data-pp="${k}">${n}</button>`).join('') + '<button type="button" class="btn" data-pp="hard">The one it gets wrong</button>';
+$('#pj-presets').addEventListener('click', e => { const b = e.target.closest('[data-pp]'); if (!b) return; let i; if (b.dataset.pp === 'hard') { const T = pgFit(PJ.d, PJ.l, PJ.crit); i = TEI.find(t => predict(T, PG.X[t]).pred !== PG.y[t]); if (i == null) i = TEI[0]; } else i = PRESETS[+b.dataset.pp][1]; PJ.x = PG.X[i].slice(); syncPS(); drawPJ(); $('#pj-path').innerHTML += ` <span class="note">(This bird really is a <b>${SPN[PG.y[i]]}</b>.)</span>`; });
+$('#pj-dep').addEventListener('input', e => { PJ.d = +e.target.value >= 8 ? 99 : +e.target.value; drawPJ(); });
+$('#pj-leaf').addEventListener('input', e => { PJ.l = +e.target.value; drawPJ(); });
+seg1('[data-pc]', 'data-pc', k => { PJ.crit = k; drawPJ(); });
+fig($('#pj-tree').parentElement, drawPJ);
+
+/* ---------- hero: a depth-2 penguin tree ---------- */
+const HT = pgFit(2, 1, 'gini'), HF = [...new Set(internals(HT).map(n => n.f))].sort((a, b) => b - a), HX = [42, 17, 195, 4000];
+$('#hero-sl').innerHTML = HF.map(j => `<div class="ctrl"><div class="top"><label for="hs-${j}">${FN[j]} (${FU[j]})</label><output id="hs-${j}-o"></output></div><input type="range" id="hs-${j}" min="${PRANGE[j][0]}" max="${PRANGE[j][1]}" step="${PRANGE[j][2]}" value="${HX[j]}"></div>`).join('');
+function drawHero() {
+  const cols = PCOL(), path = pathTo(HT, HX), leaf = predict(HT, HX);
+  HF.forEach(j => { $(`#hs-${j}-o`).textContent = fmt(HX[j], j === 3 ? 0 : 1); });
+  drawTree($('#hero-tree'), HT, { cols, names: SPN, feat: FN, fmtT, path, leafW: 90, rowH: 70 });
+  $('#hero-cap').innerHTML = `This penguin is ${leaf.pred === 0 ? 'an' : 'a'} <b style="color:${cols[leaf.pred]}">${SPN[leaf.pred]}</b>: ${leaf.cnt[leaf.pred]} of the ${leaf.n} training penguins in that leaf were. Two questions get <b>${pct(pgAcc(HT, TEI))}</b> of the test birds right.`;
+}
+HF.forEach(j => $(`#hs-${j}`).addEventListener('input', e => { HX[j] = +e.target.value; drawHero(); }));
+fig($('#hero-tree').parentElement, drawHero);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+drawSP(); drawIM(); drawGN(); grReset(); drawPR(); drawRT(); syncPS(); drawPJ(); drawHero();
+window.__dtDebug = { setOrder: f => { FEAT_ORDER = f; }, grow, prune, predict, leaves, depthOf, importances, pgFit, pgAcc, PG, TRI, TEI, clone, internals, PJ, GR, grStep, PR, prFit, SP, TN, rulesOf };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
