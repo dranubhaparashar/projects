@@ -248,13 +248,27 @@ export const tracks: Track[] = [
 			{
 				title: "Evaluating Models",
 				summary:
-					"How to know a model is good: train/validation/test splits, cross-validation, the confusion matrix, precision–recall, ROC curves and the bias–variance trade-off.",
+					"How to know a model is good before the world finds out: watch training error lie, see how much a small test set wobbles, cross-validate, read the confusion matrix, trade precision for recall, catch a leak that scores 90% on pure noise — and design a diabetes screening test with a sealed envelope.",
 				topics: [
 					"Honest splits",
 					"Cross-validation",
 					"Precision & recall",
 					"ROC & AUC",
 					"Bias vs variance",
+				],
+				href: "/lectures/evaluating-models/",
+				length: "~35 min",
+				index: [
+					["why", "Training error lies"],
+					["split", "Honest splits: train, validation, test"],
+					["cv", "Cross-validation: everyone gets a turn"],
+					["confusion", "The confusion matrix"],
+					["pr", "Precision and recall"],
+					["roc", "ROC curves and AUC"],
+					["bv", "Bias and variance"],
+					["leak", "Leakage: 90% accuracy on pure noise"],
+					["project", "Designing a diabetes screening test"],
+					["summary", "Five lines to remember"],
 				],
 			},
 			{

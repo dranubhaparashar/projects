@@ -1,0 +1,1110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on evaluating models: train and test error, honest splits, cross-validation, the confusion matrix, precision and recall, ROC and AUC, bias and variance, data leakage, and a diabetes-screening project with a sealed test set.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Evaluating Models</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+.cm { max-width: 520px; }
+.cm td { font-size: 1.1rem; text-align: center; }
+.cm td.ok { background: color-mix(in srgb, var(--cA) 12%, transparent); }
+.cm td.bad { background: color-mix(in srgb, var(--qda) 14%, transparent); }
+.cm th { white-space: nowrap; font-size: 0.82rem; }
+.splitbar { display: flex; border-radius: 10px; overflow: hidden; max-width: 860px; border: 1px solid var(--line); font-size: 0.84rem; }
+.splitbar span { padding: 10px 12px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.splitbar span:nth-child(1) { background: color-mix(in srgb, var(--cA) 18%, var(--surface)); }
+.splitbar span:nth-child(2) { background: color-mix(in srgb, var(--lda) 16%, var(--surface)); }
+.splitbar span:nth-child(3) { background: color-mix(in srgb, var(--cB) 20%, var(--surface)); }
+.folds { display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; max-height: 260px; overflow-y: auto; }
+.frow { display: grid; grid-template-columns: 70px repeat(15, minmax(0, 1fr)); gap: 3px; align-items: center; }
+.frow .flab { font-family: var(--f-mono); font-size: 0.72rem; color: var(--muted); }
+.frow i { display: block; height: 12px; border-radius: 3px; background: color-mix(in srgb, var(--cA) 35%, var(--surface)); }
+.frow i.te { background: var(--cB); }
+@media (max-width: 560px) { .splitbar { font-size: 0.72rem; } .splitbar span { padding: 8px 6px; } .frow { grid-template-columns: 56px repeat(15, minmax(0, 1fr)); } }
+.foldplot { aspect-ratio: 3.4 / 1; }
+@media (max-width: 560px) { .foldplot { aspect-ratio: 1.7 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Evaluating Models <span>&middot; honest numbers</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Training error lies</a>
+      <a href="#split">Honest splits</a>
+      <a href="#cv">Cross-validation</a>
+      <a href="#confusion">Confusion matrix</a>
+      <a href="#pr">Precision &amp; recall</a>
+      <a href="#roc">ROC &amp; AUC</a>
+      <a href="#bv">Bias &amp; variance</a>
+      <a href="#leak">Leakage</a>
+      <a href="#project">Screening project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.10 · evaluating models</div>
+      <h1>Evaluating Models</h1>
+      <div class="sub">How to know a model is good before the world finds out</div>
+      <p class="lead">A model that scores 100% on the data it learned from may be useless on tomorrow's. Evaluation is the discipline of measuring <em>honestly</em>: on data the model has never seen, with the right yardstick for the job, and without letting any information leak from the answers into the training. On the right, <strong>raise the polynomial's degree</strong>. The training error keeps falling, but the error on fresh points tells the real story.</p>
+      <dl class="facts">
+        <div><dt>Rule one</dt><dd>Never grade a model on the data it trained on</dd></div>
+        <div><dt>Rule two</dt><dd>Pick the metric that matches the cost of each kind of mistake</dd></div>
+        <div><dt>Rule three</dt><dd>Anything that looks at labels belongs inside the validation loop</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="A polynomial fitted to 15 noisy points; drag the degree"></canvas></div>
+      <div class="fig-head" style="margin-top:10px">
+        <div class="ctrl" style="flex:1"><div class="top"><label for="hero-d">Polynomial degree</label><output id="hero-d-o"></output></div><input type="range" id="hero-d" min="0" max="12" step="1" value="3"></div>
+      </div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Training error lies</a></li>
+    <li><a href="#split"><i>02</i>Honest splits: train, validation, test</a></li>
+    <li><a href="#cv"><i>03</i>Cross-validation: everyone gets a turn</a></li>
+    <li><a href="#confusion"><i>04</i>The confusion matrix</a></li>
+    <li><a href="#pr"><i>05</i>Precision and recall</a></li>
+    <li><a href="#roc"><i>06</i>ROC curves and AUC</a></li>
+    <li><a href="#bv"><i>07</i>Bias and variance</a></li>
+    <li><a href="#leak"><i>08</i>Leakage: 90% accuracy on pure noise</a></li>
+    <li><a href="#project"><i>09</i>Designing a diabetes screening test</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The trap</div>
+    <h2>Training error lies</h2>
+    <div class="prose">
+      <p>A student who memorises last year's exam answers scores perfectly on last year's exam. Training error is that exam. Every extra degree of the polynomial lets it bend closer to the 15 training points, noise included, so training error can only go down. The error on <em>new</em> points first falls (the model learns the real shape) and then climbs (it starts learning the noise). That rising part is <em class="term">overfitting</em>, and the distance between the two curves is the <em class="term">generalisation gap</em>.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{RMSE} &= \sqrt{\frac{1}{n}\sum_{i=1}^{n}\big(y_i - \hat f(x_i)\big)^2} \\ \text{gap} &= \text{RMSE}_{\text{test}} - \text{RMSE}_{\text{train}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the root-mean-square error is the typical size of a miss, in the units of y. Computed on the training points it measures how well the model memorised; computed on points it never saw, it measures how well it generalises. A big gap is the signature of overfitting.</div><div class="eq-say"><b>Say it</b><em>&ldquo;RMSE is the square root of the average squared miss; the gap is test RMSE minus train RMSE.&rdquo;</em></div><div class="eq-run" id="run-wh"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="wh-cv" aria-label="Train and test error against polynomial degree"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> training RMSE (15 points) &nbsp; <span style="color:var(--cB)">&#9644;</span> test RMSE (300 fresh points) &nbsp; dashed: the noise level &sigma; = 0.3, the best any model can do</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="wh-d">Polynomial degree</label><output id="wh-d-o"></output></div><input type="range" id="wh-d" min="0" max="12" step="1" value="3"></div>
+        <div class="btns"><button type="button" class="btn" id="wh-new">Draw a new training set</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="wh-tr"></div><div class="k">training RMSE</div></div><div class="stat"><div class="v" id="wh-te"></div><div class="k">test RMSE</div></div></div>
+        <p class="note" id="wh-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SPLIT -->
+<section class="chap" id="split">
+  <div class="wrap">
+    <div class="tag">Rule one</div>
+    <h2>Honest splits: train, validation, test</h2>
+    <div class="prose"><p>So hold some data back. The standard recipe has three parts: a <b>training</b> set to fit the model, a <b>validation</b> set to compare models and tune settings, and a <b>test</b> set, sealed in an envelope, opened exactly once at the end. Why not tune on the test set? Because every time you pick the winner by its test score, a little of the test set's luck leaks into your choice, and the final score comes out flattering. But a test set is also just a sample. <strong>Shrink it</strong> and watch how much its verdict wobbles from one random split to the next.</p></div>
+    <div class="splitbar block" aria-hidden="true"><span style="flex:60">train &middot; fit the model</span><span style="flex:20">validation &middot; choose</span><span style="flex:20">test &middot; sealed</span></div>
+    <div class="eq"><div class="m">\[ \text{SE}(\widehat{\text{acc}}) = \sqrt{\frac{\text{acc}\,(1-\text{acc})}{n_{\text{test}}}} \]</div><div class="read"><b>Read it as:</b> each test example is a coin flip that comes up &ldquo;right&rdquo; with probability acc, so the measured accuracy has a standard error that shrinks only with the <b>square root</b> of the test size. Quadruple the test set to halve the wobble. Two models whose scores differ by less than about two standard errors are not clearly different.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The standard error of accuracy is the square root of acc times one-minus-acc over the test size.&rdquo;</em></div><div class="eq-run" id="run-sp"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="sp-cv" aria-label="Histogram of test accuracy over 400 random splits"></canvas></div><figcaption>400 random train/test splits of the same 1,000 examples; a nearest-centroid classifier is retrained on each. <span style="color:var(--ink)">&#9644;</span> the model's true accuracy (on 20,000 fresh points).</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="sp-n">Test-set size</label><output id="sp-n-o"></output></div><input type="range" id="sp-n" min="10" max="500" step="10" value="50"></div>
+        <div class="stats"><div class="stat"><div class="v" id="sp-sd"></div><div class="k">spread of the test score (sd)</div></div><div class="stat"><div class="v" id="sp-rng"></div><div class="k">luckiest vs unluckiest split</div></div></div>
+        <p class="note" id="sp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CV -->
+<section class="chap" id="cv">
+  <div class="wrap">
+    <div class="tag">Using every point</div>
+    <h2>Cross-validation: everyone gets a turn</h2>
+    <div class="prose"><p>With only 15 points, holding back a third is painful, and the score would hinge on which third. <em class="term">k-fold cross-validation</em> fixes both problems: cut the data into k folds, train on k&minus;1 of them, score on the one left out, and rotate until every fold has been the test fold once. Every point is used for training <em>and</em> for testing, never at the same time. Below, cross-validation picks the polynomial degree without touching the 300 test points. <strong>Change k</strong> and compare its choice with the truth.</p></div>
+    <div class="eq"><div class="m">\[ \text{CV}_k = \frac{1}{k}\sum_{j=1}^{k} \text{Err}\big(\hat f^{(-j)},\ \text{fold}_j\big) \]</div><div class="read"><b>Read it as:</b> f&#770;<sup>(&minus;j)</sup> is the model trained without fold j; Err is its error on fold j. Average the k scores. k = 5 or 10 is the usual choice; k = n is <b>leave-one-out</b>: n fits, each tested on a single point. The spread of the k fold scores tells you how much to trust the average.</div><div class="eq-say"><b>Say it</b><em>&ldquo;CV-k is the average over folds of the error of the model trained without that fold, measured on that fold.&rdquo;</em></div><div class="eq-run" id="run-cv"></div></div>
+    <div class="lab">
+      <div>
+        <div class="folds" id="cv-folds" aria-label="Which points are in the test fold at each round"></div>
+        <figure style="margin-top:12px"><div class="plot ar-16x10"><canvas id="cv-cv" aria-label="Cross-validated error and true test error against degree"></canvas></div><figcaption><span style="color:var(--lda)">&#9644;</span> CV estimate, with &plusmn;1 sd of the fold scores shaded &nbsp; <span style="color:var(--cB)">&#9644;</span> true test RMSE (unseen by CV) &nbsp; <span style="color:var(--cA)">&#9644;</span> training RMSE</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cv-k">Folds k</label><output id="cv-k-o"></output></div><input type="range" id="cv-k" min="2" max="15" step="1" value="5"></div>
+        <div class="stats"><div class="stat"><div class="v" id="cv-pick"></div><div class="k">degree CV picks</div></div><div class="stat"><div class="v" id="cv-best"></div><div class="k">truly best degree</div></div></div>
+        <p class="note" id="cv-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONFUSION -->
+<section class="chap" id="confusion">
+  <div class="wrap">
+    <div class="tag">Rule two</div>
+    <h2>The confusion matrix</h2>
+    <div class="prose"><p>For classifiers, &ldquo;error&rdquo; hides two very different mistakes. A screening test that misses a disease (<b>false negative</b>) and one that frightens a healthy person (<b>false positive</b>) do not cost the same. The <em class="term">confusion matrix</em> counts all four outcomes. Below, 2,000 people get a risk score; everyone above the <strong>threshold</strong> is flagged. Make the disease rare and see what accuracy says about a test that flags nobody.</p></div>
+    <div class="eq"><div class="m">\[ \text{accuracy} = \frac{TP + TN}{TP + FP + FN + TN} \]</div><div class="read"><b>Read it as:</b> TP: sick and flagged. FN: sick and missed. FP: healthy but flagged. TN: healthy and cleared. Accuracy lumps the two kinds of mistake together and is dominated by the larger class, so on rare events a do-nothing model looks excellent.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Accuracy is true positives plus true negatives, over everyone.&rdquo;</em></div><div class="eq-run" id="run-cf"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="cf-cv" aria-label="Risk scores of sick and healthy people with the threshold"></canvas></div><figcaption><span style="color:var(--cB)">&#9644;</span> sick &nbsp; <span style="color:var(--cA)">&#9644;</span> healthy &nbsp; (each histogram scaled to its own height, so rare classes stay visible). Right of the line: flagged.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="How common the disease is"><button type="button" data-pv="0.01">1% sick</button><button type="button" data-pv="0.05">5%</button><button type="button" data-pv="0.2" aria-pressed="true">20%</button><button type="button" data-pv="0.5">50%</button></div>
+        <div class="ctrl"><div class="top"><label for="cf-t">Threshold</label><output id="cf-t-o"></output></div><input type="range" id="cf-t" min="0.02" max="0.98" step="0.01" value="0.5" data-sync="t"></div>
+        <div class="tbl-wrap"><table class="cm" id="cf-tbl"></table></div>
+        <div class="stats"><div class="stat"><div class="v" id="cf-acc"></div><div class="k">accuracy</div></div><div class="stat"><div class="v" id="cf-none"></div><div class="k">accuracy of &ldquo;nobody is sick&rdquo;</div></div></div>
+        <p class="note" id="cf-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PR -->
+<section class="chap" id="pr">
+  <div class="wrap">
+    <div class="tag">Two questions</div>
+    <h2>Precision and recall</h2>
+    <div class="prose"><p>Split the confusion matrix into two questions a doctor would ask. <b>Recall</b>: of the people who are sick, how many did we catch? <b>Precision</b>: of the people we flagged, how many are actually sick? Lowering the threshold catches more cases (recall up) but flags more healthy people (precision down). The <em class="term">precision&ndash;recall curve</em> traces every threshold at once. <strong>Same data, same threshold as above</strong>: the sliders are linked.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{recall} &= \frac{TP}{TP+FN} \\ \text{precision} &= \frac{TP}{TP+FP} \end{aligned} \]</div><div class="read"><b>Read it as:</b> recall (also called <i>sensitivity</i> or true-positive rate) looks only at the sick; precision looks only at the flagged. Precision depends on how common the disease is; recall does not.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Recall is TP over all actual positives; precision is TP over all predicted positives.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ F_1 = \frac{2\cdot\text{precision}\cdot\text{recall}}{\text{precision}+\text{recall}} \]</div><div class="read"><b>Read it as:</b> the harmonic mean of the two: it is high only when <b>both</b> are high. A model that flags everyone has recall 1 but a terrible F&#8321;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;F-one is two times precision times recall over their sum.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-pr" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pr-cv" aria-label="Precision-recall curve with the current threshold"></canvas></div><figcaption>Every threshold, from strict (left) to lenient (right). The dot is the current threshold; dashed: precision of flagging everyone, which equals the share of sick people.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pr-t">Threshold</label><output id="pr-t-o"></output></div><input type="range" id="pr-t" min="0.02" max="0.98" step="0.01" value="0.5" data-sync="t"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pr-r"></div><div class="k">recall</div></div><div class="stat"><div class="v" id="pr-p"></div><div class="k">precision</div></div><div class="stat"><div class="v" id="pr-f"></div><div class="k">F&#8321;</div></div></div>
+        <p class="note" id="pr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ROC -->
+<section class="chap" id="roc">
+  <div class="wrap">
+    <div class="tag">All thresholds at once</div>
+    <h2>ROC curves and AUC</h2>
+    <div class="prose"><p>The <em class="term">ROC curve</em> (receiver operating characteristic, a name from 1940s radar) plots the catch rate against the false-alarm rate for every threshold. A useless model runs along the diagonal; a perfect one hugs the top-left corner. The area under it, <b>AUC</b>, has a lovely meaning: pick one sick and one healthy person at random; AUC is the chance the model gives the sick one the higher score. <strong>Change how well the score separates the groups</strong>, then change the prevalence above: ROC doesn&rsquo;t move, precision does.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{TPR} &= \frac{TP}{TP+FN} \\ \text{FPR} &= \frac{FP}{FP+TN} \end{aligned} \]</div><div class="read"><b>Read it as:</b> TPR is recall; FPR is the share of healthy people we wrongly flag (1 &minus; specificity). Both are computed within one class, so neither depends on how common the disease is.</div><div class="eq-say"><b>Say it</b><em>&ldquo;True-positive rate is TP over the sick; false-positive rate is FP over the healthy.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \text{AUC} = P\big(s(\text{sick}) > s(\text{healthy})\big) \]</div><div class="read"><b>Read it as:</b> the probability that a randomly chosen positive outranks a randomly chosen negative (ties count half). 0.5 is a coin flip, 1 is perfect ranking. AUC judges the <i>ranking</i>, not any one threshold.</div><div class="eq-say"><b>Say it</b><em>&ldquo;AUC is the probability that the sick person's score beats the healthy person's.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-roc" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10" style="aspect-ratio:1.25/1"><canvas id="roc-cv" aria-label="ROC curve with the current threshold"></canvas></div><figcaption>The shaded area is the AUC. The dot is the current threshold; the dashed diagonal is guessing.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="roc-s">How well the score separates sick from healthy</label><output id="roc-s-o"></output></div><input type="range" id="roc-s" min="0" max="4" step="0.1" value="1.6"></div>
+        <div class="ctrl"><div class="top"><label for="roc-t">Threshold</label><output id="roc-t-o"></output></div><input type="range" id="roc-t" min="0.02" max="0.98" step="0.01" value="0.5" data-sync="t"></div>
+        <div class="stats"><div class="stat"><div class="v" id="roc-auc"></div><div class="k">AUC</div></div><div class="stat"><div class="v" id="roc-tpr"></div><div class="k">TPR</div></div><div class="stat"><div class="v" id="roc-fpr"></div><div class="k">FPR</div></div></div>
+        <p class="note" id="roc-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BIAS VARIANCE -->
+<section class="chap" id="bv">
+  <div class="wrap">
+    <div class="tag">Why models fail</div>
+    <h2>Bias and variance</h2>
+    <div class="prose"><p>Imagine collecting a fresh training set many times and refitting. A too-simple model misses in the <em>same</em> way every time: that systematic miss is <b>bias</b>. A too-flexible model chases each set's noise and lands somewhere different every time: that scatter is <b>variance</b>. Below, 30 polynomials, each fitted to its own 15 noisy points. <strong>Slide the degree</strong> from a stiff line to a wild curve.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbb{E}\big[(y - \hat f(x))^2\big] = {}&\underbrace{\big(\mathbb{E}[\hat f(x)] - f(x)\big)^2}_{\text{bias}^2} \\ &+ \underbrace{\mathbb{E}\big[(\hat f(x) - \mathbb{E}[\hat f(x)])^2\big]}_{\text{variance}} + \underbrace{\sigma^2}_{\text{noise}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the expected squared error on a new point splits exactly into three parts. Bias&sup2;: how far the <i>average</i> fit is from the truth. Variance: how much fits wobble around their average. Noise: the part no model can remove. Flexibility trades the first for the second; the best model balances them.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Expected squared error equals bias squared plus variance plus noise.&rdquo;</em></div><div class="eq-run" id="run-bv"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="bv-cv" aria-label="Thirty fitted polynomials, their average, and the truth"></canvas></div><figcaption><span style="color:var(--muted)">&#9644;</span> 30 fits, each from its own training set &nbsp; <span style="color:var(--lda)">&#9644;</span> their average &nbsp; <span style="color:var(--ink)">- -</span> the true curve</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="bv-chart" aria-label="Bias squared, variance and total error against degree"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> bias&sup2; &nbsp; <span style="color:var(--cB)">&#9644;</span> variance &nbsp; <span style="color:var(--ink)">&#9644;</span> total expected error &nbsp; (log scale, averaged over 400 training sets)</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="bv-d">Polynomial degree</label><output id="bv-d-o"></output></div><input type="range" id="bv-d" min="0" max="12" step="1" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="bv-b"></div><div class="k">bias&sup2;</div></div><div class="stat"><div class="v" id="bv-v"></div><div class="k">variance</div></div><div class="stat"><div class="v" id="bv-t"></div><div class="k">expected error</div></div></div>
+        <p class="note" id="bv-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- LEAK -->
+<section class="chap" id="leak">
+  <div class="wrap">
+    <div class="tag">Rule three</div>
+    <h2>Leakage: 90% accuracy on pure noise</h2>
+    <div class="prose"><p>This mistake has appeared in published papers. Take 50 patients and 1,000 &ldquo;gene&rdquo; measurements that are <strong>pure random noise</strong>, with random labels: nothing can be predicted, so honest accuracy must be about 50%. Now pick the 20 genes most correlated with the labels, then cross-validate a classifier on them. The wrong way picks the genes using <em>all</em> 50 patients, so the test folds helped choose the features. The right way repeats the selection inside every training fold. <strong>Run it</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{gathered} \text{every step that sees } y \\ \subset\ \text{the cross-validation loop} \end{gathered} \]</div><div class="read"><b>Read it as:</b> feature selection, scaling, imputation, choosing hyperparameters, oversampling: if a step learns anything from the data, it must be re-learned on each training fold, without the fold being scored. Otherwise the test fold has already whispered its answers. (Hastie, Tibshirani &amp; Friedman call this &ldquo;the wrong and right way to do cross-validation&rdquo;.)</div><div class="eq-say"><b>Say it</b><em>&ldquo;Anything that looks at the labels goes inside the cross-validation loop.&rdquo;</em></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-3x1" style="aspect-ratio:2.6/1"><canvas id="lk-cv" aria-label="Cross-validated accuracy on noise, wrong way vs right way, over repeated runs"></canvas></div><figcaption>Each dot is one run on fresh noise. <span style="color:var(--qda)">&#9679;</span> selection before CV (wrong) &nbsp; <span style="color:var(--cA)">&#9679;</span> selection inside each fold (right) &nbsp; dashed: 50%, the truth.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="lk-run">Run on fresh noise</button><button type="button" class="btn" id="lk-20">Run 20 times</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="lk-w"></div><div class="k">wrong way: CV accuracy</div></div><div class="stat"><div class="v" id="lk-r"></div><div class="k">right way: CV accuracy</div></div></div>
+        <p class="note" id="lk-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: designing a diabetes screening test</h2>
+    <div class="prose">
+      <p>The <strong>Pima Indians Diabetes</strong> data (Smith et al., 1988; US National Institute of Diabetes and Digestive and Kidney Diseases) records 768 women of Pima heritage near Phoenix, Arizona: pregnancies, plasma glucose, blood pressure, skin-fold thickness, insulin, BMI, a family-history score and age, and whether diabetes was diagnosed within five years. 268 (35%) were. You are designing a screening rule. We split once, stratified: <b>576 women to develop with</b> and <b>192 sealed in the envelope</b>. Everything below uses 5-fold cross-validation on the 576, until the very last step.</p>
+    </div>
+    <h3>1 &middot; Compare models by cross-validation</h3>
+    <div class="btns block"><button type="button" class="btn primary" id="pj-train">Cross-validate all four models</button><span class="note" id="pj-prog" style="align-self:center"></span></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-race"></table></div>
+    <figure class="block" style="max-width:860px"><div class="plot foldplot"><canvas id="pj-folds" aria-label="Fold-by-fold accuracy for each model"></canvas></div><figcaption>Each dot is one fold's accuracy; the bar is the mean. The spread is why a 2-point difference between models may be noise.</figcaption></figure>
+
+    <h3>2 &middot; Compare them across every threshold</h3>
+    <div class="two block">
+      <figure><div class="plot" style="aspect-ratio:1.15/1"><canvas id="pj-roc" aria-label="ROC curves of the four models, out-of-fold"></canvas></div><figcaption>ROC, from out-of-fold predictions.</figcaption></figure>
+      <figure><div class="plot" style="aspect-ratio:1.15/1"><canvas id="pj-pr" aria-label="Precision-recall curves of the four models, out-of-fold"></canvas></div><figcaption>Precision&ndash;recall. Dashed: 35%, the precision of flagging everyone.</figcaption></figure>
+    </div>
+    <p class="note block" style="max-width:72ch"><span style="color:var(--cA)">&#9644;</span> logistic regression &nbsp; <span style="color:var(--lda)">&#9644;</span> Gaussian naive Bayes &nbsp; <span style="color:var(--cB)">&#9644;</span> decision tree (depth 4) &nbsp; <span style="color:var(--muted)">&#9644;</span> &ldquo;always healthy&rdquo; baseline</p>
+
+    <h3>3 &middot; Choose the threshold from the costs</h3>
+    <div class="prose"><p>A missed diagnosis means years of untreated diabetes; a false alarm means a follow-up blood test. Say how many false alarms one missed case is worth, and the page finds the threshold with the lowest expected cost, on the out-of-fold predictions.</p></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pj-cost" aria-label="Expected cost per 100 women against threshold"></canvas></div><figcaption id="pj-costcap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Model"><button type="button" data-pm="lr" aria-pressed="true">Logistic</button><button type="button" data-pm="nb">Naive Bayes</button><button type="button" data-pm="tree">Tree</button></div>
+        <div class="ctrl"><div class="top"><label for="pj-k">One missed case costs as much as</label><output id="pj-k-o"></output></div><input type="range" id="pj-k" min="1" max="20" step="1" value="5"></div>
+        <div class="ctrl"><div class="top"><label for="pj-t">Threshold</label><output id="pj-t-o"></output></div><input type="range" id="pj-t" min="0.02" max="0.98" step="0.01" value="0.5"></div>
+        <div class="btns"><button type="button" class="btn" id="pj-best">Use the cheapest threshold</button></div>
+        <div class="tbl-wrap"><table class="cm" id="pj-cm"></table></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-rec"></div><div class="k">recall (cases caught)</div></div><div class="stat"><div class="v" id="pj-pre"></div><div class="k">precision (flags that are real)</div></div></div>
+      </div></div>
+    </div>
+
+    <h3>4 &middot; Open the sealed envelope</h3>
+    <div class="prose"><p>You have chosen a model and a threshold using only the development data. Now, once, score that exact rule on the 192 women the models have never seen. This is the number you would report.</p></div>
+    <div class="btns block"><button type="button" class="btn primary" id="pj-open">Open the test set</button></div>
+    <div class="tbl-wrap block"><table class="hand" id="pj-test"></table></div>
+    <p class="note block" style="max-width:72ch" id="pj-tsay"></p>
+
+    <h3>The same project in scikit-learn</h3>
+<pre class="code"><code>import numpy as np
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score, cross_val_predict
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.dummy import DummyClassifier
+from sklearn.metrics import roc_auc_score, confusion_matrix
+
+D = np.loadtxt("pima-indians-diabetes.csv", delimiter=",")
+X, y = D[:, :8], D[:, 8].astype(int)
+X_dev, X_test, y_dev, y_test = train_test_split(X, y, test_size=0.25, stratify=y, random_state=0)
+
+cv = StratifiedKFold(n_splits=5)
+models = {"always 'healthy'": DummyClassifier(),
+          "logistic regression": make_pipeline(StandardScaler(), LogisticRegression()),
+          "Gaussian naive Bayes": GaussianNB(),
+          "decision tree (depth 4)": DecisionTreeClassifier(max_depth=4, random_state=0)}
+for name, m in models.items():
+    acc = cross_val_score(m, X_dev, y_dev, cv=cv)
+    p = cross_val_predict(m, X_dev, y_dev, cv=cv, method="predict_proba")[:, 1]
+    print(f"{name:24s} CV accuracy {acc.mean():.4f} ± {acc.std():.4f}   CV AUC {roc_auc_score(y_dev, p):.4f}")
+
+final = models["logistic regression"].fit(X_dev, y_dev)      # opened once, at the end
+p_test = final.predict_proba(X_test)[:, 1]
+for t in (0.5, 0.3):
+    tn, fp, fn, tp = confusion_matrix(y_test, p_test >= t).ravel()
+    print(f"test, threshold {t}: recall {tp/(tp+fn):.3f}  precision {tp/(tp+fp):.3f}  TP {tp} FP {fp} FN {fn} TN {tn}")
+print(f"test AUC {roc_auc_score(y_test, p_test):.4f}")</code></pre>
+<pre class="code out"><code>always 'healthy'         CV accuracy 0.6510 ± 0.0022   CV AUC 0.4980
+logistic regression      CV accuracy 0.7552 ± 0.0258   CV AUC 0.8170
+Gaussian naive Bayes     CV accuracy 0.7396 ± 0.0198   CV AUC 0.8030
+decision tree (depth 4)  CV accuracy 0.7240 ± 0.0232   CV AUC 0.7841
+test, threshold 0.5: recall 0.582  precision 0.736  TP 39 FP 14 FN 28 TN 111
+test, threshold 0.3: recall 0.821  precision 0.647  TP 55 FP 30 FN 12 TN 95
+test AUC 0.8724</code></pre>
+    <p class="note" style="max-width:72ch">The page's folds are scikit-learn's StratifiedKFold folds, point for point. Naive Bayes and the tree (a port of scikit-learn's splitter, on float32 features as scikit-learn uses) give identical probabilities; logistic regression agrees to within 0.0005, because scikit-learn's solver stops a hair before the exact optimum. Every accuracy, AUC and confusion count matches. One honest caveat about the data: zeros in glucose, blood pressure, skin fold, insulin and BMI are really <i>missing values</i>; chapter 1.11 deals with them properly.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Training error always flatters. Measure on data the model never saw; seal a test set and open it once.</li>
+      <li>A score from a small test set wobbles by about &radic;(acc(1&minus;acc)/n); k-fold cross-validation uses every point and shows that spread.</li>
+      <li>Accuracy hides which mistakes you make. Use the confusion matrix, recall and precision, and choose the threshold from the real costs.</li>
+      <li>ROC and AUC judge the ranking and ignore prevalence; precision&ndash;recall shows what rare positives really cost.</li>
+      <li>Error = bias&sup2; + variance + noise; and any step that sees the labels (selection, tuning, scaling) must sit inside the validation loop.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A fraud model has 99.5% accuracy, and 0.5% of transactions are fraud. Is it any good?</summary><p>Not necessarily: flagging nothing also scores 99.5%. Look at recall (frauds caught) and precision (flags that are real), or the precision&ndash;recall curve.</p></details>
+      <details class="q"><summary>You tried 50 settings and reported the best validation score. Why is that number optimistic, and what do you report instead?</summary><p>Picking the maximum of 50 noisy scores selects luck as well as quality. Report the score of the chosen model on a test set that played no part in the choice (or use nested cross-validation).</p></details>
+      <details class="q"><summary>Model A has AUC 0.85, model B 0.80, but at your chosen threshold B has the higher recall. Which do you deploy?</summary><p>AUC averages over all thresholds; you operate at one. If that threshold is set by the costs, compare the models there (or by expected cost), not by AUC alone.</p></details>
+      <details class="q"><summary>You standardise all features using the whole dataset, then cross-validate. Is that leakage?</summary><p>Yes, mildly: the means and standard deviations were computed with the test folds. Put the scaler in a pipeline so it is re-fitted on each training fold. It is usually small for scaling and large for feature selection.</p></details>
+      <details class="q"><summary>Adding data barely changes the training error but steadily lowers the test error. Is the model suffering more from bias or from variance?</summary><p>Variance. More data steadies a flexible model; a high-bias model would plateau with both errors high and close together.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn" href="../support-vector-machines/">&larr; Previous: Support Vector Machines</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Hastie, Tibshirani &amp; Friedman (2009). <em>The Elements of Statistical Learning</em>, 2nd ed., ch. 7: model assessment and selection, including &sect;7.10.2 on the wrong and right way to cross-validate.</li>
+      <li>Fawcett, T. (2006). An introduction to ROC analysis. <em>Pattern Recognition Letters</em> 27.</li>
+      <li>Saito &amp; Rehmsmeier (2015). The precision-recall plot is more informative than the ROC plot when evaluating binary classifiers on imbalanced datasets. <em>PLoS ONE</em> 10(3).</li>
+      <li>Kaufman, Rosset, Perlich &amp; Stitelman (2012). Leakage in data mining: formulation, detection, and avoidance. <em>ACM TKDD</em> 6(4).</li>
+      <li>Geman, Bienenstock &amp; Doursat (1992). Neural networks and the bias/variance dilemma. <em>Neural Computation</em> 4.</li>
+      <li>Smith, J. W. et al. (1988). Using the ADAP learning algorithm to forecast the onset of diabetes mellitus. <em>Proc. Symposium on Computer Applications in Medical Care</em>: the Pima data.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- evaluation toolkit: stratified folds, four models, ROC / PR, all as in scikit-learn ---------- */
+// StratifiedKFold(n_splits = k), no shuffling: scikit-learn's allocation rule
+function stratFolds(y, k) {
+  const classes = [...new Set(y)].sort((a, b) => a - b), order = y.slice().sort((a, b) => a - b), folds = new Array(y.length).fill(0);
+  const alloc = Array.from({ length: k }, (_, i) => classes.map(c => { let n = 0; for (let j = i; j < order.length; j += k) if (order[j] === c) n++; return n; }));
+  classes.forEach((c, ci) => { const ff = []; for (let i = 0; i < k; i++) for (let r = 0; r < alloc[i][ci]; r++) ff.push(i); let p = 0; y.forEach((v, j) => { if (v === c) folds[j] = ff[p++]; }); });
+  return folds;
+}
+function linSolve(A, b) { const n = b.length; A = A.map(r => r.slice()); b = b.slice(); for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]]; for (let r = c + 1; r < n; r++) { const f = A[r][c] / A[c][c]; for (let q = c; q < n; q++) A[r][q] -= f * A[c][q]; b[r] -= f * b[c]; } } const x = new Array(n).fill(0); for (let r = n - 1; r >= 0; r--) { let s = b[r]; for (let q = r + 1; q < n; q++) s -= A[r][q] * x[q]; x[r] = s / A[r][r]; } return x; }
+// make_pipeline(StandardScaler(), LogisticRegression()): L2 penalty, C = 1, solved by Newton's method
+function fitLR(X, y) {
+  const F = X[0].length, n = X.length, mu = new Array(F).fill(0), sd = new Array(F).fill(0);
+  X.forEach(x => x.forEach((v, j) => { mu[j] += v / n; })); X.forEach(x => x.forEach((v, j) => { sd[j] += (v - mu[j]) ** 2 / n; })); for (let j = 0; j < F; j++) sd[j] = Math.sqrt(sd[j]) || 1;
+  const Z = X.map(x => x.map((v, j) => (v - mu[j]) / sd[j])), d = F + 1; let w = new Array(d).fill(0);
+  for (let it = 0; it < 50; it++) { const H = Array.from({ length: d }, () => new Array(d).fill(0)), g = new Array(d).fill(0);
+    Z.forEach((z, i) => { const r = [1, ...z]; let s = 0; for (let j = 0; j < d; j++) s += r[j] * w[j]; const p = 1 / (1 + Math.exp(-s)), e = p - y[i], q = p * (1 - p); for (let a = 0; a < d; a++) { g[a] += e * r[a]; for (let c = 0; c < d; c++) H[a][c] += q * r[a] * r[c]; } });
+    for (let a = 1; a < d; a++) { g[a] += w[a]; H[a][a] += 1; }
+    const st = linSolve(H, g); w = w.map((v, j) => v - st[j]); if (Math.max(...st.map(Math.abs)) < 1e-12) break; }
+  const prob = x => { let s = w[0]; for (let j = 0; j < F; j++) s += w[j + 1] * (x[j] - mu[j]) / sd[j]; return 1 / (1 + Math.exp(-s)); };
+  return { prob, w, mu, sd };
+}
+// GaussianNB(var_smoothing = 1e-9)
+function fitNB(X, y) {
+  const F = X[0].length, n = X.length, all = new Array(F).fill(0), allv = new Array(F).fill(0);
+  X.forEach(x => x.forEach((v, j) => { all[j] += v / n; })); X.forEach(x => x.forEach((v, j) => { allv[j] += (v - all[j]) ** 2 / n; }));
+  const eps = 1e-9 * Math.max(...allv), cls = [0, 1].map(c => { const R = X.filter((_, i) => y[i] === c), m = R.length, mu = new Array(F).fill(0), va = new Array(F).fill(0);
+    R.forEach(x => x.forEach((v, j) => { mu[j] += v / m; })); R.forEach(x => x.forEach((v, j) => { va[j] += (v - mu[j]) ** 2 / m; })); return { prior: m / n, mu, va: va.map(v => v + eps) }; });
+  const prob = x => { const L = cls.map(c => { let s = Math.log(c.prior); for (let j = 0; j < F; j++) s += -0.5 * Math.log(2 * Math.PI * c.va[j]) - 0.5 * (x[j] - c.mu[j]) ** 2 / c.va[j]; return s; }), m = Math.max(...L); return Math.exp(L[1] - m) / (Math.exp(L[0] - m) + Math.exp(L[1] - m)); };
+  return { prob, cls };
+}
+// DecisionTreeClassifier(max_depth, random_state = 0): scikit-learn's best splitter, on float32 features
+function fitTree(X0, y, maxDepth) {
+  const X = X0.map(x => x.map(Math.fround)), F = X[0].length, features = [...Array(F).keys()], constF = new Array(F).fill(0), EPS = 2.220446049250313e-16;
+  let seed = 209652396 >>> 0;
+  const rnd = () => { if (seed === 0) seed = 1; seed = (seed ^ (seed << 13)) >>> 0; seed = (seed ^ (seed >>> 17)) >>> 0; seed = (seed ^ (seed << 5)) >>> 0; return seed % 2147483648; };
+  const randInt = (lo, hi) => lo + rnd() % (hi - lo), gini = (c, n) => n ? 1 - (c[0] * c[0] + c[1] * c[1]) / (n * n) : 0;
+  function nodeSplit(idx, nKnown) {
+    const n = idx.length, tot = [0, 0]; idx.forEach(i => tot[y[i]]++);
+    let fi = F, nVis = 0, nFound = 0, nDrawn = 0, nTot = nKnown, best = null, bestProxy = -Infinity;
+    while (fi > nTot && (nVis < F || nVis <= nFound + nDrawn)) {
+      nVis++; let fj = randInt(nDrawn, fi - nFound);
+      if (fj < nKnown) { [features[nDrawn], features[fj]] = [features[fj], features[nDrawn]]; nDrawn++; continue; }
+      fj += nFound; const f = features[fj], s = idx.slice().sort((a, b) => X[a][f] - X[b][f]);
+      if (X[s[n - 1]][f] <= X[s[0]][f] + 1e-7) { [features[fj], features[nTot]] = [features[nTot], features[fj]]; nFound++; nTot++; continue; }
+      fi--; [features[fi], features[fj]] = [features[fj], features[fi]];
+      const L = [0, 0], R = tot.slice();
+      for (let p = 1; p < n; p++) { const i = s[p - 1]; L[y[i]]++; R[y[i]]--; if (X[s[p]][f] <= X[s[p - 1]][f] + 1e-7) continue;
+        const proxy = -(n - p) * gini(R, n - p) - p * gini(L, p); if (proxy > bestProxy) { bestProxy = proxy; best = { f, t: X[s[p - 1]][f] / 2 + X[s[p]][f] / 2 }; } }
+    }
+    for (let q = 0; q < nKnown; q++) features[q] = constF[q];
+    for (let q = 0; q < nFound; q++) constF[nKnown + q] = features[nKnown + q];
+    return { best, nConst: nTot };
+  }
+  function build(idx, depth, nKnown) {
+    const cnt = [0, 0]; idx.forEach(i => cnt[y[i]]++); const n = idx.length, node = { n, cnt };
+    if (depth >= maxDepth || n < 2 || gini(cnt, n) <= EPS) return node;
+    const { best, nConst } = nodeSplit(idx, nKnown); if (!best) return node;
+    node.f = best.f; node.t = best.t; node.l = build(idx.filter(i => X[i][best.f] <= best.t), depth + 1, nConst); node.r = build(idx.filter(i => X[i][best.f] > best.t), depth + 1, nConst);
+    return node;
+  }
+  const root = build([...Array(X.length).keys()], 0, 0);
+  const prob = x => { let nd = root; while (nd.l) nd = Math.fround(x[nd.f]) <= nd.t ? nd.l : nd.r; return nd.cnt[1] / nd.n; };
+  return { prob, root };
+}
+function fitDummy(X, y) { const p = y.reduce((s, v) => s + v, 0) / y.length; return { prob: () => p }; }
+// out-of-fold probabilities, like cross_val_predict(method = 'predict_proba')
+function oofProb(fit, X, y, folds, k) {
+  const out = new Array(y.length).fill(0), acc = [];
+  for (let f = 0; f < k; f++) { const tr = [], te = []; folds.forEach((g, i) => (g === f ? te : tr).push(i));
+    const m = fit(tr.map(i => X[i]), tr.map(i => y[i])); let ok = 0; te.forEach(i => { out[i] = m.prob(X[i]); if ((out[i] > 0.5 ? 1 : 0) === y[i]) ok++; }); acc.push(ok / te.length); }
+  return { p: out, acc };
+}
+// ROC curve points (distinct thresholds) and AUC with ties counted as half, as roc_auc_score does
+function rocPts(p, y) {
+  const o = p.map((v, i) => [v, y[i]]).sort((a, b) => b[0] - a[0]), P = y.filter(v => v).length, N = y.length - P, pts = [[0, 0, Infinity]]; let tp = 0, fp = 0;
+  for (let i = 0; i < o.length; i++) { if (o[i][1]) tp++; else fp++; if (i === o.length - 1 || o[i + 1][0] !== o[i][0]) pts.push([fp / N, tp / P, o[i][0]]); }
+  let auc = 0; for (let i = 1; i < pts.length; i++) auc += (pts[i][0] - pts[i - 1][0]) * (pts[i][1] + pts[i - 1][1]) / 2;
+  return { pts, auc };
+}
+// precision–recall points and average precision (step-wise, as average_precision_score)
+function prPts(p, y) {
+  const o = p.map((v, i) => [v, y[i]]).sort((a, b) => b[0] - a[0]), P = y.filter(v => v).length, pts = []; let tp = 0, fp = 0, ap = 0, lastR = 0;
+  for (let i = 0; i < o.length; i++) { if (o[i][1]) tp++; else fp++; if (i === o.length - 1 || o[i + 1][0] !== o[i][0]) { const r = tp / P, pr = tp / (tp + fp); ap += (r - lastR) * pr; lastR = r; pts.push([r, pr, o[i][0]]); } }
+  return { pts, ap };
+}
+function confusion(p, y, t) { let tp = 0, fp = 0, fn = 0, tn = 0; p.forEach((v, i) => { const h = v >= t; if (h && y[i]) tp++; else if (h) fp++; else if (y[i]) fn++; else tn++; }); return { tp, fp, fn, tn }; }
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sum = a => a.reduce((s, v) => s + v, 0);
+const meanOf = a => sum(a) / a.length, sdOf = a => { const m = meanOf(a); return Math.sqrt(sum(a.map(v => (v - m) ** 2)) / a.length); };
+const lg = v => Math.log10(Math.max(v, 1e-6));
+const logAxis = y => { const v = Math.pow(10, y); return v >= 1 ? fmt(v, 0) : v >= 0.1 ? fmt(v, 1) : fmt(v, 2); };
+function polyline(v, pts, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); c.beginPath(); pts.forEach((p, i) => { const x = v.X(p[0]), y = clamp(v.Y(p[1]), -2000, 4000); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); }
+
+/* ---------- polynomials on noisy sine data ---------- */
+const SIG = 0.3, truef = x => Math.sin(2 * Math.PI * x), DMAX = 12;
+function cheb(x, d) { const t = 2 * x - 1, T = [1]; if (d >= 1) T.push(t); for (let k = 2; k <= d; k++) T.push(2 * t * T[k - 1] - T[k - 2]); return T; }
+function polyFit(xs, ys, d) {
+  const m = d + 1, A = Array.from({ length: m }, () => new Array(m).fill(0)), b = new Array(m).fill(0);
+  xs.forEach((x, i) => { const T = cheb(x, d); for (let a = 0; a < m; a++) { b[a] += T[a] * ys[i]; for (let c = 0; c < m; c++) A[a][c] += T[a] * T[c]; } });
+  for (let a = 0; a < m; a++) A[a][a] += 1e-9;
+  const w = linSolve(A, b); return x => { const T = cheb(x, d); let s = 0; for (let a = 0; a < m; a++) s += w[a] * T[a]; return s; };
+}
+function mkSet(seed, n) { const r = mulberry32(seed), x = [], y = []; for (let i = 0; i < n; i++) { const u = r(); x.push(u); y.push(truef(u) + SIG * gaussOf(r)); } return { x, y }; }
+const rmse = (f, S) => Math.sqrt(meanOf(S.x.map((x, i) => (S.y[i] - f(x)) ** 2)));
+const POLY = { seed: 7, d: 3, tr: null, te: mkSet(999, 300), curve: null };
+function polyRefresh() { POLY.tr = mkSet(POLY.seed, 15); POLY.curve = [...Array(DMAX + 1).keys()].map(d => { const f = polyFit(POLY.tr.x, POLY.tr.y, d); return { tr: rmse(f, POLY.tr), te: rmse(f, POLY.te) }; }); CV.cache = {}; }
+
+function drawHero() {
+  const C = C0(), d = POLY.d, f = polyFit(POLY.tr.x, POLY.tr.y, d), v = frame($('#hero-cv'), [0, 1], [-1.9, 1.9], null); axes(v, 'x', 'y', { sx: 0.2, sy: 1 }); clip(v);
+  curve(v, truef, C.q, 1.4, [6, 5]); curve(v, f, C.lda, 2.6);
+  POLY.te.x.forEach((x, i) => { if (i < 120) { v.ctx.globalAlpha = 0.35; dot(v, x, POLY.te.y[i], C.b, 2.2); v.ctx.globalAlpha = 1; } });
+  POLY.tr.x.forEach((x, i) => dot(v, x, POLY.tr.y[i], C.a, 5));
+  v.ctx.restore();
+  const e = POLY.curve[d]; $('#hero-d-o').textContent = d;
+  $('#hero-cap').innerHTML = `<span style="color:var(--cA)">&#9679;</span> 15 training points &nbsp;<span style="color:var(--cB)">&#9679;</span> fresh test points. Degree ${d}: training RMSE ${tip('<b>' + fmt(e.tr, 3) + '</b>', 'typical miss on the 15 points it learned')}, test RMSE ${tip('<b>' + fmt(e.te, 3) + '</b>', 'typical miss on 300 points it never saw')}.${d >= 9 ? ' It threads the training points and misses everything else.' : ''}`;
+}
+function setDeg(d) { POLY.d = d; $('#hero-d').value = d; $('#wh-d').value = d; drawHero(); drawWH(); }
+$('#hero-d').addEventListener('input', e => setDeg(+e.target.value));
+fig($('#hero-cv'), drawHero);
+
+/* ---------- training error lies ---------- */
+function drawWH() {
+  const C = C0(), d = POLY.d, cu = POLY.curve, v = frame($('#wh-cv'), [0, DMAX], [-1.6, 1.1], { l: 44, b: 30 }); axes(v, 'polynomial degree', 'RMSE (log scale)', { sx: 1, sy: 0.5, fy: logAxis }); clip(v);
+  seg(v, -1, lg(SIG), 20, lg(SIG), C.muted, 1.2, [5, 4]);
+  polyline(v, cu.map((e, k) => [k, lg(e.tr)]), C.a, 2.4); polyline(v, cu.map((e, k) => [k, lg(e.te)]), C.b, 2.4);
+  cu.forEach((e, k) => { dot(v, k, lg(e.tr), C.a, 3); dot(v, k, lg(e.te), C.b, 3); });
+  seg(v, d, -3, d, 3, C.q, 1.2, [4, 4]); dot(v, d, lg(cu[d].tr), C.a, 5.5); dot(v, d, lg(cu[d].te), C.b, 5.5); v.ctx.restore();
+  const e = cu[d], best = cu.reduce((b, x, k) => x.te < cu[b].te ? k : b, 0);
+  $('#wh-d-o').textContent = d; $('#wh-tr').innerHTML = tip(fmt(e.tr, 3), 'on the 15 training points'); $('#wh-te').innerHTML = tip(fmt(e.te, 3), 'on 300 fresh points from the same curve');
+  $('#wh-say').innerHTML = d <= 1 ? `Underfitting: a ${d ? 'straight line' : 'constant'} can&rsquo;t follow a wave, so <b>both</b> errors are high and close together. That&rsquo;s high bias.`
+    : e.te <= cu[best].te * 1.15 ? `A sweet spot: test error ${fmt(e.te, 2)} is close to the noise floor ${SIG}. On this training set the best test error is at degree ${best}.`
+    : `Overfitting: training error ${fmt(e.tr, 3)} keeps falling while test error has climbed to ${fmt(e.te, 2)}, ${fmt(e.te / e.tr, 1)}&times; larger. The curve is memorising noise.`;
+  $('#run-wh').innerHTML = `<b>Running example</b>: degree ${d}: RMSE<sub>train</sub> = ${tip(fmt(e.tr, 3), '√(mean of 15 squared misses)')}, RMSE<sub>test</sub> = ${tip(fmt(e.te, 3), '√(mean of 300 squared misses)')}, so the gap is ${fmt(e.te, 3)} &minus; ${fmt(e.tr, 3)} = <b>${fmt(e.te - e.tr, 3)}</b>.`;
+}
+$('#wh-d').addEventListener('input', e => setDeg(+e.target.value));
+$('#wh-new').addEventListener('click', () => { POLY.seed++; polyRefresh(); drawHero(); drawWH(); drawCV(); });
+fig($('#wh-cv'), drawWH);
+
+/* ---------- how big a test set? ---------- */
+const SP = (() => { const r = mulberry32(21), X = [], y = []; for (let i = 0; i < 1000; i++) { const c = i % 2; X.push([gaussOf(r) + c * 1.4, gaussOf(r) + c * 0.6]); y.push(c); } return { X, y, n: 50, cache: {} }; })();
+const centroidFit = (X, y, idx) => { const m = [[0, 0], [0, 0]], k = [0, 0]; idx.forEach(i => { m[y[i]][0] += X[i][0]; m[y[i]][1] += X[i][1]; k[y[i]]++; }); return m.map((v, c) => [v[0] / k[c], v[1] / k[c]]); };
+const centroidPred = (M, x) => ((x[0] - M[0][0]) ** 2 + (x[1] - M[0][1]) ** 2 > (x[0] - M[1][0]) ** 2 + (x[1] - M[1][1]) ** 2 ? 1 : 0);
+SP.trueAcc = (() => { const M = centroidFit(SP.X, SP.y, [...Array(1000).keys()]), r = mulberry32(77); let ok = 0; for (let i = 0; i < 20000; i++) { const c = i % 2, x = [gaussOf(r) + c * 1.4, gaussOf(r) + c * 0.6]; if (centroidPred(M, x) === c) ok++; } return ok / 20000; })();
+function spRun(n) {
+  if (SP.cache[n]) return SP.cache[n];
+  const r = mulberry32(5 + n), idx = [...Array(1000).keys()], accs = [];
+  for (let s = 0; s < 400; s++) { for (let k = 999; k > 0; k--) { const j = Math.floor(r() * (k + 1)); [idx[k], idx[j]] = [idx[j], idx[k]]; }
+    const te = idx.slice(0, n), M = centroidFit(SP.X, SP.y, idx.slice(n)); accs.push(te.filter(i => centroidPred(M, SP.X[i]) === SP.y[i]).length / n); }
+  return (SP.cache[n] = accs);
+}
+function drawSP() {
+  const C = C0(), n = SP.n, A = spRun(n), lo = 0.5, hi = 1, B = 50, h = new Array(B).fill(0);
+  A.forEach(a => { h[clamp(Math.floor((a - lo) / (hi - lo) * B), 0, B - 1)]++; });
+  const v = frame($('#sp-cv'), [lo, hi], [0, Math.max(...h) * 1.15], { b: 30 }); axes(v, 'test accuracy', 'splits', { sx: 0.1, ny: 3, fx: x => pct(x, 0) }); clip(v);
+  const c = v.ctx; c.fillStyle = C.lda; c.globalAlpha = 0.75; h.forEach((k, b) => { if (!k) return; const x0 = v.X(lo + b * (hi - lo) / B) + 0.5, x1 = v.X(lo + (b + 1) * (hi - lo) / B) - 0.5; c.fillRect(x0, v.Y(k), x1 - x0, v.Y(0) - v.Y(k)); }); c.globalAlpha = 1;
+  seg(v, SP.trueAcc, 0, SP.trueAcc, 1e4, C.q, 2.2); c.restore();
+  const sd = sdOf(A), se = Math.sqrt(SP.trueAcc * (1 - SP.trueAcc) / n), mn = Math.min(...A), mx = Math.max(...A);
+  $('#sp-n-o').textContent = n; $('#sp-sd').innerHTML = tip(pct(sd), `standard deviation of the 400 test scores\nformula predicts ${pct(se)}`); $('#sp-rng').innerHTML = tip(`${pct(mn, 0)} – ${pct(mx, 0)}`, 'same data, same model, different random split');
+  $('#sp-say').innerHTML = n <= 50 ? `With ${n} test examples, one unlucky split says ${pct(mn, 0)} and a lucky one ${pct(mx, 0)}, for the very same model. A single small test set can&rsquo;t tell a 75% model from an 85% one.` : n >= 300 ? `${n} test examples pin the score to about &plusmn;${pct(2 * se, 1)} (two standard errors), but now only ${1000 - n} are left to train on. That tension is why cross-validation exists.` : `The spread narrows as the test set grows, but only like 1/&radic;n.`;
+  $('#run-sp').innerHTML = `<b>Running example</b>: acc &asymp; ${pct(SP.trueAcc)}, n<sub>test</sub> = ${n}: SE = &radic;(${fmt(SP.trueAcc, 3)} &times; ${fmt(1 - SP.trueAcc, 3)} / ${n}) = ${tip(pct(se), `the simulation's spread is ${pct(sd)}`)}, so a reported score is honest to about &plusmn;${pct(2 * se, 1)}.`;
+}
+$('#sp-n').addEventListener('input', e => { SP.n = +e.target.value; drawSP(); });
+fig($('#sp-cv'), drawSP);
+
+/* ---------- k-fold cross-validation on the polynomial ---------- */
+const CV = { k: 5, cache: {} };
+function kfold(n, k) { const f = new Array(n), base = Math.floor(n / k), extra = n % k; let i = 0; for (let j = 0; j < k; j++) { const sz = base + (j < extra ? 1 : 0); for (let t = 0; t < sz; t++) f[i++] = j; } return f; }
+function cvCurve(k) {
+  if (CV.cache[k]) return CV.cache[k];
+  const n = POLY.tr.x.length, folds = kfold(n, k), out = [];
+  for (let d = 0; d <= DMAX; d++) { const sc = []; for (let j = 0; j < k; j++) { const tr = [], te = []; folds.forEach((g, i) => (g === j ? te : tr).push(i)); const f = polyFit(tr.map(i => POLY.tr.x[i]), tr.map(i => POLY.tr.y[i]), d); sc.push(Math.sqrt(meanOf(te.map(i => (POLY.tr.y[i] - f(POLY.tr.x[i])) ** 2)))); } out.push({ m: meanOf(sc), sd: sdOf(sc), sc }); }
+  return (CV.cache[k] = { out, folds });
+}
+function drawCV() {
+  const C = C0(), k = CV.k, { out, folds } = cvCurve(k), cu = POLY.curve;
+  $('#cv-folds').innerHTML = [...Array(Math.min(k, 15)).keys()].map(j => `<div class="frow"><span class="flab">round ${j + 1}</span>${folds.map(g => `<i class="${g === j ? 'te' : ''}"></i>`).join('')}</div>`).join('');
+  const v = frame($('#cv-cv'), [0, DMAX], [-1.6, 1.3], { l: 44, b: 30 }); axes(v, 'polynomial degree', 'RMSE (log scale)', { sx: 1, sy: 0.5, fy: logAxis }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.lda; c.globalAlpha = 0.13; c.beginPath(); out.forEach((o, d) => { const y = v.Y(lg(o.m + o.sd)); d ? c.lineTo(v.X(d), y) : c.moveTo(v.X(d), y); }); for (let d = DMAX; d >= 0; d--) c.lineTo(v.X(d), v.Y(lg(Math.max(out[d].m - out[d].sd, 0.02)))); c.closePath(); c.fill(); c.restore();
+  polyline(v, cu.map((e, d) => [d, lg(e.tr)]), C.a, 1.6); polyline(v, cu.map((e, d) => [d, lg(e.te)]), C.b, 2.2); polyline(v, out.map((o, d) => [d, lg(o.m)]), C.lda, 2.6);
+  const pick = out.reduce((b, o, d) => o.m < out[b].m ? d : b, 0), best = cu.reduce((b, e, d) => e.te < cu[b].te ? d : b, 0);
+  out.forEach((o, d) => dot(v, d, lg(o.m), C.lda, d === pick ? 6 : 3)); dot(v, best, lg(cu[best].te), C.b, 6); c.restore();
+  $('#cv-k-o').textContent = k === 15 ? '15 (leave-one-out)' : k; $('#cv-pick').innerHTML = tip(pick, `lowest CV RMSE: ${fmt(out[pick].m, 3)}`); $('#cv-best').innerHTML = tip(best, `lowest test RMSE: ${fmt(cu[best].te, 3)}\n(CV never sees these 300 points)`);
+  const sc = out[pick].sc;
+  $('#run-cv').innerHTML = `<b>Running example</b>: degree ${pick}, ${k} folds: CV<sub>${k}</sub> = (${sc.slice(0, 6).map(s => fmt(s, 2)).join(' + ')}${k > 6 ? ' + &hellip;' : ''}) / ${k} = ${tip(fmt(out[pick].m, 3), `fold scores spread ±${fmt(out[pick].sd, 3)}`)}.`;
+  $('#cv-say').innerHTML = pick === best ? `Cross-validation found the truly best degree, ${best}, using only the 15 training points. ${k === 15 ? 'Leave-one-out uses the most training data per fit, but its fold scores are single points, so they scatter widely.' : ''}` : `CV picked ${pick}, the test set prefers ${best}; their test errors are ${fmt(cu[pick].te, 3)} vs ${fmt(cu[best].te, 3)}. With only 15 points, CV is a noisy judge. ${k <= 3 ? 'With so few folds, each fit trains on very little data, so CV over-penalises flexible models.' : ''}`;
+}
+$('#cv-k').addEventListener('input', e => { CV.k = +e.target.value; drawCV(); });
+fig($('#cv-cv'), drawCV);
+
+/* ---------- a screening score: confusion matrix, PR, ROC ---------- */
+const SC = { prev: 0.2, sep: 1.6, t: 0.5, N: 2000 };
+const ZN = (() => { const r = mulberry32(31), a = []; for (let i = 0; i < 2000; i++) a.push(gaussOf(r)); return a; })(), ZP = (() => { const r = mulberry32(32), a = []; for (let i = 0; i < 2000; i++) a.push(gaussOf(r)); return a; })();
+const sigm = z => 1 / (1 + Math.exp(-z));
+function scData() {
+  if (SC.key === [SC.prev, SC.sep].join()) return SC.D;
+  const nP = Math.round(SC.N * SC.prev), p = [], y = [];
+  for (let i = 0; i < nP; i++) { p.push(sigm(ZP[i] + SC.sep / 2 - 0.6)); y.push(1); } for (let i = 0; i < SC.N - nP; i++) { p.push(sigm(ZN[i] - SC.sep / 2 - 0.6)); y.push(0); }
+  SC.key = [SC.prev, SC.sep].join(); SC.D = { p, y, nP, roc: rocPts(p, y), pr: prPts(p, y) }; return SC.D;
+}
+function cmTable(cm, labs) { return `<thead><tr><th></th><th>${labs[2]}</th><th>${labs[3]}</th></tr></thead><tbody><tr><th>${labs[0]}</th><td class="ok">${tip(cm.tp, 'TP: true positives')}</td><td class="bad">${tip(cm.fn, 'FN: missed')}</td></tr><tr><th>${labs[1]}</th><td class="bad">${tip(cm.fp, 'FP: false alarms')}</td><td class="ok">${tip(cm.tn, 'TN: correctly cleared')}</td></tr></tbody>`; }
+function drawCF() {
+  const C = C0(), D = scData(), t = SC.t, cm = confusion(D.p, D.y, t), B = 40, h = [new Array(B).fill(0), new Array(B).fill(0)];
+  D.p.forEach((p, i) => { h[D.y[i]][Math.min(B - 1, Math.floor(p * B))]++; });
+  const m0 = Math.max(...h[0]), m1 = Math.max(...h[1], 1), v = frame($('#cf-cv'), [0, 1], [0, 1.12], { b: 30, l: 18 }); axes(v, 'risk score', '', { sx: 0.2, sy: 2 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.muted; c.globalAlpha = 0.1; c.fillRect(v.X(t), v.pad.t, v.X(1) - v.X(t), v.ph); c.restore();
+  [[0, C.a, m0], [1, C.b, m1]].forEach(([g, col, m]) => { c.save(); c.fillStyle = col; c.globalAlpha = 0.55; h[g].forEach((k, b) => { if (!k) return; const x0 = v.X(b / B) + 0.5, x1 = v.X((b + 1) / B) - 0.5; c.fillRect(x0, v.Y(k / m), x1 - x0, v.Y(0) - v.Y(k / m)); }); c.restore(); });
+  seg(v, t, 0, t, 2, C.q, 2.2); c.restore();
+  const acc = (cm.tp + cm.tn) / SC.N;
+  $('#cf-t-o').textContent = fmt(t, 2); $('#cf-tbl').innerHTML = cmTable(cm, ['actually sick', 'actually healthy', 'flagged', 'cleared']);
+  $('#cf-acc').innerHTML = tip(pct(acc), `(${cm.tp} + ${cm.tn}) / ${SC.N}`); $('#cf-none').innerHTML = tip(pct(1 - SC.prev), `flag nobody: all ${SC.N - D.nP} healthy are right,\nall ${D.nP} sick are missed`);
+  $('#cf-say').innerHTML = SC.prev <= 0.05 ? `Flagging nobody scores <b>${pct(1 - SC.prev)}</b> and catches zero of the ${D.nP} sick people. Your threshold catches ${cm.tp} of them at ${pct(acc)} accuracy${acc < 1 - SC.prev ? ', a <i>lower</i> accuracy than doing nothing' : ''}. Accuracy alone would choose the useless rule.` : `Move the threshold left: fewer sick people are missed (FN falls) but more healthy people are flagged (FP rises). There is no free lunch, only a trade.`;
+  $('#run-cf').innerHTML = `<b>Running example</b>: ${SC.N} people, ${D.nP} sick, threshold ${fmt(t, 2)}: accuracy = (${cm.tp} + ${cm.tn}) / (${cm.tp} + ${cm.fp} + ${cm.fn} + ${cm.tn}) = ${tip(pct(acc), `${cm.fn} missed cases and ${cm.fp} false alarms\ncounted as the same kind of error`)}.`;
+}
+function drawPR() {
+  const C = C0(), D = scData(), cm = confusion(D.p, D.y, SC.t), rec = cm.tp / (cm.tp + cm.fn), pre = cm.tp + cm.fp ? cm.tp / (cm.tp + cm.fp) : 1, f1 = pre + rec ? 2 * pre * rec / (pre + rec) : 0;
+  const v = frame($('#pr-cv'), [0, 1], [0, 1.04], { b: 30 }); axes(v, 'recall', 'precision', { sx: 0.2, sy: 0.2 }); clip(v);
+  seg(v, 0, SC.prev, 1, SC.prev, C.muted, 1.2, [5, 4]); polyline(v, [[0, D.pr.pts[0][1]], ...D.pr.pts.map(p => [p[0], p[1]])], C.lda, 2.6); dot(v, rec, pre, C.q, 6); v.ctx.restore();
+  $('#pr-t-o').textContent = fmt(SC.t, 2);
+  $('#pr-r').innerHTML = tip(pct(rec, 0), `${cm.tp} / (${cm.tp} + ${cm.fn})`); $('#pr-p').innerHTML = tip(pct(pre, 0), `${cm.tp} / (${cm.tp} + ${cm.fp})`); $('#pr-f').innerHTML = tip(fmt(f1, 3), `2 × ${fmt(pre, 3)} × ${fmt(rec, 3)} / (${fmt(pre, 3)} + ${fmt(rec, 3)})`);
+  $('#pr-say').innerHTML = `Of every 100 people flagged, about <b>${fmt(pre * 100, 0)}</b> are really sick; ${pct(rec, 0)} of all sick people are caught.${SC.prev <= 0.05 ? ` With only ${pct(SC.prev, 0)} sick, even a decent score drowns its true cases in false alarms: that is the base-rate effect from the Naive Bayes chapter.` : ''}`;
+  $('#run-pr').innerHTML = `<b>Running example</b>: TP = ${cm.tp}, FP = ${cm.fp}, FN = ${cm.fn}: recall = ${cm.tp}/${cm.tp + cm.fn} = ${fmt(rec, 3)}, precision = ${cm.tp}/${cm.tp + cm.fp} = ${fmt(pre, 3)}, F&#8321; = 2&times;${fmt(pre, 3)}&times;${fmt(rec, 3)}/(${fmt(pre, 3)}+${fmt(rec, 3)}) = ${tip(fmt(f1, 3), 'pulled toward the smaller of the two')}.`;
+}
+function drawROC() {
+  const C = C0(), D = scData(), cm = confusion(D.p, D.y, SC.t), tpr = cm.tp / (cm.tp + cm.fn), fpr = cm.fp / (cm.fp + cm.tn), pts = D.roc.pts;
+  const v = frame($('#roc-cv'), [0, 1], [0, 1], { b: 30 }, true); axes(v, 'FPR (false alarms)', 'TPR (recall)', { sx: 0.2, sy: 0.2 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.lda; c.globalAlpha = 0.12; c.beginPath(); c.moveTo(v.X(0), v.Y(0)); pts.forEach(p => c.lineTo(v.X(p[0]), v.Y(p[1]))); c.lineTo(v.X(1), v.Y(0)); c.closePath(); c.fill(); c.restore();
+  seg(v, 0, 0, 1, 1, C.muted, 1.2, [5, 4]); polyline(v, pts.map(p => [p[0], p[1]]), C.lda, 2.6); dot(v, fpr, tpr, C.q, 6); c.restore();
+  // AUC as a pair-counting game
+  const r = mulberry32(9), P = [], Nn = []; D.p.forEach((p, i) => (D.y[i] ? P : Nn).push(p)); let win = 0; for (let k = 0; k < 1000; k++) { const a = P[Math.floor(r() * P.length)], b = Nn[Math.floor(r() * Nn.length)]; win += a > b ? 1 : a === b ? 0.5 : 0; }
+  $('#roc-s-o').textContent = fmt(SC.sep, 1); $('#roc-t-o').textContent = fmt(SC.t, 2);
+  $('#roc-auc').innerHTML = tip(fmt(D.roc.auc, 3), 'area under the curve (trapezoids)'); $('#roc-tpr').innerHTML = tip(pct(tpr, 0), `${cm.tp} / ${cm.tp + cm.fn} sick`); $('#roc-fpr').innerHTML = tip(pct(fpr, 0), `${cm.fp} / ${cm.fp + cm.tn} healthy`);
+  const pre = cm.tp + cm.fp ? cm.tp / (cm.tp + cm.fp) : 1;
+  $('#roc-say').innerHTML = SC.sep < 0.15 ? 'No separation: the score is noise and the curve sits on the diagonal (AUC &asymp; 0.5).' : `With ${pct(SC.prev, 0)} sick, this threshold flags ${pct(fpr, 0)} of the healthy and catches ${pct(tpr, 0)} of the sick; precision is ${pct(pre, 0)}. Switch the prevalence in the confusion-matrix section: TPR, FPR and AUC barely move, but precision changes a lot.`;
+  $('#run-roc').innerHTML = `<b>Running example</b>: 1,000 random (sick, healthy) pairs: the sick person scored higher in ${tip(fmt(win, 0), 'ties count half')} of them, so AUC &asymp; ${fmt(win / 1000, 3)}; the exact area is ${fmt(D.roc.auc, 3)}.`;
+}
+const scAll = () => { drawCF(); drawPR(); drawROC(); };
+$$('[data-sync="t"]').forEach(el => el.addEventListener('input', e => { SC.t = +e.target.value; $$('[data-sync="t"]').forEach(o => { o.value = SC.t; }); scAll(); }));
+seg1('[data-pv]', 'data-pv', k => { SC.prev = +k; scAll(); });
+$('#roc-s').addEventListener('input', e => { SC.sep = +e.target.value; scAll(); });
+fig($('#cf-cv'), drawCF); fig($('#pr-cv'), drawPR); fig($('#roc-cv'), drawROC);
+
+/* ---------- bias and variance ---------- */
+const BV = { d: 1, G: [...Array(61).keys()].map(i => i / 60), R: 400, stats: null, fits: {} };
+function bvCompute() {
+  if (BV.stats) return; BV.stats = [];
+  const sets = [...Array(BV.R).keys()].map(r => mkSet(5000 + r, 15));
+  for (let d = 0; d <= DMAX; d++) { const F = sets.map(S => { const f = polyFit(S.x, S.y, d); return BV.G.map(f); }); BV.fits[d] = F;
+    const mean = BV.G.map((_, g) => meanOf(F.map(r => r[g]))), b2 = meanOf(BV.G.map((x, g) => (mean[g] - truef(x)) ** 2)), va = meanOf(BV.G.map((_, g) => meanOf(F.map(r => (r[g] - mean[g]) ** 2))));
+    BV.stats.push({ b2, va, tot: b2 + va + SIG * SIG, mean }); }
+}
+function drawBV() {
+  bvCompute(); const C = C0(), d = BV.d, st = BV.stats[d], F = BV.fits[d];
+  { const v = frame($('#bv-cv'), [0, 1], [-2, 2], null); axes(v, 'x', 'y', { sx: 0.2, sy: 1 }); clip(v);
+    F.slice(0, 30).forEach(r => { v.ctx.globalAlpha = 0.35; polyline(v, BV.G.map((x, g) => [x, r[g]]), C.muted, 1.1); }); v.ctx.globalAlpha = 1;
+    curve(v, truef, C.q, 1.6, [6, 5]); polyline(v, BV.G.map((x, g) => [x, st.mean[g]]), C.lda, 3); v.ctx.restore(); }
+  { const S = BV.stats, v = frame($('#bv-chart'), [0, DMAX], [-3, 2.2], { l: 44, b: 26 }); axes(v, 'degree', 'error (log)', { sx: 1, sy: 1, fy: logAxis }); clip(v);
+    polyline(v, S.map((s, k) => [k, lg(s.b2)]), C.a, 2.2); polyline(v, S.map((s, k) => [k, lg(s.va)]), C.b, 2.2); polyline(v, S.map((s, k) => [k, lg(s.tot)]), C.q, 2.4);
+    seg(v, -1, lg(SIG * SIG), 20, lg(SIG * SIG), C.muted, 1, [4, 4]); seg(v, d, -4, d, 4, C.q, 1, [3, 3]); v.ctx.restore(); }
+  const best = BV.stats.reduce((b, s, k) => s.tot < BV.stats[b].tot ? k : b, 0), f3 = v => v >= 100 ? fmt(v, 0) : v >= 1 ? fmt(v, 2) : fmt(v, 3);
+  $('#bv-d-o').textContent = d; $('#bv-b').innerHTML = tip(f3(st.b2), 'squared gap between the average fit\nand the true curve, averaged over x'); $('#bv-v').innerHTML = tip(f3(st.va), 'how far individual fits scatter\naround their average'); $('#bv-t').innerHTML = tip(f3(st.tot), `bias² + variance + σ² (σ² = ${fmt(SIG * SIG, 2)})`);
+  $('#bv-say').innerHTML = d <= 1 ? 'High bias: every fit is nearly the same stiff line, and all of them miss the wave in the same places. More data would not help.' : d === best ? `The balance point: degree ${d} has the lowest expected error. Bias is nearly gone and variance is still small.` : st.va > st.b2 * 3 ? `High variance: the average fit (blue) is close to the truth, but each single fit swings wildly, especially at the edges where data is thin. Expected error is ${fmt(st.tot / BV.stats[best].tot, 1)}&times; the best degree's (${best}).` : `Bias is falling and variance rising; the best total is at degree ${best}.`;
+  $('#run-bv').innerHTML = `<b>Running example</b>: degree ${d}, averaged over ${BV.R} training sets: ${f3(st.b2)} + ${f3(st.va)} + ${fmt(SIG * SIG, 2)} = ${tip(f3(st.tot), 'the error you should expect on a new point')}.`;
+}
+$('#bv-d').addEventListener('input', e => { BV.d = +e.target.value; drawBV(); });
+fig($('#bv-cv'), drawBV);
+
+/* ---------- leakage ---------- */
+const LK = { runs: [], seed: 100 };
+function lkRun() {
+  const r = mulberry32(LK.seed++), n = 50, p = 1000, K = 20, X = [...Array(n)].map(() => Float64Array.from({ length: p }, () => gaussOf(r)));
+  const y = [...Array(n)].map((_, i) => i < 25 ? 1 : 0); for (let k = n - 1; k > 0; k--) { const j = Math.floor(r() * (k + 1)); [y[k], y[j]] = [y[j], y[k]]; }
+  const top = rows => { const ym = meanOf(rows.map(i => y[i])), sc = []; for (let j = 0; j < p; j++) { let xm = 0; rows.forEach(i => { xm += X[i][j]; }); xm /= rows.length; let sxy = 0, sxx = 0; rows.forEach(i => { const dx = X[i][j] - xm; sxy += dx * (y[i] - ym); sxx += dx * dx; }); sc.push([Math.abs(sxy) / Math.sqrt(sxx), j]); } return sc.sort((a, b) => b[0] - a[0]).slice(0, K).map(s => s[1]); };
+  const folds = kfold(n, 5), cvAcc = (sel) => { let ok = 0; for (let f = 0; f < 5; f++) { const tr = [], te = []; folds.forEach((g, i) => (g === f ? te : tr).push(i)); const S = sel ? sel : top(tr), m = [0, 1].map(c => { const R = tr.filter(i => y[i] === c); return S.map(j => meanOf(R.map(i => X[i][j]))); }); te.forEach(i => { const d = m.map(mu => sum(S.map((j, q) => (X[i][j] - mu[q]) ** 2))); if ((d[1] < d[0] ? 1 : 0) === y[i]) ok++; }); } return ok / n; };
+  const all = [...Array(n).keys()]; LK.runs.push([cvAcc(top(all)), cvAcc(null)]);
+}
+function drawLK() {
+  const C = C0(), v = frame($('#lk-cv'), [0.1, 1], [-0.5, 1.5], { l: 64, b: 28 }); axes(v, 'cross-validated accuracy', '', { sx: 0.1, sy: 5, fx: x => pct(x, 0) }); clip(v);
+  seg(v, 0.5, -1, 0.5, 2, C.q, 1.2, [5, 4]);
+  const jr = mulberry32(3); LK.runs.forEach((rr, i) => { const last = i === LK.runs.length - 1; dot(v, rr[0], 1 + (jr() - 0.5) * 0.5, C.bad, last ? 6 : 4); dot(v, rr[1], (jr() - 0.5) * 0.5, C.a, last ? 6 : 4); });
+  v.ctx.restore(); const c = v.ctx; c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'right'; c.fillText('wrong', v.pad.l - 8, v.Y(1) + 4); c.fillText('right', v.pad.l - 8, v.Y(0) + 4); c.restore();
+  if (!LK.runs.length) { $('#lk-w').textContent = '—'; $('#lk-r').textContent = '—'; $('#lk-say').textContent = 'Press Run.'; return; }
+  const L = LK.runs[LK.runs.length - 1], mw = meanOf(LK.runs.map(r => r[0])), mr = meanOf(LK.runs.map(r => r[1]));
+  $('#lk-w').innerHTML = tip(pct(L[0], 0), `this run; average over ${LK.runs.length} runs: ${pct(mw)}`); $('#lk-r').innerHTML = tip(pct(L[1], 0), `this run; average over ${LK.runs.length} runs: ${pct(mr)}`);
+  $('#lk-say').innerHTML = `Over ${LK.runs.length} run${LK.runs.length > 1 ? 's' : ''} of pure noise: the wrong way averages <b>${pct(mw, 0)}</b>, the right way <b>${pct(mr, 0)}</b>. The wrong way &ldquo;discovers&rdquo; a signal because the 20 genes were chosen partly for agreeing with the test folds&rsquo; own labels.`;
+}
+$('#lk-run').addEventListener('click', () => { lkRun(); drawLK(); });
+$('#lk-20').addEventListener('click', () => { $('#lk-20').disabled = true; let k = 0; (function go() { lkRun(); drawLK(); if (++k < 20) setTimeout(go, 0); else $('#lk-20').disabled = false; })(); });
+fig($('#lk-cv'), drawLK);
+
+/* ---------- project: Pima diabetes screening ---------- */
+const PIMA = {"X":[[1.0,80.0,74.0,11.0,60.0,30.0,0.527,22.0],[2.0,119.0,0.0,0.0,0.0,19.6,0.832,72.0],[10.0,115.0,0.0,0.0,0.0,0.0,0.261,30.0],[1.0,181.0,78.0,42.0,293.0,40.0,1.258,22.0],[4.0,97.0,60.0,23.0,0.0,28.2,0.443,22.0],[2.0,94.0,68.0,18.0,76.0,26.0,0.561,21.0],[1.0,89.0,66.0,23.0,94.0,28.1,0.167,21.0],[1.0,109.0,56.0,21.0,135.0,25.2,0.833,23.0],[4.0,95.0,64.0,0.0,0.0,32.0,0.161,31.0],[2.0,81.0,72.0,15.0,76.0,30.1,0.547,25.0],[2.0,146.0,70.0,38.0,360.0,28.0,0.337,29.0],[5.0,109.0,75.0,26.0,0.0,36.0,0.546,60.0],[1.0,138.0,82.0,0.0,0.0,40.1,0.236,28.0],[7.0,109.0,80.0,31.0,0.0,35.9,1.127,43.0],[3.0,88.0,58.0,11.0,54.0,24.8,0.267,22.0],[0.0,137.0,84.0,27.0,0.0,27.3,0.231,59.0],[3.0,84.0,72.0,32.0,0.0,37.2,0.267,28.0],[1.0,128.0,48.0,45.0,194.0,40.5,0.613,24.0],[0.0,162.0,76.0,36.0,0.0,49.6,0.364,26.0],[0.0,105.0,68.0,22.0,0.0,20.0,0.236,22.0],[1.0,139.0,46.0,19.0,83.0,28.7,0.654,22.0],[10.0,122.0,78.0,31.0,0.0,27.6,0.512,45.0],[4.0,99.0,76.0,15.0,51.0,23.2,0.223,21.0],[6.0,147.0,80.0,0.0,0.0,29.5,0.178,50.0],[9.0,124.0,70.0,33.0,402.0,35.4,0.282,34.0],[0.0,131.0,66.0,40.0,0.0,34.3,0.196,22.0],[1.0,151.0,60.0,0.0,0.0,26.1,0.179,22.0],[2.0,157.0,74.0,35.0,440.0,39.4,0.134,30.0],[7.0,195.0,70.0,33.0,145.0,25.1,0.163,55.0],[3.0,80.0,82.0,31.0,70.0,34.2,1.292,27.0],[1.0,0.0,74.0,20.0,23.0,27.7,0.299,21.0],[8.0,188.0,78.0,0.0,0.0,47.9,0.137,43.0],[0.0,107.0,76.0,0.0,0.0,45.3,0.686,24.0],[2.0,81.0,60.0,22.0,0.0,27.7,0.29,25.0],[5.0,147.0,75.0,0.0,0.0,29.9,0.434,28.0],[0.0,117.0,66.0,31.0,188.0,30.8,0.493,22.0],[10.0,101.0,76.0,48.0,180.0,32.9,0.171,63.0],[6.0,91.0,0.0,0.0,0.0,29.8,0.501,31.0],[4.0,145.0,82.0,18.0,0.0,32.5,0.235,70.0],[1.0,109.0,60.0,8.0,182.0,25.4,0.947,21.0],[4.0,151.0,90.0,38.0,0.0,29.7,0.294,36.0],[3.0,107.0,62.0,13.0,48.0,22.9,0.678,23.0],[6.0,85.0,78.0,0.0,0.0,31.2,0.382,42.0],[7.0,124.0,70.0,33.0,215.0,25.5,0.161,37.0],[1.0,103.0,30.0,38.0,83.0,43.3,0.183,33.0],[4.0,118.0,70.0,0.0,0.0,44.5,0.904,26.0],[13.0,76.0,60.0,0.0,0.0,32.8,0.18,41.0],[5.0,117.0,92.0,0.0,0.0,34.1,0.337,38.0],[1.0,93.0,56.0,11.0,0.0,22.5,0.417,22.0],[5.0,168.0,64.0,0.0,0.0,32.9,0.135,41.0],[1.0,139.0,62.0,41.0,480.0,40.7,0.536,21.0],[1.0,180.0,0.0,0.0,0.0,43.3,0.282,41.0],[1.0,91.0,54.0,25.0,100.0,25.2,0.234,23.0],[6.0,92.0,92.0,0.0,0.0,19.9,0.188,28.0],[1.0,0.0,48.0,20.0,0.0,24.7,0.14,22.0],[1.0,126.0,60.0,0.0,0.0,30.1,0.349,47.0],[12.0,84.0,72.0,31.0,0.0,29.7,0.297,46.0],[5.0,162.0,104.0,0.0,0.0,37.7,0.151,52.0],[0.0,151.0,90.0,46.0,0.0,42.1,0.371,21.0],[2.0,101.0,58.0,35.0,90.0,21.8,0.155,22.0],[4.0,125.0,80.0,0.0,0.0,32.3,0.536,27.0],[2.0,115.0,64.0,22.0,0.0,30.8,0.421,21.0],[1.0,119.0,54.0,13.0,50.0,22.3,0.205,24.0],[12.0,140.0,85.0,33.0,0.0,37.4,0.244,41.0],[4.0,110.0,76.0,20.0,100.0,28.4,0.118,27.0],[7.0,194.0,68.0,28.0,0.0,35.9,0.745,41.0],[2.0,128.0,78.0,37.0,182.0,43.3,1.224,31.0],[5.0,109.0,62.0,41.0,129.0,35.8,0.514,25.0],[7.0,125.0,86.0,0.0,0.0,37.6,0.304,51.0],[3.0,150.0,76.0,0.0,0.0,21.0,0.207,37.0],[5.0,130.0,82.0,0.0,0.0,39.1,0.956,37.0],[3.0,120.0,70.0,30.0,135.0,42.9,0.452,30.0],[1.0,71.0,48.0,18.0,76.0,20.4,0.323,22.0],[4.0,111.0,72.0,47.0,207.0,37.1,1.39,56.0],[0.0,152.0,82.0,39.0,272.0,41.5,0.27,27.0],[3.0,158.0,76.0,36.0,245.0,31.6,0.851,28.0],[4.0,120.0,68.0,0.0,0.0,29.6,0.709,34.0],[2.0,110.0,74.0,29.0,125.0,32.4,0.698,27.0],[3.0,111.0,56.0,39.0,0.0,30.1,0.557,30.0],[0.0,179.0,50.0,36.0,159.0,37.8,0.455,22.0],[8.0,151.0,78.0,32.0,210.0,42.9,0.516,36.0],[6.0,109.0,60.0,27.0,0.0,25.0,0.206,27.0],[2.0,120.0,54.0,0.0,0.0,26.8,0.455,27.0],[1.0,144.0,82.0,40.0,0.0,41.3,0.607,28.0],[2.0,68.0,62.0,13.0,15.0,20.1,0.257,23.0],[3.0,191.0,68.0,15.0,130.0,30.9,0.299,34.0],[1.0,100.0,66.0,15.0,56.0,23.6,0.666,26.0],[3.0,102.0,44.0,20.0,94.0,30.8,0.4,26.0],[9.0,106.0,52.0,0.0,0.0,31.2,0.38,42.0],[11.0,135.0,0.0,0.0,0.0,52.3,0.578,40.0],[6.0,125.0,68.0,30.0,120.0,30.0,0.464,32.0],[6.0,103.0,72.0,32.0,190.0,37.7,0.324,55.0],[4.0,122.0,68.0,0.0,0.0,35.0,0.394,29.0],[4.0,84.0,90.0,23.0,56.0,39.5,0.159,25.0],[4.0,90.0,88.0,47.0,54.0,37.7,0.362,29.0],[5.0,77.0,82.0,41.0,42.0,35.8,0.156,35.0],[8.0,120.0,78.0,0.0,0.0,25.0,0.409,64.0],[0.0,118.0,64.0,23.0,89.0,0.0,1.731,21.0],[7.0,142.0,60.0,33.0,190.0,28.8,0.687,61.0],[0.0,189.0,104.0,25.0,0.0,34.3,0.435,41.0],[4.0,189.0,110.0,31.0,0.0,28.5,0.68,37.0],[5.0,99.0,54.0,28.0,83.0,34.0,0.499,30.0],[6.0,114.0,88.0,0.0,0.0,27.8,0.247,66.0],[9.0,102.0,76.0,37.0,0.0,32.9,0.665,46.0],[1.0,193.0,50.0,16.0,375.0,25.9,0.655,24.0],[1.0,167.0,74.0,17.0,144.0,23.4,0.447,33.0],[2.0,117.0,90.0,19.0,71.0,25.2,0.313,21.0],[7.0,83.0,78.0,26.0,71.0,29.3,0.767,36.0],[1.0,125.0,70.0,24.0,110.0,24.3,0.221,25.0],[4.0,95.0,70.0,32.0,0.0,32.1,0.612,24.0],[7.0,159.0,64.0,0.0,0.0,27.4,0.294,40.0],[1.0,106.0,76.0,0.0,0.0,37.5,0.197,26.0],[3.0,99.0,62.0,19.0,74.0,21.8,0.279,26.0],[0.0,139.0,62.0,17.0,210.0,22.1,0.207,21.0],[1.0,90.0,62.0,18.0,59.0,25.1,1.268,25.0],[2.0,88.0,58.0,26.0,16.0,28.4,0.766,22.0],[2.0,99.0,0.0,0.0,0.0,22.2,0.108,23.0],[1.0,144.0,82.0,46.0,180.0,46.1,0.335,46.0],[4.0,158.0,78.0,0.0,0.0,32.9,0.803,31.0],[13.0,145.0,82.0,19.0,110.0,22.2,0.245,57.0],[0.0,162.0,76.0,56.0,100.0,53.2,0.759,25.0],[1.0,143.0,84.0,23.0,310.0,42.4,1.076,22.0],[13.0,104.0,72.0,0.0,0.0,31.2,0.465,38.0],[7.0,107.0,74.0,0.0,0.0,29.6,0.254,31.0],[0.0,177.0,60.0,29.0,478.0,34.6,1.072,21.0],[1.0,136.0,74.0,50.0,204.0,37.4,0.399,24.0],[1.0,111.0,94.0,0.0,0.0,32.8,0.265,45.0],[4.0,115.0,72.0,0.0,0.0,28.9,0.376,46.0],[8.0,183.0,64.0,0.0,0.0,23.3,0.672,32.0],[4.0,147.0,74.0,25.0,293.0,34.9,0.385,30.0],[4.0,127.0,88.0,11.0,155.0,34.5,0.598,28.0],[0.0,180.0,78.0,63.0,14.0,59.4,2.42,25.0],[0.0,101.0,76.0,0.0,0.0,35.7,0.198,26.0],[1.0,149.0,68.0,29.0,127.0,29.3,0.349,42.0],[0.0,101.0,64.0,17.0,0.0,21.0,0.252,21.0],[2.0,125.0,60.0,20.0,140.0,33.8,0.088,31.0],[2.0,108.0,62.0,32.0,56.0,25.2,0.128,21.0],[13.0,106.0,72.0,54.0,0.0,36.6,0.178,45.0],[1.0,108.0,60.0,46.0,178.0,35.5,0.415,24.0],[4.0,129.0,86.0,20.0,270.0,35.1,0.231,23.0],[0.0,135.0,94.0,46.0,145.0,40.6,0.284,26.0],[2.0,91.0,62.0,0.0,0.0,27.3,0.525,22.0],[2.0,100.0,70.0,52.0,57.0,40.5,0.677,25.0],[6.0,190.0,92.0,0.0,0.0,35.5,0.278,66.0],[2.0,127.0,46.0,21.0,335.0,34.4,0.176,22.0],[1.0,189.0,60.0,23.0,846.0,30.1,0.398,59.0],[4.0,92.0,80.0,0.0,0.0,42.2,0.237,29.0],[2.0,92.0,76.0,20.0,0.0,24.2,1.698,28.0],[9.0,119.0,80.0,35.0,0.0,29.0,0.263,29.0],[4.0,94.0,65.0,22.0,0.0,24.7,0.148,21.0],[1.0,89.0,24.0,19.0,25.0,27.8,0.559,21.0],[11.0,103.0,68.0,40.0,0.0,46.2,0.126,42.0],[1.0,111.0,86.0,19.0,0.0,30.1,0.143,23.0],[10.0,68.0,106.0,23.0,49.0,35.5,0.285,47.0],[1.0,109.0,38.0,18.0,120.0,23.1,0.407,26.0],[7.0,137.0,90.0,41.0,0.0,32.0,0.391,39.0],[6.0,102.0,90.0,39.0,0.0,35.7,0.674,28.0],[7.0,114.0,76.0,17.0,110.0,23.8,0.466,31.0],[2.0,89.0,90.0,30.0,0.0,33.5,0.292,42.0],[2.0,87.0,0.0,23.0,0.0,28.9,0.773,25.0],[7.0,187.0,50.0,33.0,392.0,33.9,0.826,34.0],[3.0,180.0,64.0,25.0,70.0,34.0,0.271,26.0],[4.0,141.0,74.0,0.0,0.0,27.6,0.244,40.0],[1.0,119.0,88.0,41.0,170.0,45.3,0.507,26.0],[0.0,95.0,80.0,45.0,92.0,36.5,0.33,26.0],[8.0,196.0,76.0,29.0,280.0,37.5,0.605,57.0],[10.0,133.0,68.0,0.0,0.0,27.0,0.245,36.0],[2.0,129.0,84.0,0.0,0.0,28.0,0.284,27.0],[6.0,125.0,76.0,0.0,0.0,33.8,0.121,54.0],[10.0,108.0,66.0,0.0,0.0,32.4,0.272,42.0],[8.0,110.0,76.0,0.0,0.0,27.8,0.237,58.0],[0.0,100.0,88.0,60.0,110.0,46.8,0.962,31.0],[3.0,99.0,80.0,11.0,64.0,19.3,0.284,30.0],[1.0,122.0,64.0,32.0,156.0,35.1,0.692,30.0],[8.0,133.0,72.0,0.0,0.0,32.9,0.27,39.0],[2.0,146.0,76.0,35.0,194.0,38.2,0.329,29.0],[3.0,130.0,78.0,23.0,79.0,28.4,0.323,34.0],[6.0,144.0,72.0,27.0,228.0,33.9,0.255,40.0],[1.0,79.0,60.0,42.0,48.0,43.5,0.678,23.0],[0.0,147.0,85.0,54.0,0.0,42.8,0.375,24.0],[1.0,96.0,122.0,0.0,0.0,22.4,0.207,27.0],[10.0,122.0,68.0,0.0,0.0,31.2,0.258,41.0],[9.0,91.0,68.0,0.0,0.0,24.2,0.2,58.0],[2.0,114.0,68.0,22.0,0.0,28.7,0.092,25.0],[5.0,88.0,66.0,21.0,23.0,24.4,0.342,30.0],[0.0,102.0,86.0,17.0,105.0,29.3,0.695,27.0],[3.0,182.0,74.0,0.0,0.0,30.5,0.345,29.0],[7.0,196.0,90.0,0.0,0.0,39.8,0.451,41.0],[0.0,91.0,80.0,0.0,0.0,32.4,0.601,27.0],[0.0,198.0,66.0,32.0,274.0,41.3,0.502,28.0],[3.0,129.0,64.0,29.0,115.0,26.4,0.219,28.0],[5.0,122.0,86.0,0.0,0.0,34.7,0.29,33.0],[9.0,112.0,82.0,32.0,175.0,34.2,0.26,36.0],[2.0,155.0,74.0,17.0,96.0,26.6,0.433,27.0],[1.0,105.0,58.0,0.0,0.0,24.3,0.187,21.0],[7.0,152.0,88.0,44.0,0.0,50.0,0.337,36.0],[4.0,173.0,70.0,14.0,168.0,29.7,0.361,33.0],[0.0,140.0,65.0,26.0,130.0,42.6,0.431,24.0],[5.0,106.0,82.0,30.0,0.0,39.5,0.286,38.0],[4.0,136.0,70.0,0.0,0.0,31.2,1.182,22.0],[7.0,161.0,86.0,0.0,0.0,30.4,0.165,47.0],[9.0,112.0,82.0,24.0,0.0,28.2,1.282,50.0],[8.0,120.0,0.0,0.0,0.0,30.0,0.183,38.0],[3.0,116.0,74.0,15.0,105.0,26.3,0.107,24.0],[2.0,146.0,0.0,0.0,0.0,27.5,0.24,28.0],[8.0,181.0,68.0,36.0,495.0,30.1,0.615,60.0],[8.0,154.0,78.0,32.0,0.0,32.4,0.443,45.0],[1.0,113.0,64.0,35.0,0.0,33.6,0.543,21.0],[8.0,120.0,86.0,0.0,0.0,28.4,0.259,22.0],[6.0,0.0,68.0,41.0,0.0,39.0,0.727,41.0],[3.0,96.0,56.0,34.0,115.0,24.7,0.944,39.0],[3.0,173.0,78.0,39.0,185.0,33.8,0.97,31.0],[0.0,98.0,82.0,15.0,84.0,25.2,0.299,22.0],[6.0,115.0,60.0,39.0,0.0,33.7,0.245,40.0],[9.0,57.0,80.0,37.0,0.0,32.8,0.096,41.0],[0.0,181.0,88.0,44.0,510.0,43.3,0.222,26.0],[6.0,137.0,61.0,0.0,0.0,24.2,0.151,55.0],[6.0,102.0,82.0,0.0,0.0,30.8,0.18,36.0],[3.0,187.0,70.0,22.0,200.0,36.4,0.408,36.0],[0.0,101.0,65.0,28.0,0.0,24.6,0.237,22.0],[3.0,171.0,72.0,33.0,135.0,33.3,0.199,24.0],[2.0,106.0,56.0,27.0,165.0,29.0,0.426,22.0],[7.0,184.0,84.0,33.0,0.0,35.5,0.355,41.0],[10.0,115.0,0.0,0.0,0.0,35.3,0.134,29.0],[7.0,114.0,64.0,0.0,0.0,27.4,0.732,34.0],[8.0,197.0,74.0,0.0,0.0,25.9,1.191,39.0],[2.0,108.0,64.0,0.0,0.0,30.8,0.158,21.0],[4.0,144.0,82.0,32.0,0.0,38.5,0.554,37.0],[5.0,124.0,74.0,0.0,0.0,34.0,0.22,38.0],[2.0,175.0,88.0,0.0,0.0,22.9,0.326,22.0],[1.0,116.0,70.0,28.0,0.0,27.4,0.204,21.0],[0.0,113.0,76.0,0.0,0.0,33.3,0.278,23.0],[8.0,107.0,80.0,0.0,0.0,24.6,0.856,34.0],[3.0,112.0,74.0,30.0,0.0,31.6,0.197,25.0],[7.0,168.0,88.0,42.0,321.0,38.2,0.787,40.0],[6.0,124.0,72.0,0.0,0.0,27.6,0.368,29.0],[0.0,102.0,78.0,40.0,90.0,34.5,0.238,24.0],[9.0,122.0,56.0,0.0,0.0,33.3,1.114,33.0],[1.0,95.0,74.0,21.0,73.0,25.9,0.673,36.0],[0.0,113.0,80.0,16.0,0.0,31.0,0.874,21.0],[8.0,143.0,66.0,0.0,0.0,34.9,0.129,41.0],[2.0,100.0,66.0,20.0,90.0,32.9,0.867,28.0],[1.0,82.0,64.0,13.0,95.0,21.2,0.415,23.0],[1.0,118.0,58.0,36.0,94.0,33.3,0.261,23.0],[3.0,111.0,58.0,31.0,44.0,29.5,0.43,22.0],[10.0,139.0,80.0,0.0,0.0,27.1,1.441,57.0],[11.0,138.0,74.0,26.0,144.0,36.1,0.557,50.0],[1.0,93.0,70.0,31.0,0.0,30.4,0.315,23.0],[0.0,125.0,96.0,0.0,0.0,22.5,0.262,21.0],[4.0,125.0,70.0,18.0,122.0,28.9,1.144,45.0],[0.0,137.0,40.0,35.0,168.0,43.1,2.288,33.0],[1.0,85.0,66.0,29.0,0.0,26.6,0.351,31.0],[1.0,100.0,72.0,12.0,70.0,25.3,0.658,28.0],[9.0,145.0,88.0,34.0,165.0,30.3,0.771,53.0],[3.0,80.0,0.0,0.0,0.0,0.0,0.174,22.0],[3.0,106.0,72.0,0.0,0.0,25.8,0.207,27.0],[0.0,165.0,76.0,43.0,255.0,47.9,0.259,26.0],[2.0,122.0,76.0,27.0,200.0,35.9,0.483,26.0],[0.0,78.0,88.0,29.0,40.0,36.9,0.434,21.0],[2.0,112.0,66.0,22.0,0.0,25.0,0.307,24.0],[0.0,124.0,70.0,20.0,0.0,27.4,0.254,36.0],[5.0,114.0,74.0,0.0,0.0,24.9,0.744,57.0],[2.0,88.0,74.0,19.0,53.0,29.0,0.229,22.0],[4.0,114.0,64.0,0.0,0.0,28.9,0.126,24.0],[0.0,102.0,64.0,46.0,78.0,40.6,0.496,21.0],[0.0,121.0,66.0,30.0,165.0,34.3,0.203,33.0],[1.0,112.0,72.0,30.0,176.0,34.4,0.528,25.0],[5.0,115.0,76.0,0.0,0.0,31.2,0.343,44.0],[1.0,115.0,70.0,30.0,96.0,34.6,0.529,32.0],[10.0,161.0,68.0,23.0,132.0,25.5,0.326,47.0],[5.0,136.0,84.0,41.0,88.0,35.0,0.286,35.0],[4.0,146.0,92.0,0.0,0.0,31.2,0.539,61.0],[6.0,111.0,64.0,39.0,0.0,34.2,0.26,24.0],[6.0,117.0,96.0,0.0,0.0,28.7,0.157,30.0],[6.0,96.0,0.0,0.0,0.0,23.7,0.19,28.0],[10.0,162.0,84.0,0.0,0.0,27.7,0.182,54.0],[5.0,99.0,74.0,27.0,0.0,29.0,0.203,32.0],[0.0,129.0,110.0,46.0,130.0,67.1,0.319,26.0],[7.0,102.0,74.0,40.0,105.0,37.2,0.204,45.0],[4.0,131.0,68.0,21.0,166.0,33.1,0.16,28.0],[3.0,106.0,54.0,21.0,158.0,30.9,0.292,24.0],[5.0,166.0,72.0,19.0,175.0,25.8,0.587,51.0],[2.0,112.0,78.0,50.0,140.0,39.4,0.175,24.0],[3.0,116.0,0.0,0.0,0.0,23.5,0.187,23.0],[2.0,90.0,70.0,17.0,0.0,27.3,0.085,22.0],[1.0,124.0,74.0,36.0,0.0,27.8,0.1,30.0],[8.0,85.0,55.0,20.0,0.0,24.4,0.136,42.0],[0.0,119.0,66.0,27.0,0.0,38.8,0.259,22.0],[4.0,99.0,72.0,17.0,0.0,25.6,0.294,28.0],[7.0,129.0,68.0,49.0,125.0,38.5,0.439,43.0],[5.0,144.0,82.0,26.0,285.0,32.0,0.452,58.0],[0.0,117.0,80.0,31.0,53.0,45.2,0.089,24.0],[0.0,167.0,0.0,0.0,0.0,32.3,0.839,30.0],[3.0,100.0,68.0,23.0,81.0,31.6,0.949,28.0],[11.0,85.0,74.0,0.0,0.0,30.1,0.3,35.0],[1.0,0.0,68.0,35.0,0.0,32.0,0.389,22.0],[8.0,74.0,70.0,40.0,49.0,35.3,0.705,39.0],[4.0,134.0,72.0,0.0,0.0,23.8,0.277,60.0],[1.0,126.0,56.0,29.0,152.0,28.7,0.801,21.0],[2.0,105.0,80.0,45.0,191.0,33.7,0.711,29.0],[8.0,126.0,74.0,38.0,75.0,25.9,0.162,39.0],[2.0,155.0,52.0,27.0,540.0,38.7,0.24,25.0],[2.0,100.0,54.0,28.0,105.0,37.8,0.498,24.0],[7.0,114.0,66.0,0.0,0.0,32.8,0.258,42.0],[6.0,154.0,74.0,32.0,193.0,29.3,0.839,39.0],[8.0,124.0,76.0,24.0,600.0,28.7,0.687,52.0],[9.0,130.0,70.0,0.0,0.0,34.2,0.652,45.0],[2.0,92.0,52.0,0.0,0.0,30.1,0.141,22.0],[2.0,122.0,70.0,27.0,0.0,36.8,0.34,27.0],[0.0,106.0,70.0,37.0,148.0,39.4,0.605,22.0],[2.0,93.0,64.0,32.0,160.0,38.0,0.674,23.0],[10.0,179.0,70.0,0.0,0.0,35.1,0.2,37.0],[0.0,138.0,0.0,0.0,0.0,36.3,0.933,25.0],[7.0,119.0,0.0,0.0,0.0,25.2,0.209,37.0],[3.0,158.0,70.0,30.0,328.0,35.5,0.344,35.0],[0.0,73.0,0.0,0.0,0.0,21.1,0.342,25.0],[1.0,71.0,62.0,0.0,0.0,21.8,0.416,26.0],[13.0,152.0,90.0,33.0,29.0,26.8,0.731,43.0],[2.0,94.0,76.0,18.0,66.0,31.6,0.649,23.0],[4.0,103.0,60.0,33.0,192.0,24.0,0.966,33.0],[7.0,133.0,84.0,0.0,0.0,40.2,0.696,37.0],[9.0,164.0,84.0,21.0,0.0,30.8,0.831,32.0],[2.0,75.0,64.0,24.0,55.0,29.7,0.37,33.0],[0.0,84.0,64.0,22.0,66.0,35.8,0.545,21.0],[3.0,99.0,54.0,19.0,86.0,25.6,0.154,24.0],[2.0,99.0,60.0,17.0,160.0,36.6,0.453,21.0],[3.0,169.0,74.0,19.0,125.0,29.9,0.268,31.0],[1.0,95.0,60.0,18.0,58.0,23.9,0.26,22.0],[5.0,96.0,74.0,18.0,67.0,33.6,0.997,43.0],[0.0,132.0,78.0,0.0,0.0,32.4,0.393,21.0],[6.0,165.0,68.0,26.0,168.0,33.6,0.631,49.0],[3.0,130.0,64.0,0.0,0.0,23.1,0.314,22.0],[4.0,112.0,78.0,40.0,0.0,39.4,0.236,38.0],[0.0,109.0,88.0,30.0,0.0,32.5,0.855,38.0],[5.0,132.0,80.0,0.0,0.0,26.8,0.186,69.0],[11.0,136.0,84.0,35.0,130.0,28.3,0.26,42.0],[8.0,155.0,62.0,26.0,495.0,34.0,0.543,46.0],[9.0,170.0,74.0,31.0,0.0,44.0,0.403,43.0],[3.0,108.0,62.0,24.0,0.0,26.0,0.223,25.0],[0.0,93.0,100.0,39.0,72.0,43.4,1.021,35.0],[1.0,163.0,72.0,0.0,0.0,39.0,1.222,33.0],[2.0,101.0,58.0,17.0,265.0,24.2,0.614,23.0],[1.0,128.0,98.0,41.0,58.0,32.0,1.321,33.0],[1.0,116.0,78.0,29.0,180.0,36.1,0.496,25.0],[13.0,129.0,0.0,30.0,0.0,39.9,0.569,44.0],[1.0,89.0,76.0,34.0,37.0,31.2,0.192,23.0],[1.0,86.0,66.0,52.0,65.0,41.3,0.917,29.0],[1.0,168.0,88.0,29.0,0.0,35.0,0.905,52.0],[6.0,105.0,80.0,28.0,0.0,32.5,0.878,26.0],[5.0,44.0,62.0,0.0,0.0,25.0,0.587,36.0],[8.0,108.0,70.0,0.0,0.0,30.5,0.955,33.0],[3.0,111.0,90.0,12.0,78.0,28.4,0.495,29.0],[1.0,143.0,74.0,22.0,61.0,26.2,0.256,21.0],[8.0,99.0,84.0,0.0,0.0,35.4,0.388,50.0],[8.0,109.0,76.0,39.0,114.0,27.9,0.64,31.0],[2.0,84.0,0.0,0.0,0.0,0.0,0.304,21.0],[10.0,90.0,85.0,32.0,0.0,34.9,0.825,56.0],[1.0,73.0,50.0,10.0,0.0,23.0,0.248,21.0],[2.0,118.0,80.0,0.0,0.0,42.9,0.693,21.0],[6.0,108.0,44.0,20.0,130.0,24.0,0.813,35.0],[2.0,90.0,80.0,14.0,55.0,24.4,0.249,24.0],[1.0,80.0,55.0,0.0,0.0,19.1,0.258,21.0],[1.0,90.0,68.0,8.0,0.0,24.5,1.138,36.0],[7.0,179.0,95.0,31.0,0.0,34.2,0.164,60.0],[3.0,173.0,84.0,33.0,474.0,35.7,0.258,22.0],[3.0,61.0,82.0,28.0,0.0,34.4,0.243,46.0],[9.0,72.0,78.0,25.0,0.0,31.6,0.28,38.0],[10.0,94.0,72.0,18.0,0.0,23.1,0.595,56.0],[13.0,106.0,70.0,0.0,0.0,34.2,0.251,52.0],[1.0,119.0,86.0,39.0,220.0,45.6,0.808,29.0],[1.0,112.0,80.0,45.0,132.0,34.8,0.217,24.0],[1.0,107.0,68.0,19.0,0.0,26.5,0.165,24.0],[0.0,123.0,88.0,37.0,0.0,35.2,0.197,29.0],[5.0,110.0,68.0,0.0,0.0,26.0,0.292,30.0],[4.0,154.0,72.0,29.0,126.0,31.3,0.338,37.0],[7.0,159.0,66.0,0.0,0.0,30.4,0.383,36.0],[9.0,154.0,78.0,30.0,100.0,30.9,0.164,45.0],[8.0,105.0,100.0,36.0,0.0,43.3,0.239,45.0],[0.0,118.0,84.0,47.0,230.0,45.8,0.551,31.0],[11.0,120.0,80.0,37.0,150.0,42.3,0.785,48.0],[1.0,99.0,58.0,10.0,0.0,25.4,0.551,21.0],[9.0,184.0,85.0,15.0,0.0,30.0,1.213,49.0],[7.0,133.0,88.0,15.0,155.0,32.4,0.262,37.0],[3.0,126.0,88.0,41.0,235.0,39.3,0.704,27.0],[1.0,124.0,60.0,32.0,0.0,35.8,0.514,21.0],[2.0,134.0,70.0,0.0,0.0,28.9,0.542,23.0],[4.0,95.0,60.0,32.0,0.0,35.4,0.284,28.0],[0.0,94.0,70.0,27.0,115.0,43.5,0.347,21.0],[7.0,100.0,0.0,0.0,0.0,30.0,0.484,32.0],[8.0,186.0,90.0,35.0,225.0,34.5,0.423,37.0],[10.0,125.0,70.0,26.0,115.0,31.1,0.205,41.0],[2.0,90.0,60.0,0.0,0.0,23.5,0.191,25.0],[6.0,99.0,60.0,19.0,54.0,26.9,0.497,32.0],[2.0,92.0,62.0,28.0,0.0,31.6,0.13,24.0],[0.0,117.0,0.0,0.0,0.0,33.8,0.932,44.0],[9.0,165.0,88.0,0.0,0.0,30.4,0.302,49.0],[1.0,107.0,72.0,30.0,82.0,30.8,0.821,24.0],[17.0,163.0,72.0,41.0,114.0,40.9,0.817,47.0],[4.0,137.0,84.0,0.0,0.0,31.2,0.252,30.0],[2.0,99.0,52.0,15.0,94.0,24.6,0.637,21.0],[0.0,119.0,0.0,0.0,0.0,32.4,0.141,24.0],[0.0,126.0,84.0,29.0,215.0,30.7,0.52,24.0],[5.0,112.0,66.0,0.0,0.0,37.8,0.261,41.0],[0.0,105.0,84.0,0.0,0.0,27.9,0.741,62.0],[5.0,95.0,72.0,33.0,0.0,37.7,0.37,27.0],[7.0,136.0,90.0,0.0,0.0,29.9,0.21,50.0],[1.0,108.0,88.0,19.0,0.0,27.1,0.4,24.0],[2.0,71.0,70.0,27.0,0.0,28.0,0.586,22.0],[3.0,103.0,72.0,30.0,152.0,27.6,0.73,27.0],[4.0,128.0,70.0,0.0,0.0,34.3,0.303,24.0],[0.0,57.0,60.0,0.0,0.0,21.7,0.735,67.0],[12.0,121.0,78.0,17.0,0.0,26.5,0.259,62.0],[1.0,164.0,82.0,43.0,67.0,32.8,0.341,50.0],[6.0,148.0,72.0,35.0,0.0,33.6,0.627,50.0],[5.0,137.0,108.0,0.0,0.0,48.8,0.227,37.0],[2.0,122.0,52.0,43.0,158.0,36.2,0.816,28.0],[7.0,142.0,90.0,24.0,480.0,30.4,0.128,43.0],[9.0,134.0,74.0,33.0,60.0,25.9,0.46,81.0],[6.0,104.0,74.0,18.0,156.0,29.9,0.722,41.0],[10.0,92.0,62.0,0.0,0.0,25.9,0.167,31.0],[2.0,141.0,58.0,34.0,128.0,25.4,0.699,24.0],[8.0,91.0,82.0,0.0,0.0,35.6,0.587,68.0],[10.0,111.0,70.0,27.0,0.0,27.5,0.141,40.0],[5.0,86.0,68.0,28.0,71.0,30.2,0.364,24.0],[9.0,145.0,80.0,46.0,130.0,37.9,0.637,40.0],[3.0,128.0,72.0,25.0,190.0,32.4,0.549,27.0],[2.0,107.0,74.0,30.0,100.0,33.6,0.404,23.0],[2.0,142.0,82.0,18.0,64.0,24.7,0.761,21.0],[4.0,123.0,80.0,15.0,176.0,32.0,0.443,34.0],[2.0,100.0,64.0,23.0,0.0,29.7,0.368,21.0],[6.0,195.0,70.0,0.0,0.0,30.9,0.328,31.0],[1.0,157.0,72.0,21.0,168.0,25.6,0.123,24.0],[5.0,104.0,74.0,0.0,0.0,28.8,0.153,48.0],[0.0,137.0,68.0,14.0,148.0,24.8,0.143,21.0],[2.0,120.0,76.0,37.0,105.0,39.7,0.215,29.0],[7.0,160.0,54.0,32.0,175.0,30.5,0.588,39.0],[8.0,176.0,90.0,34.0,300.0,33.7,0.467,58.0],[2.0,123.0,48.0,32.0,165.0,42.1,0.52,26.0],[3.0,193.0,70.0,31.0,0.0,34.9,0.241,25.0],[5.0,158.0,70.0,0.0,0.0,29.8,0.207,63.0],[1.0,77.0,56.0,30.0,56.0,33.3,1.251,24.0],[0.0,105.0,90.0,0.0,0.0,29.6,0.197,46.0],[3.0,78.0,50.0,32.0,88.0,31.0,0.248,26.0],[8.0,118.0,72.0,19.0,0.0,23.1,1.476,46.0],[6.0,107.0,88.0,0.0,0.0,36.8,0.727,31.0],[12.0,88.0,74.0,40.0,54.0,35.3,0.378,48.0],[5.0,111.0,72.0,28.0,0.0,23.9,0.407,27.0],[8.0,125.0,96.0,0.0,0.0,0.0,0.232,54.0],[4.0,117.0,64.0,27.0,120.0,33.2,0.23,24.0],[0.0,131.0,88.0,0.0,0.0,31.6,0.743,32.0],[1.0,102.0,74.0,0.0,0.0,39.5,0.293,42.0],[6.0,154.0,78.0,41.0,140.0,46.1,0.571,27.0],[1.0,125.0,50.0,40.0,167.0,33.3,0.962,28.0],[0.0,104.0,76.0,0.0,0.0,18.4,0.582,27.0],[6.0,125.0,78.0,31.0,0.0,27.6,0.565,49.0],[5.0,139.0,80.0,35.0,160.0,31.6,0.361,25.0],[1.0,119.0,44.0,47.0,63.0,35.5,0.28,25.0],[0.0,102.0,52.0,0.0,0.0,25.1,0.078,21.0],[0.0,86.0,68.0,32.0,0.0,35.8,0.238,25.0],[10.0,101.0,86.0,37.0,0.0,45.6,1.136,38.0],[3.0,74.0,68.0,28.0,45.0,29.7,0.293,23.0],[1.0,88.0,78.0,29.0,76.0,32.0,0.365,29.0],[4.0,129.0,60.0,12.0,231.0,27.5,0.527,31.0],[7.0,103.0,66.0,32.0,0.0,39.1,0.344,31.0],[4.0,132.0,86.0,31.0,0.0,28.0,0.419,63.0],[2.0,105.0,75.0,0.0,0.0,23.3,0.56,53.0],[5.0,123.0,74.0,40.0,77.0,34.1,0.269,28.0],[11.0,138.0,76.0,0.0,0.0,33.2,0.42,35.0],[13.0,126.0,90.0,0.0,0.0,43.4,0.583,42.0],[8.0,84.0,74.0,31.0,0.0,38.3,0.457,39.0],[6.0,80.0,66.0,30.0,0.0,26.2,0.313,41.0],[4.0,96.0,56.0,17.0,49.0,20.8,0.34,26.0],[2.0,83.0,65.0,28.0,66.0,36.8,0.629,24.0],[1.0,87.0,60.0,37.0,75.0,37.2,0.509,22.0],[2.0,122.0,60.0,18.0,106.0,29.8,0.717,22.0],[5.0,139.0,64.0,35.0,140.0,28.6,0.411,26.0],[1.0,140.0,74.0,26.0,180.0,24.1,0.828,23.0],[7.0,147.0,76.0,0.0,0.0,39.4,0.257,43.0],[7.0,94.0,64.0,25.0,79.0,33.3,0.738,41.0],[10.0,75.0,82.0,0.0,0.0,33.3,0.263,38.0],[1.0,114.0,66.0,36.0,200.0,38.1,0.289,21.0],[6.0,105.0,70.0,32.0,68.0,30.8,0.122,37.0],[0.0,141.0,84.0,26.0,0.0,32.4,0.433,22.0],[3.0,122.0,78.0,0.0,0.0,23.0,0.254,40.0],[4.0,110.0,66.0,0.0,0.0,31.9,0.471,29.0],[5.0,116.0,74.0,0.0,0.0,25.6,0.201,30.0],[3.0,129.0,92.0,49.0,155.0,36.4,0.968,32.0],[1.0,87.0,68.0,34.0,77.0,37.6,0.401,24.0],[10.0,129.0,76.0,28.0,122.0,35.9,0.28,39.0],[0.0,125.0,68.0,0.0,0.0,24.7,0.206,21.0],[2.0,127.0,58.0,24.0,275.0,27.7,1.6,25.0],[5.0,78.0,48.0,0.0,0.0,33.7,0.654,25.0],[2.0,109.0,92.0,0.0,0.0,42.7,0.845,54.0],[0.0,93.0,60.0,25.0,92.0,28.7,0.532,22.0],[1.0,117.0,60.0,23.0,106.0,33.8,0.466,27.0],[15.0,136.0,70.0,32.0,110.0,37.1,0.153,43.0],[3.0,162.0,52.0,38.0,0.0,37.2,0.652,24.0],[2.0,111.0,60.0,0.0,0.0,26.2,0.343,23.0],[3.0,174.0,58.0,22.0,194.0,32.9,0.593,36.0],[1.0,95.0,82.0,25.0,180.0,35.0,0.233,43.0],[7.0,106.0,92.0,18.0,0.0,22.7,0.235,48.0],[7.0,62.0,78.0,0.0,0.0,32.6,0.391,41.0],[3.0,141.0,0.0,0.0,0.0,30.0,0.761,27.0],[3.0,148.0,66.0,25.0,0.0,32.5,0.256,22.0],[1.0,172.0,68.0,49.0,579.0,42.4,0.702,28.0],[0.0,102.0,75.0,23.0,0.0,0.0,0.572,21.0],[8.0,194.0,80.0,0.0,0.0,26.1,0.551,67.0],[4.0,123.0,62.0,0.0,0.0,32.0,0.226,35.0],[1.0,97.0,70.0,40.0,0.0,38.1,0.218,30.0],[1.0,128.0,82.0,17.0,183.0,27.5,0.115,22.0],[8.0,126.0,88.0,36.0,108.0,38.5,0.349,49.0],[3.0,125.0,58.0,0.0,0.0,31.6,0.151,24.0],[10.0,115.0,98.0,0.0,0.0,24.0,1.022,34.0],[1.0,199.0,76.0,43.0,0.0,42.9,1.394,22.0],[1.0,97.0,70.0,15.0,0.0,18.2,0.147,21.0],[4.0,146.0,78.0,0.0,0.0,38.5,0.52,67.0],[1.0,81.0,72.0,18.0,40.0,26.6,0.283,24.0],[5.0,103.0,108.0,37.0,0.0,39.2,0.305,65.0],[3.0,90.0,78.0,0.0,0.0,42.7,0.559,21.0],[14.0,100.0,78.0,25.0,184.0,36.6,0.412,46.0],[1.0,146.0,56.0,0.0,0.0,29.7,0.564,29.0],[1.0,147.0,94.0,41.0,0.0,49.3,0.358,27.0],[9.0,152.0,78.0,34.0,171.0,34.2,0.893,33.0],[1.0,81.0,74.0,41.0,57.0,46.3,1.096,32.0],[6.0,93.0,50.0,30.0,64.0,28.7,0.356,23.0],[9.0,156.0,86.0,0.0,0.0,24.8,0.23,53.0],[6.0,87.0,80.0,0.0,0.0,23.2,0.084,32.0],[4.0,183.0,0.0,0.0,0.0,28.4,0.212,36.0],[2.0,105.0,58.0,40.0,94.0,34.9,0.225,25.0],[0.0,137.0,70.0,38.0,0.0,33.2,0.17,22.0],[4.0,99.0,68.0,38.0,0.0,32.8,0.145,33.0],[2.0,108.0,80.0,0.0,0.0,27.0,0.259,52.0],[5.0,0.0,80.0,32.0,0.0,41.0,0.346,37.0],[4.0,110.0,92.0,0.0,0.0,37.6,0.191,30.0],[1.0,87.0,78.0,27.0,32.0,34.6,0.101,22.0],[2.0,98.0,60.0,17.0,120.0,34.7,0.198,22.0],[2.0,90.0,68.0,42.0,0.0,38.2,0.503,27.0],[12.0,100.0,84.0,33.0,105.0,30.0,0.488,46.0],[9.0,89.0,62.0,0.0,0.0,22.5,0.142,33.0],[2.0,108.0,52.0,26.0,63.0,32.5,0.318,22.0],[2.0,197.0,70.0,99.0,0.0,34.7,0.575,62.0],[6.0,129.0,90.0,7.0,326.0,19.6,0.582,60.0],[1.0,121.0,78.0,39.0,74.0,39.0,0.261,28.0],[1.0,90.0,62.0,12.0,43.0,27.2,0.58,24.0],[9.0,123.0,70.0,44.0,94.0,33.1,0.374,40.0],[12.0,140.0,82.0,43.0,325.0,39.2,0.528,58.0],[0.0,173.0,78.0,32.0,265.0,46.5,1.159,58.0],[6.0,162.0,62.0,0.0,0.0,24.3,0.178,50.0],[6.0,183.0,94.0,0.0,0.0,40.8,1.461,45.0],[10.0,148.0,84.0,48.0,237.0,37.6,1.001,51.0],[0.0,180.0,66.0,39.0,0.0,42.0,1.893,25.0],[4.0,197.0,70.0,39.0,744.0,36.7,2.329,31.0],[0.0,95.0,64.0,39.0,105.0,44.6,0.366,22.0],[1.0,196.0,76.0,36.0,249.0,36.5,0.875,29.0],[6.0,134.0,70.0,23.0,130.0,35.4,0.542,29.0],[1.0,122.0,90.0,51.0,220.0,49.7,0.325,31.0],[2.0,82.0,52.0,22.0,115.0,28.5,1.699,25.0],[7.0,105.0,0.0,0.0,0.0,0.0,0.305,24.0],[2.0,85.0,65.0,0.0,0.0,39.6,0.93,27.0],[3.0,173.0,82.0,48.0,465.0,38.4,2.137,25.0],[0.0,129.0,80.0,0.0,0.0,31.2,0.703,29.0],[3.0,78.0,70.0,0.0,0.0,32.5,0.27,39.0],[1.0,107.0,50.0,19.0,0.0,28.3,0.181,29.0],[5.0,115.0,98.0,0.0,0.0,52.9,0.209,28.0],[1.0,101.0,50.0,15.0,36.0,24.2,0.526,26.0],[2.0,158.0,90.0,0.0,0.0,31.6,0.805,66.0],[8.0,100.0,76.0,0.0,0.0,38.7,0.19,42.0],[6.0,134.0,80.0,37.0,370.0,46.2,0.238,46.0],[12.0,151.0,70.0,40.0,271.0,41.8,0.742,38.0],[0.0,123.0,72.0,0.0,0.0,36.3,0.258,52.0],[1.0,120.0,80.0,48.0,200.0,38.9,1.162,41.0],[5.0,128.0,80.0,0.0,0.0,34.6,0.144,45.0],[1.0,135.0,54.0,0.0,0.0,26.7,0.687,62.0],[3.0,82.0,70.0,0.0,0.0,21.1,0.389,25.0],[4.0,156.0,75.0,0.0,0.0,48.3,0.238,32.0],[0.0,161.0,50.0,0.0,0.0,21.9,0.254,65.0],[2.0,106.0,64.0,35.0,119.0,30.5,1.4,34.0],[2.0,95.0,54.0,14.0,88.0,26.1,0.748,22.0],[1.0,100.0,66.0,29.0,196.0,32.0,0.444,42.0],[0.0,126.0,86.0,27.0,120.0,27.4,0.515,21.0],[6.0,103.0,66.0,0.0,0.0,24.3,0.249,29.0],[2.0,128.0,64.0,42.0,0.0,40.0,1.101,24.0],[0.0,141.0,0.0,0.0,0.0,42.4,0.205,29.0],[2.0,102.0,86.0,36.0,120.0,45.5,0.127,23.0],[5.0,147.0,78.0,0.0,0.0,33.7,0.218,65.0],[3.0,139.0,54.0,0.0,0.0,25.6,0.402,22.0],[5.0,155.0,84.0,44.0,545.0,38.7,0.619,34.0],[5.0,85.0,74.0,22.0,0.0,29.0,1.224,32.0],[1.0,181.0,64.0,30.0,180.0,34.1,0.328,38.0],[0.0,179.0,90.0,27.0,0.0,44.1,0.686,23.0],[2.0,68.0,70.0,32.0,66.0,25.0,0.187,25.0],[4.0,154.0,62.0,31.0,284.0,32.8,0.237,23.0],[6.0,92.0,62.0,32.0,126.0,32.0,0.085,46.0],[0.0,67.0,76.0,0.0,0.0,45.3,0.194,46.0],[9.0,120.0,72.0,22.0,56.0,20.8,0.733,48.0],[1.0,79.0,80.0,25.0,37.0,25.4,0.583,22.0],[5.0,143.0,78.0,0.0,0.0,45.0,0.19,47.0],[2.0,124.0,68.0,28.0,205.0,32.9,0.875,30.0],[3.0,96.0,78.0,39.0,0.0,37.3,0.238,40.0],[2.0,112.0,68.0,22.0,94.0,34.1,0.315,26.0],[0.0,107.0,60.0,25.0,0.0,26.4,0.133,23.0],[2.0,74.0,0.0,0.0,0.0,0.0,0.102,22.0],[2.0,96.0,68.0,13.0,49.0,21.1,0.647,26.0],[1.0,95.0,66.0,13.0,38.0,19.6,0.334,25.0],[0.0,138.0,60.0,35.0,167.0,34.6,0.534,21.0],[2.0,112.0,75.0,32.0,0.0,35.7,0.148,21.0],[2.0,139.0,75.0,0.0,0.0,25.6,0.167,29.0],[1.0,133.0,102.0,28.0,140.0,32.8,0.234,45.0],[3.0,123.0,100.0,35.0,240.0,57.3,0.88,22.0],[1.0,130.0,60.0,23.0,170.0,28.6,0.692,21.0],[0.0,180.0,90.0,26.0,90.0,36.5,0.314,35.0],[4.0,171.0,72.0,0.0,0.0,43.6,0.479,26.0],[1.0,71.0,78.0,50.0,45.0,33.2,0.422,21.0],[1.0,88.0,62.0,24.0,44.0,29.9,0.422,23.0],[1.0,111.0,62.0,13.0,182.0,24.0,0.138,23.0],[0.0,91.0,68.0,32.0,210.0,39.9,0.381,25.0],[2.0,121.0,70.0,32.0,95.0,39.1,0.886,23.0],[11.0,127.0,106.0,0.0,0.0,39.0,0.19,51.0],[9.0,171.0,110.0,24.0,240.0,45.4,0.721,54.0],[9.0,164.0,78.0,0.0,0.0,32.8,0.148,45.0],[3.0,102.0,74.0,0.0,0.0,29.5,0.121,32.0],[10.0,129.0,62.0,36.0,0.0,41.2,0.441,38.0],[0.0,131.0,0.0,0.0,0.0,43.2,0.27,26.0],[1.0,131.0,64.0,14.0,415.0,23.7,0.389,21.0],[9.0,156.0,86.0,28.0,155.0,34.3,1.189,42.0],[3.0,176.0,86.0,27.0,156.0,33.3,1.154,52.0],[1.0,106.0,70.0,28.0,135.0,34.2,0.142,22.0],[6.0,194.0,78.0,0.0,0.0,23.5,0.129,59.0],[1.0,143.0,86.0,30.0,330.0,30.1,0.892,23.0],[8.0,95.0,72.0,0.0,0.0,36.8,0.485,57.0],[2.0,130.0,96.0,0.0,0.0,22.6,0.268,21.0],[5.0,158.0,84.0,41.0,210.0,39.4,0.395,29.0],[8.0,65.0,72.0,23.0,0.0,32.0,0.6,42.0],[3.0,158.0,64.0,13.0,387.0,31.2,0.295,24.0],[3.0,142.0,80.0,15.0,0.0,32.4,0.2,63.0],[4.0,83.0,86.0,19.0,0.0,29.3,0.317,34.0],[5.0,97.0,76.0,27.0,0.0,35.6,0.378,52.0],[0.0,127.0,80.0,37.0,210.0,36.3,0.804,23.0],[2.0,144.0,58.0,33.0,135.0,31.6,0.422,25.0],[0.0,134.0,58.0,20.0,291.0,26.4,0.352,21.0],[0.0,146.0,70.0,0.0,0.0,37.9,0.334,28.0],[2.0,129.0,0.0,0.0,0.0,38.5,0.304,41.0],[7.0,81.0,78.0,40.0,48.0,46.7,0.261,42.0],[8.0,167.0,106.0,46.0,231.0,37.6,0.165,43.0],[8.0,100.0,74.0,40.0,215.0,39.4,0.661,43.0],[11.0,111.0,84.0,40.0,0.0,46.8,0.925,45.0],[0.0,119.0,64.0,18.0,92.0,34.9,0.725,23.0],[3.0,132.0,80.0,0.0,0.0,34.4,0.402,44.0],[0.0,104.0,64.0,23.0,116.0,27.8,0.454,23.0],[4.0,146.0,85.0,27.0,100.0,28.9,0.189,27.0],[7.0,150.0,78.0,29.0,126.0,35.2,0.692,54.0],[1.0,109.0,58.0,18.0,116.0,28.5,0.219,22.0],[2.0,112.0,86.0,42.0,160.0,38.4,0.246,28.0],[2.0,84.0,50.0,23.0,76.0,30.4,0.968,21.0],[0.0,108.0,68.0,20.0,0.0,27.3,0.787,32.0],[0.0,105.0,64.0,41.0,142.0,41.5,0.173,22.0],[9.0,140.0,94.0,0.0,0.0,32.7,0.734,45.0],[6.0,119.0,50.0,22.0,176.0,27.1,1.318,33.0],[0.0,165.0,90.0,33.0,680.0,52.3,0.427,23.0],[4.0,117.0,62.0,12.0,0.0,29.7,0.38,30.0],[1.0,84.0,64.0,23.0,115.0,36.9,0.471,28.0],[4.0,142.0,86.0,0.0,0.0,44.0,0.645,22.0],[3.0,84.0,68.0,30.0,106.0,31.9,0.591,25.0],[4.0,184.0,78.0,39.0,277.0,37.0,0.264,31.0],[4.0,85.0,58.0,22.0,49.0,27.8,0.306,28.0],[3.0,83.0,58.0,31.0,18.0,34.3,0.336,25.0],[6.0,114.0,0.0,0.0,0.0,0.0,0.189,26.0],[1.0,117.0,88.0,24.0,145.0,34.5,0.403,40.0],[3.0,163.0,70.0,18.0,105.0,31.6,0.268,28.0],[3.0,111.0,62.0,0.0,0.0,22.6,0.142,21.0],[4.0,90.0,0.0,0.0,0.0,28.0,0.61,31.0],[5.0,136.0,82.0,0.0,0.0,0.0,0.64,69.0],[12.0,106.0,80.0,0.0,0.0,23.6,0.137,44.0],[0.0,114.0,80.0,34.0,285.0,44.2,0.167,27.0],[0.0,84.0,82.0,31.0,125.0,38.2,0.233,23.0],[4.0,116.0,72.0,12.0,87.0,22.1,0.463,37.0],[1.0,99.0,72.0,30.0,18.0,38.6,0.412,21.0],[0.0,107.0,62.0,30.0,74.0,36.6,0.757,25.0],[0.0,93.0,60.0,0.0,0.0,35.3,0.263,25.0],[1.0,88.0,30.0,42.0,99.0,55.0,0.496,26.0],[0.0,104.0,64.0,37.0,64.0,33.6,0.51,22.0],[2.0,174.0,88.0,37.0,120.0,44.5,0.646,24.0],[0.0,94.0,0.0,0.0,0.0,0.0,0.256,25.0],[0.0,128.0,68.0,19.0,180.0,30.5,1.391,25.0],[0.0,188.0,82.0,14.0,185.0,32.0,0.682,22.0],[5.0,126.0,78.0,27.0,22.0,29.6,0.439,40.0],[3.0,113.0,44.0,13.0,0.0,22.4,0.14,22.0],[1.0,97.0,64.0,19.0,82.0,18.2,0.299,21.0],[2.0,56.0,56.0,28.0,45.0,24.2,0.332,22.0],[2.0,83.0,66.0,23.0,50.0,32.2,0.497,22.0],[7.0,136.0,74.0,26.0,135.0,26.0,0.647,51.0],[5.0,187.0,76.0,27.0,207.0,43.6,1.034,53.0],[14.0,175.0,62.0,30.0,0.0,33.6,0.212,38.0],[1.0,128.0,88.0,39.0,110.0,36.5,1.057,37.0],[8.0,112.0,72.0,0.0,0.0,23.6,0.84,58.0],[2.0,197.0,70.0,45.0,543.0,30.5,0.158,53.0],[2.0,87.0,58.0,16.0,52.0,32.7,0.166,25.0],[3.0,170.0,64.0,37.0,225.0,34.5,0.356,30.0],[1.0,91.0,64.0,24.0,0.0,29.2,0.192,21.0],[6.0,123.0,72.0,45.0,230.0,33.6,0.733,34.0],[13.0,158.0,114.0,0.0,0.0,42.3,0.257,44.0],[5.0,117.0,86.0,30.0,105.0,39.1,0.251,42.0],[4.0,144.0,58.0,28.0,140.0,29.5,0.287,37.0],[5.0,108.0,72.0,43.0,75.0,36.1,0.263,33.0],[1.0,100.0,74.0,12.0,46.0,19.5,0.149,28.0],[5.0,189.0,64.0,33.0,325.0,31.2,0.583,29.0],[2.0,100.0,68.0,25.0,71.0,38.5,0.324,26.0],[7.0,106.0,60.0,24.0,0.0,26.5,0.296,29.0],[2.0,129.0,74.0,26.0,205.0,33.2,0.591,25.0],[13.0,153.0,88.0,37.0,140.0,40.6,1.174,39.0],[2.0,108.0,62.0,10.0,278.0,25.3,0.881,22.0],[4.0,91.0,70.0,32.0,88.0,33.1,0.446,22.0],[2.0,99.0,70.0,16.0,44.0,20.4,0.235,27.0],[0.0,145.0,0.0,0.0,0.0,44.2,0.63,31.0],[0.0,111.0,65.0,0.0,0.0,24.6,0.66,31.0],[0.0,135.0,68.0,42.0,250.0,42.3,0.365,24.0],[6.0,98.0,58.0,33.0,190.0,34.0,0.43,43.0],[1.0,79.0,75.0,30.0,0.0,32.0,0.396,22.0],[1.0,173.0,74.0,0.0,0.0,36.8,0.088,38.0],[0.0,124.0,56.0,13.0,105.0,21.8,0.452,21.0],[3.0,121.0,52.0,0.0,0.0,36.0,0.127,25.0],[1.0,83.0,68.0,0.0,0.0,18.2,0.624,27.0],[5.0,121.0,72.0,23.0,112.0,26.2,0.245,30.0],[0.0,146.0,82.0,0.0,0.0,40.5,1.781,44.0],[8.0,179.0,72.0,42.0,130.0,32.7,0.719,36.0],[7.0,181.0,84.0,21.0,192.0,35.9,0.586,51.0],[0.0,101.0,62.0,0.0,0.0,21.9,0.336,25.0],[1.0,96.0,64.0,27.0,87.0,33.2,0.289,21.0],[11.0,143.0,94.0,33.0,146.0,36.6,0.254,51.0],[6.0,166.0,74.0,0.0,0.0,26.6,0.304,66.0],[0.0,100.0,70.0,26.0,50.0,30.8,0.597,21.0],[4.0,109.0,64.0,44.0,99.0,34.8,0.905,26.0],[5.0,105.0,72.0,29.0,325.0,36.9,0.159,28.0],[3.0,81.0,86.0,16.0,66.0,27.5,0.306,22.0],[4.0,132.0,0.0,0.0,0.0,32.9,0.302,23.0],[0.0,120.0,74.0,18.0,63.0,30.5,0.285,26.0],[6.0,151.0,62.0,31.0,120.0,35.5,0.692,28.0],[3.0,89.0,74.0,16.0,85.0,30.4,0.551,38.0],[3.0,115.0,66.0,39.0,140.0,38.1,0.15,28.0],[6.0,80.0,80.0,36.0,0.0,39.8,0.177,28.0],[4.0,148.0,60.0,27.0,318.0,30.9,0.15,29.0],[4.0,114.0,65.0,0.0,0.0,21.9,0.432,37.0],[3.0,124.0,80.0,33.0,130.0,33.2,0.305,26.0],[1.0,153.0,82.0,42.0,485.0,40.6,0.687,23.0],[10.0,168.0,74.0,0.0,0.0,38.0,0.537,34.0],[1.0,92.0,62.0,25.0,41.0,19.5,0.482,25.0],[12.0,92.0,62.0,7.0,258.0,27.6,0.926,44.0],[11.0,155.0,76.0,28.0,150.0,33.3,1.353,51.0],[1.0,97.0,66.0,15.0,140.0,23.2,0.487,22.0],[7.0,150.0,66.0,42.0,342.0,34.7,0.718,42.0],[5.0,116.0,74.0,29.0,0.0,32.3,0.66,35.0],[1.0,97.0,68.0,21.0,0.0,27.2,1.095,22.0],[5.0,166.0,76.0,0.0,0.0,45.7,0.34,27.0],[3.0,113.0,50.0,10.0,85.0,29.5,0.626,25.0],[0.0,97.0,64.0,36.0,100.0,36.8,0.6,25.0],[0.0,99.0,0.0,0.0,0.0,25.0,0.253,22.0],[0.0,95.0,85.0,25.0,36.0,37.4,0.247,24.0],[0.0,74.0,52.0,10.0,36.0,27.8,0.269,22.0],[1.0,103.0,80.0,11.0,82.0,19.4,0.491,22.0],[1.0,130.0,70.0,13.0,105.0,25.9,0.472,22.0],[5.0,73.0,60.0,0.0,0.0,26.8,0.268,27.0],[4.0,76.0,62.0,0.0,0.0,34.0,0.391,25.0],[7.0,97.0,76.0,32.0,91.0,40.9,0.871,32.0],[7.0,178.0,84.0,0.0,0.0,39.9,0.331,41.0],[3.0,128.0,78.0,0.0,0.0,21.1,0.268,55.0],[5.0,88.0,78.0,30.0,0.0,27.6,0.258,37.0],[3.0,87.0,60.0,18.0,0.0,21.8,0.444,21.0],[7.0,187.0,68.0,39.0,304.0,37.7,0.254,41.0]],"y":[0,0,1,1,0,0,0,0,1,0,1,0,0,1,0,0,0,1,1,0,0,0,0,1,0,1,0,0,1,1,0,1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,0,1,0,0,0,1,1,1,1,0,1,0,0,0,0,1,1,1,0,0,1,0,0,1,0,1,0,0,0,1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,0,1,1,0,0,1,0,1,0,0,0,0,0,0,0,0,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,1,1,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0,0,1,1,0,1,1,0,1,1,0,1,1,1,0,1,1,1,1,0,1,1,1,1,1,1,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,1,0,1,1,0,0,1,0,1,1,1,0,1,0,0,1,1,0,0,0,0,1,0,0,1,1,0,0,1,0,0,0,0,0,0,1,0,0,0,0,1,0,1,1,1,1,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,0,0,0,1,0,1,0,1,0,1,0,1,1,0,0,0,1,0,1,0,1,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0,1,1,1,0,0,1,0,1,0,1,0,0,1,0,0,1,0,0,0,1,0,1,0,1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,0,1,1,1,0,1,0,0,0,1,0,0,1,1,1,0,0,0,0,1,0,1,0,0,1,0,1,1,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,0,1,0,1,1,0,0,0,0,1,0,0,0,0,1,1,0,1,0,0,0,1,0,0,0,0,1,0,1,1,0,1,0,1,1,0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,1,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,1,0,1,1,0,0,1,0,1,0,0,0,1,1,0,0,0,1,0,0,0,1,0,0,0,0,1,0,1,0,1,1,0,0,1,1,1,0,0,0,1,0,0,0,1,0,1,0,1,1,1,0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,1,0,0,1,1,0,0,0,0,0,0,1,1,0,1,1,0,1,1,0,1,0,0,0,1,0,0,0,0,1,0,1,0,1,0,0,1,1,1,0,1,0,0,1,0,0,0,0,0,1,1,0,1,0,1,0,1,0,0,0,1,1,0,0,0,0,0,0,0,0,1,0,1,1,1,0,1,1,0,0,0,0,0,0,1,1,1,0,1,0,1,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,0,1,0,1,0,0,0,1,1,0,0,1,0,0,1,0,0,1,0,0,0,0,0,1,0,0,0,1,0,1,1,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1,1,0,0,0,1],"nDev":576};
+const ND = PIMA.nDev, XD = PIMA.X.slice(0, ND), YD = PIMA.y.slice(0, ND), XT = PIMA.X.slice(ND), YT = PIMA.y.slice(ND), FOLDS = stratFolds(YD, 5);
+const MODELS = [['dummy', '&ldquo;Always healthy&rdquo; baseline', fitDummy, '--muted', [0.6510, 0.0022, 0.4980]], ['lr', 'Logistic regression', fitLR, '--cA', [0.7552, 0.0258, 0.8170]], ['nb', 'Gaussian naive Bayes', fitNB, '--lda', [0.7396, 0.0198, 0.8030]], ['tree', 'Decision tree, depth 4', (X, y) => fitTree(X, y, 4), '--cB', [0.7240, 0.0232, 0.7841]]];
+const PJ = { res: {}, running: false, done: false, m: 'lr', k: 5, t: 0.5, opened: 0, peeks: 0 };
+function pjTrain() {
+  if (PJ.running) return; PJ.running = true; $('#pj-train').disabled = true; PJ.res = {}; let i = 0;
+  (function step() { const [key, name, fit] = MODELS[i]; $('#pj-prog').innerHTML = `Cross-validating ${name}&hellip;`; const t0 = performance.now(), o = oofProb(fit, XD, YD, FOLDS, 5), fin = fit(XD, YD);
+    PJ.res[key] = { p: o.p, acc: o.acc, mean: meanOf(o.acc), sd: sdOf(o.acc), roc: rocPts(o.p, YD), pr: prPts(o.p, YD), test: XT.map(fin.prob), ms: performance.now() - t0 };
+    drawRace(); if (++i < MODELS.length) return setTimeout(step, 0);
+    PJ.running = false; PJ.done = true; $('#pj-train').disabled = false; $('#pj-train').textContent = 'Run cross-validation again'; $('#pj-prog').textContent = ''; drawFolds(); drawCurves(); drawCost(); drawTest(); })();
+}
+function drawRace() {
+  $('#pj-race').innerHTML = '<thead><tr><th>model</th><th>accuracy in each fold</th><th>CV accuracy</th><th>CV AUC</th><th>scikit-learn</th><th>time</th></tr></thead><tbody>' + MODELS.map(([key, name, , , sk]) => { const r = PJ.res[key];
+    return `<tr${r && key === 'lr' ? ' class="win"' : ''}><td><b>${name}</b></td><td class="num note">${r ? r.acc.map(a => fmt(a, 3)).join(' &middot; ') : '…'}</td><td class="num">${r ? tip(`${fmt(r.mean, 4)} &plusmn; ${fmt(r.sd, 4)}`, 'mean ± sd of the 5 fold accuracies') : ''}</td><td class="num">${r ? tip(fmt(r.roc.auc, 4), 'AUC of the out-of-fold probabilities') : ''}</td><td class="num">${fmt(sk[0], 4)} &plusmn; ${fmt(sk[1], 4)} &middot; ${fmt(sk[2], 4)}</td><td class="num">${r ? fmt(r.ms, 0) + ' ms' : ''}</td></tr>`; }).join('') + '</tbody>';
+}
+function drawFolds() {
+  const C = C0(), narrow = $('#pj-folds').getBoundingClientRect().width < 520, v = frame($('#pj-folds'), [0.62, 0.84], [-0.6, 3.6], { l: narrow ? 92 : 170, b: 26 }); axes(v, narrow ? '' : 'fold accuracy', '', { sx: narrow ? 0.05 : 0.02, sy: 9, fx: x => pct(x, 0), fy: () => '' }); clip(v);
+  MODELS.forEach(([key, , , col], r) => { const R = PJ.res[key]; if (!R) return; const y = 3 - r; seg(v, R.mean, y - 0.32, R.mean, y + 0.32, css(col), 3); R.acc.forEach(a => dot(v, a, y, css(col), 5)); });
+  v.ctx.restore(); const c = v.ctx; c.save(); c.font = '12px ' + css('--f-body'); c.fillStyle = C.q; c.textAlign = 'right'; c.textBaseline = 'middle'; MODELS.forEach(([, name], r) => c.fillText(narrow ? ['baseline', 'logistic', 'naive Bayes', 'tree'][r] : name.replace(/&ldquo;|&rdquo;/g, '"'), v.pad.l - 10, v.Y(3 - r))); c.restore();
+}
+function drawCurves() {
+  const C = C0();
+  { const v = frame($('#pj-roc'), [0, 1], [0, 1], { b: 30 }, true); axes(v, 'FPR', 'TPR', { sx: 0.2, sy: 0.2 }); clip(v); seg(v, 0, 0, 1, 1, C.line, 1, [4, 4]);
+    MODELS.forEach(([key, , , col]) => { const R = PJ.res[key]; if (R) polyline(v, R.roc.pts.map(p => [p[0], p[1]]), css(col), key === PJ.m ? 3 : 1.8); });
+    const R = PJ.res[PJ.m]; if (R) { const cm = confusion(R.p, YD, PJ.t); dot(v, cm.fp / (cm.fp + cm.tn), cm.tp / (cm.tp + cm.fn), C.q, 6); } v.ctx.restore(); }
+  { const prev = sum(YD) / ND, v = frame($('#pj-pr'), [0, 1], [0, 1.04], { b: 30 }); axes(v, 'recall', 'precision', { sx: 0.2, sy: 0.2 }); clip(v); seg(v, 0, prev, 1, prev, C.muted, 1, [4, 4]);
+    MODELS.forEach(([key, , , col]) => { const R = PJ.res[key]; if (R && key !== 'dummy') polyline(v, [[0, R.pr.pts[0][1]], ...R.pr.pts.map(p => [p[0], p[1]])], css(col), key === PJ.m ? 3 : 1.8); });
+    const R = PJ.res[PJ.m]; if (R) { const cm = confusion(R.p, YD, PJ.t); dot(v, cm.tp / (cm.tp + cm.fn), cm.tp + cm.fp ? cm.tp / (cm.tp + cm.fp) : 1, C.q, 6); } v.ctx.restore(); }
+}
+const costOf = (cm, n) => 100 * (PJ.k * cm.fn + cm.fp) / n;
+function drawCost() {
+  const C = C0(), R = PJ.res[PJ.m];
+  $('#pj-k-o').textContent = `${PJ.k} false alarm${PJ.k > 1 ? 's' : ''}`; $('#pj-t-o').textContent = fmt(PJ.t, 2); $('#pj-t').value = PJ.t;
+  $$('[data-pm]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pm === PJ.m ? 'true' : 'false'));
+  if (!R) { frame($('#pj-cost'), [0, 1], [0, 1]); $('#pj-costcap').textContent = 'Run the cross-validation first.'; $('#pj-cm').innerHTML = ''; return; }
+  const ts = [...Array(97).keys()].map(i => 0.02 + i * 0.01), cs = ts.map(t => costOf(confusion(R.p, YD, t), ND)), bi = cs.indexOf(Math.min(...cs)), cur = costOf(confusion(R.p, YD, PJ.t), ND);
+  const v = frame($('#pj-cost'), [0, 1], [0, Math.max(...cs) * 1.1], { b: 30 }); axes(v, 'threshold', 'cost per 100 women', { sx: 0.1, ny: 4 }); clip(v);
+  polyline(v, ts.map((t, i) => [t, cs[i]]), css(MODELS.find(m => m[0] === PJ.m)[3]), 2.6); seg(v, PJ.t, 0, PJ.t, 1e4, C.q, 1.4, [4, 4]); dot(v, PJ.t, cur, C.q, 6); star(v, ts[bi], cs[bi], C.lda, 9); v.ctx.restore();
+  PJ.best = +ts[bi].toFixed(2);
+  const cm = confusion(R.p, YD, PJ.t), rec = cm.tp / (cm.tp + cm.fn), pre = cm.tp + cm.fp ? cm.tp / (cm.tp + cm.fp) : 1;
+  $('#pj-costcap').innerHTML = `Expected cost per 100 women screened, counting a false alarm as 1 and a missed case as ${PJ.k}, from the out-of-fold predictions. &#9733; cheapest threshold: <b>${fmt(ts[bi], 2)}</b> (cost ${fmt(cs[bi], 1)}); yours: ${fmt(PJ.t, 2)} (cost ${tip(fmt(cur, 1), `100 × (${PJ.k} × ${cm.fn} missed + ${cm.fp} false alarms) / ${ND}`)}).`;
+  $('#pj-cm').innerHTML = cmTable(cm, ['diabetic', 'not diabetic', 'flagged', 'cleared']);
+  $('#pj-rec').innerHTML = tip(pct(rec, 0), `${cm.tp} of ${cm.tp + cm.fn} diabetic women`); $('#pj-pre').innerHTML = tip(pct(pre, 0), `${cm.tp} of ${cm.tp + cm.fp} flagged`);
+  drawCurves(); if (PJ.opened) drawTest();
+}
+function drawTest() {
+  if (!PJ.opened) { $('#pj-test').innerHTML = ''; $('#pj-tsay').textContent = PJ.done ? 'Sealed. Choose your model and threshold first.' : ''; return; }
+  const R = PJ.res[PJ.m], name = MODELS.find(m => m[0] === PJ.m)[1], cv = confusion(R.p, YD, PJ.t), te = confusion(R.test, YT, PJ.t);
+  const row = (lab, f, how) => `<tr><td>${lab}</td><td class="num">${f(cv, R.p, YD)}</td><td class="num"><b>${tip(f(te, R.test, YT), how(te))}</b></td></tr>`;
+  const accF = c => pct((c.tp + c.tn) / (c.tp + c.fp + c.fn + c.tn)), recF = c => pct(c.tp / (c.tp + c.fn)), preF = c => pct(c.tp + c.fp ? c.tp / (c.tp + c.fp) : 1);
+  $('#pj-test').innerHTML = `<thead><tr><th>${name}, threshold ${fmt(PJ.t, 2)}</th><th>cross-validated (576 women)</th><th>sealed test (192 women)</th></tr></thead><tbody>` +
+    row('accuracy', accF, c => `(${c.tp} + ${c.tn}) / 192`) + row('recall: diabetic women caught', recF, c => `${c.tp} of ${c.tp + c.fn}`) + row('precision: flags that are real', preF, c => `${c.tp} of ${c.tp + c.fp}`) +
+    row('AUC', (c, p, y) => fmt(rocPts(p, y).auc, 3), () => 'ranking quality on the 192') + row(`cost per 100 (miss = ${PJ.k})`, c => fmt(costOf(c, c.tp + c.fp + c.fn + c.tn), 1), c => `100 × (${PJ.k} × ${c.fn} + ${c.fp}) / 192`) + '</tbody>';
+  const rT = te.tp / (te.tp + te.fn), se = Math.sqrt(rT * (1 - rT) / (te.tp + te.fn));
+  $('#pj-tsay').innerHTML = (PJ.peeks > 0 ? `<b>You have changed the settings ${PJ.peeks} time${PJ.peeks > 1 ? 's' : ''} while looking at the test column.</b> Each change made with the test score in view turns the envelope into a validation set: the number is no longer an honest estimate. ` : '') +
+    `The test set holds only ${te.tp + te.fn} diabetic women, so its recall is uncertain by about &plusmn;${pct(2 * se, 0)}; differences from the cross-validated column of that size are luck, not a change in the model.`;
+}
+$('#pj-train').addEventListener('click', pjTrain);
+const changed = () => { if (PJ.opened) PJ.peeks++; drawCost(); };
+seg1('[data-pm]', 'data-pm', k => { PJ.m = k; changed(); });
+$('#pj-k').addEventListener('input', e => { PJ.k = +e.target.value; changed(); });
+$('#pj-t').addEventListener('input', e => { PJ.t = +e.target.value; changed(); });
+$('#pj-best').addEventListener('click', () => { if (PJ.best != null) { PJ.t = PJ.best; changed(); } });
+$('#pj-open').addEventListener('click', () => { if (!PJ.done) return; PJ.opened++; PJ.peeks = 0; $('#pj-open').textContent = 'Opened'; $('#pj-open').disabled = true; drawTest(); });
+fig($('#pj-folds'), () => PJ.done && drawFolds()); fig($('#pj-roc'), () => PJ.done && drawCurves()); fig($('#pj-cost'), drawCost);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+polyRefresh(); drawHero(); drawWH(); drawSP(); drawCV(); scAll(); drawBV(); drawLK(); drawRace(); drawCost(); drawTest();
+{ const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting) && !PJ.done && !PJ.running) { pjTrain(); io.disconnect(); } }, { rootMargin: '400px' }) : null; if (io) io.observe($('#project')); else pjTrain(); }
+window.__evDebug = { PJ, POLY, CV, SC, BV, LK, SP, FOLDS, XD, YD, XT, YT, pjTrain, lkRun, polyFit };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
