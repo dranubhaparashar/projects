@@ -224,12 +224,25 @@ export const tracks: Track[] = [
 			{
 				title: "Support Vector Machines",
 				summary:
-					"The widest street between two classes: margins and support vectors, soft margins for messy data, and the kernel trick that bends space.",
+					"The widest street between two classes: steer your own line, remove points to find the support vectors, turn the C dial, lift data until a straight street appears, and catch forged banknotes with a live SVM solver.",
 				topics: [
 					"Maximum margin",
 					"Support vectors",
 					"Soft margin & C",
 					"The kernel trick",
+				],
+				href: "/lectures/support-vector-machines/",
+				length: "~30 min",
+				index: [
+					["why", "Which line would you trust?"],
+					["support", "Support vectors: the few that matter"],
+					["soft", "Soft margins and the C dial"],
+					["hinge", "Hinge loss: the SVM as a loss"],
+					["kernel", "The kernel trick: lift, then cut"],
+					["rbf", "RBF kernels: similarity bumps"],
+					["when", "When to reach for an SVM"],
+					["project", "Catching forged banknotes"],
+					["summary", "Five lines to remember"],
 				],
 			},
 			{

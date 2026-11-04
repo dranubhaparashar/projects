@@ -1,0 +1,1148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on support vector machines: margins and the widest street, support vectors, soft margins and C, hinge loss, the kernel trick, RBF kernels, and a banknote-forgery project with a live SVM solver.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Support Vector Machines</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.cf-track.one::after { display: none; }
+table.zoo td, table.zoo th { font-size: 0.88rem; vertical-align: top; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+.pax { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; }
+.pax-name { font-family: var(--f-display); font-size: 1.6rem; font-weight: 600; line-height: 1.2; }
+table.heat { border-collapse: collapse; font-family: var(--f-mono); font-size: 0.78rem; margin-top: 4px; }
+table.heat th, table.heat td { padding: 4px 6px; text-align: center; }
+table.heat th { color: var(--muted); font-weight: 500; }
+table.heat td { border: 1px solid var(--line); cursor: pointer; min-width: 38px; }
+table.heat td:hover { outline: 1px solid var(--muted); outline-offset: -1px; }
+table.heat td.cur { outline: 2px solid var(--ink); outline-offset: -2px; font-weight: 700; }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">SVM <span>&middot; the widest street</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Which line?</a>
+      <a href="#support">Support vectors</a>
+      <a href="#soft">Soft margin</a>
+      <a href="#hinge">Hinge loss</a>
+      <a href="#kernel">Kernel trick</a>
+      <a href="#rbf">RBF playground</a>
+      <a href="#when">When to use</a>
+      <a href="#project">Banknote project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.9 · support vector machines</div>
+      <h1>Support Vector Machines</h1>
+      <div class="sub">The widest street between two classes</div>
+      <p class="lead">When two classes can be split by a line, there are infinitely many lines that do it. Which one should you trust with tomorrow's data? Vladimir Vapnik's answer: the one that leaves the <strong>widest street</strong> between the classes, so new points have the most room before they cross over. On the right, <strong>drag any dot</strong>. Only the ringed ones, the <em>support vectors</em>, hold the street in place; move any other dot and nothing happens.</p>
+      <dl class="facts">
+        <div><dt>The idea</dt><dd>Maximise the margin: the distance to the nearest points</dd></div>
+        <div><dt>Kernels</dt><dd>Curved boundaries from a similarity function, with no new features to build</dd></div>
+        <div><dt>In practice</dt><dd>Text, images, biology: strong on small-to-medium data with many features</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Two classes with the maximum-margin street; drag the points"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>9 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Which line would you trust?</a></li>
+    <li><a href="#support"><i>02</i>Support vectors: the few that matter</a></li>
+    <li><a href="#soft"><i>03</i>Soft margins and the C dial</a></li>
+    <li><a href="#hinge"><i>04</i>Hinge loss: the SVM as a loss</a></li>
+    <li><a href="#kernel"><i>05</i>The kernel trick: lift, then cut</a></li>
+    <li><a href="#rbf"><i>06</i>RBF kernels: similarity bumps</a></li>
+    <li><a href="#when"><i>07</i>When to reach for an SVM</a></li>
+    <li><a href="#project"><i>08</i>Catching forged banknotes</a></li>
+    <li><a href="#summary"><i>09</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Which line would you trust?</h2>
+    <div class="prose">
+      <p>A perceptron or a logistic regression stops as soon as the training points are on the right sides. But a line that scrapes past a point is fragile: a new example a hair away lands on the wrong side. Measure how much room a line leaves with its <em class="term">margin</em>, the distance from the line to the nearest training point. <strong>Steer the line yourself</strong> and try to make the street as wide as you can, then compare with the best one.</p>
+    </div>
+    <div class="eq"><div class="m">\[ d_i = \frac{y_i\,(\mathbf{w}\cdot\mathbf{x}_i + b)}{\lVert \mathbf{w} \rVert}, \qquad \text{margin} = \min_i \, d_i \]</div><div class="read"><b>Read it as:</b> labels are y = +1 or &minus;1. w&middot;x + b is positive on one side of the line and negative on the other; dividing by &Vert;w&Vert; turns it into a true distance. Multiplying by y<sub>i</sub> makes it positive when point i is on its correct side. The margin is the worst case over all points; a negative margin means some point is misclassified.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The signed distance of point i is y-i times w-dot-x-i plus b, over the length of w. The margin is the smallest of these.&rdquo;</em></div><div class="eq-run" id="run-mg"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="mg-cv" aria-label="Your line and its street; the nearest points are marked"></canvas></div><figcaption><span style="color:var(--ink)">&#9644;</span> your line, shaded out to the nearest point on each side &nbsp; <span style="color:var(--lda)">&#9644; &#9644;</span> the widest street (after you press the button)</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="mg-t">Angle of w</label><output id="mg-t-o"></output></div><input type="range" id="mg-t" min="-80" max="80" step="1" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="mg-c">Position of the line</label><output id="mg-c-o"></output></div><input type="range" id="mg-c" min="2" max="9" step="0.02" value="5"></div>
+        <div class="btns"><button type="button" class="btn primary" id="mg-best">Show the widest street</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="mg-you"></div><div class="k">your street's width</div></div><div class="stat"><div class="v" id="mg-opt"></div><div class="k">widest possible</div></div></div>
+        <p class="note" id="mg-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SUPPORT -->
+<section class="chap" id="support">
+  <div class="wrap">
+    <div class="tag">The optimisation</div>
+    <h2>Support vectors: the few that matter</h2>
+    <div class="prose"><p>Scale w and b so that the nearest points satisfy y(w&middot;x + b) = 1 exactly. The street's edges are then the lines w&middot;x + b = &plusmn;1, its width is 2/&Vert;w&Vert;, and making the street wide means making w <em>short</em>. That gives a clean problem with one best answer (it is convex, so there are no local traps). Its solution has a striking property: it depends only on the points on the street's edges. <strong>Click a dot to remove it</strong>; click again to bring it back.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\min_{\mathbf{w},\,b}\ \tfrac12 \lVert\mathbf{w}\rVert^2 \\ &\text{s.t.}\ \ y_i(\mathbf{w}\cdot\mathbf{x}_i + b) \ge 1 \ \text{ for all } i \end{aligned} \]</div><div class="read"><b>Read it as:</b> find the shortest w (the widest street, 2/&Vert;w&Vert;) such that every point sits on its own side, at or beyond the street's edge.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Minimise half the squared length of w, subject to y-i times w-dot-x-i plus b being at least one for every point.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\mathbf{w} = \sum_i \alpha_i\, y_i\, \mathbf{x}_i \\ &\alpha_i \ge 0, \qquad \sum_i \alpha_i y_i = 0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> the solution is a weighted sum of training points. Each &alpha;<sub>i</sub> is how hard point i pushes on the street. Points away from the street have &alpha;<sub>i</sub> = 0: they could vanish and nothing would change. The ones with &alpha;<sub>i</sub> &gt; 0 are the <b>support vectors</b>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;w is the sum of alpha-i, y-i, x-i; the alphas are non-negative and balance between the classes.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-sv" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="sv-cv" aria-label="The street with numbered points; click a point to remove it"></canvas></div><figcaption>Ringed dots are support vectors. Hollow dots have been removed. The faint street is the one with every point present.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="stats"><div class="stat"><div class="v" id="sv-n"></div><div class="k">support vectors</div></div><div class="stat"><div class="v" id="sv-w"></div><div class="k">street width 2/&Vert;w&Vert;</div></div></div>
+        <div class="tbl-wrap"><table class="hand" id="sv-tbl"></table></div>
+        <div class="btns"><button type="button" class="btn" id="sv-reset">Bring every point back</button></div>
+        <p class="note" id="sv-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SOFT -->
+<section class="chap" id="soft">
+  <div class="wrap">
+    <div class="tag">Real data</div>
+    <h2>Soft margins and the C dial</h2>
+    <div class="prose"><p>Real classes overlap, and then no street is empty: the hard-margin problem has no solution at all. Cortes &amp; Vapnik (1995) let points trespass, at a price. Each point gets a <em class="term">slack</em> &xi;<sub>i</sub>: how far it is inside the street (or beyond it, on the wrong side). The dial <b>C</b> sets the price of slack. <strong>Turn C</strong>: small C buys a wide, calm street that tolerates mistakes; large C fights for every training point and narrows the street. You can drag the dots too.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\min_{\mathbf{w},\,b,\,\xi}\ \tfrac12\lVert\mathbf{w}\rVert^2 + C\sum_i \xi_i \\ &\text{s.t.}\ \ y_i(\mathbf{w}\cdot\mathbf{x}_i+b) \ge 1-\xi_i,\ \ \xi_i \ge 0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> two goals pulling against each other: a wide street (small &Vert;w&Vert;) and little trespassing (small total slack). &xi;<sub>i</sub> = 0 for points outside the street, between 0 and 1 for points inside it but on the right side, and more than 1 for misclassified points. In the dual, this simply caps every &alpha;<sub>i</sub> at C.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Minimise half w squared plus C times the total slack, where each point may fall short of the margin by its slack xi-i.&rdquo;</em></div><div class="eq-run" id="run-so"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="so-cv" aria-label="Soft-margin SVM on overlapping data with slack drawn"></canvas></div><figcaption>Ringed: support vectors. Dashed grey ticks: each trespasser's slack, the distance back to its own edge of the street.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="so-c">C, the price of slack</label><output id="so-c-o"></output></div><input type="range" id="so-c" min="-2" max="3" step="0.05" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="so-w"></div><div class="k">street width</div></div><div class="stat"><div class="v" id="so-n"></div><div class="k">support vectors</div></div><div class="stat"><div class="v" id="so-e"></div><div class="k">training mistakes</div></div></div>
+        <p class="note" id="so-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- HINGE -->
+<section class="chap" id="hinge">
+  <div class="wrap">
+    <div class="tag">Another view</div>
+    <h2>Hinge loss: the SVM as a loss function</h2>
+    <div class="prose"><p>At the optimum each slack is as small as allowed: &xi;<sub>i</sub> = max(0, 1 &minus; y<sub>i</sub>f(x<sub>i</sub>)). Substitute that in and the constraints disappear. The SVM becomes the same recipe as every model so far: a loss on the training points plus a penalty on the weights. Its loss is the <em class="term">hinge</em>: zero once a point is safely beyond the street, then rising in a straight line. Compare it with logistic regression's loss from chapter 1.3. <strong>Slide the point's score</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\min_{\mathbf{w},\,b}\ \underbrace{\tfrac{1}{2C}\lVert\mathbf{w}\rVert^2}_{\text{wide street}} + \sum_i \underbrace{\max\!\big(0,\ 1 - y_i f(\mathbf{x}_i)\big)}_{\text{hinge loss}} \\ &\text{where } f(\mathbf{x}) = \mathbf{w}\cdot\mathbf{x}+b \end{aligned} \]</div><div class="read"><b>Read it as:</b> z = y&middot;f(x) is the point's score: positive when it's on the correct side, at least 1 when it's beyond the street. The hinge charges nothing for z &ge; 1, so points far from the boundary have no say at all. That is exactly why only support vectors matter. Logistic loss never quite reaches zero, so every point keeps a little influence.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Minimise one over two C times w squared, plus the sum of the max of zero and one minus y f of x.&rdquo;</em></div><div class="eq-run" id="run-hg"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="hg-cv" aria-label="Zero-one, hinge and logistic losses against the score y times f of x"></canvas></div><figcaption><span style="color:var(--muted)">&#9644;</span> 0&ndash;1 loss (what we really care about) &nbsp; <span style="color:var(--cA)">&#9644;</span> hinge (SVM) &nbsp; <span style="color:var(--cB)">&#9644;</span> logistic, scaled to pass through 1 at z = 0</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="hg-z">The point's score z = y&middot;f(x)</label><output id="hg-z-o"></output></div><input type="range" id="hg-z" min="-2.5" max="3" step="0.05" value="0.4"></div>
+        <div class="stats"><div class="stat"><div class="v" id="hg-h"></div><div class="k">hinge loss</div></div><div class="stat"><div class="v" id="hg-l"></div><div class="k">logistic loss</div></div><div class="stat"><div class="v" id="hg-01"></div><div class="k">0&ndash;1 loss</div></div></div>
+        <p class="note" id="hg-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- KERNEL -->
+<section class="chap" id="kernel">
+  <div class="wrap">
+    <div class="tag">Bending the boundary</div>
+    <h2>The kernel trick: lift, then cut</h2>
+    <div class="prose"><p>Below, orange points sit in the middle and blue points on both ends. No single cut on the line separates them. But give every point a second coordinate, x&sup2;, and the middle points stay low while the ends rise. In the lifted space a <em>straight</em> street separates them, and back on the line that street becomes two cuts. <strong>Drag the lift slider</strong> and watch the street appear.</p></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="kl-cv" aria-label="Points on a line lifted onto a parabola, separated by a straight street"></canvas></div><figcaption id="kl-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="kl-t">Lift: second coordinate = t &middot; x&sup2;</label><output id="kl-t-o"></output></div><input type="range" id="kl-t" min="0" max="1" step="0.01" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="kl-e"></div><div class="k">training mistakes</div></div><div class="stat"><div class="v" id="kl-w"></div><div class="k">street width</div></div></div>
+        <p class="note" id="kl-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>Here's the trick. Look back at the dual: the solution w = &Sigma; &alpha;<sub>i</sub>y<sub>i</sub>x<sub>i</sub> means every prediction only needs <em>dot products</em> between points. So we never have to build the lifted features; we only need a function K that returns their dot product. That function is a <em class="term">kernel</em>, and it can stand for a lift into hundreds, or infinitely many, dimensions at the cost of one small formula.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &K(\mathbf{x},\mathbf{z}) = \varphi(\mathbf{x})\cdot\varphi(\mathbf{z}) \\ &\varphi(x) = (x,\ x^2) \ \Rightarrow\ K(x,z) = xz + x^2z^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> a kernel is a dot product in some lifted space &phi;, computed without ever building &phi;. For the parabola lift above, K is two multiplications.</div><div class="eq-say"><b>Say it</b><em>&ldquo;K of x and z is phi of x dot phi of z.&rdquo;</em></div><div class="eq-run" id="run-kl"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ f(\mathbf{x}) = \sum_{i \in \text{SV}} \alpha_i\, y_i\, K(\mathbf{x}_i, \mathbf{x}) + b \]</div><div class="read"><b>Read it as:</b> to classify a new point, compare it with each support vector through K, weight by &alpha;<sub>i</sub>y<sub>i</sub>, add up, and read the sign. Training and prediction both see the data only through K. Swap the kernel and you swap the shape of the boundary.</div><div class="eq-say"><b>Say it</b><em>&ldquo;f of x is the sum over support vectors of alpha-i y-i K of x-i and x, plus b.&rdquo;</em></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- RBF -->
+<section class="chap" id="rbf">
+  <div class="wrap">
+    <div class="tag">Playground</div>
+    <h2>RBF kernels: similarity bumps</h2>
+    <div class="prose"><p>The most popular kernel, the <em class="term">radial basis function</em> (RBF, or Gaussian), measures how close two points are. Each support vector becomes a bump of influence, and f(x) adds up the bumps, plus for one class and minus for the other. <b>&gamma;</b> sets the bumps' reach: small &gamma; gives broad bumps and smooth boundaries; large &gamma; gives narrow bumps that wrap around single points, which is overfitting. <strong>Click to add points</strong>, try the presets, and move the mouse over the plot to see f(x) built from its bumps.</p></div>
+    <div class="eq"><div class="m">\[ K(\mathbf{x},\mathbf{z}) = \exp\!\big(-\gamma\,\lVert \mathbf{x}-\mathbf{z}\rVert^2\big) \]</div><div class="read"><b>Read it as:</b> 1 when the points coincide, falling towards 0 as they move apart. 1/&radic;&gamma; is roughly the distance at which a support vector's influence fades. This kernel is a dot product in an <i>infinite</i>-dimensional space, yet it costs one exponential.</div><div class="eq-say"><b>Say it</b><em>&ldquo;K is e to the minus gamma times the squared distance between x and z.&rdquo;</em></div><div class="eq-run" id="run-pg"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Preset data"><button type="button" data-pp="ring" aria-pressed="true">Ring</button><button type="button" data-pp="xor">XOR</button><button type="button" data-pp="moons">Moons</button><button type="button" data-pp="blobs">Blobs</button><button type="button" data-pp="clear">Clear</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pg-cv" aria-label="SVM playground: click to add points"></canvas></div>
+        <figcaption>Solid: the boundary f = 0. Dashed: the street's edges f = &plusmn;1. Ringed: support vectors. Colour strength shows |f|.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="What a click does"><button type="button" data-pc="1" aria-pressed="true">Click adds <span style="color:var(--cA)">&#9679;</span></button><button type="button" data-pc="-1">Click adds <span style="color:var(--cB)">&#9679;</span></button><button type="button" data-pc="0">Click erases</button></div>
+        <div class="seg" role="group" aria-label="Kernel"><button type="button" data-pk="linear">Linear</button><button type="button" data-pk="poly">Polynomial (d = 3)</button><button type="button" data-pk="rbf" aria-pressed="true">RBF</button></div>
+        <div class="ctrl"><div class="top"><label for="pg-c">C, the price of slack</label><output id="pg-c-o"></output></div><input type="range" id="pg-c" min="-2" max="3" step="0.05" value="0"></div>
+        <div class="ctrl" id="pg-g-ctrl"><div class="top"><label for="pg-g">&gamma;, the reach of each bump</label><output id="pg-g-o"></output></div><input type="range" id="pg-g" min="-1.5" max="1.5" step="0.05" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pg-n"></div><div class="k">support vectors</div></div><div class="stat"><div class="v" id="pg-a"></div><div class="k">training accuracy</div></div></div>
+        <p class="note" id="pg-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- WHEN -->
+<section class="chap" id="when">
+  <div class="wrap">
+    <div class="tag">Choosing</div>
+    <h2>When to reach for an SVM</h2>
+    <div class="prose"><p>SVMs ruled machine learning from the late 1990s until deep learning arrived: they were the best tools for handwriting, text categorisation and gene-expression data. They are still excellent when you have <strong>hundreds to tens of thousands of examples</strong>, many features, and want a strong, principled model. Their weak spots are scale (training cost grows faster than the number of examples), the need to scale features, and the lack of built-in probabilities.</p></div>
+    <div class="tbl-wrap block"><table class="zoo">
+      <thead><tr><th>Model</th><th>Boundary</th><th>Feature scaling</th><th>Probabilities</th><th>Big data (millions of rows)</th><th>Reach for it when</th></tr></thead>
+      <tbody>
+        <tr><td><b>Logistic regression</b></td><td>straight</td><td>helps</td><td>yes, calibrated</td><td>easy</td><td>you need a fast, explainable baseline with probabilities</td></tr>
+        <tr><td><b>k-NN</b></td><td>any shape</td><td>essential</td><td>rough (vote share)</td><td>slow to predict</td><td>small data, a good distance, little training time</td></tr>
+        <tr><td><b>Tree / forest / boosting</b></td><td>boxy, any shape</td><td>not needed</td><td>yes (forests roughly)</td><td>easy (boosting libraries)</td><td>mixed tabular data; the default for spreadsheets</td></tr>
+        <tr><td><b>Linear SVM</b></td><td>straight, max margin</td><td>essential</td><td>no (needs calibration)</td><td>easy (LinearSVC, SGD)</td><td>text and other very high-dimensional, sparse data</td></tr>
+        <tr><td><b>Kernel SVM (RBF)</b></td><td>smooth, any shape</td><td>essential</td><td>no (needs calibration)</td><td>hard: cost grows like n&sup2; or worse</td><td>medium-sized data with curved boundaries; a strong all-rounder</td></tr>
+      </tbody></table></div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: catching forged banknotes</h2>
+    <div class="prose">
+      <p>Counterfeit detection is a classic machine-vision task. Lohweg and colleagues (2013) photographed <strong>1,372</strong> banknote-like specimens, 762 genuine and 610 forged, with an industrial camera. A wavelet transform turned each image into four numbers that describe its fine print texture: the <b>variance</b>, <b>skewness</b> and <b>kurtosis</b> of the wavelet coefficients, and the image's <b>entropy</b>. The data is on the UCI repository. We shuffle it once, learn from 1,000 notes and test on the other 372. Features are standardised (SVMs measure distances, so scale matters). <strong>Press Train</strong>.</p>
+    </div>
+    <div class="btns block"><button type="button" class="btn primary" id="pj-train">Train all four models</button><span class="note" id="pj-prog" style="align-self:center"></span></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-race"></table></div>
+
+    <h3>The street, seen from the side</h3>
+    <div class="prose"><p>Plot every test note by its score f(x). Genuine notes should pile up on the left, forged ones on the right, and the street, from &minus;1 to +1, should be nearly empty.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Model"><button type="button" data-hm="lin">Linear SVM</button><button type="button" data-hm="rbf" aria-pressed="true">RBF SVM</button></div></div>
+        <div class="plot ar-3x1" style="aspect-ratio:2.4/1"><canvas id="pj-hist" aria-label="Histogram of test notes' decision values"></canvas></div>
+        <figcaption><span style="color:var(--cA)">&#9644;</span> genuine notes &nbsp; <span style="color:var(--cB)">&#9644;</span> forged notes &nbsp; shaded: the street, &minus;1 &lt; f(x) &lt; 1</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="stats"><div class="stat"><div class="v" id="pj-in"></div><div class="k">test notes inside the street</div></div><div class="stat"><div class="v" id="pj-wr"></div><div class="k">on the wrong side</div></div></div>
+        <p class="note" id="pj-hsay"></p>
+      </div></div>
+    </div>
+
+    <h3>Two features at a time</h3>
+    <div class="prose"><p>With all four features the RBF SVM makes no mistakes, so let's make it hard. Keep only two features, see the boundary, and tune C and &gamma; by hand. Dots are the 372 test notes; ringed dots are the ones the model gets wrong.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Feature pair"><button type="button" data-fp="0,1" aria-pressed="true">variance &times; skewness</button><button type="button" data-fp="0,2">variance &times; kurtosis</button><button type="button" data-fp="1,2">skewness &times; kurtosis</button><button type="button" data-fp="0,3">variance &times; entropy</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pj-2d" aria-label="Two-feature SVM boundary over the test notes"></canvas></div>
+        <figcaption id="pj-2dcap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Kernel"><button type="button" data-tk="linear">Linear</button><button type="button" data-tk="rbf" aria-pressed="true">RBF</button></div>
+        <div class="ctrl"><div class="top"><label for="tw-c">C</label><output id="tw-c-o"></output></div><input type="range" id="tw-c" min="-1" max="3" step="0.05" value="0"></div>
+        <div class="ctrl" id="tw-g-ctrl"><div class="top"><label for="tw-g">&gamma;</label><output id="tw-g-o"></output></div><input type="range" id="tw-g" min="-1.5" max="1" step="0.05" value="-0.3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="tw-a"></div><div class="k">test accuracy</div></div><div class="stat"><div class="v" id="tw-n"></div><div class="k">support vectors</div></div></div>
+        <div class="btns"><button type="button" class="btn" id="tw-map">Map every C and &gamma;</button></div>
+        <div class="tbl-wrap"><table class="heat" id="tw-heat"></table></div>
+        <p class="note" id="tw-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Inspect a note</h3>
+    <div class="prose"><p>Why does the RBF SVM call a note forged? Its score is a sum of bumps from its support vectors: the closest, most heavily weighted ones dominate. Step through the test notes, or jump to the ones the linear model gets wrong.</p></div>
+    <div class="lab">
+      <div>
+        <div class="pax" id="ins-verdict"></div>
+        <div class="coefs" id="ins-bars" style="margin-top:12px"></div>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ins-i">Test note</label><output id="ins-i-o"></output></div><input type="range" id="ins-i" min="1" max="372" step="1" value="1"></div>
+        <div class="btns"><button type="button" class="btn" id="ins-hard">Next note the linear SVM gets wrong</button></div>
+        <div class="coefs" id="ins-feat"></div>
+      </div></div>
+    </div>
+
+    <h3>The same project in scikit-learn</h3>
+<pre class="code"><code>import numpy as np
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+
+D = np.loadtxt("data_banknote_authentication.txt", delimiter=",")   # UCI repository
+X, y = D[:, :4], D[:, 4].astype(int)                                  # 0 = genuine, 1 = forged
+p = np.random.RandomState(42).permutation(len(y))
+X_tr, y_tr, X_te, y_te = X[p][:1000], y[p][:1000], X[p][1000:], y[p][1000:]
+
+models = {"logistic regression": LogisticRegression(),
+          "linear SVM": SVC(kernel="linear", C=1),
+          "polynomial SVM (d=3)": SVC(kernel="poly", degree=3, gamma=0.25, coef0=1, C=1),
+          "RBF SVM": SVC(kernel="rbf", gamma=0.25, C=1)}
+for name, m in models.items():
+    pipe = make_pipeline(StandardScaler(), m).fit(X_tr, y_tr)
+    n_sv = m.n_support_.sum() if hasattr(m, "n_support_") else "-"
+    print(f"{name:21s} accuracy = {pipe.score(X_te, y_te):.4f}   support vectors = {n_sv}")</code></pre>
+<pre class="code out"><code id="pj-out">logistic regression   accuracy = 0.9839   support vectors = -
+linear SVM            accuracy = 0.9866   support vectors = 60
+polynomial SVM (d=3)  accuracy = 1.0000   support vectors = 43
+RBF SVM               accuracy = 1.0000   support vectors = 92</code></pre>
+    <p class="note" style="max-width:72ch">The page runs its own port of libsvm's SMO solver (the algorithm inside scikit-learn's SVC), with the same stopping tolerance, so every accuracy above matches scikit-learn's. Support-vector counts can differ by one or two: a few points sit with &alpha; within the solver's tolerance of zero, and tiny rounding differences between machines decide which side of zero they land on. Solve to a tolerance of 10<sup>&minus;8</sup> and scikit-learn itself reports 93 support vectors for the RBF model, not 92; one of them has &alpha; &asymp; 0.00005.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Of all the boundaries that separate the classes, the SVM picks the one with the widest margin: minimise &frac12;&Vert;w&Vert;&sup2; while keeping every point beyond y&middot;f(x) = 1.</li>
+      <li>The solution depends only on the support vectors, the points on or inside the street; every other point could be deleted.</li>
+      <li>Soft margins let points trespass at price C: small C gives a wide, tolerant street; large C a narrow, strict one. Equivalently, the SVM minimises the hinge loss plus a weight penalty.</li>
+      <li>The kernel trick swaps every dot product for K(x, z), giving curved boundaries from a lift we never compute. RBF's &gamma; sets how local each support vector's bump is.</li>
+      <li>Scale your features, tune C and &gamma; together, and an SVM is a strong all-rounder: on banknotes, 372 of 372 test notes right.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why is the street's width 2/&Vert;w&Vert;?</summary><p>The edges are the lines w&middot;x + b = +1 and w&middot;x + b = &minus;1. Moving from one to the other changes w&middot;x by 2, and moving a distance d along the direction of w changes it by d&Vert;w&Vert;. So d = 2/&Vert;w&Vert;.</p></details>
+      <details class="q"><summary>You delete a training point that is not a support vector and retrain. What changes?</summary><p>Nothing: its &alpha; was 0, so it contributed nothing to w or b, and the old solution still satisfies every remaining constraint.</p></details>
+      <details class="q"><summary>Your RBF SVM gets 100% training accuracy and almost every point is a support vector. What happened, and what do you turn?</summary><p>Overfitting: &gamma; is so large that each point gets its own small bump. Lower &gamma; (broader bumps) and/or lower C (more tolerance), and choose both by cross-validation.</p></details>
+      <details class="q"><summary>Why must features be standardised before an RBF SVM?</summary><p>The kernel uses squared distances. A feature measured in large units would dominate &Vert;x &minus; z&Vert;&sup2; and the others would be ignored.</p></details>
+      <details class="q"><summary>The hinge loss is zero for a point with y&middot;f(x) = 2. What does that say about the point's influence on the model?</summary><p>None: it's beyond the street, contributes no loss and no gradient, and has &alpha; = 0. Logistic loss would still give it a small pull.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn" href="../ensembles/">&larr; Previous: Forests &amp; Boosting</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Boser, Guyon &amp; Vapnik (1992). A training algorithm for optimal margin classifiers. <em>COLT</em>: the kernel trick for maximum-margin classifiers.</li>
+      <li>Cortes &amp; Vapnik (1995). Support-vector networks. <em>Machine Learning</em> 20: soft margins.</li>
+      <li>Platt, J. (1998). Sequential minimal optimization: a fast algorithm for training support vector machines. Microsoft Research TR-98-14.</li>
+      <li>Fan, Chen &amp; Lin (2005). Working set selection using second order information for training SVM. <em>JMLR</em> 6: the solver in libsvm, ported on this page.</li>
+      <li>Chang &amp; Lin (2011). LIBSVM: a library for support vector machines. <em>ACM TIST</em> 2(3).</li>
+      <li>Lohweg, V. et al. (2013). Banknote authentication with mobile devices. <em>Proc. SPIE</em> 8665; data: UCI Machine Learning Repository, &ldquo;banknote authentication&rdquo;.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- SVM: libsvm's SMO solver (Fan, Chen & Lin 2005 working-set selection), C-SVC ---------- */
+const KERN = {
+  linear: () => (a, b) => { let s = 0; for (let k = 0; k < a.length; k++) s += a[k] * b[k]; return s; },
+  poly: (g, d, c0) => (a, b) => { let s = 0; for (let k = 0; k < a.length; k++) s += a[k] * b[k]; return Math.pow(g * s + c0, d); },
+  rbf: g => (a, b) => { let s = 0; for (let k = 0; k < a.length; k++) { const d = a[k] - b[k]; s += d * d; } return Math.exp(-g * s); }
+};
+function svmFit(X, y, K, C, opt) {
+  opt = opt || {};
+  const n = X.length, eps = opt.tol || 1e-3, TAU = 1e-12, maxIt = opt.maxIt || Math.max(1e7, 100 * n);
+  const Q = opt.Kmat ? null : new Float64Array(n * n), Km = opt.Kmat;
+  if (Q) for (let i = 0; i < n; i++) for (let j = i; j < n; j++) { const v = K(X[i], X[j]); Q[i * n + j] = v; Q[j * n + i] = v; }
+  const KK = Q || Km, q = (i, j) => y[i] * y[j] * KK[i * n + j];
+  const a = new Float64Array(n), G = new Float64Array(n).fill(-1), QD = new Float64Array(n);
+  for (let i = 0; i < n; i++) QD[i] = KK[i * n + i];
+  let it = 0;
+  for (; it < maxIt; it++) {
+    let Gmax = -Infinity, i = -1;
+    for (let t = 0; t < n; t++) {
+      if (y[t] > 0) { if (a[t] < C && -G[t] >= Gmax) { Gmax = -G[t]; i = t; } }
+      else if (a[t] > 0 && G[t] >= Gmax) { Gmax = G[t]; i = t; }
+    }
+    let Gmax2 = -Infinity, j = -1, best = Infinity;
+    if (i >= 0) for (let t = 0; t < n; t++) {
+      const Kit = KK[i * n + t];
+      if (y[t] > 0) {
+        if (a[t] > 0) { const gd = Gmax + G[t]; if (G[t] >= Gmax2) Gmax2 = G[t];
+          if (gd > 0) { let qc = QD[i] + QD[t] - 2 * y[i] * y[i] * y[t] * Kit; if (qc <= 0) qc = TAU; const od = -gd * gd / qc; if (od <= best) { j = t; best = od; } } }
+      } else if (a[t] < C) { const gd = Gmax - G[t]; if (-G[t] >= Gmax2) Gmax2 = -G[t];
+        if (gd > 0) { let qc = QD[i] + QD[t] + 2 * y[i] * y[i] * y[t] * Kit; if (qc <= 0) qc = TAU; const od = -gd * gd / qc; if (od <= best) { j = t; best = od; } } }
+    }
+    if (Gmax + Gmax2 < eps || j < 0) break;
+    const oi = a[i], oj = a[j], Qij = q(i, j);
+    if (y[i] !== y[j]) {
+      let qc = QD[i] + QD[j] + 2 * Qij; if (qc <= 0) qc = TAU;
+      const delta = (-G[i] - G[j]) / qc, diff = a[i] - a[j]; a[i] += delta; a[j] += delta;
+      if (diff > 0) { if (a[j] < 0) { a[j] = 0; a[i] = diff; } } else if (a[i] < 0) { a[i] = 0; a[j] = -diff; }
+      if (diff > 0) { if (a[i] > C) { a[i] = C; a[j] = C - diff; } } else if (a[j] > C) { a[j] = C; a[i] = C + diff; }
+    } else {
+      let qc = QD[i] + QD[j] - 2 * Qij; if (qc <= 0) qc = TAU;
+      const delta = (G[i] - G[j]) / qc, s = a[i] + a[j]; a[i] -= delta; a[j] += delta;
+      if (s > C) { if (a[i] > C) { a[i] = C; a[j] = s - C; } } else if (a[j] < 0) { a[j] = 0; a[i] = s; }
+      if (s > C) { if (a[j] > C) { a[j] = C; a[i] = s - C; } } else if (a[i] < 0) { a[i] = 0; a[j] = s; }
+    }
+    const di = a[i] - oi, dj = a[j] - oj;
+    if (di || dj) for (let t = 0; t < n; t++) G[t] += y[t] * (y[i] * KK[t * n + i] * di + y[j] * KK[t * n + j] * dj);
+  }
+  // rho, as libsvm computes it
+  let ub = Infinity, lb = -Infinity, nf = 0, sf = 0;
+  for (let t = 0; t < n; t++) { const yG = y[t] * G[t];
+    if (a[t] >= C) { if (y[t] < 0) ub = Math.min(ub, yG); else lb = Math.max(lb, yG); }
+    else if (a[t] <= 0) { if (y[t] > 0) ub = Math.min(ub, yG); else lb = Math.max(lb, yG); }
+    else { nf++; sf += yG; } }
+  const rho = nf > 0 ? sf / nf : (ub + lb) / 2, b = -rho;
+  const sv = []; for (let t = 0; t < n; t++) if (a[t] > 0) sv.push(t);
+  const coef = sv.map(t => a[t] * y[t]), SX = sv.map(t => X[t]);
+  const f = x => { let s = b; for (let k = 0; k < SX.length; k++) s += coef[k] * K(SX[k], x); return s; };
+  let obj = 0; for (let t = 0; t < n; t++) obj += a[t] * (G[t] - 1); obj /= 2; // dual objective, as libsvm reports
+  return { a, b, sv, coef, SX, f, it, C, nBound: sv.filter(t => a[t] >= C).length, obj };
+}
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sum = a => a.reduce((s, v) => s + v, 0);
+const sub = n => String(n).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch] || ch).join('');
+
+/* ---------- drawing a decision function: field, colour, contours, straight streets ---------- */
+function field(v, f, step) {
+  step = step || 5; const nx = Math.ceil(v.pw / step) + 1, ny = Math.ceil(v.ph / step) + 1, F = new Float64Array(nx * ny);
+  for (let j = 0; j < ny; j++) { const y = v.iY(v.pad.t + j * step); for (let i = 0; i < nx; i++) F[j * nx + i] = f(v.iX(v.pad.l + i * step), y); }
+  return { F, nx, ny, step };
+}
+function paint(v, G, colP, colN) {
+  const c = v.ctx, { F, nx, ny, step } = G; c.save();
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) { const val = (F[j * nx + i] + F[j * nx + i + 1] + F[(j + 1) * nx + i] + F[(j + 1) * nx + i + 1]) / 4;
+    c.globalAlpha = 0.05 + 0.27 * Math.min(1, Math.abs(val) / 1.6); c.fillStyle = val >= 0 ? colP : colN; c.fillRect(v.pad.l + i * step, v.pad.t + j * step, step + 0.5, step + 0.5); }
+  c.restore();
+}
+function iso(v, G, lev, col, lw, dotted) {
+  const c = v.ctx, { F, nx, ny, step } = G; c.save(); c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round'; c.beginPath();
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    if (dotted && (i + j) % 2) continue;
+    const a = F[j * nx + i] - lev, b = F[j * nx + i + 1] - lev, d = F[(j + 1) * nx + i] - lev, e = F[(j + 1) * nx + i + 1] - lev, x0 = v.pad.l + i * step, y0 = v.pad.t + j * step, P = [];
+    if ((a > 0) !== (b > 0)) P.push([x0 + step * a / (a - b), y0]);
+    if ((b > 0) !== (e > 0)) P.push([x0 + step, y0 + step * b / (b - e)]);
+    if ((d > 0) !== (e > 0)) P.push([x0 + step * d / (d - e), y0 + step]);
+    if ((a > 0) !== (d > 0)) P.push([x0, y0 + step * a / (a - d)]);
+    if (P.length >= 2) { c.moveTo(P[0][0], P[0][1]); c.lineTo(P[1][0], P[1][1]); }
+    if (P.length === 4) { c.moveTo(P[2][0], P[2][1]); c.lineTo(P[3][0], P[3][1]); }
+  }
+  c.stroke(); c.restore();
+}
+// the line w·x + b = lev, clipped to the view, as two endpoints
+function lineEnds(v, w, b, lev) {
+  if (Math.abs(w[1]) >= Math.abs(w[0])) { const y = x => (lev - b - w[0] * x) / w[1]; return [[v.xl[0], y(v.xl[0])], [v.xl[1], y(v.xl[1])]]; }
+  const x = y => (lev - b - w[1] * y) / w[0]; return [[x(v.yl[0]), v.yl[0]], [x(v.yl[1]), v.yl[1]]];
+}
+function lineF(v, w, b, lev, col, lw, dash) { const [p, q] = lineEnds(v, w, b, lev); seg(v, p[0], p[1], q[0], q[1], col, lw, dash); }
+function street(v, w, b, lo, hi, col, alpha) {
+  const [p1, q1] = lineEnds(v, w, b, lo), [p2, q2] = lineEnds(v, w, b, hi), c = v.ctx; c.save(); c.globalAlpha = alpha == null ? 0.16 : alpha; c.fillStyle = col;
+  c.beginPath(); c.moveTo(v.X(p1[0]), v.Y(p1[1])); c.lineTo(v.X(q1[0]), v.Y(q1[1])); c.lineTo(v.X(q2[0]), v.Y(q2[1])); c.lineTo(v.X(p2[0]), v.Y(p2[1])); c.closePath(); c.fill(); c.restore();
+}
+function ring(v, x, y, col, r, lw) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 8, 0, 7); c.strokeStyle = col; c.lineWidth = lw || 1.7; c.stroke(); }
+const linW = m => { const d = m.SX.length ? m.SX[0].length : 2, w = new Array(d).fill(0); m.SX.forEach((x, k) => { for (let j = 0; j < d; j++) w[j] += m.coef[k] * x[j]; }); return w; };
+const fitPts = (P, K, C) => svmFit(P.map(p => [p[0], p[1]]), P.map(p => p[2]), K, C);
+const sepOK = (m, P) => P.every(p => p[2] * m.f([p[0], p[1]]) >= 1 - 1e-3);
+
+/* ---------- toy points shared by the first three labs ---------- */
+const P0 = [[1.6, 1.4, -1], [2.4, 2.6, -1], [3.1, 1.1, -1], [1.9, 3.4, -1], [3.6, 2.3, -1], [2.7, 0.6, -1], [4.3, 1.5, -1], [1.2, 2.3, -1], [3.4, 3.4, -1],
+  [6.2, 4.1, 1], [7.4, 3.3, 1], [6.9, 5.2, 1], [8.3, 4.6, 1], [5.8, 5.4, 1], [7.8, 2.4, 1], [8.8, 3.6, 1], [6.6, 3.0, 1], [7.6, 5.7, 1]];
+const HARD = 1e4;
+
+/* ---------- hero ---------- */
+const HP = P0.map(p => p.slice());
+let heroV = null;
+function drawHero() {
+  const C = C0(), m = fitPts(HP, KERN.linear(), HARD), w = linW(m), nw = Math.hypot(w[0], w[1]), ok = sepOK(m, HP);
+  const v = heroV = frame($('#hero-cv'), [0, 10], [0, 6.25], null, true); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  paint(v, field(v, (a, b) => w[0] * a + w[1] * b + m.b, 8), C.a, C.b);
+  street(v, w, m.b, -1, 1, C.muted, 0.18); lineF(v, w, m.b, 0, C.q, 2.4); lineF(v, w, m.b, 1, C.q, 1.2, [5, 4]); lineF(v, w, m.b, -1, C.q, 1.2, [5, 4]);
+  HP.forEach((p, i) => { dot(v, p[0], p[1], p[2] > 0 ? C.a : C.b, 5.5); if (m.a[i] > 1e-8) ring(v, p[0], p[1], C.q, 9.5, 1.8); });
+  v.ctx.restore();
+  $('#hero-cap').innerHTML = ok ? `Street width ${tip('<b>' + fmt(2 / nw, 2) + '</b>', `2 / ‖w‖ = 2 / ${fmt(nw, 4)}`)}, held by <b>${m.sv.length}</b> support vectors (ringed) out of ${HP.length} points. Drag any dot, and try pulling one into the street.`
+    : `Now the classes overlap: no empty street exists, so the hard margin breaks down and points end up inside the street. That's what <a href="#soft">soft margins</a> are for.`;
+}
+draggable($('#hero-cv'), () => heroV, () => HP, drawHero);
+fig($('#hero-cv'), drawHero);
+
+/* ---------- your own line ---------- */
+const MG = { t: 0, c: 5, best: false, fit: fitPts(P0, KERN.linear(), HARD) };
+function drawMG() {
+  const C = C0(), th = MG.t * Math.PI / 180, w = [Math.cos(th), Math.sin(th)], b = -MG.c;
+  const d = P0.map(p => p[2] * (w[0] * p[0] + w[1] * p[1] + b)), m = Math.min(...d);
+  const mp = Math.min(...d.filter((_, i) => P0[i][2] > 0)), mn = Math.min(...d.filter((_, i) => P0[i][2] < 0));
+  const v = frame($('#mg-cv'), [0, 10], [0, 6.25], null, true); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  if (m > 0) street(v, w, b, -m, m, C.muted, 0.22);
+  lineF(v, w, b, 0, C.q, 2.4);
+  if (MG.best) { const bw = linW(MG.fit); lineF(v, bw, MG.fit.b, 0, C.lda, 2, [7, 5]); lineF(v, bw, MG.fit.b, 1, C.lda, 1.1, [3, 4]); lineF(v, bw, MG.fit.b, -1, C.lda, 1.1, [3, 4]); }
+  const near = d.indexOf(m);
+  P0.forEach((p, i) => { dot(v, p[0], p[1], p[2] > 0 ? C.a : C.b, 5.5); if (d[i] <= 0) ring(v, p[0], p[1], C.bad, 9.5, 2); else if (Math.abs(d[i] - m) < 1e-9) ring(v, p[0], p[1], C.q, 9.5, 1.8); });
+  // w arrow from the line's midpoint
+  { const [p, q] = lineEnds(v, w, b, 0), mx = clamp((p[0] + q[0]) / 2, 1, 9), my = clamp((p[1] + q[1]) / 2, 0.8, 5.4), c = v.ctx; c.save(); c.strokeStyle = C.q; c.fillStyle = C.q; c.lineWidth = 1.6; const x0 = v.X(mx), y0 = v.Y(my), x1 = v.X(mx + w[0] * 0.9), y1 = v.Y(my + w[1] * 0.9); c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); const an = Math.atan2(y1 - y0, x1 - x0); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x1 - 8 * Math.cos(an - .4), y1 - 8 * Math.sin(an - .4)); c.lineTo(x1 - 8 * Math.cos(an + .4), y1 - 8 * Math.sin(an + .4)); c.fill(); c.font = 'italic 13px ' + css('--f-display'); c.fillText('w', x1 + 5, y1 - 5); c.restore(); }
+  v.ctx.restore();
+  const best = 2 / Math.hypot(...linW(MG.fit)), mis = d.filter(x => x <= 0).length;
+  $('#mg-t-o').textContent = MG.t + '°'; $('#mg-c-o').textContent = fmt(MG.c, 2);
+  $('#mg-you').innerHTML = m > 0 ? tip(fmt(2 * m, 2), `2 × smallest distance = 2 × ${fmt(m, 3)}`) : tip('—', `margin is ${fmt(m, 3)}: a point is on the wrong side`);
+  $('#mg-opt').innerHTML = MG.best ? tip(fmt(best, 2), `2 / ‖w‖ from the SVM = 2 / ${fmt(Math.hypot(...linW(MG.fit)), 4)}`) : '?';
+  $('#mg-say').innerHTML = m <= 0 ? `Your line puts <b>${mis}</b> point${mis > 1 ? 's' : ''} on the wrong side (red rings): the margin is negative.`
+    : 2 * m / best > 0.985 ? `<b>${pct(2 * m / best, 0)}</b> of the widest street: you found the SVM's answer by hand.${MG.best ? '' : ' Press the button to check.'}`
+    : `Across your line the nearest points are ${fmt(mp + mn, 2)} apart. ${Math.abs(mp - mn) > 0.06 ? `Your line isn't centred (${fmt(mn, 2)} on one side, ${fmt(mp, 2)} on the other): slide it to the middle, then` : 'It is centred; now'} turn the angle to widen the gap.`;
+  const P = P0[near];
+  $('#run-mg').innerHTML = `<b>Running example</b>: w = (cos ${MG.t}°, sin ${MG.t}°) = (${fmt(w[0], 3)}, ${fmt(w[1], 3)}), so &Vert;w&Vert; = 1 and b = &minus;${fmt(MG.c, 2)}. The nearest point is (${P[0]}, ${P[1]}) with y = ${P[2] > 0 ? '+1' : '&minus;1'}: d = ${P[2] > 0 ? '' : '&minus;'}(${fmt(w[0], 3)}&times;${P[0]} + ${fmt(w[1], 3)}&times;${P[1]} &minus; ${fmt(MG.c, 2)}) = ${tip(fmt(m, 3), 'this smallest distance is the margin')}.`;
+}
+$('#mg-t').addEventListener('input', e => { MG.t = +e.target.value; drawMG(); });
+$('#mg-c').addEventListener('input', e => { MG.c = +e.target.value; drawMG(); });
+$('#mg-best').addEventListener('click', () => { MG.best = !MG.best; $('#mg-best').textContent = MG.best ? 'Hide the widest street' : 'Show the widest street'; drawMG(); });
+fig($('#mg-cv'), drawMG);
+
+/* ---------- support vectors: remove points ---------- */
+const SV = { off: new Set(), full: fitPts(P0, KERN.linear(), HARD) };
+let svV = null;
+function drawSV() {
+  const C = C0(), on = P0.map((p, i) => i).filter(i => !SV.off.has(i)), P = on.map(i => P0[i]);
+  const both = P.some(p => p[2] > 0) && P.some(p => p[2] < 0), m = both ? fitPts(P, KERN.linear(), HARD) : null, w = m ? linW(m) : null;
+  const fw = linW(SV.full), v = svV = frame($('#sv-cv'), [0, 10], [0, 6.25], null, true); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  street(v, fw, SV.full.b, -1, 1, C.muted, 0.08); lineF(v, fw, SV.full.b, 0, C.muted, 1.2, [3, 4]);
+  if (m) { street(v, w, m.b, -1, 1, C.muted, 0.2); lineF(v, w, m.b, 0, C.q, 2.4); lineF(v, w, m.b, 1, C.q, 1.1, [5, 4]); lineF(v, w, m.b, -1, C.q, 1.1, [5, 4]); }
+  const c = v.ctx; c.font = '10px ' + css('--f-mono'); c.textAlign = 'left'; c.textBaseline = 'bottom';
+  P0.forEach((p, i) => { const off = SV.off.has(i), k = on.indexOf(i); dot(v, p[0], p[1], p[2] > 0 ? C.a : C.b, 5.5, off); if (m && k >= 0 && m.a[k] > 1e-8) ring(v, p[0], p[1], C.q, 9.5, 1.8); c.fillStyle = C.muted; c.globalAlpha = off ? .5 : 1; c.fillText(i + 1, v.X(p[0]) + 7, v.Y(p[1]) - 5); c.globalAlpha = 1; });
+  v.ctx.restore();
+  if (!m) { $('#sv-n').textContent = '—'; $('#sv-w').textContent = '—'; $('#sv-tbl').innerHTML = ''; $('#run-sv').innerHTML = ''; $('#sv-say').textContent = 'Keep at least one point of each colour.'; return; }
+  const nw = Math.hypot(w[0], w[1]), svs = on.map((i, k) => ({ i, k })).filter(o => m.a[o.k] > 1e-8);
+  $('#sv-n').textContent = `${svs.length} of ${on.length}`; $('#sv-w').innerHTML = tip(fmt(2 / nw, 3), `2 / ‖w‖ = 2 / ${fmt(nw, 4)}`);
+  $('#sv-tbl').innerHTML = '<thead><tr><th>point</th><th>y</th><th>&alpha;</th><th>y(w&middot;x + b)</th></tr></thead><tbody>' + svs.map(o => { const p = P0[o.i], s = p[2] * (w[0] * p[0] + w[1] * p[1] + m.b); return `<tr><td>#${o.i + 1}</td><td>${p[2] > 0 ? '+1' : '&minus;1'}</td><td class="num">${fmt(m.a[o.k], 4)}</td><td class="num">${tip(fmt(s, 3), `${p[2] > 0 ? '' : '−'}(${fmt(w[0], 3)}×${p[0]} + ${fmt(w[1], 3)}×${p[1]} + ${fmt(m.b, 3)})\non the street's edge, so exactly 1`)}</td></tr>`; }).join('') + `<tr><td colspan="2">all other points</td><td class="num">0</td><td></td></tr></tbody>`;
+  const terms = svs.map(o => `${fmt(m.a[o.k], 3)}&middot;(${P0[o.i][2] > 0 ? '+1' : '&minus;1'})&middot;(${P0[o.i][0]}, ${P0[o.i][1]})`).join(' + ');
+  const bal = sum(svs.map(o => m.a[o.k] * P0[o.i][2]));
+  $('#run-sv').innerHTML = `<b>Running example</b>: w = ${terms} = ${tip(`(${fmt(w[0], 3)}, ${fmt(w[1], 3)})`, 'sum over the support vectors only;\nevery other point has α = 0')}, and &Sigma; &alpha;<sub>i</sub>y<sub>i</sub> = ${tip(fmt(Math.abs(bal) < 5e-4 ? 0 : bal, 3), 'the pushes from the two sides balance')}.`;
+  const fullSV = new Set(P0.map((_, i) => i).filter(i => SV.full.a[i] > 1e-8)), removedSV = [...SV.off].filter(i => fullSV.has(i)).length, same = Math.abs(w[0] - fw[0]) + Math.abs(w[1] - fw[1]) + Math.abs(m.b - SV.full.b) < 1e-3;
+  $('#sv-say').innerHTML = !SV.off.size ? 'Try removing a dot <i>without</i> a ring: the street doesn&rsquo;t move. Then remove a ringed one.'
+    : same ? `You removed ${SV.off.size} point${SV.off.size > 1 ? 's' : ''}${removedSV ? '' : ', none of them a support vector'}: the street is <b>exactly the same</b>. Those points never mattered.`
+    : `You removed ${removedSV ? 'a support vector' : 'points'}: the street re-formed around the next-closest points and is now ${2 / nw > 2 / Math.hypot(...fw) ? 'wider' : 'narrower'}.`;
+}
+$('#sv-cv').addEventListener('click', e => { if (!svV) return; const [px, py] = evPos($('#sv-cv'), e); let best = -1, bd = 16 * 16; P0.forEach((p, i) => { const dx = svV.X(p[0]) - px, dy = svV.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); if (best < 0) return; if (SV.off.has(best)) SV.off.delete(best); else SV.off.add(best); drawSV(); });
+$('#sv-cv').style.cursor = 'pointer';
+$('#sv-reset').addEventListener('click', () => { SV.off.clear(); drawSV(); });
+fig($('#sv-cv'), drawSV);
+
+/* ---------- soft margin ---------- */
+const SO = (() => { const r = mulberry32(11), P = []; for (let k = 0; k < 44; k++) { const y = k < 22 ? 1 : -1, mx = y > 0 ? 6.0 : 4.0, my = y > 0 ? 3.6 : 2.6; P.push([+clamp(mx + 1.05 * gaussOf(r), 0.3, 9.7).toFixed(2), +clamp(my + 1.05 * gaussOf(r), 0.3, 5.95).toFixed(2), y]); } return { P, lc: 0 }; })();
+let soV = null;
+function drawSO() {
+  const C = C0(), Cv = Math.pow(10, SO.lc), m = fitPts(SO.P, KERN.linear(), Cv), w = linW(m), nw = Math.hypot(w[0], w[1]);
+  const v = soV = frame($('#so-cv'), [0, 10], [0, 6.25], null, true); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  paint(v, field(v, (a, b) => w[0] * a + w[1] * b + m.b, 8), C.a, C.b);
+  street(v, w, m.b, -1, 1, C.muted, 0.18); lineF(v, w, m.b, 0, C.q, 2.4); lineF(v, w, m.b, 1, C.q, 1.1, [5, 4]); lineF(v, w, m.b, -1, C.q, 1.1, [5, 4]);
+  let xi = 0, err = 0; const XI = [];
+  SO.P.forEach(p => { const s = p[2] * (w[0] * p[0] + w[1] * p[1] + m.b); if (s < 1) { const k = 1 - s; xi += k; XI.push(k); const t = p[2] * k / (nw * nw); seg(v, p[0], p[1], p[0] + t * w[0], p[1] + t * w[1], C.muted, 1.4, [2, 3]); } if (s < 0) err++; });
+  SO.P.forEach((p, i) => { dot(v, p[0], p[1], p[2] > 0 ? C.a : C.b, 5); if (m.a[i] > 1e-8) ring(v, p[0], p[1], C.q, 8.5, m.a[i] >= Cv - 1e-9 ? 1.1 : 1.9); });
+  v.ctx.restore();
+  $('#so-c-o').textContent = Cv < 1 ? fmt(Cv, 2) : fmt(Cv, Cv < 10 ? 1 : 0);
+  $('#so-w').innerHTML = tip(fmt(2 / nw, 2), `2 / ‖w‖ = 2 / ${fmt(nw, 4)}`); $('#so-n').textContent = m.sv.length; $('#so-e').textContent = `${err} of ${SO.P.length}`;
+  const top = XI.slice().sort((a, b) => b - a).slice(0, 4).map(x => fmt(x, 2)).join(' + ');
+  $('#run-so').innerHTML = `<b>Running example</b>: C = ${$('#so-c-o').textContent}: &frac12;&Vert;w&Vert;&sup2; = ${tip(fmt(nw * nw / 2, 3), `‖w‖ = ${fmt(nw, 4)}`)}, &Sigma;&xi;<sub>i</sub> = ${tip(fmt(xi, 2), XI.length ? `${XI.length} points inside the street or beyond\nlargest: ${top}${XI.length > 4 ? ' + …' : ''}` : 'no point is inside the street')}, so the objective is ${fmt(nw * nw / 2, 3)} + ${$('#so-c-o').textContent} &times; ${fmt(xi, 2)} = ${tip(fmt(nw * nw / 2 + Cv * xi, 2), 'the smallest value any line can reach at this C')}.`;
+  const nb = m.nBound;
+  $('#so-say').innerHTML = Cv <= 0.1 ? `Slack is cheap: a wide street with <b>${XI.length}</b> points inside it. All ${m.sv.length} support vectors vote, so the line is set by the overall shape of the classes, not by a few points.`
+    : Cv >= 100 ? `Slack is expensive: the street narrows to ${fmt(2 / nw, 2)} to push points out, yet ${err} mistakes remain, because the classes truly overlap. A very large C chases noise.`
+    : `${nb} support vector${nb === 1 ? '' : 's'} sit at the cap &alpha; = C (thin rings: inside the street or misclassified); ${m.sv.length - nb} sit exactly on an edge (thick rings). Turn C both ways.`;
+}
+$('#so-c').addEventListener('input', e => { SO.lc = +e.target.value; drawSO(); });
+draggable($('#so-cv'), () => soV, () => SO.P, drawSO);
+fig($('#so-cv'), drawSO);
+
+/* ---------- hinge loss ---------- */
+const HG = { z: 0.4 };
+const hingeL = z => Math.max(0, 1 - z), logL = z => Math.log2(1 + Math.exp(-z)), zoL = z => z < 0 ? 1 : 0;
+function drawHG() {
+  const C = C0(), z = HG.z, v = frame($('#hg-cv'), [-2.5, 3], [0, 3.6], { b: 30 }); axes(v, 'z = y·f(x)', 'loss', { sx: 1, sy: 1 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.muted; c.globalAlpha = 0.1; c.fillRect(v.X(0), v.pad.t, v.X(1) - v.X(0), v.ph); c.restore();
+  seg(v, -3, 1, 0, 1, C.muted, 3); seg(v, 0, 0, 3, 0, C.muted, 3); seg(v, 0, 0, 0, 1, C.muted, 1, [3, 3]);
+  curve(v, hingeL, C.a, 2.8); curve(v, logL, C.b, 2.4);
+  seg(v, z, 0, z, 4, C.q, 1.2, [4, 4]); dot(v, z, hingeL(z), C.a, 5.5); dot(v, z, logL(z), C.b, 5.5);
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'center'; c.fillText('the street', v.X(0.5), v.pad.t + 14);
+  c.restore();
+  $('#hg-z-o').textContent = fmt(z, 2);
+  $('#hg-h').innerHTML = tip(fmt(hingeL(z), 3), `max(0, 1 − ${fmt(z, 2)})`); $('#hg-l').innerHTML = tip(fmt(logL(z), 3), `log₂(1 + e^−${fmt(z, 2)})`); $('#hg-01').textContent = zoL(z);
+  $('#hg-say').innerHTML = z >= 1 ? `Beyond the street: the hinge loss is exactly <b>0</b>, so this point has no influence on the SVM (&alpha; = 0). Logistic loss still charges ${fmt(logL(z), 3)} and keeps a small pull.`
+    : z >= 0 ? `Correct side, but inside the street. No classification mistake, yet the hinge charges ${fmt(hingeL(z), 2)}: the SVM wants a safety margin, not just a right answer.`
+    : `Wrong side: a mistake. Both losses grow in a straight line, so one far-off outlier can&rsquo;t dominate the way it would under squared error.`;
+  $('#run-hg').innerHTML = `<b>Running example</b>: a point with score z = ${fmt(z, 2)}: hinge = max(0, 1 &minus; ${fmt(z, 2)}) = ${tip(fmt(hingeL(z), 3), z >= 1 ? 'beyond the street: free' : 'its slack ξ in the soft-margin problem')}; logistic = log&#8322;(1 + e<sup>&minus;${fmt(z, 2)}</sup>) = ${fmt(logL(z), 3)}.`;
+}
+$('#hg-z').addEventListener('input', e => { HG.z = +e.target.value; drawHG(); });
+fig($('#hg-cv'), drawHG);
+
+/* ---------- kernel lift ---------- */
+const KL = { t: 0, x: [-2.8, -2.4, -2.1, -1.8, -1.55, 1.6, 1.9, 2.2, 2.5, 2.9, -1.1, -0.8, -0.45, -0.1, 0.3, 0.6, 0.9, 1.2], y: null };
+KL.y = KL.x.map(x => Math.abs(x) < 1.35 ? 1 : -1);
+function drawKL() {
+  const C = C0(), t = KL.t, X = KL.x.map(x => [x, t * x * x]), m = svmFit(X, KL.y, KERN.linear(), 1000), w = linW(m), nw = Math.hypot(w[0], w[1]);
+  const err = X.filter((x, i) => KL.y[i] * m.f(x) <= 0).length, sep = err === 0 && X.every((x, i) => KL.y[i] * m.f(x) >= 1 - 1e-3);
+  const v = frame($('#kl-cv'), [-3.2, 3.2], [-0.9, 9.3], { b: 30 }); axes(v, 'x', 't·x²', { sx: 1, sy: 2 }); clip(v);
+  if (t > 0) curve(v, x => t * x * x, C.line, 1.6);
+  if (sep) { street(v, w, m.b, -1, 1, C.muted, 0.2); lineF(v, w, m.b, 0, C.q, 2.2); lineF(v, w, m.b, 1, C.q, 1.1, [5, 4]); lineF(v, w, m.b, -1, C.q, 1.1, [5, 4]); }
+  let roots = [];
+  if (sep && t > 0) { const A = w[1] * t, B = w[0], Cc = m.b, D = B * B - 4 * A * Cc; if (D >= 0 && Math.abs(A) > 1e-12) roots = [(-B - Math.sqrt(D)) / (2 * A), (-B + Math.sqrt(D)) / (2 * A)].sort((a, b) => a - b);
+    roots.forEach(r => { seg(v, r, t * r * r, r, -0.9, C.lda, 1.6, [4, 3]); dot(v, r, t * r * r, C.lda, 4); }); }
+  X.forEach((p, i) => { dot(v, p[0], p[1], KL.y[i] > 0 ? C.b : C.a, 5.5); if (sep && m.a[i] > 1e-8) ring(v, p[0], p[1], C.q, 9, 1.7); });
+  if (roots.length) { const c = v.ctx; c.font = '11px ' + css('--f-mono'); c.fillStyle = C.lda; c.textAlign = 'center'; roots.forEach(r => c.fillText('cut', v.X(r), v.Y(-0.9) - 6)); }
+  v.ctx.restore();
+  $('#kl-t-o').textContent = fmt(t, 2);
+  $('#kl-e').textContent = err; $('#kl-w').innerHTML = sep ? tip(fmt(2 / nw, 2), `2 / ‖w‖ = 2 / ${fmt(nw, 4)} in the lifted plane`) : '—';
+  $('#kl-cap').innerHTML = t === 0 ? 'Every point lies on the line (t = 0). Orange in the middle, blue at both ends.' : `Each point x is drawn at (x, ${fmt(t, 2)}&middot;x&sup2;) on the grey parabola.${roots.length ? ' Blue dashes: where the street&rsquo;s centre line meets the parabola.' : ''}`;
+  $('#kl-say').innerHTML = !sep ? (t === 0 ? 'On the line, the best single cut still gets several points wrong. Start lifting.' : `t = ${fmt(t, 2)}: the points are rising, but there is no clean street yet${err ? ` (${err} mistake${err > 1 ? 's' : ''})` : ''}. Keep lifting.`)
+    : `Separated by a straight street. Back on the original line it means two cuts, at x &asymp; ${fmt(roots[0], 2)} and x &asymp; ${fmt(roots[1], 2)}: orange in between, blue outside. ${t < 1 ? 'Lift further and the street widens.' : ''}`;
+}
+$('#kl-t').addEventListener('input', e => { KL.t = +e.target.value; drawKL(); });
+fig($('#kl-cv'), drawKL);
+$('#run-kl').innerHTML = `<b>Running example</b>: x = &minus;0.8, z = 2.2. Lift first: &phi;(x) = (&minus;0.8, 0.64), &phi;(z) = (2.2, 4.84), dot product = &minus;1.76 + 3.0976 = ${tip('1.3376', '0.64 × 4.84 = 3.0976')}. Kernel directly: xz + x&sup2;z&sup2; = &minus;1.76 + 0.64&times;4.84 = ${tip('1.3376', 'same number, and φ was never built')}.`;
+
+/* ---------- RBF playground ---------- */
+const PG = { pts: [], kern: 'rbf', lc: 0, lg: 0, mode: 1, q: [0.6, 0.4], m: null, G: null, Gkey: '' };
+function preset(name) {
+  const r = mulberry32({ ring: 3, xor: 5, moons: 8, blobs: 13, clear: 1 }[name]), P = [];
+  if (name === 'ring') { for (let k = 0; k < 20; k++) { const a = 2 * Math.PI * r(), d = 0.75 * Math.sqrt(r()); P.push([d * Math.cos(a), d * Math.sin(a), 1]); } for (let k = 0; k < 30; k++) { const a = 2 * Math.PI * r(), d = 1.3 + 0.45 * r(); P.push([d * Math.cos(a), d * Math.sin(a), -1]); } }
+  if (name === 'xor') [[-1.2, -0.85], [1.2, 0.85], [-1.2, 0.85], [1.2, -0.85]].forEach(([cx, cy]) => { for (let k = 0; k < 12; k++) P.push([cx + 0.38 * gaussOf(r), cy + 0.32 * gaussOf(r), cx * cy > 0 ? 1 : -1]); });
+  if (name === 'moons') for (let k = 0; k < 40; k++) { const a = Math.PI * r(), up = k % 2 === 0; const x = up ? Math.cos(a) : 1 - Math.cos(a), y = up ? Math.sin(a) : 0.5 - Math.sin(a); P.push([1.45 * (x - 0.5) + 0.12 * gaussOf(r), 1.45 * (y - 0.25) + 0.12 * gaussOf(r), up ? 1 : -1]); }
+  if (name === 'blobs') for (let k = 0; k < 40; k++) { const y = k < 20 ? 1 : -1; P.push([(y > 0 ? 1.0 : -1.0) + 0.6 * gaussOf(r), (y > 0 ? 0.45 : -0.45) + 0.55 * gaussOf(r), y]); }
+  PG.pts = P.map(p => [clamp(p[0], -2.9, 2.9), clamp(p[1], -1.8, 1.8), p[2]]); PG.m = null;
+}
+function pgKern() { const g = Math.pow(10, PG.lg); return PG.kern === 'linear' ? KERN.linear() : PG.kern === 'poly' ? KERN.poly(g, 3, 1) : KERN.rbf(g); }
+function pgFit() { const P = PG.pts; PG.m = P.some(p => p[2] > 0) && P.some(p => p[2] < 0) ? fitPts(P, pgKern(), Math.pow(10, PG.lc)) : null; PG.Gkey = ''; }
+let pgV = null;
+function drawPG() {
+  if (!PG.m && PG.pts.length) pgFit();
+  const C = C0(), v = pgV = frame($('#pg-cv'), [-3, 3], [-1.875, 1.875], null, true); axes(v, 'x₁', 'x₂', { sx: 1, sy: 1 }); clip(v);
+  const m = PG.m;
+  if (m) { const key = [v.w, v.h, PG.pts.length, PG.kern, PG.lc, PG.lg, m.b].join('|'); if (PG.Gkey !== key) { PG.G = field(v, (a, b) => m.f([a, b]), 5); PG.Gkey = key; }
+    paint(v, PG.G, C.a, C.b); iso(v, PG.G, 1, C.q, 1.2, true); iso(v, PG.G, -1, C.q, 1.2, true); iso(v, PG.G, 0, C.q, 2.2); }
+  PG.pts.forEach((p, i) => { dot(v, p[0], p[1], p[2] > 0 ? C.a : C.b, 4.6); if (m && m.a[i] > 1e-8) ring(v, p[0], p[1], C.q, 8, 1.5); });
+  { const c = v.ctx, x = v.X(PG.q[0]), y = v.Y(PG.q[1]); c.save(); c.strokeStyle = C.q; c.lineWidth = 1.3; c.beginPath(); c.moveTo(x - 7, y); c.lineTo(x + 7, y); c.moveTo(x, y - 7); c.lineTo(x, y + 7); c.stroke(); c.restore(); }
+  v.ctx.restore();
+  const g = Math.pow(10, PG.lg), Cv = Math.pow(10, PG.lc);
+  $('#pg-c-o').textContent = Cv < 1 ? fmt(Cv, 2) : fmt(Cv, Cv < 10 ? 1 : 0); $('#pg-g-o').textContent = g < 1 ? fmt(g, 2) : fmt(g, 1);
+  $('#pg-g-ctrl').style.opacity = PG.kern === 'linear' ? 0.4 : 1; $('#pg-g').disabled = PG.kern === 'linear';
+  if (!m) { $('#pg-n').textContent = '—'; $('#pg-a').textContent = '—'; $('#pg-say').textContent = 'Add at least one point of each colour.'; $('#run-pg').innerHTML = ''; return; }
+  const acc = PG.pts.filter(p => (m.f([p[0], p[1]]) > 0 ? 1 : -1) === p[2]).length / PG.pts.length, fr = m.sv.length / PG.pts.length;
+  $('#pg-n').textContent = `${m.sv.length} of ${PG.pts.length}`; $('#pg-a').textContent = pct(acc, 0);
+  $('#pg-say').innerHTML = PG.kern === 'linear' && acc < 0.85 ? 'A straight street can&rsquo;t follow this shape. Switch to the RBF kernel.'
+    : PG.kern === 'rbf' && g >= 8 ? `&gamma; = ${fmt(g, 1)}: each bump is tiny, so the boundary hugs individual points${fr > 0.6 ? ` and ${pct(fr, 0)} of the points are support vectors` : ''}. That&rsquo;s overfitting. Lower &gamma;.`
+    : PG.kern === 'rbf' && g <= 0.06 ? `&gamma; = ${fmt(g, 2)}: the bumps are so broad that the RBF SVM behaves almost like a linear one.`
+    : PG.kern === 'poly' ? 'The cubic kernel (&gamma;x&middot;z + 1)&sup3; draws smooth curves with at most a few bends.'
+    : `${m.sv.length} support vectors carry the whole boundary. Add a point of the wrong colour inside a region and watch the boundary make room for it, more eagerly at large C.`;
+  // f at the cursor, built from its terms
+  const kf = pgKern(), xq = PG.q, terms = m.sv.map((t, k) => ({ t, k, v: m.coef[k] * kf(m.SX[k], xq) })).sort((a, b) => Math.abs(b.v) - Math.abs(a.v)), fq = m.f(xq), top = terms.slice(0, 3), rest = sum(terms.slice(3).map(o => o.v));
+  const kHow = o => { const s = m.SX[o.k]; if (PG.kern === 'rbf') { const d2 = (s[0] - xq[0]) ** 2 + (s[1] - xq[1]) ** 2; return `α = ${fmt(m.a[o.t], 3)}, y = ${PG.pts[o.t][2] > 0 ? '+1' : '−1'}\nK = exp(−${fmt(g, 2)} × ${fmt(d2, 3)}) = ${fmt(Math.exp(-g * d2), 4)}`; } return `α = ${fmt(m.a[o.t], 3)}, y = ${PG.pts[o.t][2] > 0 ? '+1' : '−1'}, K = ${fmt(kf(s, xq), 3)}`; };
+  $('#run-pg').innerHTML = `<b>Running example</b> at the cursor (${fmt(xq[0], 2)}, ${fmt(xq[1], 2)}): f = ${fmt(m.b, 3)} ${top.map(o => (o.v < 0 ? '&minus; ' : '+ ') + tip(fmt(Math.abs(o.v), 3), kHow(o))).join(' ')}${terms.length > 3 ? ` ${rest < 0 ? '&minus;' : '+'} ${tip(fmt(Math.abs(rest), 3), `the other ${terms.length - 3} support vectors`)}` : ''} = <b>${fmt(fq, 3)}</b> &rarr; ${fq > 0 ? '<span style="color:var(--cA)">&#9679;</span>' : '<span style="color:var(--cB)">&#9679;</span>'}${Math.abs(fq) < 1 ? ', inside the street' : ''}.`;
+}
+$('#pg-cv').addEventListener('click', e => { if (!pgV) return; const [px, py] = evPos($('#pg-cv'), e), x = pgV.iX(px), y = pgV.iY(py);
+  if (PG.mode === 0) { let best = -1, bd = 14 * 14; PG.pts.forEach((p, i) => { const d = (pgV.X(p[0]) - px) ** 2 + (pgV.Y(p[1]) - py) ** 2; if (d < bd) { bd = d; best = i; } }); if (best >= 0) PG.pts.splice(best, 1); }
+  else if (PG.pts.length < 160) PG.pts.push([clamp(x, -2.95, 2.95), clamp(y, -1.85, 1.85), PG.mode]);
+  $$('[data-pp]').forEach(b => b.setAttribute('aria-pressed', 'false')); PG.m = null; drawPG(); });
+$('#pg-cv').addEventListener('pointermove', e => { if (!pgV) return; const [px, py] = evPos($('#pg-cv'), e); PG.q = [pgV.iX(px), pgV.iY(py)]; drawPG(); });
+$('#pg-cv').style.cursor = 'crosshair';
+seg1('[data-pp]', 'data-pp', k => { preset(k); drawPG(); });
+seg1('[data-pc]', 'data-pc', k => { PG.mode = +k; });
+seg1('[data-pk]', 'data-pk', k => { PG.kern = k; PG.m = null; drawPG(); });
+$('#pg-c').addEventListener('input', e => { PG.lc = +e.target.value; PG.m = null; drawPG(); });
+$('#pg-g').addEventListener('input', e => { PG.lg = +e.target.value; PG.m = null; drawPG(); });
+preset('ring');
+fig($('#pg-cv'), drawPG);
+
+/* ---------- project: banknotes ---------- */
+const BANK = {"X":[[1.5691,6.3465,-0.1828,-2.4099],[-0.27802,8.1881,-3.1338,-2.5276],[0.05198,7.0521,-2.0541,-3.1508],[-1.7559,11.9459,3.0946,-4.8978],[2.4287,9.3821,-3.2477,-1.4543],[4.6352,-3.0087,2.6773,1.212],[0.24835,7.6439,0.9885,-0.87371],[5.1731,3.9606,-1.983,0.40774],[4.0047,0.45937,1.3621,1.6181],[0.96441,5.8395,2.3235,0.06636],[1.5077,1.9596,-3.0584,-0.12243],[-0.59587,2.4811,-2.8673,-0.89828],[0.46901,-0.63321,7.3848,0.36507],[-0.77288,-7.4473,6.492,0.36119],[-1.7344,2.0175,7.7618,0.93532],[1.6408,4.2503,-4.9023,-2.6621],[-1.3414,-2.0776,2.8093,0.60688],[-1.4628,-1.5706,2.4357,0.49826],[-3.2692,-12.7406,15.5573,-0.14182],[-1.2786,-2.4087,4.5735,0.47627],[2.4235,9.5332,-3.0789,-2.7746],[2.0421,1.2436,4.2171,0.90429],[-0.69879,-3.3771,4.1211,1.5043],[3.534,9.3614,-3.6316,-1.2461],[-4.577,3.4515,0.66719,-0.94742],[3.9262,6.0299,-2.0156,-0.06553],[3.2422,6.2265,0.12224,-1.4466],[-0.9854,-6.661,5.8245,0.5461],[5.6084,10.3009,-4.8003,-4.3534],[5.1776,8.2316,-3.2511,-1.5694],[-0.49081,2.8452,-3.6436,-3.1004],[1.5902,2.2948,3.2403,0.18404],[1.4578,-0.08485,4.1785,0.59136],[-6.3679,8.0102,0.4247,-3.2207],[-3.9204,4.0723,-0.23678,-2.1151],[3.7935,7.9853,-2.5477,-1.872],[1.5904,2.2121,-3.1183,-0.11725],[0.4283,-0.94981,-1.0731,0.3211],[-0.86339,1.9348,-2.3729,-1.0897],[1.6349,3.286,2.8753,0.08705],[1.5099,0.03931,6.2332,-0.30346],[-0.76794,3.4598,-3.4405,-3.4276],[-0.10234,1.8189,-2.2169,-0.56725],[2.229,9.6325,-3.1123,-2.7164],[-2.5899,-0.3911,0.93452,0.42972],[-1.8391,-9.0883,9.2416,-0.10432],[-1.4174,-2.2535,1.518,0.61981],[3.583,-3.7971,3.4391,-0.12501],[2.3678,-6.839,8.4207,-0.44829],[1.296,4.2855,-4.8457,-2.9013],[3.9292,-2.9156,2.2129,0.30817],[5.262,3.9834,-1.5572,1.0103],[0.00712,8.3661,0.50781,-3.8155],[3.6575,7.2797,-2.2692,-1.144],[-0.11996,6.8741,0.91995,-0.6694],[0.26517,2.4066,-2.8416,-0.59958],[-2.2623,12.1177,0.28846,-7.7581],[4.2969,7.617,-2.3874,-0.96164],[4.3846,-4.8794,3.3662,-0.02932],[2.8672,10.0008,-3.2049,-3.1095],[-1.9116,-6.1603,5.606,0.48533],[2.5367,2.599,2.0938,0.20085],[0.27331,4.8773,-4.9194,-5.8198],[3.2294,7.7391,-0.37816,-2.5405],[-1.803,11.8818,2.0458,-5.2728],[4.1542,7.2756,-2.4766,-1.2099],[3.3848,3.2674,0.90967,0.25128],[1.8205,6.7562,0.00999,0.39481],[-1.5055,0.07035,6.8681,-0.50648],[0.2952,4.8856,-5.149,-6.2323],[-1.7589,-6.4624,8.4773,0.31981],[2.4008,9.3593,-3.3565,-3.3526],[-1.3968,-9.6698,9.4652,-0.34872],[5.7353,5.2808,-2.2598,0.07542],[0.74428,-3.7723,1.6131,1.5754],[0.5195,-3.2633,3.0895,-0.9849],[4.2756,-2.6528,2.1375,0.94437],[-0.64326,2.4748,-2.9452,-1.0276],[-1.9555,0.20692,1.2473,-0.3707],[0.24394,1.4733,-1.4192,-0.58535],[-0.41965,2.9094,-1.7859,-2.2069],[1.7939,-1.1174,1.5454,-0.26079],[0.53936,3.8944,-4.8166,-4.3418],[2.2091,7.4556,-1.3284,-3.3021],[2.2517,-5.1422,4.2916,-1.2487],[4.0446,11.1741,-4.3582,-4.7401],[2.8561,6.9176,-0.79372,0.48403],[-2.5912,-0.10554,1.2798,1.0414],[0.89512,4.7738,-4.8431,-5.5909],[1.8373,6.1292,0.84027,0.55257],[3.4916,8.5709,-3.0326,-0.59182],[3.0329,2.2948,2.1135,0.35084],[0.3434,0.12415,-0.28733,0.14654],[0.23874,2.0879,-3.3522,-0.66553],[1.9321,6.0423,0.26019,-2.053],[-3.5895,-6.572,10.5251,-0.16381],[-4.1429,2.7749,0.68261,-0.71984],[0.27451,9.2186,-3.2863,-4.8448],[2.3952,9.5083,-3.1783,-3.0086],[2.5331,2.9135,-0.822,-0.12243],[-4.3876,-7.7267,11.9655,-1.4543],[4.5597,-2.4211,2.6413,1.6168],[0.39559,6.8866,1.0588,-0.67587],[3.4769,-0.15314,2.53,2.4495],[-6.7526,8.8172,-0.06198,-3.725],[5.2032,3.5116,-1.2538,1.0129],[3.5288,0.71596,1.9507,1.9375],[0.64376,3.764,-4.4738,-4.0483],[-3.4917,-12.1736,14.3689,-0.61639],[-3.1875,-7.5756,11.8678,-0.57889],[-2.1333,1.5685,-0.08426,-1.7453],[0.88992,2.2638,-3.1046,-0.11855],[2.093,8.3061,0.02284,-3.2724],[-2.8833,1.7713,0.68946,-0.4638],[-0.539,-5.167,3.4399,0.05214],[-3.551,1.8955,0.1865,-2.4409],[4.6562,7.6398,-2.4243,-1.2384],[-2.7769,-5.6967,5.9179,0.37671],[-3.73,-12.9723,12.9817,-2.684],[4.7926,1.7071,-0.0517,1.4926],[-2.8391,-6.63,10.4849,-0.42113],[2.0962,2.4769,1.9379,-0.04096],[1.581,0.86909,-2.3138,0.82412],[2.6415,7.586,-0.28562,-1.6677],[1.2572,4.8731,-5.2861,-5.8741],[0.38251,6.8121,1.8128,-0.61251],[-3.9594,4.0289,-0.35845,-3.8957],[-1.1188,3.3357,-1.3455,-1.9573],[1.594,4.7055,1.3758,0.08188],[-1.7064,3.3088,-2.2829,-2.1978],[-6.2003,8.6806,0.00913,-3.703],[-1.8348,11.0334,3.1863,-4.8888],[-0.16735,7.6274,1.2061,-3.6241],[3.8905,-2.1521,2.6302,1.1047],[3.8417,10.0215,-4.2699,-4.9159],[3.1377,-4.1096,4.5701,0.98963],[-2.1802,3.3791,-1.2256,-2.6621],[4.0102,10.6568,-4.1388,-5.0646],[0.93584,8.8855,-1.6831,-1.6599],[-1.8584,7.886,-1.6643,-1.8384],[2.8521,9.171,-3.6461,-1.2047],[3.482,-4.1634,3.5008,-0.07846],[-5.2049,7.259,0.07083,-7.3004],[1.742,-4.809,8.2142,-2.0659],[0.59823,3.5012,-3.9795,-1.7841],[2.1943,4.5503,-4.976,-2.7254],[1.2279,4.0309,-4.6435,-3.9125],[0.48797,3.5674,-4.3882,-3.8116],[0.02501,3.3998,-4.4327,-4.2655],[3.0948,8.7324,-2.9007,-0.96682],[1.0637,3.6957,-4.1594,-1.9379],[-0.40804,0.54214,-0.52725,0.6586],[-3.5801,-12.9309,13.1779,-2.5677],[4.8368,10.0132,-4.3239,-4.3276],[1.0117,0.9022,-2.3506,0.42714],[4.4682,2.2907,0.95766,0.83058],[0.6005,1.9327,-3.2888,-0.32415],[0.21084,9.4359,-0.09454,-1.859],[1.8384,6.063,0.54723,0.51248],[1.941,0.46351,4.6472,1.0879],[-3.0265,-0.06209,0.68604,-0.05519],[-3.8552,3.5219,-0.38415,-3.8608],[-1.7015,-0.01036,-0.99337,-0.53104],[-1.3066,0.25244,0.7623,1.7758],[0.7049,0.17174,-1.7859,0.36119],[3.2704,6.9321,-1.0456,0.23447],[-3.3924,3.3564,-0.72004,-3.5233],[1.8533,6.1458,1.0176,-2.0401],[4.1454,7.257,-1.9153,-0.86078],[2.9571,-4.5938,5.9068,0.57196],[-0.36279,8.2895,-1.9213,-3.3332],[3.8999,1.734,1.6011,0.96765],[2.5989,3.5178,0.7623,0.81119],[-1.6706,-2.09,1.584,0.71162],[2.1752,-0.8091,5.1022,-0.67975],[2.0597,-0.99326,5.2119,-0.29312],[-1.5732,1.0636,-0.71232,-0.8388],[-3.3125,0.10139,0.55323,-0.2957],[0.33565,6.8369,0.69718,-0.55691],[4.2478,7.6956,-2.7696,-1.0767],[-0.2062,9.2207,-3.7044,-6.8103],[-1.9922,11.6542,2.6542,-5.2107],[-3.2778,1.8023,0.1805,-2.3931],[1.2706,8.035,-0.19651,-2.1888],[-1.8387,-6.301,5.6506,0.19567],[2.7213,7.05,-0.58808,0.41809],[-2.9672,-13.2869,13.4727,-2.6271],[-0.89542,2.0279,-2.3652,-1.2746],[2.6917,10.8161,-3.3,-4.2888],[2.5635,6.7769,-0.61979,0.38576],[-2.41,3.7433,-0.40215,-1.2953],[2.1059,7.6046,-0.47755,-1.8461],[0.93611,8.6413,-1.6351,-1.3043],[-6.651,6.7934,0.68604,-7.5887],[-2.4365,3.6026,-1.4166,-2.8948],[-0.21394,-0.68287,0.09653,1.1965],[0.6005,0.99945,-2.2126,0.0974],[-1.1313,1.9037,7.5339,1.022],[-1.5075,1.9224,7.1466,0.89136],[-2.5724,-0.95602,2.7073,-0.16639],[-3.3884,-8.215,10.3315,0.98187],[-2.3675,-0.43663,1.692,-0.43018],[4.0329,0.23175,0.89082,1.1823],[-2.3361,11.9604,3.0835,-5.4435],[-1.0116,-0.19038,-0.90597,0.003],[-6.5773,6.8017,0.85483,-7.5344],[-6.5235,9.6014,-0.25392,-6.9642],[0.06252,2.9301,-3.5467,-2.6737],[-0.33729,-0.64976,7.6659,0.72326],[4.6689,1.3098,0.0554,1.909],[0.5706,-0.02484,1.2421,-0.56208],[2.8084,11.3045,-3.3394,-4.4194],[0.86202,2.6963,4.2908,0.54739],[1.8592,3.2074,-0.15966,-0.26208],[4.2188,6.8162,-1.2804,0.76076],[3.5761,9.7753,-3.9795,-3.4638],[0.5195,-3.2633,3.0895,-0.9849],[1.8799,2.4707,2.4931,0.37671],[-6.1632,8.7096,-0.21621,-3.6345],[-1.6514,-8.4985,9.1122,1.2379],[-1.5681,-7.2446,6.5537,-0.1276],[-5.119,6.6486,-0.04999,-6.5206],[-0.60975,-4.002,1.8471,0.6017],[2.5503,-4.9518,6.3729,-0.41596],[-0.4294,-0.14693,0.04426,-0.15605],[4.8906,-3.3584,3.4202,1.0905],[-2.2261,12.5398,2.9438,-3.5258],[-4.3773,-5.5167,10.939,-0.4082],[-3.506,-12.5667,15.1606,-0.75216],[-5.4414,7.2363,0.10938,-7.5642],[-0.71868,-5.7154,3.8298,1.0233],[1.4884,3.6274,3.308,0.48921],[0.37637,-0.82358,0.78543,0.74524],[4.2899,9.1814,-4.6067,-4.3263],[-1.7279,-6.841,8.9494,0.68058],[-2.7083,-6.8266,7.5339,0.59007],[0.11806,0.39108,-0.98223,0.42843],[-2.0659,1.0512,-0.46298,-1.0974],[2.4196,6.4665,-0.75688,0.228],[3.8023,-3.8696,4.044,0.95343],[0.77805,6.6424,-1.1425,-1.0573],[-1.7322,-9.2828,7.719,-1.7168],[3.9529,-2.3548,2.3792,0.48274],[-2.456,-0.24418,1.4041,-0.45863],[-0.77461,-1.8768,2.4023,1.1319],[-3.6817,3.2239,-0.69347,-3.4004],[-0.12196,8.8068,0.94566,-4.2267],[2.8261,9.4007,-3.3034,-1.0509],[3.5982,7.1307,-1.3035,0.21248],[2.1526,-6.1665,8.0831,-0.34355],[5.9374,6.1664,-2.5905,-0.36553],[3.1557,2.8908,0.59693,0.79825],[-1.8356,-6.7562,5.0585,-0.55044],[-1.3,10.2678,-2.953,-5.8638],[2.3917,4.5565,-4.9888,-2.8987],[4.0215,-2.1914,2.4648,1.1409],[3.9102,6.065,-2.4534,-0.68234],[2.486,-0.99533,5.3404,-0.15475],[-5.873,9.1752,-0.27448,-6.0422],[-1.5877,-6.6072,5.8022,0.31593],[1.3638,-4.7759,8.4182,-1.8836],[0.25035,9.3262,-3.6873,-6.2543],[4.7285,2.1065,-0.28305,1.5625],[-2.588,3.8654,-0.3336,-1.2797],[-0.00129,0.13863,-0.19651,0.00818],[3.4312,6.2637,-1.9513,-0.36165],[-0.49241,0.89392,-1.6283,-0.56854],[3.6244,1.4609,1.3501,1.9284],[-4.0786,2.9239,0.87026,-0.65389],[-0.37013,-5.554,4.7749,1.547],[-2.2625,-0.09934,2.8127,0.48662],[1.4378,0.66837,-2.0267,1.0271],[3.4626,-4.449,3.5427,0.15429],[-0.278,8.1881,-3.1338,-2.5276],[2.7831,10.9796,-3.557,-4.4039],[-1.3885,12.5026,0.69118,-7.5487],[2.7744,6.8576,-1.0671,0.07542],[-4.2887,-7.8633,11.8387,-1.8978],[5.3586,3.7557,-1.7345,1.0789],[0.75736,3.0294,2.9164,-0.06812],[-3.7244,1.9037,-0.03542,-2.5095],[4.6499,7.6336,-1.9427,-0.37458],[-2.2173,1.4671,-0.72689,-1.1724],[4.9264,5.496,-2.4774,-0.50648],[0.58982,7.4266,1.2353,-2.9595],[-2.4115,-9.1359,9.3444,-0.65259],[2.9163,10.8306,-3.3437,-4.122],[1.2262,0.89599,5.7568,-0.11596],[4.9249,0.68906,0.77344,1.2095],[-2.484,12.1611,2.8204,-3.7418],[3.9382,0.9291,0.78543,0.6767],[-3.38,-0.7077,2.5325,0.71808],[-4.2932,3.3419,0.77258,-0.99785],[1.3419,-4.4221,8.09,-1.7349],[-1.6029,-0.38903,1.62,1.9103],[2.5089,6.841,-0.02942,0.44912],[-0.17296,-1.1816,1.3818,0.7336],[-2.5701,-6.8452,8.9999,2.1353],[4.9362,7.6046,-2.3429,-0.85302],[0.5706,-0.0248,1.2421,-0.5621],[-1.9177,11.6894,2.5454,-3.2763],[3.5458,9.3718,-4.0351,-3.9564],[2.1721,-0.73874,5.4672,-0.72371],[1.5478,9.1814,-1.6326,-1.7375],[2.0911,0.94358,4.5512,1.234],[-3.3863,-12.9889,13.0545,-2.7202],[-2.121,-0.05588,1.949,1.353],[-1.6176,1.0926,-0.35502,-0.59958],[2.2526,9.9636,-3.1749,-2.9944],[5.8862,5.8747,-2.8167,-0.30087],[-0.82601,2.9611,-1.2864,-1.4647],[-2.0066,-6.719,9.0162,0.09998],[4.0972,0.46972,1.6671,0.91593],[1.2247,8.7779,-2.2135,-0.80647],[1.7496,-0.1759,5.1827,1.2922],[4.8451,8.1116,-2.9512,-1.4724],[2.877,-4.0599,3.6259,-0.32544],[1.143,0.83391,5.4552,-0.56984],[-2.7338,0.45523,2.4391,0.21766],[-2.2153,11.9625,0.07854,-7.7853],[-2.1652,3.0211,-2.4132,-2.4241],[0.21431,-0.69529,0.87711,0.29653],[-2.5346,-0.77392,3.3602,0.00171],[3.4246,-0.14693,0.80342,0.29136],[5.7403,-0.44284,0.38015,1.3763],[4.3848,-3.0729,3.0423,1.2741],[5.681,7.795,-2.6848,-0.92544],[0.83625,1.1071,-2.4706,-0.06294],[1.2138,8.7986,-2.1672,-0.74182],[4.1605,11.2196,-3.6136,-4.0819],[-1.2528,10.2036,2.1787,-5.6038],[2.0153,1.8479,3.1375,0.42843],[2.3164,-2.628,3.1529,-0.08622],[3.0672,-4.4117,3.8238,-0.81682],[0.52855,0.96427,4.0243,-1.0483],[-2.3277,1.4381,-0.82114,-1.2862],[2.2634,-4.4862,3.6558,-0.61251],[-4.244,-13.0634,17.1116,-2.8017],[-4.6765,-5.6636,10.969,-0.33449],[0.18868,0.70148,-0.51182,0.00559],[-2.4941,3.5447,-1.3721,-2.8483],[4.0524,5.6802,-1.9693,0.02628],[-0.66008,-3.226,3.8058,1.1836],[-1.9983,-6.6072,4.8254,-0.41984],[1.9476,-4.7738,8.527,-1.8668],[-1.6637,3.2881,-2.2701,-2.2224],[-1.3887,-4.8773,6.4774,0.34179],[4.1529,-3.9358,2.8633,-0.01769],[2.9543,1.076,0.64577,0.89394],[-0.0715,3.7412,-4.5415,-4.2526],[0.88872,5.3449,2.045,-0.19355],[2.7659,0.66216,4.1494,-0.28406],[-1.5621,-2.2121,4.2591,0.27972],[2.4226,-4.5752,5.947,0.21507],[-2.7723,3.2777,-0.9351,-3.1457],[2.8232,10.8513,-3.1466,-3.9784],[-3.9934,5.8333,0.54723,-4.9379],[-0.82053,0.65181,-0.48869,-0.52716],[2.5328,7.528,-0.41929,-2.6478],[3.4893,6.69,-1.2042,-0.38751],[-1.749,-6.332,6.0987,0.14266],[0.72252,-0.05381,5.6703,-1.3509],[2.805,0.57732,1.3424,1.2133],[-1.9667,11.8052,-0.40472,-7.8719],[4.616,10.1788,-4.2185,-4.4245],[4.0127,10.1477,-3.9366,-4.0728],[2.5227,2.2369,2.7236,0.79438],[-2.5961,-9.349,9.7942,-0.28018],[0.74841,7.2756,1.1504,-0.5388],[3.5829,1.4423,1.0219,1.4008],[-6.5084,8.7696,0.23191,-3.937],[0.3292,-4.4552,4.5718,-0.9888],[-0.91718,9.9884,1.1804,-5.2263],[-0.13144,-1.7775,8.3316,0.35214],[0.89606,10.5471,-1.4175,-4.0327],[-1.9966,-9.5001,9.682,-0.12889],[-0.53072,-0.09726,-0.21793,1.0426],[2.5068,1.1588,3.9249,0.12585],[-2.0441,1.2271,0.18564,-1.091],[4.0552,0.40143,1.4563,0.65343],[-2.7028,1.6327,0.83598,-0.09139],[-1.5322,-5.0966,6.6779,0.17498],[1.0194,1.1029,-2.3,0.59395],[4.1197,-2.7956,2.0707,0.67412],[-1.8215,2.7521,-0.72261,-2.353],[0.6818,4.8504,-5.2133,-6.1043],[2.6463,-4.8152,6.3549,0.003],[-2.1241,-6.8969,5.5992,-0.47156],[-0.47465,-4.3496,1.9901,0.7517],[4.3398,-5.3036,3.8803,-0.70432],[-1.9409,-8.6848,9.155,0.94049],[-0.7056,8.7241,2.2215,-4.5965],[2.5678,3.5136,0.61406,-0.40691],[1.7747,-6.4334,8.15,-0.89828],[-3.8953,4.0392,-0.3019,-2.1836],[-1.0802,2.1996,-2.5862,-1.2759],[0.98296,3.4226,-3.9692,-1.7116],[4.7114,2.0755,-0.2702,1.2379],[-0.0161,9.7484,0.15394,-1.6134],[4.2164,9.4607,-4.9288,-5.2366],[3.1088,3.1122,0.80857,0.4336],[-2.3221,-9.3304,9.233,-0.79871],[-0.78289,11.3603,-0.37644,-7.0495],[3.9121,2.9735,0.92852,0.60558],[-3.9698,3.6812,-0.60008,-4.0133],[-3.8483,-12.8047,15.6824,-1.281],[-0.65767,-2.8018,3.7115,0.99739],[-0.52645,-0.24832,-0.45613,0.41938],[2.5698,-4.4076,5.9856,0.078],[0.16358,-3.3584,1.3749,1.3569],[2.4012,1.6223,3.0312,0.71679],[3.0009,5.8126,-2.2306,-0.66553],[-0.56877,1.4174,-1.4252,-1.1246],[0.47368,3.3605,-4.5064,-4.0431],[1.0652,8.3682,-1.4004,-1.6509],[-4.5531,-12.5854,15.4417,-1.4983],[-0.04801,-1.6037,8.4756,0.75558],[0.74067,1.7299,-3.1963,-0.1457],[3.3951,1.1484,2.1401,2.0862],[3.8832,6.4023,-2.432,-0.98363],[4.3937,0.35798,2.0416,1.2004],[-1.8969,-6.7893,5.2761,-0.32544],[0.31803,-0.99326,1.0947,0.88619],[3.5152,6.8224,-0.67377,-0.46898],[3.3669,-5.1856,3.6935,-1.1427],[1.5799,-4.7076,7.9186,-1.5487],[-1.3414,-1.9162,-0.15538,-0.11984],[1.8664,7.7763,-0.23849,-2.9634],[3.4663,1.1112,1.7425,1.3388],[-5.4901,9.1048,-0.38758,-5.9763],[1.8993,7.6625,0.15394,-3.1108],[3.6894,9.887,-4.0788,-4.3664],[4.0552,-2.4583,2.2806,1.0323],[-0.2361,9.3221,2.1307,-4.3793],[-1.8974,3.5074,-1.7842,-3.8491],[3.7731,7.2073,-1.6814,-0.94742],[-0.26654,-0.64562,-0.42014,0.89136],[5.591,10.4643,-4.3839,-4.3379],[0.5706,-0.0248,1.2421,-0.5621],[-1.2244,1.7485,-1.4801,-1.4181],[4.0932,5.4132,-1.8219,0.23576],[3.5594,1.3078,1.291,1.6556],[-0.21661,8.0329,1.8848,-3.8853],[5.2418,10.5388,-4.1174,-4.2797],[5.4188,10.1457,-4.084,-3.6991],[4.1349,6.1189,-2.4294,-0.19613],[-0.49948,1.7734,-2.2469,-0.68104],[-2.902,-7.6563,11.8318,-0.84268],[1.7317,-0.34765,4.1905,-0.99138],[4.364,-3.1039,2.3757,0.78532],[3.5127,2.9073,1.0579,0.40774],[5.504,10.3671,-4.413,-4.0211],[-0.2062,9.2207,-3.7044,-6.8103],[-0.8734,-0.03312,-0.20165,0.55774],[2.0177,1.7982,-2.9581,0.2099],[-0.36038,4.1158,3.1143,-0.37199],[-2.0529,3.8385,-0.79544,-1.2138],[5.2756,0.13863,0.12138,1.1435],[3.884,10.0277,-3.9298,-4.0819],[-1.8046,-6.8141,6.7019,1.1681],[0.64295,7.1018,0.3493,-0.41337],[4.4549,2.4976,1.0313,0.96894],[-2.4824,-7.3046,6.839,-0.59053],[2.2928,9.0386,-3.2417,-1.2991],[1.8216,-6.4748,8.0514,-0.41855],[4.8278,7.7598,-2.4491,-1.2216],[-3.1158,-8.6289,10.4403,0.97153],[-4.2333,4.9166,-0.49212,-5.3207],[-0.77995,3.2322,-3.282,-3.1004],[-1.7781,0.8546,7.1303,0.02757],[-2.286,-5.4484,5.8039,0.88231],[-3.7573,-8.2916,10.3032,0.38059],[-1.8782,-6.5865,4.8486,-0.02157],[5.0429,-0.52974,0.50439,1.106],[-2.1786,-6.4479,6.0344,-0.20777],[-1.682,-6.8121,7.1398,1.3323],[-2.9138,-9.4711,9.7668,-0.60216],[4.9852,8.3516,-2.5425,-1.2823],[-2.4458,1.6285,-0.88541,-1.4802],[4.9294,0.27727,0.20792,0.33662],[3.757,-5.4236,3.8255,-1.2526],[-3.1273,-7.1121,11.3897,-0.08363],[2.9742,8.96,-2.9024,-1.0379],[3.7352,9.5911,-3.9032,-3.3487],[4.3684,9.6718,-3.9606,-3.1625],[-4.8554,-5.9037,10.9818,-0.82199],[4.7965,6.9859,-1.9967,-0.35001],[-3.1423,-13.0365,15.6773,-0.66165],[1.8994,0.97462,4.2265,0.81377],[3.4805,9.7008,-3.7541,-3.4379],[-0.24811,-0.17797,4.9068,0.15429],[1.6406,3.5488,1.3964,-0.36424],[-1.3971,3.3191,-1.3927,-1.9948],[-3.518,2.8763,0.1548,-1.2086],[5.438,9.4669,-4.9417,-3.9202],[4.0215,-2.7004,2.4957,0.36636],[-1.3995,-1.9162,2.5154,0.59912],[0.65497,5.1815,1.0673,-0.42113],[-1.4217,11.6542,-0.0577,-7.1025],[-4.3967,4.9601,-0.64892,-5.4719],[-3.2051,-0.14279,0.97565,0.04568],[-2.1668,1.5933,0.04512,-1.678],[5.0214,8.0764,-3.0515,-1.7155],[3.4566,9.5228,-4.0112,-3.5944],[1.518,5.6946,0.09482,-0.02674],[-4.4775,-13.0303,17.0834,-3.0345],[0.66365,-0.04553,-0.18794,0.23447],[-4.0679,2.4955,0.79571,-1.1039],[0.96708,3.8426,-4.9314,-4.1323],[-0.8471,3.1329,-3.0112,-2.9388],[0.67886,4.1199,-4.569,-4.1414],[-3.8167,5.1401,-0.65063,-5.4306],[3.2303,7.8384,-3.5348,-1.2151],[1.1811,8.3847,-2.0567,-0.90345],[3.359,9.8022,-3.8209,-3.7133],[2.9499,2.2493,1.3458,-0.03708],[0.29961,7.1328,-0.31475,-1.1828],[1.9429,6.3961,0.09225,0.58102],[1.3451,0.23589,-1.8785,1.3258],[-0.38388,-1.0471,8.0514,0.49567],[-1.4375,-1.8624,4.026,0.55127],[1.1588,8.9331,-2.0807,-1.1272],[-2.6479,10.1374,-1.331,-5.4707],[1.105,7.4432,0.41099,-3.0332],[3.4465,2.9508,1.0271,0.5461],[-4.0214,-12.8006,15.6199,-0.95647],[0.75108,1.9161,-3.1098,-0.20518],[4.6054,-4.0765,2.7587,0.31981],[-2.0046,-0.49457,1.333,1.6543],[-3.5713,-12.4922,14.8881,-0.47027],[3.5156,10.1891,-4.2759,-4.978],[-2.0336,-1.4092,1.1582,0.36507],[1.0182,9.109,-0.62064,-1.7129],[-0.8734,1.6533,-2.1964,-0.78061],[0.30081,0.17381,-1.7542,0.48921],[-2.2987,-5.227,5.63,0.91722],[-4.1244,3.7909,-0.6532,-4.1802],[-0.95923,-6.7128,4.9857,0.32886],[-2.2804,-0.30626,1.3347,1.3763],[-0.88728,2.808,-3.1432,-1.2035],[-7.0421,9.2,0.25933,-4.6832],[-2.799,1.9679,-0.42357,-2.1125],[-3.3553,0.35591,2.6473,-0.37846],[-2.5665,-6.8824,7.5416,0.70774],[2.6946,6.7976,-0.40301,0.44912],[-2.9146,4.0537,-0.45699,-4.0327],[1.7452,4.8028,2.0878,0.62627],[3.866,-2.6383,1.9242,0.10645],[3.5912,3.0129,0.72888,0.56421],[5.0297,-4.9704,3.5025,-0.23751],[-2.3797,-1.4402,1.1273,0.16076],[-1.6662,-0.30005,1.4238,0.02499],[0.11592,3.2219,-3.4302,-2.8457],[6.0919,2.9673,-1.3267,1.4551],[2.6104,8.0081,-0.23592,-1.7608],[-0.38214,8.3909,2.1624,-3.7405],[-5.0477,-5.8023,11.244,-0.3901],[5.1213,8.5565,-3.3917,-1.5474],[-1.979,3.2301,-1.3575,-2.5819],[-0.24037,-1.7837,2.135,1.2418],[-4.0025,-13.4979,17.6772,-3.3202],[-2.62,-6.8555,6.2169,-0.62285],[3.0934,-2.9177,2.2232,0.22283],[0.7057,-5.4981,8.3368,-2.8715],[3.966,3.9213,0.70574,0.33662],[-0.7869,9.5663,-3.7867,-7.5034],[2.3136,10.6651,-3.5288,-4.7672],[-4.2859,8.5234,3.1392,-0.91639],[4.8265,0.80287,1.6371,1.1875],[2.4673,1.3926,1.7125,0.41421],[0.68087,2.3259,4.9085,0.54998],[3.4642,10.6878,-3.4071,-4.109],[-2.6479,10.1374,-1.331,-5.4707],[0.56953,7.6294,1.5754,-3.2233],[4.7181,10.0153,-3.9486,-3.8582],[-0.3481,-0.38696,-0.47841,0.62627],[-2.2214,-0.23798,0.56008,0.05602],[-0.7869,9.5663,-3.7867,-7.5034],[-0.50816,2.868,-1.8108,-2.2612],[2.1319,-2.0403,2.5574,-0.06165],[-1.4446,2.1438,-0.47241,-1.6677],[-0.45062,-1.3678,7.0858,-0.40303],[1.7257,-4.4697,8.2219,-1.8073],[0.0453,6.7334,1.0708,-0.9332],[-2.6989,12.1984,0.67661,-8.5482],[3.5862,-3.0957,2.8093,0.24481],[-6.9599,8.9931,0.2182,-4.572],[-0.24745,1.9368,-2.4697,-0.80518],[2.888,0.44696,4.5907,-0.24398],[4.3064,8.2068,-2.7824,-1.4336],[1.5268,-5.5871,8.6564,-1.722],[-2.341,12.3784,0.70403,-7.5836],[0.20977,-0.46146,7.7267,0.90946],[-2.3242,11.5176,1.8231,-5.375],[3.4669,6.87,-1.0568,-0.73147],[3.7321,-3.884,3.3577,-0.00605],[3.7022,6.9942,-1.8511,-0.12889],[-0.69572,8.6165,1.8419,-4.3289],[3.9922,-4.4676,3.7304,-0.1095],[-1.4106,-7.108,5.6454,0.31335],[-4.0218,-8.304,12.555,-1.5099],[0.83292,7.5404,0.65005,-0.92544],[-0.95403,1.9824,-2.3163,-1.1957],[3.1452,5.825,-0.51439,-1.4944],[4.1038,-4.8069,3.3491,-0.49225],[-1.522,-6.6383,5.7491,-0.10691],[-0.77848,3.4019,-3.4859,-3.5569],[2.5559,3.3605,2.0321,0.26809],[-3.0061,-12.2377,11.9552,-2.1603],[2.9421,7.4101,-0.97709,-0.88406],[5.032,8.2026,-2.6256,-1.0341],[-1.2568,-1.4733,2.8718,0.44653],[2.8033,9.0862,-3.3668,-1.0224],[-1.0555,0.79459,-1.6968,-0.46768],[-1.7713,-10.7665,10.2184,-1.0043],[3.6667,4.302,0.55923,0.33791],[6.8248,5.2187,-2.5425,0.5461],[0.94732,-0.57113,7.1903,-0.67587],[4.1927,-3.2674,2.5839,0.21766],[0.3798,0.7098,0.7572,-0.4444],[1.6032,-4.7863,8.5193,-2.1203],[0.84546,3.4826,-3.6307,-1.3961],[3.5251,0.7201,1.6928,0.64438],[3.9294,1.4112,1.8076,0.89782],[2.1616,-6.8804,8.1517,-0.08105],[-3.7181,-8.5089,12.363,-0.95518],[-0.69745,-1.7672,-0.34474,-0.12372],[5.1129,-0.49871,0.62863,1.1189],[-1.239,-6.541,4.8151,-0.0332],[0.03022,-1.0512,1.4024,0.77369],[0.26877,4.987,-5.1508,-6.3913],[-2.3211,3.166,-1.0002,-2.7151],[-4.1958,-8.1819,12.1291,-1.6017],[1.6849,8.7489,-1.2641,-1.3858],[-3.3203,-0.02691,2.9618,-0.44958],[-3.5985,-13.6593,17.6052,-2.4927],[-2.2527,11.5321,2.5899,-3.2737],[2.0466,2.03,2.1761,-0.08363],[-2.4621,2.7645,-0.62578,-2.8573],[1.5631,0.89599,-1.9702,0.65472],[1.0284,9.767,-1.3687,-1.7853],[-2.3142,2.0838,-0.46813,-1.6767],[-2.6864,-0.09726,0.61663,0.06119],[1.0135,8.4551,-1.672,-2.0815],[1.6799,4.2068,-4.5398,-2.3931],[1.2198,2.0982,-3.1954,0.12843],[4.1373,0.49248,1.093,1.8276],[3.2718,1.7837,2.1161,0.61334],[4.65,-4.8297,3.4553,-0.25174],[-0.96511,9.4111,1.7305,-4.8629],[-0.46651,2.3383,-2.9812,-1.0431],[3.9364,10.5885,-3.725,-4.3133],[3.1887,-3.4143,2.7742,-0.2026],[-5.8818,7.6584,0.5558,-2.9155],[2.3969,0.23589,4.8477,1.437],[-1.8629,-0.84841,2.5377,0.0974],[0.04918,6.1437,1.7828,-0.72113],[3.245,6.63,-0.63435,0.86937],[-0.55648,3.2136,-3.3085,-2.7965],[5.0185,8.5978,-2.9375,-1.281],[0.64215,3.1287,4.2933,0.64696],[-4.211,-12.4736,14.9704,-1.3884],[-0.09219,0.39315,-0.32846,-0.13794],[0.3798,0.7098,0.7572,-0.4444],[3.0333,-2.5928,2.3183,0.303],[-4.2091,4.7283,-0.49126,-5.2159],[-4.3667,6.0692,0.57208,-5.4668],[0.3798,0.7098,0.7572,-0.4444],[-2.0149,3.6874,-1.9385,-3.8918],[-1.8219,-6.8824,5.4681,0.05731],[0.22432,-0.52147,-0.40386,1.2017],[4.2027,0.22761,0.96108,0.97282],[3.4092,5.4049,-2.5228,-0.89958],[0.49571,10.2243,-1.097,-4.0159],[-0.3489,3.1929,-3.4054,-3.1832],[4.2586,11.2962,-4.0943,-4.3457],[4.068,-2.9363,2.1992,0.50084],[-5.2406,6.6258,-0.19908,-6.8607],[3.9994,0.90427,1.1693,1.6892],[4.6464,10.5326,-4.5852,-4.206],[0.5195,-3.2633,3.0895,-0.9849],[-5.3012,7.3915,0.0297,-7.3987],[1.9105,8.871,-2.3386,-0.75604],[2.8969,0.70768,2.29,1.8663],[-2.3898,-0.78427,3.0141,0.76205],[4.5691,-4.4552,3.1769,0.0043],[-0.72068,-6.7583,5.8408,0.62369],[1.5356,9.1772,-2.2718,-0.73535],[3.9414,-3.2902,3.1674,1.0866],[4.1425,-3.6792,3.8281,1.6297],[-2.7914,1.7734,6.7756,-0.39915],[3.7982,10.423,-4.1602,-4.9728],[0.91315,3.3377,-4.0557,-1.6741],[0.7376,4.8525,-4.7986,-5.6659],[4.0405,0.51524,1.0279,1.106],[0.96574,8.393,-1.361,-1.4659],[-0.87834,3.257,-3.6778,-3.2944],[3.8481,10.1539,-3.8561,-4.2228],[1.2999,2.5762,2.0107,-0.18967],[-1.4377,-1.432,2.1144,0.42067],[4.2475,1.4816,-0.48355,0.95343],[3.6582,5.6864,-1.7157,-0.23751],[-0.97325,-6.4168,5.6026,1.0323],[3.6077,6.8576,-1.1622,0.28231],[-2.6685,-10.4519,9.1139,-1.7323],[0.50225,0.65388,-1.1793,0.39998],[-2.9498,-8.273,10.2646,1.1629],[0.38478,6.5989,-0.3336,-0.56466],[-4.5046,-5.8126,10.8867,-0.52846],[2.0922,-6.81,8.4636,-0.60216],[5.2012,0.32694,0.17965,1.1797],[-0.04801,-0.56078,7.7215,0.453],[-2.6286,0.18002,1.7956,0.97282],[3.2051,8.6889,-2.9033,-0.7819],[1.6988,2.9094,2.9044,0.11033],[1.7425,3.6833,-4.0129,-1.7207],[-0.30432,2.6528,-2.7756,-0.65647],[0.75896,0.29176,-1.6506,0.83834],[3.744,0.79459,0.95851,1.0077],[-0.27068,3.2674,-3.5562,-3.0888],[0.74307,11.17,-1.3824,-4.0728],[-0.03613,1.525,-1.4089,-0.76121],[-0.61442,-0.09106,-0.31818,0.50214],[4.1736,3.3336,-1.4244,0.60429],[1.2746,8.8172,-1.5323,-1.7957],[-1.9389,1.5706,0.04598,-1.122],[0.00966,3.5612,-4.407,-4.4103],[-2.3299,-9.9532,8.4756,-1.8733],[-5.2943,-5.1463,10.3332,-1.1181],[3.4359,0.66216,2.1041,1.8922],[3.3583,10.3567,-3.7301,-3.6991],[-3.3793,-13.7731,17.9274,-2.0323],[0.5706,-0.0248,1.2421,-0.5621],[1.4501,3.6067,-4.0557,-1.5966],[3.1219,-3.137,1.9259,-0.37458],[-0.83121,0.03931,0.05369,-0.23105],[2.614,8.0081,-3.7258,-1.3069],[1.1317,3.9647,3.3979,0.84351],[3.6277,0.9829,0.68861,0.63403],[-1.6677,-7.1535,7.8929,0.96765],[0.51947,-3.2633,3.0895,-0.98492],[-2.3147,3.6668,-0.6969,-1.2474],[0.55298,-3.4619,1.7048,1.1008],[0.01727,8.693,1.3989,-3.9668],[0.4339,5.5395,2.033,-0.40432],[-2.9915,-6.6258,8.6521,1.8198],[4.223,1.1319,0.72202,0.96118],[-1.2424,-1.7175,-0.52553,-0.21036],[4.6014,5.6264,-2.1235,0.19309],[-4.9447,3.3005,1.063,-1.444],[2.8297,6.3485,-0.73546,-0.58665],[-1.8439,-8.6475,7.6796,-0.66682],[3.3299,0.91254,1.5806,0.39352],[-2.4953,11.1472,1.9353,-3.4638],[3.6216,8.6661,-2.8073,-0.44699],[2.7161,-4.2006,4.1914,0.16981],[-3.5933,0.22968,0.7126,-0.3332],[3.8213,0.23175,2.0133,2.0564],[-1.7549,-0.08071,-0.75774,-0.3707],[-1.7976,-6.7686,6.6753,0.89912],[-1.4233,-0.98912,2.3586,0.39481],[-2.9662,-10.3257,8.784,-2.1138],[-1.5449,-10.1498,9.6152,-1.2332],[-3.2238,2.7935,0.32274,-0.86078],[-1.6952,1.0657,8.8294,0.94955],[3.6922,-3.9585,4.3439,1.3517],[2.994,7.2011,-1.2153,0.3211],[-1.2369,-1.6906,2.518,0.51636],[5.7227,5.8312,-2.4097,-0.24527],[4.0962,10.1891,-3.9323,-4.1827],[1.4806,7.6377,-2.7876,-1.0341],[-1.2943,2.6735,-0.84085,-2.0323],[-0.11783,-1.5789,8.03,-0.02803],[-3.8826,4.898,-0.92311,-5.0801],[1.9818,9.2621,-3.521,-1.872],[0.57461,10.1105,-1.6917,-4.3922],[0.12326,8.9848,-0.9351,-2.4332],[5.1302,8.6703,-2.8913,-1.5086],[0.3292,-4.4552,4.5718,-0.9888],[0.25943,5.0097,-5.0394,-6.3862],[-0.16108,-6.4624,8.3573,-1.5216],[-4.1479,7.1225,-0.0834,-6.4172],[-3.5359,0.30417,0.6569,-0.2957],[0.88444,6.5906,0.55837,-0.44182],[-4.8861,7.0542,-0.17252,-6.959],[5.7823,5.5788,-2.4089,-0.05648],[-0.12624,10.3216,-3.7121,-6.1185],[-0.89809,-4.4862,2.2009,0.50731],[0.96414,5.616,2.2138,-0.12501],[-1.1497,1.2954,7.701,0.62627],[4.8851,1.5995,-0.00029,1.6401],[6.5633,9.8187,-4.4113,-3.2258],[-2.3983,12.606,2.9464,-5.7888],[4.8272,3.0687,0.68604,0.80731],[-6.7387,6.9879,0.67833,-7.5887],[-5.0676,-5.1877,10.4266,-0.86725],[-0.98193,2.7956,-1.2341,-1.5668],[0.11739,6.2761,-1.5495,-2.4746],[-1.7063,2.7956,-2.378,-2.3491],[4.6439,-3.3729,2.5976,0.55257],[-1.1193,10.7271,2.0938,-5.6504],[4.2406,-2.4852,1.608,0.7155],[-0.29858,2.4769,-2.9512,-0.66165],[-0.81479,-5.7381,4.3919,0.3211],[3.0632,-3.3315,5.1305,0.8267],[4.1654,-3.4495,3.643,1.0879],[0.33325,3.3108,-4.5081,-4.012],[1.4276,8.3847,-2.0995,-1.9677],[-2.8829,3.8964,-0.1888,-1.1672],[-0.278,8.1881,-3.1338,-2.5276],[2.7296,2.8701,0.51124,0.5099],[-2.7143,11.4535,2.1092,-3.9629],[4.1962,0.74493,0.83256,0.753],[0.17346,7.8695,0.26876,-3.7883],[2.0139,6.1416,0.37929,0.56938],[-5.1661,8.0433,0.04426,-4.4983],[-1.7697,3.4329,-1.2144,-2.3789],[-2.3629,-0.10554,1.9336,1.1358],[-1.2537,10.8803,1.931,-4.3237],[-0.2062,9.2207,-3.7044,-6.8103],[3.9771,11.1513,-3.9272,-4.3444],[3.106,9.5414,-4.2536,-4.003],[4.5679,3.1929,-2.1055,0.29653],[4.3435,3.3295,0.83598,0.64955],[-0.83535,0.80494,-1.6411,-0.19225],[-2.5526,-7.3625,6.9255,-0.66811],[-0.49281,3.0605,-1.8356,-2.834],[0.96788,7.1907,1.2798,-2.4565],[4.5707,7.2094,-3.2794,-1.4944],[4.4338,9.887,-4.6795,-3.7483],[-2.1405,-0.16762,1.321,-0.20906],[-3.8053,2.4273,0.6809,-1.0871],[-0.60254,1.7237,-2.1501,-0.77027],[-1.5951,-6.572,4.7689,-0.94354],[3.5189,6.332,-1.7791,-0.02027],[2.565,8.633,-2.9941,-1.3082],[-2.4349,-9.2497,8.9922,-0.50001],[3.8117,10.1457,-4.0463,-4.5629],[2.7961,2.121,1.8385,0.38317],[2.9856,7.2673,-0.409,-2.2431],[-3.5798,0.45937,2.3457,-0.45734],[1.602,6.1251,0.52924,0.47886],[2.483,6.6155,-0.79287,-0.90863],[-1.48,-10.5244,9.9176,-0.5026],[2.2596,-0.03312,4.7355,-0.2776],[1.3349,6.1189,0.46497,0.49826],[1.2616,4.4303,-1.3335,-1.7517],[-0.36372,3.0439,-3.4816,-2.7836],[0.19081,9.1297,-3.725,-5.8224],[1.4479,-4.8794,8.3428,-2.1086],[-0.70346,2.957,-3.5947,-3.1457],[-1.786,-8.1157,7.0858,-1.2112],[-1.1804,11.5093,0.15565,-6.8194],[-4.4861,-13.2889,17.3087,-3.2194],[3.1836,7.2321,-1.0713,-2.5909],[0.49665,5.527,1.7785,-0.47156],[4.4072,-0.07036,2.0416,1.1319],[-3.8952,3.8157,-0.31304,-3.8194],[-3.9933,2.6218,0.62863,-1.1595],[0.89566,7.7763,-2.7473,-1.9353],[-3.6012,-6.5389,10.5234,-0.48967],[0.74054,0.36625,2.1992,0.48403],[3.4985,3.1639,0.22677,-0.1651],[-1.005,0.08483,-0.2462,0.45688],[2.6881,6.0195,-0.46641,-0.69268],[3.5358,6.7086,-0.81857,0.47886],[0.61652,3.8944,-4.7275,-4.3948],[2.9736,8.7944,-3.6359,-1.3754],[-0.23356,3.2405,-3.0669,-2.7784],[-3.0866,-6.6362,10.5405,-0.89182],[3.4647,-3.9172,3.9746,0.36119],[0.40614,1.3492,-1.4501,-0.55949],[2.6213,5.7919,0.06569,-1.5759],[0.92703,9.4318,-0.66263,-1.6728],[3.9663,10.1684,-4.1131,-4.6056],[2.0007,1.8644,2.6491,0.47369],[-4.4996,3.4288,0.56265,-1.1672],[3.7831,10.0526,-3.8869,-3.7366],[-0.16682,5.8974,0.49839,-0.70044],[3.2414,0.40971,1.4015,1.1952],[-0.21888,-2.2038,-0.0954,0.56421],[0.37984,0.70975,0.75716,-0.44441],[1.9572,-5.1153,8.6127,-1.4297],[0.58836,10.7727,-1.3884,-4.3276],[3.7767,9.7794,-3.9075,-3.5323],[4.4069,10.9072,-4.5775,-4.4271],[0.15423,0.11794,-1.6823,0.59524],[-1.6001,-9.5828,9.4044,0.08188],[3.8644,3.7061,0.70403,0.35214],[-2.234,-7.0314,7.4936,0.61334],[-1.8584,7.886,-1.6643,-1.8384],[3.946,6.8514,-1.5443,-0.5582],[1.7819,6.9176,-1.2744,-1.5759],[1.1518,1.3864,5.2727,-0.43536],[2.5581,2.6218,1.8513,0.40257],[-2.6479,10.1374,-1.331,-5.4707],[-1.5078,-7.3191,7.8981,1.2289],[3.8027,0.81529,2.1041,1.0245],[-2.9098,-10.0712,8.4156,-1.9948],[-2.4198,-0.24418,0.70146,0.41809],[0.55939,-0.3104,0.18307,0.44653],[3.1541,-5.1711,6.5991,0.57455],[0.5706,-0.0248,1.2421,-0.5621],[-2.6649,-12.813,12.6689,-1.9082],[-1.2667,2.8183,-2.426,-1.8862],[-1.7101,-8.7903,7.9735,-0.45475],[-2.9821,4.1986,-0.5898,-3.9642],[3.9899,-2.7066,2.3946,0.86291],[2.6799,3.1349,0.34073,0.58489],[-5.0301,7.5032,-0.13396,-7.5034],[2.2893,3.733,0.6312,-0.39786],[-0.00689,9.2931,-0.41243,-1.9638],[-3.8858,-12.8461,12.7957,-3.1353],[1.0235,6.901,-2.0062,-2.7125],[4.3483,11.1079,-4.0857,-4.2539],[0.32444,10.067,-1.1982,-4.1284],[-1.7263,-6.0237,5.2419,0.29524],[3.8496,9.7939,-4.1508,-4.4582],[1.7875,4.78,-5.1362,-3.2362],[-1.5222,10.8409,2.7827,-4.0974],[5.8519,5.3905,-2.4037,-0.06165],[4.2458,1.1981,0.66633,0.94696],[1.208,4.0744,-4.7635,-2.6129],[1.3754,8.8793,-1.9136,-0.53751],[3.0242,-3.3378,2.5865,-0.54785],[-2.899,-0.60424,2.6045,1.3776],[-0.69078,-0.50077,-0.35417,0.47498],[0.60731,3.9544,-4.772,-4.4853],[-1.7479,-5.823,5.8699,1.212],[1.3566,4.2358,2.1341,0.3211],[-0.63298,-5.1277,4.5624,1.4797],[-1.5572,-9.8808,8.1088,-1.0806],[2.2034,5.9947,0.53009,0.84998],[-2.5919,-1.0553,3.8949,0.77757],[3.4667,-4.0724,4.2882,1.5418],[-2.659,-1.6058,1.3647,0.16464],[4.6765,-3.3895,3.4896,1.4771],[5.8782,5.9409,-2.8544,-0.60863],[3.5257,1.2829,1.9276,1.7991],[-1.7582,2.7397,-2.5323,-2.234],[5.7456,10.1808,-4.7857,-4.3366],[-3.793,-12.7095,12.7957,-2.825],[-4.6338,-12.7509,16.7166,-3.2168],[-1.2846,3.2715,-1.7671,-3.2608],[0.74521,3.6357,-4.4044,-4.1414],[1.0987,0.6394,5.989,-0.58277],[2.3925,9.798,-3.0361,-2.8224],[-4.7331,-6.1789,11.388,-1.0741],[-2.7419,11.4038,2.5394,-5.5793],[-0.89569,3.0025,-3.6067,-3.4457],[2.6606,3.1681,1.9619,0.18662],[0.81356,9.1566,-2.1492,-4.1814],[2.2504,3.5757,0.35273,0.2836],[3.9362,10.1622,-3.8235,-4.0172],[2.7206,9.0821,-3.3111,-0.96811],[3.8244,-3.1081,2.4537,0.52024],[-1.5228,-6.4789,5.7568,0.87325],[-0.74324,-0.32902,-0.42785,0.23317],[3.8197,8.9951,-4.383,-4.0327],[-0.87874,-2.2121,-0.0517,0.09998],[4.9923,7.8653,-2.3515,-0.71984],[1.3087,4.9228,2.0013,0.22024],[-1.8483,0.31038,0.77344,1.4189],[1.3264,1.0326,5.6566,-0.41337],[2.031,1.852,-3.0121,0.003],[4.1757,10.2615,-3.8552,-4.3056],[-0.1269,-1.1505,-0.95138,0.57843],[-1.0833,-0.31247,1.2815,0.41291],[-1.9881,0.99945,-0.28562,-0.70044],[2.4486,-6.3175,7.9632,0.20602],[-1.8554,-9.6035,7.7764,-0.97716],[1.0009,7.7846,-0.28219,-2.6608],[-1.7886,-6.3486,5.6154,0.42584],[1.2309,3.8923,-4.8277,-4.0069],[-1.3,10.2678,-2.953,-5.8638],[1.645,7.8612,-0.87598,-3.5569],[4.0296,2.6756,0.80685,0.71679],[5.6272,10.0857,-4.2931,-3.8142],[0.11686,3.735,-4.4379,-4.3741],[3.4591,11.112,-4.2039,-5.0931],[2.3066,3.5364,0.57551,0.41938],[-1.8076,-8.8131,8.7086,-0.21682],[-4.4018,-12.9371,15.6559,-1.6806],[-3.5637,-8.3827,12.393,-1.2823],[1.0552,1.1857,-2.6411,0.11033],[4.7072,8.2957,-2.5605,-1.4905],[2.4527,2.9653,0.20021,-0.05648],[1.3114,4.5462,2.2935,0.22541],[4.5645,-3.6275,2.8684,0.27714],[5.3915,9.9946,-3.8081,-3.3642],[-1.1005,-7.2508,6.0139,0.36895],[-1.0112,2.9984,-1.1664,-1.6185],[-1.3274,9.498,2.4408,-5.2689],[3.4776,8.811,-3.1886,-0.92285],[-0.02531,-0.17383,-0.11339,1.2198],[2.0165,-0.25246,5.1707,1.0763],[2.108,6.7955,-0.1708,0.4905],[3.3004,7.0811,-1.3258,0.22283],[-4.9462,3.5716,0.82742,-1.4957],[-0.91318,-2.0113,-0.19565,0.06636],[4.0422,-4.391,4.7466,1.137],[2.6648,10.754,-3.3994,-4.1685],[4.4295,-2.3507,1.7048,0.90946],[-0.90784,-7.9026,6.7807,0.34179],[-6.3364,9.2848,0.01428,-6.7844],[-1.3907,-1.3781,2.3055,-0.02157],[-3.6053,-5.974,10.0916,-0.82846],[-2.343,12.9516,3.3285,-5.9426],[1.1644,3.8095,-4.9408,-4.0909],[-2.2482,3.0915,-2.3969,-2.6711],[3.8969,7.4163,-1.8245,0.14007],[2.8209,7.3108,-0.81857,-1.8784],[-2.4473,12.6247,0.73573,-7.6612],[-2.565,-5.7899,6.0122,0.04697],[-2.0891,-0.48422,1.704,1.7435],[5.807,5.0097,-2.2384,0.43878],[3.7635,2.7811,0.66119,0.34179],[-2.0962,-7.1059,6.6188,-0.33708],[-1.4427,3.2922,-1.9702,-3.4392],[0.9297,-3.7971,4.6429,-0.2957],[-1.3612,10.694,1.7022,-2.9026],[-5.637,8.1261,0.13081,-5.0142],[4.3634,0.46351,1.4281,2.0202],[3.5438,1.2395,1.997,2.1547],[1.8967,-2.5163,2.8093,-0.79742],[2.1948,1.3781,1.1582,0.85774],[0.9297,-3.7971,4.6429,-0.2957],[2.6562,10.7044,-3.3085,-4.0767],[-1.8448,1.254,0.27218,-1.0728],[-3.0731,-0.53181,2.3877,0.77627],[-4.1409,3.4619,-0.47841,-3.8879],[2.0843,6.6258,0.48382,-2.2134],[-1.5851,-2.1562,1.7082,0.9017],[-2.9883,0.31245,0.45041,0.06895],[-3.5916,-6.2285,10.2389,-1.1543],[-1.5252,-6.2534,5.3524,0.59912],[0.32924,-4.4552,4.5718,-0.9888],[-3.8203,-13.0551,16.9583,-2.3052],[4.988,7.2052,-3.2846,-1.1608],[0.518,0.25865,-0.84085,0.96118],[-0.77688,0.13036,-0.03114,-0.35389],[3.6702,2.9942,0.85141,0.30688],[-1.7104,-4.778,6.2109,0.3974],[-6.2815,6.6651,0.52581,-7.0107],[1.3403,4.1323,-4.7018,-2.5987],[2.3729,10.4726,-3.0087,-3.2013],[0.12126,0.22347,-0.47327,0.97024],[2.1274,5.1939,-1.7971,-1.1763],[2.7391,7.4018,0.07168,-2.5302],[1.1676,9.1566,-2.0867,-0.80647],[4.3239,-4.8835,3.4356,-0.5776],[0.6212,3.6771,-4.0771,-2.0711],[0.0405,8.5234,1.4461,-3.9306],[-2.8267,-9.0407,9.0694,-0.98233],[0.87256,9.2931,-0.7843,-2.1978],[0.00312,-4.0061,1.7956,0.91722],[3.3577,-4.3062,6.0241,0.18274],[2.9695,5.6222,0.27561,-1.1556],[3.9433,2.5017,1.5215,0.903],[0.5195,-3.2633,3.0895,-0.9849],[5.2423,11.0272,-4.353,-4.1013],[-2.0759,10.8223,2.6439,-4.837],[2.4391,6.4417,-0.80743,-0.69139],[-2.8957,-12.0205,11.9149,-2.7552],[-3.8073,-8.0971,10.1772,0.65084],[-2.564,-1.7051,1.5026,0.32757],[-0.06202,6.1975,1.099,-1.131],[-5.4808,8.1819,0.27818,-5.0323],[-0.10648,-0.76771,7.7575,0.64179],[3.931,1.8541,-0.02342,1.2314],[-0.11716,0.60422,-0.38587,-0.05906],[4.2134,-2.806,2.0116,0.67412],[-3.4083,4.8587,-0.76888,-4.8668],[2.8237,2.8597,0.19678,0.57196],[1.9358,8.1654,-0.02342,-2.2586],[-1.1859,-1.2519,2.2635,0.77239],[-3.1366,0.42212,2.6225,-0.06424],[4.0948,-2.9674,2.3689,0.75429],[4.0715,7.6398,-2.0824,-1.1698],[1.8238,-6.7748,8.3873,-0.54139],[-2.6406,-4.4159,5.983,-0.13924],[0.80355,2.8473,4.3439,0.6017],[3.7818,-2.8846,2.2558,-0.15734],[-3.6227,3.9958,-0.35845,-3.9047],[0.63655,5.2022,-5.2159,-6.1211],[2.2279,4.0951,-4.8037,-2.1112],[0.9297,-3.7971,4.6429,-0.2957],[-1.4781,0.14277,-1.1622,-0.48579],[1.5514,3.8013,-4.9143,-3.7483],[-1.4275,11.8797,0.41613,-6.9978],[1.6426,3.0149,0.22849,-0.147],[2.9719,6.8369,-0.2702,0.71291],[3.3756,-4.0951,4.367,1.0698],[-2.2617,-4.7428,6.3489,0.11162],[-2.3142,-0.68494,1.9833,-0.44829],[-1.6641,-1.3678,1.997,0.52283],[1.762,4.3682,2.1384,0.75429],[-1.4454,-8.4385,8.8483,0.96894],[0.3798,0.7098,0.7572,-0.4444],[3.9479,-3.7723,2.883,0.01981],[2.6719,3.0646,0.37158,0.58619],[-1.366,0.18416,0.90539,1.5806],[1.4507,8.7903,-2.2324,-0.65259],[1.04,-6.9321,8.2888,-1.2991],[-2.5419,-0.65804,2.6842,1.1952],[-0.8172,3.3812,-3.6684,-3.456],[0.56232,1.0015,-2.2726,-0.00605],[-6.3979,6.4479,1.0836,-6.6176],[0.11032,1.9741,-3.3668,-0.65259],[0.3223,-0.89808,8.0883,0.69222],[0.81583,4.84,-5.2613,-6.0823],[1.3562,3.2136,4.3465,0.78662],[1.1432,-3.7413,5.5777,-0.63578],[0.5415,6.0319,1.6825,-0.46122],[-2.8619,4.5193,-0.58123,-4.2629],[5.4944,1.5478,0.04169,1.9284],[3.6289,0.81322,1.6277,0.77627],[0.88298,0.66009,6.0096,-0.43277],[-0.0149,-1.0243,-0.94024,0.64955],[0.1848,6.5079,2.0133,-0.87242],[-4.7462,3.1205,1.075,-1.2966],[-2.9786,2.3445,0.52667,-0.40173],[-0.53966,7.3273,0.46583,-1.4543],[-3.0,-9.1566,9.5766,-0.73018],[3.8846,-3.0336,2.5334,0.20214],[-3.0201,-0.67253,2.7056,0.85774],[-2.0754,1.2767,-0.64206,-1.2642],[-1.1306,1.8458,-1.3575,-1.3806],[-2.0631,-1.5147,1.219,0.44524],[5.0452,3.8964,-1.4304,0.86291],[-1.0744,-6.3113,5.355,0.80472],[-4.0173,-8.3123,12.4547,-1.4375],[-2.1979,-2.1252,1.7151,0.45171],[-5.1216,-5.3118,10.3846,-1.0612],[-4.2249,6.2699,0.15822,-5.5457],[5.0691,0.21313,0.20278,1.2095],[-2.5084,-0.22763,1.488,1.2069],[-0.2951,9.0489,-0.52725,-2.0789],[-1.6386,3.3584,-1.7302,-3.5646],[-1.9725,2.8825,-2.3086,-2.3724],[3.3397,-4.6145,3.9823,-0.23751],[1.5456,8.5482,0.4187,-2.1784],[1.4896,3.4288,-4.0309,-1.4259],[2.549,6.1499,-1.1605,-1.2371],[-1.7599,11.9211,2.6756,-3.3241],[3.0864,-2.5845,2.2309,0.30947],[2.5605,9.2683,-3.5913,-1.356],[-0.9607,2.6963,-3.1226,-1.3121],[-2.0285,3.8468,-0.63435,-1.175],[3.2032,5.7588,-0.75345,-0.61251],[0.14329,-1.0885,1.0039,0.48791],[-4.8426,-4.9932,10.4052,-0.53104],[0.77124,9.0862,-1.2281,-1.4996],[5.2868,3.257,-1.3721,1.1668],[0.00405,0.62905,-0.64121,0.75817],[-1.8343,-6.5907,5.6429,0.54998],[-2.3518,-4.8359,6.6479,-0.06036],[-5.525,6.3258,0.89768,-6.6241],[3.7758,7.1783,-1.5195,0.40128],[-1.8584,7.886,-1.6643,-1.8384],[-2.7908,-5.7133,5.953,0.45946],[1.8114,7.6067,-0.9788,-2.4668],[4.5447,8.2274,-2.4166,-1.5875],[3.8384,6.1851,-2.0439,-0.0332],[4.1665,-0.4449,0.23448,0.27843],[0.06613,2.4914,-2.9401,-0.62156],[0.52374,3.644,-4.0746,-1.9909],[3.9719,1.0367,0.75973,1.0013],[-6.1536,7.9295,0.61663,-3.2646],[1.1315,7.9212,1.093,-2.8444],[-1.1667,-1.4237,2.9241,0.66119],[3.8584,0.78425,1.1033,1.7008],[1.9647,6.9383,0.57722,0.66377],[-1.0292,-6.3879,5.5255,0.79955],[-6.4247,9.5311,0.02284,-6.8517],[2.1881,2.7356,1.3278,-0.1832],[-1.9458,11.2217,1.9079,-3.4405],[3.2585,-4.4614,3.8024,-0.15087],[-1.6988,-7.1163,5.7902,0.16723],[5.086,3.2798,-1.2701,1.1189],[3.9232,-3.2467,3.4579,0.83705],[2.2546,8.0992,-0.24877,-3.2698],[-6.0598,9.2952,-0.43642,-6.3694],[1.9157,6.0816,0.23705,-2.0116],[-3.3604,-0.32696,2.1324,0.6017],[1.9265,7.7557,-0.16823,-3.0771],[1.934,-1e-05,4.816,-0.33967],[-2.4561,-4.5566,6.4534,-0.05648],[1.3049,-0.15521,6.4911,-0.75346],[-1.4572,9.1214,1.7425,-5.1241],[-0.78689,9.5663,-3.7867,-7.5034],[-0.94255,0.03931,-0.24192,0.31593],[1.6472,0.48213,4.7449,1.225],[-3.9297,-6.0816,10.0958,-1.0147],[-1.4094,-2.1252,-0.10397,-0.19225],[-2.7611,-10.5099,9.0239,-1.9547],[0.54777,10.3754,-1.5435,-4.1633],[-2.5754,-5.6574,6.103,0.65214],[-1.3,10.2678,-2.953,-5.8638],[0.94225,5.8561,1.8762,-0.32544],[4.5459,8.1674,-2.4586,-1.4621],[3.2351,9.647,-3.2074,-2.5948],[3.2403,-3.7082,5.2804,0.41291],[-3.3458,-0.50491,2.6328,0.53705],[-1.6936,2.7852,-2.1835,-1.9276],[-1.9551,-6.9756,5.5383,-0.12889],[-2.0662,0.16967,-1.0054,-0.82975],[0.86816,10.2429,-1.4912,-4.0082],[-0.41645,0.32487,-0.33617,-0.36036],[3.7798,-3.3109,2.6491,0.06636],[-3.8894,-7.8322,9.8208,0.47498],[2.6718,5.6574,0.72974,-1.4892],[0.77765,5.9781,1.1941,-0.3526],[3.2692,3.4184,0.20706,-0.06682],[1.3518,1.0595,-2.3437,0.39998],[2.0153,0.43661,4.5864,-0.3151],[3.6941,-3.9482,4.2625,1.1577],[-5.3857,9.1214,-0.41929,-5.9181],[-2.5463,3.1101,-0.83228,-3.0358],[0.50813,0.47799,-1.9804,0.57714],[2.9233,6.0464,-0.11168,-0.58665],[-2.2677,3.2964,-2.2563,-2.4642],[1.5673,7.9274,-0.05684,-2.1694],[2.2429,-4.1427,5.2333,-0.40173],[3.8962,-4.7904,3.3954,-0.53751],[-0.40857,3.0977,-2.9607,-2.6892],[-3.5741,3.944,-0.07912,-2.1203],[0.33111,4.5731,2.057,-0.18967],[-3.2305,-7.2135,11.6433,-0.94613],[3.9772,0.33521,2.2566,2.1625],[-2.4725,-0.40145,1.4855,1.1189],[0.85574,0.00827,6.6042,-0.53104],[-3.9411,-12.8792,13.0597,-3.3125],[4.7432,2.1086,0.1368,1.6543],[-0.64472,-4.6062,8.347,-2.7099],[-4.8392,6.6755,-0.24278,-6.5775],[4.1195,10.9258,-3.8929,-4.1802],[0.66191,9.6594,-0.28819,-1.6638],[0.20216,1.9182,-3.2828,-0.61768],[-0.55008,2.8659,-1.6488,-2.4319],[-0.70867,-5.5602,4.0483,0.903],[5.3063,5.2684,-2.8904,-0.52716],[0.86736,5.5643,1.6765,-0.16769],[-1.6244,-6.3444,4.6575,0.16981],[-1.9423,0.3766,-1.2898,-0.82458],[-0.39816,5.9781,1.3912,-1.1621],[-3.5681,-8.213,10.083,0.96765],[-0.62043,0.5587,-0.38587,-0.66423],[-2.2811,-0.85669,2.7185,0.04438],[-2.7264,3.9213,-0.49212,-3.6371],[5.1321,-0.03105,0.32616,1.1151],[-1.1391,1.8127,6.9144,0.70127],[-2.2501,3.3129,-0.88369,-2.8974],[3.6181,-3.7454,2.8273,-0.71208],[4.3365,-3.584,3.6884,0.74912],[3.82,10.9279,-4.0112,-5.0284],[-0.28015,3.0729,-3.3857,-2.9155],[0.14783,7.946,1.0742,-3.3409],[2.0051,-6.8638,8.132,-0.2401],[-2.5373,-6.959,8.8054,1.5289],[-2.1059,1.1815,-0.53324,-0.82716],[-3.9172,2.6652,0.78886,-0.7819],[-1.8187,-9.0366,9.0162,-0.12243],[-2.0897,10.8265,2.3603,-3.4198],[-1.0401,9.3987,0.85998,-5.3336],[-3.7747,2.5162,0.83341,-0.30993],[4.1711,8.722,-3.0224,-0.59699],[-0.93587,-5.1008,4.5367,1.3866],[-1.3389,1.552,7.0806,1.031],[2.8523,9.0096,-3.761,-3.3371],[0.44125,2.9487,4.3225,0.7155],[-1.2576,1.5892,7.0078,0.42455],[2.1265,6.8783,0.44784,-2.2224],[0.95626,2.4728,4.4578,0.21636],[1.7331,3.9544,-4.7412,-2.5017],[-0.62684,-6.301,4.7843,1.106],[3.7791,2.5762,1.3098,0.5655],[-2.4835,-7.4494,6.8964,-0.64484],[3.1896,5.7526,-0.18537,-0.30087],[5.4021,3.1039,-1.1536,1.5651],[3.404,8.7261,-2.9915,-0.57242],[-2.2183,-1.254,2.9986,0.36378],[-3.6961,-13.6779,17.5795,-2.6181],[-1.8411,10.8306,2.769,-3.0901],[4.2772,2.4955,0.48554,0.36119],[1.8314,6.3672,-0.03628,0.04955],[0.39012,-0.14279,-0.03199,0.35084],[1.3234,3.2964,0.2362,-0.11984],[-4.4779,7.3708,-0.31218,-6.7754],[-0.55355,-7.9233,6.7156,0.74394],[-3.2854,4.0372,-0.45356,-1.8228],[1.0191,2.33,4.9334,0.82929],[1.7748,-0.76978,5.5854,1.3039],[2.1464,6.0795,-0.5778,-2.2302],[-2.0042,-9.3676,9.3333,-0.10303],[-3.0986,-10.4602,8.9717,-2.3427],[2.6682,10.216,-3.4414,-4.0069],[-3.7503,-13.4586,17.5932,-2.7771],[-3.1128,-6.841,10.7402,-1.0172],[4.9342,2.4107,-0.17594,1.6245],[-2.1234,1.1815,-0.55552,-0.81165],[4.0026,-3.5943,3.5573,0.26809],[3.5499,8.6165,-3.2794,-1.2009],[-0.95923,0.09104,6.2204,-1.4828],[2.2123,-5.8395,7.7687,-0.85302],[3.7522,-3.6978,3.9943,1.3051],[-0.40951,-0.15521,0.06054,-0.08881],[1.5701,7.9129,0.29018,-2.1953],[-1.2792,2.1376,-0.47584,-1.3974],[-1.1022,-5.8395,4.5641,0.68705],[-3.0193,1.7775,0.73745,-0.45346],[4.8077,2.2327,-0.26334,1.5534],[-1.6162,0.80908,8.1628,0.60817],[-0.36506,2.8928,-3.6461,-3.0603],[5.0617,-0.35799,0.44698,0.99868],[1.3183,1.9017,-3.3111,0.06507],[4.0632,3.584,0.72545,0.39481],[-0.28696,3.1784,-3.5767,-3.1896],[2.0193,0.82356,4.6369,1.4202],[-5.9034,6.5679,0.67661,-6.6797],[-1.3931,1.5664,7.5382,0.78403],[-1.5768,10.843,2.5462,-2.9362],[0.3292,-4.4552,4.5718,-0.9888],[1.1558,6.4003,1.5506,0.6961],[4.6361,-2.6611,2.8358,1.1991],[-2.1674,0.12415,-1.0465,-0.86208],[1.1166,8.6496,-0.96252,-1.8112],[-2.258,-9.3263,9.3727,-0.85949],[5.7867,7.8902,-2.6196,-0.48708],[1.162,10.2926,-1.2821,-4.0392],[-0.36025,-4.449,2.1067,0.94308],[-0.39416,-0.0207,-0.06627,-0.44699],[-2.4554,-9.0407,8.862,-0.86983],[-2.4604,12.7302,0.91738,-7.6418],[-2.0545,-10.8679,9.4926,-1.4116],[0.76163,5.8209,1.1959,-0.64613],[-0.51003,-0.23591,0.02027,0.76334],[2.7365,-5.0325,6.6608,-0.57889],[-3.0799,0.60836,2.7039,-0.23751],[3.9166,10.2491,-4.0926,-4.4659],[3.577,2.4004,1.8908,0.73231],[-1.3946,2.3134,-0.44499,-1.4905],[2.5817,9.7546,-3.1749,-2.9957],[0.24261,0.57318,-1.9402,0.44007],[-0.02358,7.1742,0.78457,-0.75734],[0.5734,9.1938,-0.9094,-1.872],[0.3292,-4.4552,4.5718,-0.9888],[0.2346,-4.5152,2.1195,1.4448],[0.77445,9.0552,-2.4089,-1.3884],[-0.7351,1.7361,-1.4938,-1.1582],[4.052,-0.16555,0.45383,0.51248],[-2.2083,-9.1069,8.9991,-0.28406],[-0.71494,-4.4448,2.2241,0.49826],[2.3718,7.4908,0.01599,-1.7414],[-3.6085,3.3253,-0.51954,-3.5737],[0.66018,10.3878,-1.4029,-3.9151],[-0.89409,3.1991,-1.8219,-2.9452],[0.90407,3.3708,-4.4987,-3.6965],[3.2697,-4.3414,3.6884,-0.29829],[-0.75793,2.5349,-3.0464,-1.2629],[0.26637,0.73252,-0.67891,0.03533],[0.87603,6.8141,0.84198,-0.17156],[1.0607,2.4542,2.5188,-0.17027],[-1.0941,2.3072,-2.5237,-1.4453],[1.1472,3.5985,1.9387,-0.43406],[4.0713,10.4023,-4.1722,-4.7582],[-1.4904,-2.2183,1.6054,0.89394],[1.164,3.913,-4.5544,-3.8672],[-2.2918,-7.257,7.9597,0.9211],[-7.0364,9.2931,0.16594,-4.5396],[-3.4605,2.6901,0.16165,-1.0224],[-3.3582,-7.2404,11.4419,-0.57113]],"y":[0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,1,1,1,1,0,0,1,0,1,0,0,1,0,0,1,0,0,1,1,0,1,1,1,0,0,1,1,0,1,1,1,0,0,1,0,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,0,1,1,0,1,0,1,0,0,1,1,1,1,0,1,0,0,0,0,1,1,0,0,0,1,1,0,1,1,0,0,0,1,0,0,0,1,0,0,1,1,1,1,1,0,1,1,1,0,1,1,0,1,0,1,0,1,0,1,1,0,1,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1,0,0,0,1,1,1,1,1,0,1,0,0,0,0,0,0,1,0,0,1,1,0,0,0,0,1,0,1,0,1,1,0,0,1,0,0,1,1,1,1,0,0,1,1,1,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,1,0,0,1,1,1,1,0,1,0,1,1,1,1,0,0,0,1,0,1,1,1,0,0,0,0,0,0,1,0,1,0,0,0,1,1,0,0,0,1,1,0,1,0,1,1,1,1,0,0,0,0,0,1,0,0,1,0,1,0,0,1,0,0,0,0,0,1,1,0,1,0,1,1,0,0,0,0,0,0,0,1,1,1,0,0,1,1,0,0,0,0,0,0,1,0,1,1,1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,1,1,1,1,0,1,1,0,1,1,0,0,1,0,0,1,0,1,0,1,1,0,0,1,0,0,0,0,0,0,1,0,0,1,0,0,0,0,1,1,0,1,0,1,1,1,0,1,1,0,1,1,0,1,0,0,0,1,1,1,0,0,0,0,1,0,0,1,1,1,1,0,1,0,0,1,1,0,1,0,1,0,0,0,1,1,0,0,0,1,0,0,1,0,0,0,0,1,0,1,0,0,1,0,0,0,0,0,0,1,1,0,0,0,0,0,1,1,0,1,0,0,1,0,0,1,0,0,0,1,1,1,0,1,1,1,0,1,1,1,0,1,0,0,1,0,0,0,1,0,1,0,0,0,0,1,1,0,0,1,0,0,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,1,0,1,0,0,0,0,1,1,0,1,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,0,0,0,1,1,1,0,0,0,1,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,0,1,1,0,1,0,0,1,0,1,1,0,0,0,0,0,0,1,0,0,0,1,1,0,1,1,1,1,1,0,1,1,0,0,1,1,0,1,1,0,1,1,0,0,0,0,1,0,0,1,0,1,0,0,1,0,0,1,1,0,0,1,1,0,1,1,1,0,0,0,1,0,0,1,0,0,0,1,0,0,1,0,1,0,0,0,0,0,1,1,0,0,1,0,0,1,0,0,1,0,1,1,1,0,1,0,0,0,1,0,0,1,1,1,0,1,0,1,1,0,0,1,1,1,1,0,0,1,0,1,0,1,0,0,0,1,0,1,1,0,0,1,0,1,0,1,0,1,0,0,0,0,1,0,1,1,1,1,1,1,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0,1,1,0,1,0,0,1,0,0,0,0,0,0,1,1,1,0,1,0,0,0,1,1,0,0,1,0,1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,1,1,1,0,0,0,1,1,1,1,0,0,1,0,0,0,1,0,0,1,0,0,0,1,0,0,1,1,0,1,0,0,0,1,1,0,1,0,0,1,0,0,1,0,1,1,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,1,0,1,0,0,0,0,0,0,1,0,1,1,1,0,0,1,1,1,1,0,0,1,0,0,1,0,0,0,1,0,1,0,0,0,1,0,0,1,1,1,1,0,1,1,0,1,0,1,0,0,0,1,0,1,1,1,1,0,0,1,0,1,0,0,0,0,0,0,1,1,0,1,0,0,1,0,1,0,1,1,1,0,1,0,1,1,0,0,0,0,1,0,0,1,1,1,1,0,0,0,0,0,1,1,0,0,1,0,0,0,1,1,0,0,0,1,1,1,1,0,1,1,0,0,0,1,1,0,0,1,1,0,0,1,0,0,0,0,0,0,1,1,1,0,1,1,1,1,0,1,0,1,1,0,1,1,1,0,1,0,0,0,0,1,0,1,0,1,0,0,0,0,0,0,0,1,1,1,0,1,0,0,1,0,1,0,0,1,1,0,0,0,1,0,0,1,1,1,0,1,1,0,0,0,0,1,1,1,0,1,0,0,0,1,0,0,1,1,1,1,1,0,1,0,0,0,1,0,0,0,1,0,1,1,0,1,0,1,1,1,1,0,1,1,1,1,1,0,1,0,1,1,0,0,1,0,0,0,0,1,1,0,1,1,0,0,1,1,1,1,0,0,1,0,0,0,0,1,1,0,1,0,1,0,0,1,1,0,0,0,1,0,0,0,1,0,1,0,0,1,0,0,0,1,0,1,1,1,0,1,0,0,0,0,0,1,1,1,1,0,1,0,1,0,0,0,1,0,0,1,1,1,0,1,0,0,0,1,1,0,1,0,1,0,1,0,0,1,0,0,1,1,1,0,0,1,1,0,1,1,1,1,0,0,1,0,0,0,1,0,0,1,1,1,1,0,0,1,0,1,0,0,0,0,0,0,1,1,0,1,0,0,0,1,1,0,0,0,1,0,1,1,1,0,0,0,1,1,0,1,1,0,1,0,0,0,0,0,1,0,1,1,1,0,0,1,0,1,0,1,0,1,0,0,0,0,0,1,0,1,0,0,1,1,1,0,1,0,1,0,1,0,0,1,0,1,0,0,0,1,0,1,0,1,1,0,1,0,1,1,0,1,1,0,0,1,0,0,1,1,1,1,1,1]};
+const FN = ['variance', 'skewness', 'kurtosis', 'entropy'], NTR = 1000, NTE = BANK.y.length - NTR;
+const MU = [0, 1, 2, 3].map(j => sum(BANK.X.slice(0, NTR).map(x => x[j])) / NTR), SD = [0, 1, 2, 3].map(j => Math.sqrt(sum(BANK.X.slice(0, NTR).map(x => (x[j] - MU[j]) ** 2)) / NTR));
+const XS = BANK.X.map(x => x.map((v, j) => (v - MU[j]) / SD[j])), YS = BANK.y.map(v => v ? 1 : -1);
+const XTR = XS.slice(0, NTR), YTR = YS.slice(0, NTR), XTE = XS.slice(NTR), YTE = YS.slice(NTR);
+function solve(A, b) { const n = b.length; A = A.map(r => r.slice()); b = b.slice(); for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r; [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]]; for (let r = c + 1; r < n; r++) { const f = A[r][c] / A[c][c]; for (let k = c; k < n; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; } } const x = new Array(n).fill(0); for (let r = n - 1; r >= 0; r--) { let s = b[r]; for (let k = r + 1; k < n; k++) s -= A[r][k] * x[k]; x[r] = s / A[r][r]; } return x; }
+function lrFit(X, y) { // L2-penalised logistic regression (C = 1), Newton's method: scikit-learn's default model
+  const d = X[0].length + 1; let w = new Array(d).fill(0);
+  for (let it = 0; it < 60; it++) { const H = Array.from({ length: d }, () => new Array(d).fill(0)), g = new Array(d).fill(0);
+    X.forEach((x, i) => { const r = [1, ...x], z = r.reduce((s, v, j) => s + v * w[j], 0), p = 1 / (1 + Math.exp(-z)), e = p - (y[i] > 0 ? 1 : 0), s = p * (1 - p); for (let a = 0; a < d; a++) { g[a] += e * r[a]; for (let c = 0; c < d; c++) H[a][c] += s * r[a] * r[c]; } });
+    for (let a = 1; a < d; a++) { g[a] += w[a]; H[a][a] += 1; }
+    const st = solve(H, g); w = w.map((v, j) => v - st[j]); if (Math.max(...st.map(Math.abs)) < 1e-12) break; }
+  return x => w[0] + x.reduce((s, v, j) => s + v * w[j + 1], 0);
+}
+const PJ = { done: false, running: false, models: {}, times: {}, hm: 'rbf' };
+const SPECS = [['lr', 'Logistic regression', 0.9839, '—', 'chapter 1.3, for comparison'], ['lin', 'Linear SVM', 0.9866, 60, 'straight street, C = 1'], ['poly', 'Polynomial SVM, d = 3', 1, 43, '(0.25 x·z + 1)³, C = 1'], ['rbf', 'RBF SVM', 1, 92, 'γ = 0.25, C = 1']];
+function pjTrain() {
+  if (PJ.running) return; PJ.running = true; $('#pj-train').disabled = true; PJ.models = {}; let k = 0;
+  function step() {
+    const [key] = SPECS[k]; $('#pj-prog').textContent = `Training ${SPECS[k][1]}…`; const t0 = performance.now();
+    if (key === 'lr') { const f = lrFit(XTR, YTR); PJ.models.lr = { f }; }
+    else { const K = key === 'lin' ? KERN.linear() : key === 'poly' ? KERN.poly(0.25, 3, 1) : KERN.rbf(0.25); const m = svmFit(XTR, YTR, K, 1); m.K = K; PJ.models[key] = m; }
+    PJ.times[key] = performance.now() - t0; PJ.models[key].te = XTE.map(x => PJ.models[key].f(x));
+    drawRace(); k++;
+    if (k < SPECS.length) return setTimeout(step, 0);
+    PJ.done = true; PJ.running = false; $('#pj-train').disabled = false; $('#pj-train').textContent = 'Retrain all four'; $('#pj-prog').textContent = '';
+    drawHist(); drawIns();
+  }
+  setTimeout(step, 0);
+}
+function drawRace() {
+  $('#pj-race').innerHTML = '<thead><tr><th>model</th><th>test accuracy (your browser)</th><th>mistakes</th><th>support vectors</th><th>scikit-learn</th><th>time</th><th>what it is</th></tr></thead><tbody>' + SPECS.map(([key, name, sk, skn, what]) => {
+    const m = PJ.models[key], err = m ? m.te.filter((f, i) => (f > 0 ? 1 : -1) !== YTE[i]).length : null;
+    return `<tr${m && err === 0 ? ' class="win"' : ''}><td><b>${name}</b></td><td class="num">${m ? tip(fmt(1 - err / NTE, 4), `${NTE - err} of ${NTE} test notes right`) : '…'}</td><td class="num">${m ? err + ' / ' + NTE : ''}</td><td class="num">${m && m.sv ? tip(m.sv.length, `${m.nBound} at the cap α = C,\n${m.sv.length - m.nBound} on the street's edge\nout of ${NTR} training notes`) : m ? '—' : ''}</td><td class="num">${fmt(sk, 4)}${skn === '—' ? '' : ' · ' + skn + ' SV'}</td><td class="num">${m ? fmt(PJ.times[key], 0) + ' ms' : ''}</td><td class="note">${what}</td></tr>`; }).join('') + '</tbody>';
+}
+function drawHist() {
+  const C = C0(), m = PJ.models[PJ.hm];
+  if (!m) { const v = frame($('#pj-hist'), [-3, 3], [0, 1], { b: 28 }); axes(v, 'f(x)', '', { sx: 1, ny: 1 }); $('#pj-in').textContent = '…'; $('#pj-wr').textContent = '…'; $('#pj-hsay').textContent = 'Train the models first.'; return; }
+  const F = m.te, lo = Math.max(-8, Math.floor(Math.min(...F)) - 0.5), hi = Math.min(8, Math.ceil(Math.max(...F)) + 0.5), bw = 0.25, nb = Math.ceil((hi - lo) / bw), H = [new Array(nb).fill(0), new Array(nb).fill(0)];
+  F.forEach((f, i) => { const k = clamp(Math.floor((f - lo) / bw), 0, nb - 1); H[YTE[i] > 0 ? 1 : 0][k]++; });
+  const top = Math.max(...H[0], ...H[1]) * 1.12, v = frame($('#pj-hist'), [lo, hi], [0, top], { b: 28 }); axes(v, 'score f(x)', 'notes', { sx: hi - lo > 8 ? 2 : 1, ny: 3 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.muted; c.globalAlpha = 0.14; c.fillRect(v.X(-1), v.pad.t, v.X(1) - v.X(-1), v.ph); c.restore();
+  [[0, C.a], [1, C.b]].forEach(([g, col]) => { c.save(); c.globalAlpha = 0.75; c.fillStyle = col; H[g].forEach((n, k) => { if (!n) return; const x0 = v.X(lo + k * bw) + 0.5, x1 = v.X(lo + (k + 1) * bw) - 0.5; c.fillRect(x0, v.Y(n), x1 - x0, v.Y(0) - v.Y(n)); }); c.restore(); });
+  seg(v, 0, 0, 0, top, C.q, 2); c.restore();
+  const inside = F.filter(f => Math.abs(f) < 1).length, wrong = F.filter((f, i) => (f > 0 ? 1 : -1) !== YTE[i]).length;
+  $('#pj-in').innerHTML = tip(`${inside}`, '|f(x)| < 1: the model is unsure'); $('#pj-wr').textContent = wrong;
+  $('#pj-hsay').innerHTML = PJ.hm === 'rbf' ? `The RBF SVM keeps the classes apart: every test note lands on its correct side, and only ${inside} fall inside the street, the ones it is least sure about.` : `The linear SVM's scores spread wider, and ${wrong} notes land on the wrong side of the line. A straight street is close, but the true boundary is curved.`;
+}
+seg1('[data-hm]', 'data-hm', k => { PJ.hm = k; drawHist(); });
+fig($('#pj-hist'), drawHist);
+
+/* two-feature explorer */
+const TW = { pair: [0, 1], kern: 'rbf', lc: 0, lg: -0.3, m: null, busy: 0, heat: {}, G: null, Gkey: '' };
+const twC = () => Math.pow(10, TW.lc), twG = () => Math.pow(10, TW.lg);
+function twFit() { const [a, b] = TW.pair, X = XTR.map(x => [x[a], x[b]]), K = TW.kern === 'linear' ? KERN.linear() : KERN.rbf(twG()), t0 = performance.now(); TW.m = svmFit(X, YTR, K, twC()); TW.ms = performance.now() - t0; TW.Gkey = ''; }
+function twSchedule() { clearTimeout(TW.busy); $('#tw-a').textContent = '…'; TW.busy = setTimeout(() => { twFit(); drawTW(); }, 70); }
+function drawTW() {
+  const C = C0(), [a, b] = TW.pair, xs = XS.map(x => x[a]), ys = XS.map(x => x[b]);
+  const v = frame($('#pj-2d'), [Math.min(...xs) - 0.2, Math.max(...xs) + 0.2], [Math.min(...ys) - 0.2, Math.max(...ys) + 0.2], { b: 30 }); axes(v, FN[a], FN[b], { sx: 1, sy: 1 }); clip(v);
+  const m = TW.m; let err = 0;
+  if (m) { const key = [v.w, v.h, a, b, TW.kern, TW.lc, TW.lg].join('|'); if (TW.Gkey !== key) { TW.G = field(v, (p, q) => m.f([p, q]), 6); TW.Gkey = key; }
+    paint(v, TW.G, C.b, C.a); iso(v, TW.G, 1, C.q, 1, true); iso(v, TW.G, -1, C.q, 1, true); iso(v, TW.G, 0, C.q, 2); }
+  XTE.forEach((x, i) => { const p = [x[a], x[b]], wrong = m && (m.f(p) > 0 ? 1 : -1) !== YTE[i]; if (wrong) err++; dot(v, p[0], p[1], YTE[i] > 0 ? C.b : C.a, 2.8); if (wrong) ring(v, p[0], p[1], C.q, 6, 1.4); });
+  v.ctx.restore();
+  $('#tw-c-o').textContent = twC() < 1 ? fmt(twC(), 2) : fmt(twC(), twC() < 10 ? 1 : 0); $('#tw-g-o').textContent = twG() < 1 ? fmt(twG(), 2) : fmt(twG(), 1);
+  $('#tw-g-ctrl').style.opacity = TW.kern === 'linear' ? 0.4 : 1; $('#tw-g').disabled = TW.kern === 'linear';
+  if (!m) return;
+  $('#tw-a').innerHTML = tip(pct(1 - err / NTE), `${NTE - err} of ${NTE} test notes right\ntrained in ${fmt(TW.ms, 0)} ms`); $('#tw-n').innerHTML = tip(m.sv.length, `out of ${NTR} training notes`);
+  $('#pj-2dcap').innerHTML = `${FN[a]} against ${FN[b]}, both standardised. Background: the ${TW.kern === 'linear' ? 'linear' : 'RBF'} SVM&rsquo;s verdict (<span style="color:var(--cB)">forged</span> where f &gt; 0, <span style="color:var(--cA)">genuine</span> where f &lt; 0). <b>${err}</b> of ${NTE} test notes misclassified (ringed).`;
+  drawHeat();
+}
+const HC = [-1, 0, 1, 2, 3], HG_ = [-1.5, -1, -0.5, 0, 0.5, 1], gFmt = g => fmt(Math.pow(10, g), g < 0 ? 2 : g === 0.5 ? 1 : 0);
+function drawHeat() {
+  const H = TW.heat[TW.pair.join()]; if (!H) { $('#tw-heat').innerHTML = ''; $('#tw-say').innerHTML = 'Two features lose information, so mistakes are unavoidable here. Large &gamma; with large C carves islands around single notes; small values give smooth, cautious boundaries.'; return; }
+  const vals = H.flat().filter(x => x != null), lo = Math.min(...vals), hi = Math.max(...vals);
+  $('#tw-heat').innerHTML = `<thead><tr><th>C \\ &gamma;</th>${HG_.map(g => `<th>${gFmt(g)}</th>`).join('')}</tr></thead><tbody>` + HC.map((c, r) => `<tr><th>${fmt(Math.pow(10, c), c < 0 ? 1 : 0)}</th>${HG_.map((g, k) => { const a = H[r][k], t = a == null ? 0 : (a - lo) / Math.max(1e-9, hi - lo), cur = TW.kern === 'rbf' && Math.abs(TW.lc - c) < 1e-9 && Math.abs(TW.lg - g) < 1e-9; return `<td data-hc="${c}" data-hg="${g}" class="${cur ? 'cur' : ''}" style="background:color-mix(in srgb, var(--cA) ${Math.round(6 + 60 * t)}%, transparent)">${a == null ? '…' : fmt(a * 100, 1)}</td>`; }).join('')}</tr>`).join('') + '</tbody>';
+  $$('#tw-heat td').forEach(td => td.addEventListener('click', () => { TW.lc = +td.dataset.hc; TW.lg = +td.dataset.hg; TW.kern = 'rbf'; $('#tw-c').value = TW.lc; $('#tw-g').value = TW.lg; $$('[data-tk]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tk === 'rbf' ? 'true' : 'false')); twSchedule(); }));
+  if (vals.length === HC.length * HG_.length) { let br = 0, bk = 0; H.forEach((row, r) => row.forEach((a, k) => { if (a > H[br][bk]) { br = r; bk = k; } }));
+    $('#tw-say').innerHTML = `Test accuracy (%) for every C and &gamma;; click a cell to load it. Best here: C = ${fmt(Math.pow(10, HC[br]), HC[br] < 0 ? 1 : 0)}, &gamma; = ${gFmt(HG_[bk])} at ${pct(H[br][bk])}. Careful: choosing settings by peeking at the test set flatters the score. Chapter 1.10 does it honestly, with cross-validation.`; }
+}
+$('#tw-map').addEventListener('click', () => {
+  const key = TW.pair.join(), [a, b] = TW.pair; if (TW.heat[key]) return;
+  const H = TW.heat[key] = HC.map(() => HG_.map(() => null)), X = XTR.map(x => [x[a], x[b]]), XT = XTE.map(x => [x[a], x[b]]); let n = 0; $('#tw-map').disabled = true;
+  (function cell() { const r = Math.floor(n / HG_.length), k = n % HG_.length, m = svmFit(X, YTR, KERN.rbf(Math.pow(10, HG_[k])), Math.pow(10, HC[r]));
+    H[r][k] = XT.filter((x, i) => (m.f(x) > 0 ? 1 : -1) === YTE[i]).length / NTE; n++; if (TW.pair.join() === key) drawHeat();
+    if (n < HC.length * HG_.length) setTimeout(cell, 0); else $('#tw-map').disabled = false; })();
+});
+seg1('[data-fp]', 'data-fp', k => { TW.pair = k.split(',').map(Number); twSchedule(); });
+seg1('[data-tk]', 'data-tk', k => { TW.kern = k; twSchedule(); });
+$('#tw-c').addEventListener('input', e => { TW.lc = +e.target.value; twSchedule(); });
+$('#tw-g').addEventListener('input', e => { TW.lg = +e.target.value; twSchedule(); });
+fig($('#pj-2d'), drawTW);
+
+/* inspect one note */
+const INS = { i: 0 };
+const RANGE = [0, 1, 2, 3].map(j => [Math.min(...BANK.X.map(x => x[j])), Math.max(...BANK.X.map(x => x[j]))]);
+function drawIns() {
+  const i = INS.i, raw = BANK.X[NTR + i], truth = YTE[i];
+  $('#ins-i').value = i + 1; $('#ins-i-o').textContent = `${i + 1} of ${NTE}`;
+  $('#ins-feat').innerHTML = '<span class="mini-h">This note&rsquo;s four numbers</span>' + FN.map((n, j) => `<div class="cf"><span>${n}</span><span class="cf-track one"><i style="left:0;width:${(raw[j] - RANGE[j][0]) / (RANGE[j][1] - RANGE[j][0]) * 100}%;background:var(--muted)"></i></span><span class="num">${tip(fmt(raw[j], 2), `standardised: (${fmt(raw[j], 3)} − ${fmt(MU[j], 3)}) / ${fmt(SD[j], 3)} = ${fmt(XTE[i][j], 3)}`)}</span></div>`).join('');
+  const m = PJ.models.rbf, ml = PJ.models.lin;
+  if (!m) { $('#ins-verdict').innerHTML = '<p class="note">Train the models first.</p>'; $('#ins-bars').innerHTML = ''; return; }
+  const x = XTE[i], f = m.te[i], fl = ml.te[i], lab = s => s > 0 ? '<span style="color:var(--cB)">forged</span>' : '<span style="color:var(--cA)">genuine</span>';
+  $('#ins-verdict').innerHTML = `<span class="mini-h">Test note ${i + 1} &middot; truly ${truth > 0 ? 'forged' : 'genuine'}</span><div class="pax-name">RBF SVM: ${lab(f)} ${(f > 0 ? 1 : -1) === truth ? '&#10003;' : '&#10007;'}</div><div class="note">f(x) = ${tip(fmt(f, 3), 'b + Σ αᵢ yᵢ K(xᵢ, x), the bars below')}, ${Math.abs(Math.abs(f) - 1) < 0.005 ? 'right on the street&rsquo;s edge' : Math.abs(f) > 1 ? 'outside the street: a confident call' : 'inside the street: a close call'}. The linear SVM says ${lab(fl)} (f = ${fmt(fl, 2)})${(fl > 0 ? 1 : -1) !== truth ? ', <b>wrongly</b>' : ''}.</div>`;
+  const terms = m.sv.map((t, k) => { const d2 = sum(m.SX[k].map((v, j) => (v - x[j]) ** 2)), K = Math.exp(-0.25 * d2); return { t, k, d2, K, v: m.coef[k] * K }; }).sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
+  const top = terms.slice(0, 6), rest = sum(terms.slice(6).map(o => o.v)), rows = [...top.map(o => ({ name: `#${o.t + 1} &middot; ${YTR[o.t] > 0 ? 'forged' : 'genuine'}${o.K > 0.999 ? ' (twin)' : ''}`, v: o.v, how: `α = ${fmt(m.a[o.t], 3)}${m.a[o.t] >= 1 - 1e-9 ? ' (at the cap C = 1)' : ''}, y = ${YTR[o.t] > 0 ? '+1' : '−1'}\nK = exp(−0.25 × ${fmt(o.d2, 3)}) = ${fmt(o.K, 4)}`, col: YTR[o.t] > 0 ? 'var(--cB)' : 'var(--cA)' })),
+    { name: `${terms.length - 6} other SVs`, v: rest, how: 'their bumps are far away or small', col: 'var(--muted)' }, { name: 'intercept b', v: m.b, how: 'b = −ρ from the solver', col: 'var(--muted)' }];
+  const mx = Math.max(...rows.map(r => Math.abs(r.v)), 1e-9);
+  $('#ins-bars').innerHTML = '<span class="mini-h">Where the score comes from (left: genuine, right: forged)</span>' + rows.map(r => { const w = Math.abs(r.v) / mx * 50; return `<div class="cf"><span>${r.name}</span><span class="cf-track"><i style="left:${r.v < 0 ? 50 - w : 50}%;width:${w}%;background:${r.col}"></i></span><span class="num">${tip(fmt(r.v, 3), r.how)}</span></div>`; }).join('') + `<p class="note" style="margin-top:6px">Sum = ${fmt(f, 3)}. Each support vector pulls toward its own class, as hard as its &alpha; and as much as it resembles this note.${top.some(o => o.K > 0.999) ? ' A <b>twin</b> is a training note with exactly the same four numbers: the data contains a few duplicates.' : ''}</p>`;
+}
+$('#ins-i').addEventListener('input', e => { INS.i = +e.target.value - 1; drawIns(); });
+$('#ins-hard').addEventListener('click', () => { if (!PJ.models.lin) return; const bad = PJ.models.lin.te.map((f, i) => (f > 0 ? 1 : -1) !== YTE[i] ? i : -1).filter(i => i >= 0); if (!bad.length) return; INS.i = bad.find(i => i > INS.i) ?? bad[0]; drawIns(); });
+$('#pj-train').addEventListener('click', pjTrain);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+drawHero(); drawMG(); drawSV(); drawSO(); drawHG(); drawKL(); drawPG(); drawRace(); drawHist(); drawIns(); drawTW();
+{ const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { if (!PJ.done && !PJ.running) pjTrain(); if (!TW.m) twSchedule(); io.disconnect(); } }, { rootMargin: '400px' }) : null; if (io) io.observe($('#project')); else { pjTrain(); twSchedule(); } }
+window.__svDebug = { KERN, svmFit, PJ, TW, PG, SO, SV, MG, KL, HP, XTR, XTE, YTR, YTE, lrFit, pjTrain, twFit };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
