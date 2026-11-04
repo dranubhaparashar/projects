@@ -128,12 +128,25 @@ export const tracks: Track[] = [
 			{
 				title: "Naive Bayes",
 				summary:
-					"The 'wrong' assumption that works: treating features as independent, counting words to catch spam, and smoothing away the zero-probability trap.",
+					"The 'wrong' assumption that works: Bayes' rule by counting, treating features as independent, catching spam by counting words, smoothing away the zero-probability trap, logs against underflow, Gaussian NB vs QDA — and a real SMS spam filter trained in your browser.",
 				topics: [
 					"Independence, naively",
 					"Spam by word counts",
 					"Laplace smoothing",
 					"Gaussian vs multinomial",
+				],
+				href: "/lectures/naive-bayes/",
+				length: "~25 min",
+				index: [
+					["why", "The “naive” bet that works"],
+					["bayes", "Bayes’ rule, counted out"],
+					["naive", "Pretending features don’t talk"],
+					["words", "Catching spam by counting words"],
+					["smooth", "The zero-probability trap"],
+					["logs", "Adding logs, not multiplying"],
+					["gaussian", "Gaussian NB for numbers"],
+					["project", "A real SMS spam filter"],
+					["summary", "Five lines to remember"],
 				],
 			},
 			{
