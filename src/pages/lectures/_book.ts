@@ -200,12 +200,25 @@ export const tracks: Track[] = [
 			{
 				title: "Ensembles: Forests & Boosting",
 				summary:
-					"Many weak voters beat one expert: bagging and random forests, AdaBoost's focus on mistakes, and gradient boosting — the engine behind XGBoost.",
+					"Many weak voters beat one expert: the wisdom of crowds, bagging and bootstrap samples, random forests and out-of-bag error, AdaBoost's focus on mistakes, gradient boosting on residuals — and a California housing race with a live price map.",
 				topics: [
 					"Wisdom of crowds",
 					"Bagging & random forests",
 					"AdaBoost",
 					"Gradient boosting",
+				],
+				href: "/lectures/ensembles/",
+				length: "~30 min",
+				index: [
+					["why", "The wisdom of crowds"],
+					["bagging", "Bagging: many trees, different views"],
+					["forest", "Random forests: decorrelating the trees"],
+					["oob", "Out-of-bag: a test set for free"],
+					["adaboost", "AdaBoost: learning from mistakes"],
+					["gboost", "Gradient boosting: fitting the residuals"],
+					["zoo", "Bias, variance and the ensemble zoo"],
+					["project", "Pricing California homes"],
+					["summary", "Five lines to remember"],
 				],
 			},
 			{
