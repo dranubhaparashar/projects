@@ -152,12 +152,25 @@ export const tracks: Track[] = [
 			{
 				title: "k-Nearest Neighbours",
 				summary:
-					"Judging by the company you keep: distance metrics, choosing k, why scaling matters, and how high dimensions make everyone a stranger.",
+					"Judging by the company you keep: the neighbour vote, three distances, choosing k by cross-validation, why scaling matters, how high dimensions make everyone a stranger — and a draw-a-digit project where you meet the neighbours who read your handwriting.",
 				topics: [
 					"Distance, three ways",
 					"Choosing k",
 					"Feature scaling",
 					"Curse of dimensionality",
+				],
+				href: "/lectures/k-nearest-neighbours/",
+				length: "~25 min",
+				index: [
+					["why", "Judged by the company you keep"],
+					["vote", "Ask your k nearest neighbours"],
+					["distance", "Distance, three ways"],
+					["k", "Choosing k: from nervous to numb"],
+					["scaling", "Why scaling matters"],
+					["curse", "The curse of dimensionality"],
+					["regression", "k-NN for numbers too"],
+					["project", "Reading handwriting with neighbours"],
+					["summary", "Five lines to remember"],
 				],
 			},
 			{
