@@ -181,6 +181,16 @@ input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
 .chk { display: inline-flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer; }
 .chk input { accent-color: var(--ink); width: 16px; height: 16px; }
 
+/* basics labs */
+.mtx { border-collapse: separate; border-spacing: 6px; margin: 0; }
+.mtx td, .mtx th { border: 0; padding: 0; }
+.mtx .cell { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 1.05rem; text-align: center; padding: 10px 6px; border-radius: 6px; min-width: 78px; }
+.mtx .diag { background: color-mix(in srgb, var(--cA) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--cA) 40%, var(--line)); }
+.mtx .off { background: color-mix(in srgb, var(--lda) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--lda) 35%, var(--line)); }
+.mtx .lbl2 { font-size: 0.72rem; color: var(--muted); font-family: var(--f-mono); text-align: center; padding: 2px; }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+
 /* fisher */
 .fisher-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; margin-top: 22px; }
 .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
@@ -313,6 +323,7 @@ footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size:
     <a class="brand" href="#top">LDA &amp; QDA <span>· discriminant analysis</span></a>
     <div class="navlinks" id="navlinks">
       <a href="#why">Why</a>
+      <a href="#basics">Basics</a>
       <a href="#foundation">Foundation</a>
       <a href="#lda">LDA</a>
       <a href="#qda">QDA</a>
@@ -388,7 +399,8 @@ footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size:
 
     <h3>Why we need both</h3>
     <div class="prose" style="margin-top:12px">
-      <p>LDA assumes every class has the <em class="term">same</em> covariance matrix, meaning the same spread and orientation. QDA lets every class have <em class="term">its own</em>. This is the classic bias–variance trade-off:</p>
+      <p>LDA assumes every class has the <em class="term">same</em> <a class="word-link" href="#basics-cov">covariance matrix</a>, meaning the same spread and orientation. QDA lets every class have <em class="term">its own</em>. This is the classic bias–variance trade-off:</p>
+      <p class="note">New words? Every term on this page — covariance, Bayes' theorem, the bell curve, projection — gets its own playground in <a href="#basics">the building blocks</a>, next section down.</p>
       <p><strong class="lda-c">LDA</strong> is rigid. If the classes really have different shapes it is biased, but it has few parameters, so its estimates barely change from one sample to the next (low variance).<br><strong class="qda-c">QDA</strong> is flexible. It can fit different shapes (low bias), but it must estimate a full covariance matrix for every class, so with little data its boundary swings around (high variance).</p>
       <p>The number of parameters grows quickly with the number of features \(p\). Try it:</p>
     </div>
@@ -406,13 +418,117 @@ footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size:
   </div>
 </section>
 
+<!-- BASICS -->
+<section class="chap" id="basics">
+  <div class="wrap">
+    <div class="tag both">Start from zero</div>
+    <h2>The building blocks, as playgrounds</h2>
+    <div class="prose">
+      <p>Everything on this page is made of four small ideas. If words like <em class="term">covariance</em> or <em class="term">Bayes' theorem</em> are new, play with each lab below for a minute &mdash; the rest of the lecture then reads like a story instead of jargon.</p>
+    </div>
+
+    <h3 id="basics-norm">Lab 1 &middot; The bell curve: &mu; says where, &sigma; says how wide</h3>
+    <div class="prose" style="margin-top:12px">
+      <p>Measure one thing about many samples of the same kind &mdash; say, the alcohol level of 240 wines from one grape &mdash; and the histogram usually piles up around an average and thins out both ways. The smooth idealisation of that pile is the <strong>normal (Gaussian) distribution</strong>. It needs only two numbers: the <strong>mean &mu;</strong> (where the pile sits) and the <strong>standard deviation &sigma;</strong> (how wide it spreads). &sigma;&sup2; is called the <strong>variance</strong>.</p>
+    </div>
+    <div class="fisher-grid">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="bs-norm-cv" aria-label="Histogram of samples with a bell curve, mean and one-sigma band"></canvas></div>
+        <figcaption>240 samples (bars) and the bell curve with the same &mu; and &sigma;. The shaded band is &mu; &plusmn; 1&sigma;.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="ctrl"><div class="top"><label for="bs-n-mu">Mean &mu; (slide the pile)</label><output id="bs-n-mu-o">0.0</output></div><input type="range" id="bs-n-mu" min="-3" max="3" step="0.1" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="bs-n-s">Spread &sigma; (widen it)</label><output id="bs-n-s-o">1.00</output></div><input type="range" id="bs-n-s" min="0.4" max="2.5" step="0.05" value="1"></div>
+        <dl class="readouts">
+          <div><dt>Inside &mu; &plusmn; 1&sigma;</dt><dd id="bs-n-in">68%</dd></div>
+          <div><dt>Variance &sigma;&sup2;</dt><dd id="bs-n-var">1.00</dd></div>
+        </dl>
+        <p class="note">Whatever you do, roughly <b>68%</b> of samples stay inside one &sigma; and 95% inside two. In the formulas later, \(f_k(x)\) is nothing but the height of this curve: <b>tall where that class's samples are common</b>.</p>
+      </div>
+    </div>
+
+    <h3 id="basics-cov">Lab 2 &middot; Covariance: the shape of a cloud, in four numbers</h3>
+    <div class="prose" style="margin-top:12px">
+      <p>Now measure <strong>two</strong> things per sample and each sample becomes a dot in 2-D. The cloud of dots has a shape: wide or tall, and possibly <em>tilted</em> &mdash; when one measurement rises, does the other rise too? The <strong>covariance matrix &Sigma;</strong> is simply that shape written as numbers: the diagonal holds each measurement's variance, the off-diagonal holds their co-movement. Drag the probe point and watch the two distances disagree.</p>
+    </div>
+    <div class="fisher-grid">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="bs-cov-cv" aria-label="A 2-D point cloud with its covariance ellipse and a draggable probe point"></canvas></div>
+        <figcaption>200 samples, the 1&sigma; and 2&sigma; ellipses of their covariance matrix, and a draggable probe (the crosshair). <strong>Mahalanobis distance</strong> is distance measured in the cloud's own units &mdash; "how many ellipses out is this point?"</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="ctrl"><div class="top"><label for="bs-c-sx">Spread of x</label><output id="bs-c-sx-o">1.40</output></div><input type="range" id="bs-c-sx" min="0.4" max="2.4" step="0.05" value="1.4"></div>
+        <div class="ctrl"><div class="top"><label for="bs-c-sy">Spread of y</label><output id="bs-c-sy-o">0.70</output></div><input type="range" id="bs-c-sy" min="0.4" max="2.4" step="0.05" value="0.7"></div>
+        <div class="ctrl"><div class="top"><label for="bs-c-r">Link &rho; (the tilt)</label><output id="bs-c-r-o">0.60</output></div><input type="range" id="bs-c-r" min="-0.95" max="0.95" step="0.05" value="0.6"></div>
+        <table class="mtx" aria-label="The covariance matrix, live">
+          <tr><td></td><td class="lbl2">x</td><td class="lbl2">y</td></tr>
+          <tr><td class="lbl2">x</td><td class="cell diag" id="bs-m00">1.96</td><td class="cell off" id="bs-m01">0.59</td></tr>
+          <tr><td class="lbl2">y</td><td class="cell off" id="bs-m10">0.59</td><td class="cell diag" id="bs-m11">0.49</td></tr>
+        </table>
+        <p class="note" id="bs-c-word">x and y rise together.</p>
+        <dl class="readouts">
+          <div><dt>Probe: ruler distance</dt><dd id="bs-c-de">1.5</dd></div>
+          <div><dt>In cloud units (Mahalanobis)</dt><dd id="bs-c-dm">1.1&sigma;</dd></div>
+        </dl>
+        <p class="note" id="bs-c-verdict"></p>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px;max-width:70ch"><strong>Why this matters here:</strong> the &Sigma; in every formula below is exactly this little table. <span class="lda-c"><b>LDA</b></span> forces all classes to share <em>one</em> cloud shape; <span class="qda-c"><b>QDA</b></span> lets every class keep its own. That single choice is the whole difference between them.</p>
+
+    <h3 id="basics-bayes">Lab 3 &middot; Bayes' theorem: just counting dots</h3>
+    <div class="prose" style="margin-top:12px">
+      <p>We want \(P(\text{class} \mid \text{evidence})\): "given what I measured, which class is it?" Bayes' theorem answers with two ingredients: how <strong>common</strong> each class is (the <em>prior</em>), and how <strong>well each class explains the evidence</strong> (the <em>likelihood</em>). No algebra needed &mdash; count dots:</p>
+    </div>
+    <div class="fisher-grid">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="bs-b-cv" aria-label="A population of dots split into two classes; dots matching the evidence stay solid"></canvas></div>
+        <figcaption>300 samples. Colour = class (set by the prior). <strong>Solid dots match the evidence</strong>; faded ones don't. The answer is read off the survivors.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="ctrl"><div class="top"><label for="bs-b-p">Prior: share of class <span class="a-c">A</span></label><output id="bs-b-p-o">50%</output></div><input type="range" id="bs-b-p" min="0.02" max="0.98" step="0.01" value="0.5"></div>
+        <div class="ctrl"><div class="top"><label for="bs-b-la">Evidence fits <span class="a-c">A</span></label><output id="bs-b-la-o">80%</output></div><input type="range" id="bs-b-la" min="0.01" max="1" step="0.01" value="0.8"></div>
+        <div class="ctrl"><div class="top"><label for="bs-b-lb">Evidence fits <span class="b-c">B</span></label><output id="bs-b-lb-o">20%</output></div><input type="range" id="bs-b-lb" min="0.01" max="1" step="0.01" value="0.2"></div>
+        <div class="btns">
+          <button type="button" class="btn" data-bayes="0.05,0.9,0.05">Rare but obvious</button>
+          <button type="button" class="btn" data-bayes="0.5,0.6,0.6">Useless evidence</button>
+        </div>
+        <div class="bars" style="display:grid;gap:10px">
+          <div class="bar-row" style="display:grid;grid-template-columns:70px minmax(0,1fr) 60px;gap:10px;align-items:center;font-size:.9rem"><b>P(A | ev.)</b><div class="bar-track"><div class="bar-fill" id="bs-b-bar" style="background:var(--cA);width:80%"></div></div><span class="num" id="bs-b-post">80%</span></div>
+        </div>
+        <p class="note mono" id="bs-b-math" style="overflow-x:auto"></p>
+        <p class="note" id="bs-b-say"></p>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px;max-width:70ch"><strong>The whole trick of LDA &amp; QDA:</strong> for a real measurement \(x\), the "evidence fits" sliders aren't guesses &mdash; they are the <em>heights of each class's bell curve at \(x\)</em> (Lab 1), with cloud shapes from Lab 2. Bayes then counts the dots for you.</p>
+
+    <h3 id="basics-proj">Lab 4 &middot; Squashing 2-D onto a line</h3>
+    <div class="prose" style="margin-top:12px">
+      <p>Two measurements per sample means a 2-D picture. But a decision is 1-D: this side or that side. So we <strong>project</strong>: shine a light, and every 2-D point leaves a 1-D shadow on a line. The only question is the <em>angle</em> of the line &mdash; some angles keep the classes apart, some smear them together.</p>
+    </div>
+    <div class="fisher-grid">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="bs-p-cv" aria-label="Two point clouds casting tick-mark shadows onto a rotatable line"></canvas></div>
+        <figcaption>Every point drops perpendicular onto the line and becomes a tick. Turn the line: at bad angles the teal and orange ticks mix.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="ctrl"><div class="top"><label for="bs-p-t">Angle of the line</label><output id="bs-p-t-o">0&deg;</output></div><input type="range" id="bs-p-t" min="0" max="179" step="1" value="25"></div>
+        <dl class="readouts">
+          <div><dt>Ticks on the wrong side</dt><dd id="bs-p-err">?</dd></div>
+          <div><dt>Best possible angle</dt><dd id="bs-p-best">?</dd></div>
+        </dl>
+        <p class="note">Find a good angle by hand &mdash; then, in the <a href="#lda">Fisher section below</a>, a formula finds the best one automatically, and that formula <em>is</em> LDA.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- FOUNDATION -->
 <section class="chap" id="foundation">
   <div class="wrap">
     <div class="tag both">Both methods</div>
     <h2>The shared foundation: Bayes' theorem</h2>
     <div class="prose">
-      <p>LDA and QDA follow the same four-step recipe. Only step 2 differs.</p>
+      <p>LDA and QDA follow the same four-step recipe. Only step 2 differs. (Every ingredient here was built by hand in <a class="word-link" href="#basics">the labs above</a> — priors and likelihoods are Lab 3, the bell curve is Lab 1, the cloud shapes are Lab 2.)</p>
     </div>
     <ol class="steps">
       <li><div>
@@ -421,7 +537,7 @@ footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size:
       </div></li>
       <li><div>
         <b>Likelihood: how does each class generate data?</b>
-        <div class="eq"><div class="m">\[ f_k(x) = \frac{1}{(2\pi)^{p/2}\,|\Sigma_k|^{1/2}} \exp\!\left( -\tfrac{1}{2}\,(x-\mu_k)^{\top}\,\Sigma_k^{-1}\,(x-\mu_k) \right) \]</div><div class="read"><b>Read it as:</b> a bell-shaped cloud centred at the class mean \(\mu_k\), with shape set by the covariance matrix \(\Sigma_k\). The term in the exponent is the <b>Mahalanobis distance</b>: distance measured in units of the cloud's own spread. LDA forces every \(\Sigma_k\) to be the same \(\Sigma\); QDA does not.</div></div>
+        <div class="eq"><div class="m">\[ f_k(x) = \frac{1}{(2\pi)^{p/2}\,|\Sigma_k|^{1/2}} \exp\!\left( -\tfrac{1}{2}\,(x-\mu_k)^{\top}\,\Sigma_k^{-1}\,(x-\mu_k) \right) \]</div><div class="read"><b>Read it as:</b> a bell-shaped cloud centred at the class mean \(\mu_k\), with shape set by the covariance matrix \(\Sigma_k\). The term in the exponent is the <a class="word-link" href="#basics-cov"><b>Mahalanobis distance</b></a>: distance measured in units of the cloud's own spread (the probe point in Lab 2). LDA forces every \(\Sigma_k\) to be the same \(\Sigma\); QDA does not.</div></div>
       </div></li>
       <li><div>
         <b>Posterior: flip it with Bayes' theorem</b>
@@ -1134,6 +1250,151 @@ $('#fisher-mean').addEventListener('click', () => animTheta(meanDeg));
 $('#fisher-best').addEventListener('click', () => animTheta(fisherDeg));
 fig($('#fisher-cv'), drawFisher);
 { const m = projStats(meanDeg), f = projStats(fisherDeg); $('#fisher-note').textContent = `Joining the two class means looks like the natural direction (${Math.round(meanDeg)}°, ${(m.err * 100).toFixed(1)}% misclassified), but it ignores the tilt of the clouds. Fisher's direction (${Math.round(fisherDeg)}°) accounts for the tilt: ${(f.err * 100).toFixed(1)}% misclassified, J rises from ${m.J.toFixed(2)} to ${f.J.toFixed(2)}.`; }
+
+/* ---------- basics labs ---------- */
+/* Lab 1: bell curve */
+const bsZ = normals(240, 404).map(p => p[0]);
+function bsNormDraw() {
+  const mu = +$('#bs-n-mu').value, s = +$('#bs-n-s').value;
+  const xs = bsZ.map(z => mu + s * z);
+  const v = prep($('#bs-norm-cv'), [-6.2, 6.2], [-0.05, 0.52]);
+  const c = v.ctx, line = css('--line'), muted = css('--muted'), acc = css('--cA');
+  c.strokeStyle = line; c.beginPath(); c.moveTo(0, v.Y(0)); c.lineTo(v.w, v.Y(0)); c.stroke();
+  /* 1-sigma band */
+  c.fillStyle = acc; c.globalAlpha = 0.1;
+  c.fillRect(v.X(mu - s), v.Y(0.52), v.X(mu + s) - v.X(mu - s), v.Y(0) - v.Y(0.52));
+  c.globalAlpha = 1;
+  /* histogram */
+  const lo = -6.2, nb = 40, bw = 12.4 / nb, bins = new Array(nb).fill(0);
+  let inside = 0;
+  xs.forEach(x => { const b = Math.floor((x - lo) / bw); if (b >= 0 && b < nb) bins[b]++; if (Math.abs(x - mu) <= s) inside++; });
+  c.fillStyle = muted; c.globalAlpha = 0.4;
+  bins.forEach((n, b) => { const h = (n / 240 / bw) * (v.Y(0) - v.Y(1)); c.fillRect(v.X(lo + b * bw) + 1, v.Y(0) - h, v.X(bw) - v.X(0) - 2, h); });
+  c.globalAlpha = 1;
+  /* curve */
+  c.beginPath();
+  for (let i = 0; i <= 240; i++) { const x = lo + 12.4 * i / 240, y = Math.exp(-0.5 * ((x - mu) / s) ** 2) / (s * Math.sqrt(2 * Math.PI)); i ? c.lineTo(v.X(x), v.Y(y)) : c.moveTo(v.X(x), v.Y(y)); }
+  c.strokeStyle = acc; c.lineWidth = 2.6; c.stroke(); c.lineWidth = 1;
+  /* mu line */
+  c.strokeStyle = css('--ink'); c.setLineDash([4, 4]); c.beginPath(); c.moveTo(v.X(mu), v.Y(0)); c.lineTo(v.X(mu), v.Y(0.5)); c.stroke(); c.setLineDash([]);
+  c.fillStyle = muted; c.font = '11px ' + css('--f-mono'); c.textAlign = 'center';
+  c.fillText('μ', v.X(mu), v.Y(0.5) - 4);
+  c.fillText('μ−σ', v.X(mu - s), v.Y(0) + 14); c.fillText('μ+σ', v.X(mu + s), v.Y(0) + 14);
+  $('#bs-n-mu-o').textContent = mu.toFixed(1); $('#bs-n-s-o').textContent = s.toFixed(2);
+  $('#bs-n-in').textContent = Math.round(inside / 240 * 100) + '%';
+  $('#bs-n-var').textContent = (s * s).toFixed(2);
+}
+['#bs-n-mu', '#bs-n-s'].forEach(id => $(id).addEventListener('input', bsNormDraw));
+fig($('#bs-norm-cv'), bsNormDraw);
+
+/* Lab 2: covariance cloud + Mahalanobis probe */
+const bsC = { probe: [2.2, 1.0] };
+const bsCz = normals(200, 505);
+function bsCovParams() {
+  const sx = +$('#bs-c-sx').value, sy = +$('#bs-c-sy').value, r = +$('#bs-c-r').value;
+  return { sx, sy, r, S: [[sx * sx, r * sx * sy], [r * sx * sy, sy * sy]] };
+}
+function bsCovDraw() {
+  const { sx, sy, r, S } = bsCovParams();
+  const pts = bsCz.map(([a, b]) => [sx * a, sy * (r * a + Math.sqrt(1 - r * r) * b)]);
+  const v = prep($('#bs-cov-cv'), [-5.5, 5.5], [-3.4, 3.4]);
+  dots(v, pts, pts.map(() => 0), COLS(), 2.8, { alpha: 0.55 });
+  ellipse(v, [0, 0], S, 1, css('--cA'), [], 2);
+  ellipse(v, [0, 0], S, 2, css('--cA'), [3, 4], 1.4);
+  cross(v, bsC.probe[0], bsC.probe[1], css('--ink'));
+  /* readouts */
+  const det = S[0][0] * S[1][1] - S[0][1] * S[1][0];
+  const Si = [[S[1][1] / det, -S[0][1] / det], [-S[1][0] / det, S[0][0] / det]];
+  const [px, py] = bsC.probe;
+  const dM = Math.sqrt(Math.max(0, px * (Si[0][0] * px + Si[0][1] * py) + py * (Si[1][0] * px + Si[1][1] * py)));
+  const dE = Math.hypot(px, py);
+  $('#bs-m00').textContent = S[0][0].toFixed(2); $('#bs-m11').textContent = S[1][1].toFixed(2);
+  $('#bs-m01').textContent = $('#bs-m10').textContent = (S[0][1] >= 0 ? '+' : '') + S[0][1].toFixed(2);
+  $('#bs-c-sx-o').textContent = sx.toFixed(2); $('#bs-c-sy-o').textContent = sy.toFixed(2); $('#bs-c-r-o').textContent = r.toFixed(2);
+  $('#bs-c-word').textContent = r > 0.3 ? 'Positive link: when x is high, y tends to be high too — the cloud tilts up.' : r < -0.3 ? 'Negative link: when x is high, y tends to be low — the cloud tilts down.' : 'Almost no link: knowing x tells you little about y.';
+  $('#bs-c-de').textContent = dE.toFixed(1);
+  $('#bs-c-dm').textContent = dM.toFixed(1) + 'σ';
+  $('#bs-c-verdict').textContent = 'For this cloud, the probe is ' + (dM < 1 ? 'completely typical — well inside 1σ.' : dM < 2 ? 'plausible — between the 1σ and 2σ ellipses.' : dM < 3 ? 'unusual — beyond 2σ.' : 'wildly out of character — this cloud almost never makes such a point.') + ' Same spot, different cloud shape → different verdict: that is why covariance decides classification.';
+}
+['#bs-c-sx', '#bs-c-sy', '#bs-c-r'].forEach(id => $(id).addEventListener('input', bsCovDraw));
+{
+  const cv = $('#bs-cov-cv'); let dragging = false, view = null;
+  const pos = e => { const r2 = cv.getBoundingClientRect(); return [e.clientX - r2.left, e.clientY - r2.top]; };
+  const toWorld = (px, py) => { const v = prep(cv, [-5.5, 5.5], [-3.4, 3.4]); return [v.iX(px), v.iY(py)]; };
+  cv.addEventListener('pointerdown', e => { dragging = true; cv.setPointerCapture(e.pointerId); const [px, py] = pos(e); const w = toWorld(px, py); if (isFinite(w[0])) bsC.probe = [Math.max(-5.3, Math.min(5.3, w[0])), Math.max(-3.2, Math.min(3.2, w[1]))]; bsCovDraw(); e.preventDefault(); });
+  cv.addEventListener('pointermove', e => { if (!dragging) return; const [px, py] = pos(e); const w = toWorld(px, py); if (isFinite(w[0])) bsC.probe = [Math.max(-5.3, Math.min(5.3, w[0])), Math.max(-3.2, Math.min(3.2, w[1]))]; bsCovDraw(); });
+  ['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, () => { dragging = false; }));
+}
+fig($('#bs-cov-cv'), bsCovDraw);
+
+/* Lab 3: Bayes by counting dots */
+const bsBorder = (() => { const r2 = mulberry32(777); return [...Array(300).keys()].map(() => r2()); })();
+function bsBayesDraw() {
+  const p = +$('#bs-b-p').value, la = +$('#bs-b-la').value, lb = +$('#bs-b-lb').value;
+  const v = prep($('#bs-b-cv'), [0, 25], [0, 6.6]);
+  const c = v.ctx, C = COLS();
+  const nA = Math.round(300 * p);
+  let okA = 0, okB = 0;
+  for (let i = 0; i < 300; i++) {
+    const col = i % 25, row = (i / 25) | 0;
+    const isA = i < nA;
+    const match = bsBorder[i] < (isA ? la : lb);
+    if (match) { isA ? okA++ : okB++; }
+    c.beginPath(); c.arc(v.X(col + 0.5), v.Y(row * 0.48 + 0.6), match ? 4.4 : 2, 0, 7);
+    c.fillStyle = C[isA ? 0 : 1]; c.globalAlpha = match ? 0.95 : 0.22; c.fill(); c.globalAlpha = 1;
+  }
+  const post = (p * la) / (p * la + (1 - p) * lb);
+  $('#bs-b-p-o').textContent = Math.round(p * 100) + '%';
+  $('#bs-b-la-o').textContent = Math.round(la * 100) + '%';
+  $('#bs-b-lb-o').textContent = Math.round(lb * 100) + '%';
+  $('#bs-b-bar').style.width = (post * 100).toFixed(1) + '%';
+  $('#bs-b-post').textContent = (post * 100).toFixed(1) + '%';
+  $('#bs-b-math').textContent = `${okA} A-dots match · ${okB} B-dots match → ${okA} / (${okA}+${okB}) = ${(okA + okB) ? Math.round(okA / (okA + okB) * 100) : 0}% — formula: (${p.toFixed(2)}×${la.toFixed(2)}) / (${p.toFixed(2)}×${la.toFixed(2)} + ${(1 - p).toFixed(2)}×${lb.toFixed(2)}) = ${(post * 100).toFixed(1)}%`;
+  $('#bs-b-say').textContent = Math.abs(la - lb) < 0.03
+    ? 'The evidence fits both classes equally — so it teaches you nothing, and the answer falls back to the prior.'
+    : (p < 0.15 && la > 3 * lb && post < 0.7
+      ? 'Strong evidence, yet the posterior stays modest — rarity fights back. This is why the log πₖ term exists.'
+      : 'Prior × likelihood, renormalised — that is the entire theorem.');
+}
+['#bs-b-p', '#bs-b-la', '#bs-b-lb'].forEach(id => $(id).addEventListener('input', bsBayesDraw));
+$$('[data-bayes]').forEach(b => b.addEventListener('click', () => {
+  const [p, la, lb] = b.dataset.bayes.split(',').map(Number);
+  $('#bs-b-p').value = p; $('#bs-b-la').value = la; $('#bs-b-lb').value = lb;
+  bsBayesDraw();
+}));
+fig($('#bs-b-cv'), bsBayesDraw);
+
+/* Lab 4: projection shadows */
+function bsProjDraw() {
+  const th = +$('#bs-p-t').value;
+  const st = projStats(th);
+  const v = prep($('#bs-p-cv'), [-4.6, 4.6], [-3.2, 3.2]);
+  const c = v.ctx, C = COLS();
+  dots(v, FA, FA.map(() => 0), C, 2.4, { alpha: 0.35 });
+  dots(v, FB, FB.map(() => 1), C, 2.4, { alpha: 0.35 });
+  const u = st.u, L = 20;
+  c.strokeStyle = css('--ink'); c.lineWidth = 1.8; c.beginPath();
+  c.moveTo(v.X(-L * u[0]), v.Y(-L * u[1])); c.lineTo(v.X(L * u[0]), v.Y(L * u[1])); c.stroke(); c.lineWidth = 1;
+  const nrm = [-u[1], u[0]];
+  [[st.a, 0, FA], [st.b, 1, FB]].forEach(([arr, k, P]) => {
+    c.strokeStyle = C[k];
+    /* faint perpendicular drop lines for a few points */
+    c.globalAlpha = 0.18; c.beginPath();
+    for (let i = 0; i < P.length; i += 12) { const t = arr[i]; c.moveTo(v.X(P[i][0]), v.Y(P[i][1])); c.lineTo(v.X(t * u[0]), v.Y(t * u[1])); }
+    c.stroke();
+    /* ticks on the line */
+    c.globalAlpha = 0.8; c.lineWidth = 1.6; c.beginPath();
+    arr.forEach(t => { const x = t * u[0], y = t * u[1]; c.moveTo(v.X(x + nrm[0] * 0.14), v.Y(y + nrm[1] * 0.14)); c.lineTo(v.X(x - nrm[0] * 0.14), v.Y(y - nrm[1] * 0.14)); });
+    c.stroke(); c.globalAlpha = 1; c.lineWidth = 1;
+  });
+  $('#bs-p-t-o').textContent = Math.round(th) + '°';
+  $('#bs-p-err').textContent = (st.err * 100).toFixed(1) + '%';
+  $('#bs-p-best').textContent = Math.round(fisherDeg) + '° (' + (projStats(fisherDeg).err * 100).toFixed(1) + '%)';
+}
+$('#bs-p-t').addEventListener('input', bsProjDraw);
+fig($('#bs-p-cv'), bsProjDraw);
+
+bsNormDraw(); bsCovDraw(); bsBayesDraw(); bsProjDraw();
 
 /* ---------- 1-D boundary lab ---------- */
 function d1Draw() {
