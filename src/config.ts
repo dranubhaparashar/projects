@@ -45,6 +45,10 @@ export const navBarConfig: NavBarConfig = {
 			url: "/impact-domain/",
 		},
 		{
+			name: "Lectures",
+			url: "/lectures/",
+		},
+		{
 			name: "Website",
 			url: "https://anubhaparashar.github.io/",
 			external: true,
