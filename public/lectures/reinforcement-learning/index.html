@@ -49,8 +49,7 @@ window.MathJax = {
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 64px; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+html { scroll-padding-top: 64px; }
 body {
   background: var(--bg); color: var(--ink);
   font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65;
@@ -73,7 +72,7 @@ strong { font-weight: 600; }
 code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
 
 /* nav */
-.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
 .topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
 .back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
 .back:hover { color: var(--ink); background: var(--soft); }
@@ -1201,7 +1200,9 @@ function heroDraw() {
     agent: heroMode === 'learn' ? heroL.s : null
   });
 }
+let heroLive = true;
 function heroTick() {
+  if (!heroLive || document.hidden) return;
   for (let i = 0; i < 60; i++) learnStep(heroL, heroW, 'ql');
   if (heroL.ep > 160) heroL = makeLearner(heroW, { alpha: 0.5, eps: 0.2, decay: false, seed: (Math.random() * 1e9) | 0 });
   heroDraw();
@@ -1227,6 +1228,16 @@ $$('[data-hero]').forEach(b => b.addEventListener('click', () => {
 }));
 $('#hero-restart').addEventListener('click', heroStart);
 fig(heroCv, heroDraw);
+function heroResume() {
+  if (heroLive && !document.hidden && heroMode === 'learn' && !reduceMotion) { cancelAnimationFrame(heroRaf); heroTick(); }
+}
+if ('IntersectionObserver' in window) new IntersectionObserver(es => {
+  const vis = es.some(e => e.isIntersecting);
+  if (vis === heroLive) return;
+  heroLive = vis;
+  if (vis) heroResume(); else cancelAnimationFrame(heroRaf);
+}).observe(heroCv);
+document.addEventListener('visibilitychange', heroResume);
 if (reduceMotion) heroFinish(); else heroTick();
 
 /* ---------- loop stepper ---------- */
@@ -1745,7 +1756,7 @@ document.addEventListener('keydown', e => {
   const all = [$('#top'), ...secs], y = window.scrollY + 70;
   let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
   const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
-  target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+  target.scrollIntoView();
 });
 
 /* expose a small hook for automated checks */
