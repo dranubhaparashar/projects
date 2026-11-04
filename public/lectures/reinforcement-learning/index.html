@@ -1,0 +1,1757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on reinforcement learning: the agent-environment loop, bandits, Markov decision processes, Bellman equations, Q-learning and SARSA, a gridworld traced by hand, live playgrounds, deep RL and RLHF.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Reinforcement Learning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Layout: a lecture notebook. One reading column (~68ch) with figures that widen to the full 1120px frame; a sticky section bar on top. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --plan: #2747C9;   /* planning · value iteration · "best possible" */
+  --learn: #BE2F48;  /* Q-learning · off-policy */
+  --sarsa: #B86A14;  /* SARSA · on-policy */
+  --pos: #0F8278;    /* goals, positive value */
+  --neg: #B3362C;    /* traps, cliffs, negative value */
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --plan: #8AA2FF; --learn: #FF7A90; --sarsa: #F0AA45; --pos: #38C0B1; --neg: #FF8A73;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --plan: #8AA2FF; --learn: #FF7A90; --sarsa: #F0AA45; --pos: #38C0B1; --neg: #FF8A73;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--plan); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--plan); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+strong { font-weight: 600; }
+.plan-c { color: var(--plan); } .learn-c { color: var(--learn); } .sarsa-c { color: var(--sarsa); }
+.pos-c { color: var(--pos); } .neg-c { color: var(--neg); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+
+/* nav */
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+
+/* hero */
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 5rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+.dl-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+.dl-row a { text-decoration: none; }
+
+/* figures */
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-4x3 { aspect-ratio: 4 / 3; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+
+/* sections */
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.tag.plan { color: var(--plan); } .tag.learn { color: var(--learn); }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.three > *, .two > * { min-width: 0; }
+
+/* equations */
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq .lbl { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.eq.motif { border-left: 4px solid var(--pos); }
+.eq.star { border-left: 4px solid var(--learn); }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+
+/* point lists */
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+
+/* card grids (uses, paradigms, limits, dials) */
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.92rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.uses.cols4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* controls */
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btn.picked { border-color: var(--plan); box-shadow: inset 0 0 0 1px var(--plan); }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.chk { display: inline-flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer; }
+.chk input { accent-color: var(--ink); width: 16px; height: 16px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.bar-track { height: 14px; background: var(--soft); border-radius: 3px; overflow: hidden; position: relative; }
+.bar-fill { height: 100%; border-radius: 3px; transition: width .25s ease; }
+@media (prefers-reduced-motion: reduce) { .bar-fill { transition: none; } }
+
+/* panel layout for labs */
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.metrics td.num, .metrics th.num { text-align: right; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.upd-log { font-family: var(--f-mono); font-size: 0.84rem; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; margin-top: 12px; overflow-x: auto; white-space: nowrap; color: var(--ink); }
+.upd-log b { color: var(--learn); font-weight: 500; }
+
+/* bandit machines */
+.arms { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.arm { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 12px; display: grid; gap: 8px; }
+.arm button { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--soft); color: var(--ink); border-radius: 6px; padding: 10px 6px; cursor: pointer; font-family: var(--f-mono); }
+.arm button:hover { border-color: var(--ink); }
+.arm button:disabled { opacity: .45; cursor: default; }
+.arm .est { font-size: 0.8rem; color: var(--muted); display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.arm .true-mu { font-size: 0.8rem; color: var(--pos); font-family: var(--f-mono); }
+.tick { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--pos); }
+
+/* worked example */
+.calc-steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.calc-steps li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.calc-steps .h { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.calc-steps .m { overflow-x: auto; overflow-y: hidden; }
+.ex-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; margin-top: 24px; align-items: start; }
+.ex-grid > * { min-width: 0; }
+.vgrid { border-collapse: collapse; font-family: var(--f-mono); font-variant-numeric: tabular-nums; margin-top: 8px; }
+.vgrid td { border: 1px solid var(--line); width: 74px; height: 58px; text-align: center; padding: 2px; font-size: 0.95rem; background: var(--surface); }
+.vgrid td .ar { color: var(--muted); font-size: 0.85rem; display: block; }
+.vgrid td.goal { background: color-mix(in srgb, var(--pos) 14%, var(--surface)); color: var(--pos); font-weight: 600; }
+.vgrid td.strt { box-shadow: inset 0 0 0 2px var(--plan); }
+
+/* verdict */
+.verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 24px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.verdict > div { padding: 18px 20px; }
+.verdict > div + div { border-left: 1px solid var(--line); }
+.verdict .who { font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+.verdict .say { font-family: var(--f-display); font-size: 1.5rem; margin-top: 4px; line-height: 1.2; }
+.verdict .p { font-family: var(--f-mono); font-size: 0.9rem; color: var(--muted); margin-top: 4px; }
+
+/* compare tables */
+.cmp th:nth-child(2), .cmp td:nth-child(2) { border-left: 3px solid var(--plan); }
+.cmp th:nth-child(3), .cmp td:nth-child(3) { border-left: 3px solid var(--pos); }
+.cmp th:nth-child(4), .cmp td:nth-child(4) { border-left: 3px solid var(--learn); }
+.cmp td:first-child { font-weight: 600; width: 20%; }
+.cmp thead th { text-transform: none; letter-spacing: 0; color: var(--ink); font-family: var(--f-display); font-size: 1.15rem; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+
+/* loop svg */
+.loop-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; margin-top: 22px; align-items: start; }
+.loop-grid > * { min-width: 0; }
+.loop-svg { width: 100%; height: auto; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.lp { opacity: 0.35; transition: opacity .25s ease; }
+.lp.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .lp { transition: none; } }
+.loop-log { font-family: var(--f-mono); font-size: 0.82rem; display: grid; gap: 6px; margin-top: 12px; }
+.loop-log div { padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; white-space: nowrap; }
+
+/* landscape map */
+.map { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-top: 18px; background: var(--surface); }
+.map > div { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.map > div:nth-child(odd) { border-right: 1px solid var(--line); }
+.map .hd { font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; }
+.map h4 { margin: 0 0 2px; font-size: 0.98rem; }
+.map p { font-size: 0.88rem; color: var(--muted); }
+
+/* RLHF flow */
+.flow { list-style: none; counter-reset: f; padding: 0; margin: 18px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
+.flow li { counter-increment: f; padding: 14px 16px 0 0; border-top: 2px solid var(--ink); font-size: 0.92rem; line-height: 1.5; }
+.flow li + li { margin-left: 0; padding-left: 16px; }
+.flow li::before { content: counter(f); display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--bg); font-family: var(--f-mono); font-size: 0.78rem; margin-bottom: 6px; }
+.flow b { display: block; font-weight: 600; }
+
+/* summary */
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+
+@media (max-width: 920px) {
+  .hero-grid, .ex-grid, .lab, .loop-grid { grid-template-columns: minmax(0, 1fr); }
+  .uses, .uses.cols4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .arms { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .flow li { padding-left: 0; }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .three, .rule, .verdict, .map { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div, .verdict > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .verdict > div + div { padding-left: 20px; }
+  .map > div:nth-child(odd) { border-right: 0; }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2, .uses.cols4 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .vgrid td { width: 58px; height: 48px; font-size: 0.82rem; }
+  .brand span { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Reinforcement Learning <span>· learning from interaction</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Why</a>
+      <a href="#loop">The loop</a>
+      <a href="#bandits">Bandits</a>
+      <a href="#mdp">MDPs</a>
+      <a href="#return">Return</a>
+      <a href="#bellman">Bellman</a>
+      <a href="#solving">Solving it</a>
+      <a href="#control">Q-learning</a>
+      <a href="#playground">Playground</a>
+      <a href="#beyond">Scaling up</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Sequential decisions · Markov decision processes</div>
+      <h1>Reinforcement Learning</h1>
+      <div class="sub">From trial-and-error to optimal control</div>
+      <p class="lead">No labels, no teacher. An agent acts, the world replies with a state and a single number — the reward — and out of that feedback the agent teaches itself a behaviour. This page builds the whole theory, from slot machines to Bellman equations to the algorithms behind AlphaGo and ChatGPT, with a live playground for every idea.</p>
+      <dl class="facts">
+        <div><dt>Type</dt><dd>Learning behaviour from delayed, evaluative feedback</dd></div>
+        <div><dt>Built on</dt><dd>MDPs + the Bellman equations</dd></div>
+        <div><dt>Origin</dt><dd>Bellman 1957 · Watkins 1989 · Sutton &amp; Barto</dd></div>
+      </dl>
+      <div class="dl-row">
+        <a class="btn" href="../rl-lda-qda-lecture.pptx" download>&#8595; Slides (.pptx)</a>
+        <a class="btn" href="reinforcement-learning-notes.pdf" download>&#8595; Lecture notes (PDF)</a>
+      </div>
+    </div>
+    <figure>
+      <div class="fig-head">
+        <div class="seg" role="group" aria-label="Hero demo mode">
+          <button type="button" data-hero="learn" aria-pressed="true">Watch it learn</button>
+          <button type="button" data-hero="done" aria-pressed="false">Learned policy</button>
+        </div>
+        <button type="button" class="btn" id="hero-restart">Restart</button>
+      </div>
+      <div class="plot" style="aspect-ratio: 1.35"><canvas id="hero-cv" aria-label="A 4 by 4 gridworld where a Q-learning agent gradually finds the goal; shading shows learned value, arrows show the current greedy policy"></canvas></div>
+      <figcaption id="hero-cap">Q-learning, live: each step costs &minus;1, the goal pays +10. Shading is the learned value of each square; arrows are the current best guess. Watch value leak backwards from the goal, episode by episode.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">Foundations</div>
+    <h2>Learning from interaction, not from labels</h2>
+    <div class="prose">
+      <p>Supervised learning is a classroom: for every input, someone hands you the right answer. Reinforcement learning is life: you act, something happens, and all you get is a score. Two things make this genuinely hard:</p>
+    </div>
+    <div class="uses cols2" style="max-width:820px">
+      <div><h4>Delayed consequences</h4><p>Actions pay off many steps later. Which of the forty moves won the chess game? Assigning credit backwards through time is the central puzzle.</p></div>
+      <div><h4>The agent shapes its own data</h4><p>What the agent does determines what it sees next. Its data is not a fixed dataset but a consequence of its own behaviour — explore differently, learn different things.</p></div>
+    </div>
+
+    <h3>Three paradigms of machine learning</h3>
+    <div class="uses">
+      <div><span class="which">Supervised</span><h4>Learn x &rarr; y from labelled pairs</h4><p>Feedback: the correct answer. I.i.d. data, one-shot prediction. LDA &amp; QDA live here — see the companion lecture.</p></div>
+      <div><span class="which">Unsupervised</span><h4>Find structure in unlabelled data</h4><p>Feedback: none. Clustering, density estimation, dimensionality reduction.</p></div>
+      <div><span class="which pos-c">Reinforcement</span><h4>Learn behaviour from interaction</h4><p>Feedback: a scalar reward, possibly delayed. Sequential, non-i.i.d., and the agent influences its own data.</p></div>
+    </div>
+    <p class="note" style="margin-top:12px"><strong>Instructive vs evaluative feedback:</strong> supervision tells you the right action; reward only scores the one you took. That single difference forces everything that follows.</p>
+
+    <h3>Rewards: one scalar to rule the objective</h3>
+    <div class="prose" style="margin-top:12px">
+      <p>The <em class="term">reward hypothesis</em> (Sutton &amp; Barto): all goals can be described as maximisation of expected cumulative reward. It sounds too simple. In practice it is how every RL system is specified:</p>
+    </div>
+    <div class="uses cols4">
+      <div><span class="which">Chess / Go</span><h4>+1 win, &minus;1 loss</h4><p>0 otherwise — nothing about moves or style. AlphaGo was told only this.</p></div>
+      <div><span class="which">Robot locomotion</span><h4>+ forward velocity</h4><p>&minus; energy used, &minus; falling over.</p></div>
+      <div><span class="which">Recommender</span><h4>+ long-term retention</h4><p>+ engagement, &minus; churn.</p></div>
+      <div><span class="which">LLM assistant (RLHF)</span><h4>Preference score</h4><p>A reward model's rating of a human-preferred response.</p></div>
+    </div>
+    <p class="note" style="margin-top:12px"><strong>Reward defines <em>what</em> to achieve — never <em>how</em> to achieve it.</strong> The how is the agent's problem; that is the whole point.</p>
+  </div>
+</section>
+
+<!-- LOOP -->
+<section class="chap" id="loop">
+  <div class="wrap">
+    <div class="tag">The core object</div>
+    <h2>The agent&ndash;environment loop</h2>
+    <div class="prose">
+      <p>Everything in RL happens inside one loop. At time \(t\) the agent sees a state \(S_t\), picks an action \(A_t\), and the environment answers with a reward \(R_{t+1}\) and the next state \(S_{t+1}\). Step through it:</p>
+    </div>
+    <div class="loop-grid">
+      <figure>
+        <svg class="loop-svg" viewBox="0 0 640 250" role="img" aria-label="Diagram of the agent-environment loop: the agent sends an action to the environment, the environment returns a state and reward">
+          <g id="lp-agent" class="lp">
+            <rect x="40" y="85" width="180" height="80" rx="10" fill="none" stroke="var(--pos)" stroke-width="2.5"/>
+            <text x="130" y="120" text-anchor="middle" fill="var(--ink)" font-size="19" font-weight="600" font-family="var(--f-body)">Agent</text>
+            <text x="130" y="144" text-anchor="middle" fill="var(--muted)" font-size="13" font-family="var(--f-mono)">policy &pi;(a|s)</text>
+          </g>
+          <g id="lp-env" class="lp">
+            <rect x="420" y="85" width="180" height="80" rx="10" fill="none" stroke="var(--muted)" stroke-width="2.5"/>
+            <text x="510" y="120" text-anchor="middle" fill="var(--ink)" font-size="19" font-weight="600" font-family="var(--f-body)">Environment</text>
+            <text x="510" y="144" text-anchor="middle" fill="var(--muted)" font-size="13" font-family="var(--f-mono)">dynamics P, reward R</text>
+          </g>
+          <g id="lp-act" class="lp">
+            <path d="M 220 100 C 290 50, 350 50, 420 100" fill="none" stroke="var(--plan)" stroke-width="2.5"/>
+            <path d="M 420 100 l -12 -9 l 3 11 z" fill="var(--plan)"/>
+            <text x="320" y="52" text-anchor="middle" fill="var(--plan)" font-size="15" font-family="var(--f-mono)">action A&#8348;</text>
+          </g>
+          <g id="lp-obs" class="lp">
+            <path d="M 420 150 C 350 205, 290 205, 220 150" fill="none" stroke="var(--learn)" stroke-width="2.5"/>
+            <path d="M 220 150 l 12 9 l -3 -11 z" fill="var(--learn)"/>
+            <text x="320" y="225" text-anchor="middle" fill="var(--learn)" font-size="15" font-family="var(--f-mono)">state S&#8348;&#8330;&#8321; , reward R&#8348;&#8330;&#8321;</text>
+          </g>
+        </svg>
+        <figcaption>One tick of the loop. The agent is whatever you control; the environment is everything you don't.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="btns">
+          <button type="button" class="btn primary" id="loop-step">Step</button>
+          <button type="button" class="btn" id="loop-reset">Reset</button>
+        </div>
+        <p class="note" id="loop-say">Press Step to walk one phase of the loop, with a running example from the gridworld above.</p>
+        <div class="loop-log" id="loop-log" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BANDITS -->
+<section class="chap" id="bandits">
+  <div class="wrap">
+    <div class="tag">Simplest RL</div>
+    <h2>Warm-up: the k-armed bandit</h2>
+    <div class="prose">
+      <p>Strip away states and transitions and one hard problem remains: <strong>k slot machines</strong>, each with an unknown average payout \(q_*(a)\). You have a limited budget of pulls. Earn as much as you can.</p>
+    </div>
+    <div class="eq"><div class="m">\[ q_*(a) = \mathbb{E}\left[ R_t \mid A_t = a \right], \qquad \text{maximise } \sum_{t=1}^{T} R_t \]</div><div class="read"><b>Read it as:</b> each arm has a true average payout the agent never sees. The sub-goal is to <b>estimate \(q_*(a)\) while still earning reward</b> — estimation and control at once. This isolates the exploration-vs-exploitation dilemma, and it runs daily in A/B tests, ad serving and trial design.</div></div>
+
+    <h3>Your turn: beat the bandit</h3>
+    <div class="prose" style="margin-top:12px">
+      <p>You get <strong>20 pulls across 4 machines</strong>. Payouts are noisy. Earn as much as you can, then reveal the truth and see your regret — then let ε-greedy play the same machines on the same budget. Who wins?</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="arms" id="bd-arms"></div>
+        <p class="say-line" id="bd-say">Pulls left: 20 · Your score: 0.00</p>
+        <p class="note" id="bd-verdict"></p>
+        <div class="plot ar-3x1" style="margin-top:16px"><canvas id="bd-chart" aria-label="Average cumulative regret of different bandit strategies over 1000 pulls"></canvas></div>
+        <figcaption id="bd-chart-cap">Average regret (shortfall against always playing the best arm) over 1,000 pulls, averaged across 100 fresh casinos. Flat is good. Run the comparison to draw it.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>Your game</h4>
+          <div class="btns">
+            <button type="button" class="btn" id="bd-reveal">Reveal true means</button>
+            <button type="button" class="btn" id="bd-race">Let &epsilon;-greedy play</button>
+            <button type="button" class="btn" id="bd-new">New machines</button>
+          </div>
+          <p class="note">Regret = what the best arm would have paid, minus what your choices were worth in expectation.</p>
+        </div>
+        <div class="grp">
+          <h4>Strategy race · 1,000 pulls</h4>
+          <div class="ctrl"><div class="top"><label for="bd-eps">&epsilon; for &epsilon;-greedy</label><output id="bd-eps-o">0.10</output></div><input type="range" id="bd-eps" min="0" max="0.5" step="0.01" value="0.1"></div>
+          <button type="button" class="btn primary" id="bd-run">Run the comparison</button>
+          <div class="legend" style="flex-direction:column;align-items:flex-start;gap:4px">
+            <span><i class="sw" style="background:var(--learn)"></i>Greedy (&epsilon; = 0)</span>
+            <span><i class="sw" style="background:var(--plan)"></i>&epsilon;-greedy</span>
+            <span><i class="sw" style="background:var(--pos)"></i>Optimistic greedy</span>
+            <span><i class="sw" style="background:var(--sarsa)"></i>UCB</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Estimating action values, one pull at a time</h3>
+    <div class="eq"><div class="m">\[ Q_{n+1} \;=\; Q_n + \tfrac{1}{n}\left[ R_n - Q_n \right] \]</div><div class="read"><b>Where it comes from:</b> the average of \(n\) rewards is \(\frac{1}{n}\sum R_i = Q_n + \frac{1}{n}(R_n - Q_n)\) after a little algebra — so you never need to store old rewards, just nudge the estimate toward each new one. A <b>1/n step</b> gives the true average (right for fixed arms); a <b>constant &alpha;</b> gives a recency-weighted average that tracks arms whose payouts drift.</div></div>
+    <div class="eq motif"><div class="lbl">The master template</div><div class="m">\[ \text{NewEstimate} \;\leftarrow\; \text{OldEstimate} \;+\; \text{StepSize}\cdot\left[\, \text{Target} - \text{OldEstimate} \,\right] \]</div><div class="read"><b>Remember this line.</b> Every update on this page — bandits, Monte Carlo, TD, SARSA, Q-learning, even deep RL — is this template with a different <b>Target</b>. Keep asking: what is the target, and is it trustworthy?</div></div>
+
+    <h3>Explore or exploit? The &epsilon;-greedy compromise</h3>
+    <div class="eq"><div class="m">\[ A_t = \begin{cases} \arg\max_a Q_t(a) & \text{with probability } 1-\varepsilon \;\;\text{(exploit)}\\[2pt] \text{a random arm} & \text{with probability } \varepsilon \;\;\text{(explore)} \end{cases} \]</div><div class="read"><b>Why not pure greedy?</b> Greedy locks onto the first arm that happens to look good and never corrects its estimates of the others — run it a few times above and watch it sometimes flatline on a mediocre arm. Smarter exploration exists: <b>optimistic initialisation</b> (start every estimate high, let disappointment drive exploration), the <b>UCB bonus</b> \(c\sqrt{\ln t / N(a)}\) (uncertainty as a bonus), <b>Thompson sampling</b>, and decaying &epsilon;.</div></div>
+  </div>
+</section>
+
+<!-- MDP -->
+<section class="chap" id="mdp">
+  <div class="wrap">
+    <div class="tag">Formalism</div>
+    <h2>Adding state: the Markov Decision Process</h2>
+    <div class="prose">
+      <p>A bandit is one situation, repeated. In chess, driving, inventory control or dialogue, <strong>the state evolves under your actions</strong>: today's choice shapes tomorrow's options, and reward may arrive far in the future. The state is the memory of the problem. The formal object is the MDP \(\langle \mathcal{S}, \mathcal{A}, P, R, \gamma \rangle\):</p>
+    </div>
+    <ul class="pts block" style="margin-top:14px">
+      <li><b>\(\mathcal{S}\) — states</b><span>All situations the agent can be in. \(s \in \mathcal{S}\).</span></li>
+      <li><b>\(\mathcal{A}\) — actions</b><span>Choices available in each state. \(a \in \mathcal{A}(s)\).</span></li>
+      <li><b>\(P\) — transitions</b><span>The dynamics: \(P(s' \mid s, a)\), a distribution over next states.</span></li>
+      <li><b>\(R\) — rewards</b><span>Expected immediate payoff \(r(s,a) = \mathbb{E}[R \mid s, a]\).</span></li>
+      <li><b>\(\gamma\) — discount</b><span>\(\gamma \in [0,1)\): how much the future is worth today. Gets its own section below.</span></li>
+    </ul>
+    <p class="note" style="margin-top:12px"><strong>\(P\) and \(R\) together are the <em>model</em>.</strong> Known model &rarr; planning. Unknown model &rarr; learning. This one distinction organises every algorithm on this page.</p>
+
+    <h3>The Markov property: the state is enough</h3>
+    <div class="eq"><div class="m">\[ P\left( S_{t+1}, R_{t+1} \mid S_t, A_t \right) \;=\; P\left( S_{t+1}, R_{t+1} \mid S_1, A_1, \dots, S_t, A_t \right) \]</div><div class="read"><b>Read it as:</b> the future is independent of the past, <b>given the present</b>. The current state must carry everything that matters.</div></div>
+    <div class="two block" style="max-width:820px">
+      <div>
+        <h4 style="margin:0 0 6px" class="pos-c">Markov &#10003;</h4>
+        <ul style="margin:0;padding-left:1.1em;font-size:.95rem">
+          <li>A chess position — the board summarises all past moves</li>
+          <li>Inventory level — current stock is what matters</li>
+        </ul>
+      </div>
+      <div>
+        <h4 style="margin:0 0 6px" class="neg-c">Not Markov &#10007;</h4>
+        <ul style="margin:0;padding-left:1.1em;font-size:.95rem">
+          <li>A single camera frame — velocity is invisible (stack 4 frames: the DQN trick)</li>
+          <li>Poker — hidden cards make it a POMDP, needing belief states</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note" style="margin-top:12px"><strong>The fix is engineering:</strong> build the state until it is (approximately) Markov — frame stacking, recurrent networks, belief states.</p>
+
+    <h3>The policy: the agent's behaviour, made explicit</h3>
+    <div class="eq"><div class="m">\[ \pi(a \mid s) \;=\; P\left( A_t = a \mid S_t = s \right) \]</div><div class="read"><b>Read it as:</b> a (possibly stochastic) rule — in state \(s\), act like this. <b>Deterministic</b> \(\pi(s)=a\) suffices for optimal play in any finite MDP; <b>stochastic</b> policies are needed while exploring, and under partial observability or adversaries.</div></div>
+  </div>
+</section>
+
+<!-- RETURN -->
+<section class="chap" id="return">
+  <div class="wrap">
+    <div class="tag">The objective</div>
+    <h2>The return: adding up the future, discounted</h2>
+    <div class="eq"><div class="m">\[ G_t \;=\; R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \cdots \;=\; \sum_{k=0}^{\infty} \gamma^k R_{t+k+1} \]</div><div class="read"><b>Read it as:</b> the agent maximises not the next reward but the whole discounted future. A reward \(k\) steps away is worth \(\gamma^k\) of itself today.</div></div>
+    <div class="eq"><div class="m">\[ G_t \;=\; R_{t+1} + \gamma\, G_{t+1} \]</div><div class="read"><b>Where it comes from:</b> factor \(\gamma\) out of every term after the first: \(G_t = R_{t+1} + \gamma(R_{t+2} + \gamma R_{t+3} + \cdots)\) — and the bracket is exactly \(G_{t+1}\). <b>Remember this recursive line: it becomes the Bellman equation.</b></div></div>
+    <div class="eq"><div class="m">\[ \sum_{k=0}^{\infty} \gamma^k = \frac{1}{1-\gamma} \qquad (0 \le \gamma < 1) \]</div><div class="read"><b>Where it comes from:</b> call the sum \(S\); then \(S - \gamma S = 1\), so \(S = \frac{1}{1-\gamma}\). This keeps returns finite for bounded rewards, and it gives \(\gamma\) a meaning: an <b>effective look-ahead of about \(1/(1-\gamma)\) steps</b>. \(\gamma = 0\): myopic. \(\gamma \to 1\): far-sighted. (Episodic tasks allow \(\gamma = 1\).)</div></div>
+
+    <h3>Feel the discount</h3>
+    <div class="lab" style="grid-template-columns: minmax(0,1fr) 300px">
+      <figure>
+        <div class="plot ar-3x1"><canvas id="gm-cv" aria-label="Bar chart of discount weights gamma to the power k for steps into the future"></canvas></div>
+        <figcaption>The weight \(\gamma^k\) placed on a reward \(k\) steps into the future. Slide \(\gamma\) and watch the agent's horizon stretch or collapse.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="gm-g">Discount &gamma;</label><output id="gm-g-o">0.90</output></div><input type="range" id="gm-g" min="0" max="0.99" step="0.01" value="0.9"></div>
+          <dl style="margin:0;display:grid;gap:10px">
+            <div><dt class="note">Effective horizon 1/(1&minus;&gamma;)</dt><dd class="num" id="gm-h" style="margin:0;font-size:1.3rem;text-align:left">10 steps</dd></div>
+            <div><dt class="note">A reward 10 steps away is worth</dt><dd class="num" id="gm-10" style="margin:0;font-size:1.3rem;text-align:left">35% of itself</dd></div>
+          </dl>
+          <p class="note">&gamma; = 0.99 &asymp; a 100-step horizon. Match &gamma; to how far consequences actually reach in your task.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BELLMAN -->
+<section class="chap" id="bellman">
+  <div class="wrap">
+    <div class="tag plan">The math core</div>
+    <h2>Value functions and the Bellman equations</h2>
+    <div class="prose">
+      <p>How good is a state? How good is an action? Fix a policy \(\pi\) and ask for the expected return from there on:</p>
+    </div>
+    <div class="eq"><div class="m">\[ V^\pi(s) = \mathbb{E}_\pi\left[ G_t \mid S_t = s \right], \qquad Q^\pi(s,a) = \mathbb{E}_\pi\left[ G_t \mid S_t = s, A_t = a \right] \]</div><div class="read"><b>Read it as:</b> \(V\) scores a <b>state</b>, \(Q\) scores an <b>action taken in a state</b>. They are tied by \(V^\pi(s) = \sum_a \pi(a|s)\, Q^\pi(s,a)\) — V is the policy-weighted average of Q. <b>Why Q matters more in practice:</b> acting greedily on Q needs no model, \(a^* = \arg\max_a Q(s,a)\); acting on V alone still requires \(P(s'|s,a)\) to look ahead.</div></div>
+
+    <h3>The Bellman equation: value = reward + discounted next value</h3>
+    <div class="prose" style="margin-top:12px"><p>Take the recursion \(G_t = R_{t+1} + \gamma G_{t+1}\) and push an expectation through it. The left side becomes \(V^\pi(s)\); the right side averages over the policy's action choices and the environment's transitions:</p></div>
+    <div class="eq"><div class="m">\[ V^\pi(s) \;=\; \sum_a \pi(a|s) \sum_{s'} P(s'|s,a)\left[\, r(s,a) + \gamma\, V^\pi(s') \,\right] \]</div><div class="read"><b>Read it as:</b> expected one-step reward, plus the discounted value of wherever you land. <b>Consistency, not magic:</b> this is \(|\mathcal{S}|\) linear equations in \(|\mathcal{S}|\) unknowns — with a known model, evaluating a policy is linear algebra.</div></div>
+    <div class="eq star"><div class="lbl">The most important line on this page</div><div class="m">\[ Q^*(s,a) \;=\; r(s,a) \;+\; \gamma \sum_{s'} P(s'|s,a)\; \max_{a'} Q^*(s', a') \]</div><div class="read"><b>Bellman optimality:</b> replace the policy's average with a <b>max</b> — assume you act optimally from the next state on. Then \(V^*(s) = \max_a Q^*(s,a)\) and \(\pi^*(s) = \arg\max_a Q^*(s,a)\): greedy on \(Q^*\) is globally optimal. The max makes the system <b>nonlinear</b> — no closed form, solve iteratively (value iteration, Q-learning). Every finite MDP has a deterministic optimal policy.</div></div>
+  </div>
+</section>
+
+<!-- SOLVING -->
+<section class="chap" id="solving">
+  <div class="wrap">
+    <div class="tag plan">Three routes to a solution</div>
+    <h2>Solving an MDP: plan, replay, or bootstrap</h2>
+    <div class="tbl-wrap block">
+      <table class="cmp">
+        <thead><tr><th></th><th>Dynamic Programming</th><th>Monte Carlo</th><th>Temporal Difference</th></tr></thead>
+        <tbody>
+          <tr><td>Needs a model?</td><td>yes — P and R</td><td>no — just episodes</td><td>no — single steps</td></tr>
+          <tr><td>When it updates</td><td>full sweeps over all states</td><td>end of each episode</td><td>every step, online</td></tr>
+          <tr><td>Target</td><td>exact expectation</td><td>actual return \(G_t\)</td><td>\(R + \gamma V(s')\) — bootstrap</td></tr>
+          <tr><td>Bias / variance</td><td>exact (given model)</td><td>unbiased · high variance</td><td>biased · low variance</td></tr>
+          <tr><td>Continuing tasks</td><td>yes</td><td>no — needs episodes</td><td>yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:10px">Same Bellman equation underneath — they differ only in how they approximate the expectation. <em>n</em>-step returns and TD(&lambda;) interpolate smoothly between the TD and MC extremes.</p>
+
+    <h3>Known model: value iteration</h3>
+    <div class="eq"><div class="m">\[ V_{k+1}(s) \;=\; \max_a \left[\, r(s,a) + \gamma \sum_{s'} P(s'|s,a)\, V_k(s') \,\right] \]</div><div class="read"><b>Read it as:</b> repeat the optimality backup until nothing changes. <b>Why it works — contraction:</b> each sweep shrinks the error by \(\gamma\): \(\lVert V_{k+1}-V^*\rVert \le \gamma \lVert V_k - V^*\rVert\), geometric convergence from any start. (Its sibling, policy iteration, ping-pongs evaluate &rarr; improve &rarr; evaluate to \(\pi^*\).) This is <b>planning, not learning</b>: no samples, no interaction.</div></div>
+
+    <h3>Watch values ripple backwards</h3>
+    <div class="lab" style="grid-template-columns: minmax(0,1fr) 300px">
+      <figure>
+        <div id="ch-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch"></div>
+        <div class="upd-log" id="ch-log">Press &ldquo;Step one sweep&rdquo; — each sweep pushes value one state further from the reward.</div>
+        <figcaption style="margin-top:10px">A corridor: every step costs &minus;1, the right end pays +10. Click a state to see its backup. These are exactly the top-row values of the gridworld below.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="btns">
+            <button type="button" class="btn primary" id="ch-step">Step one sweep</button>
+            <button type="button" class="btn" id="ch-solve">Run to convergence</button>
+            <button type="button" class="btn" id="ch-reset">Reset</button>
+          </div>
+          <div class="ctrl"><div class="top"><label for="ch-g">Discount &gamma;</label><output id="ch-g-o">0.90</output></div><input type="range" id="ch-g" min="0.5" max="0.99" step="0.01" value="0.9"></div>
+          <p class="note" id="ch-note">Sweeps so far: 0</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Two curses: why we can't just plan</h3>
+    <div class="uses cols2" style="max-width:820px">
+      <div><span class="which neg-c">Curse of modelling</span><h4>P(s&prime;|s,a) is unknown</h4><p>For robots, markets, users… writing a simulator is itself the hard research problem, and model errors compound over long horizons.</p></div>
+      <div><span class="which neg-c">Curse of dimensionality</span><h4>Tables don't scale</h4><p>DP sweeps all states: Go has &asymp; 10<sup>170</sup>. State spaces grow exponentially with state variables — tables cannot even be stored, let alone swept.</p></div>
+      <div><span class="which pos-c">Escape 1: sample</span><h4>Learn from experience</h4><p>Monte Carlo and TD replace the exact expectation with sampled interaction — no model needed.</p></div>
+      <div><span class="which pos-c">Escape 2: generalise</span><h4>Function approximation</h4><p>Share estimates across similar states — the road to deep RL, later on this page.</p></div>
+    </div>
+
+    <h3>Model-free prediction: Monte Carlo and TD</h3>
+    <div class="eq"><div class="m">\[ V(S_t) \;\leftarrow\; V(S_t) + \alpha \left[\, G_t - V(S_t) \,\right] \]</div><div class="read"><b>Monte Carlo:</b> wait for the episode to end, then nudge each visited state toward the <b>actual return</b> that followed it. Unbiased, no model, no Markov assumption — but high variance, episodic tasks only, and it learns nothing mid-episode.</div></div>
+    <div class="eq"><div class="m">\[ V(S_t) \;\leftarrow\; V(S_t) + \alpha \underbrace{\left[\, R_{t+1} + \gamma V(S_{t+1}) - V(S_t) \,\right]}_{\delta_t,\ \text{the TD error}} \]</div><div class="read"><b>Temporal difference:</b> don't wait — bootstrap. The target leans on the current estimate of the next state. \(\delta_t\) is the <b>“surprise”</b>: reality minus expectation (dopamine neurons in the brain encode exactly this signal). Online, low variance, some bias — the workhorse of modern RL.</div></div>
+    <div class="tbl-wrap block" style="max-width:760px">
+      <table>
+        <thead><tr><th>Algorithm</th><th>Target in the master template</th></tr></thead>
+        <tbody>
+          <tr><td>Bandit (sample average)</td><td class="mono">R&#8345;</td></tr>
+          <tr><td>Monte Carlo</td><td class="mono">G&#8348; (the real return)</td></tr>
+          <tr><td>TD(0)</td><td class="mono">R + &gamma;&middot;V(s&prime;)</td></tr>
+          <tr><td class="sarsa-c">SARSA</td><td class="mono">R + &gamma;&middot;Q(s&prime;, a&prime;)</td></tr>
+          <tr><td class="learn-c">Q-learning</td><td class="mono">R + &gamma;&middot;max&#8336;&#8242; Q(s&prime;, a&prime;)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:8px">One template, five targets. Everything below is already in this table.</p>
+  </div>
+</section>
+
+<!-- CONTROL -->
+<section class="chap" id="control">
+  <div class="wrap">
+    <div class="tag learn">Control — the famous algorithms</div>
+    <h2>SARSA and Q-learning</h2>
+    <div class="prose">
+      <p>Prediction scores a fixed policy. <strong>Control</strong> finds a better one: learn \(Q\), act (mostly) greedily on it, repeat. Two one-line algorithms do this, and they differ by a single symbol.</p>
+    </div>
+    <div class="eq"><div class="lbl sarsa-c">On-policy · SARSA</div><div class="m">\[ Q(S,A) \;\leftarrow\; Q(S,A) + \alpha\left[\, R + \gamma\, Q(S', A') - Q(S,A) \,\right] \]</div><div class="read"><b>Read it as:</b> \(A'\) is the action the policy <b>actually takes</b> in \(S'\) — the quintuple \((S, A, R, S', A')\) names the algorithm. SARSA evaluates the ε-greedy policy it is really running, so <b>exploration noise is priced into the values</b>. Converges to \(Q^*\) if every pair is visited forever, \(\alpha\) decays suitably (Robbins&ndash;Monro), and ε decays to 0 (GLIE).</div></div>
+    <div class="eq"><div class="lbl learn-c">Off-policy · Q-learning (Watkins 1989)</div><div class="m">\[ Q(S,A) \;\leftarrow\; Q(S,A) + \alpha\left[\, R + \gamma\, \max_{a'} Q(S', a') - Q(S,A) \,\right] \]</div><div class="read"><b>Read it as:</b> the most famous update in RL. The <b>behaviour</b> policy stays ε-greedy (keeps exploring) while the <b>target</b> inside the update is pure greedy — it learns about optimal play while behaving sub-optimally. Exploration and optimality, decoupled. <b>Watch out:</b> the max causes overestimation bias (fix: Double Q-learning), and off-policy learning can diverge with function approximation.</div></div>
+
+    <h3>Worked example: a 4&times;4 gridworld, traced by hand</h3>
+    <div class="ex-grid">
+      <div>
+        <p><strong>Setup:</strong> goal G pays +10 and ends the episode; every other step costs &minus;1. Actions: up, down, left, right — deterministic, walls bounce back. Protocol: \(\gamma = 0.9\), \(\alpha = 0.5\), ε-greedy with ε = 0.2, \(Q(s,a) = 0\) initially. 16 states &times; 4 actions = a 64-entry Q-table.</p>
+        <ol class="calc-steps" style="margin-top:18px">
+          <li><div class="h">&#9312; A &rarr; G &nbsp;(A is the cell left of the goal)</div><div class="m mono" style="padding-top:6px">r = +10, terminal &rArr; max&#8336;&#8242; Q(G, a&prime;) = 0<br>Q(A, &rarr;) &larr; 0 + 0.5 &middot; [ 10 + 0.9&middot;0 &minus; 0 ] = <b class="learn-c">5.0</b></div></li>
+          <li><div class="h">&#9313; B &rarr; A &nbsp;(B is two cells left of the goal)</div><div class="m mono" style="padding-top:6px">r = &minus;1, max&#8336;&#8242; Q(A, a&prime;) = 5.0<br>Q(B, &rarr;) &larr; 0 + 0.5 &middot; [ &minus;1 + 0.9&middot;5.0 &minus; 0 ] = <b class="learn-c">1.75</b></div></li>
+          <li><div class="h">Each later visit to A halves the remaining error</div><div class="m mono" style="padding-top:6px">Q(A, &rarr;):&nbsp; 5 &rarr; 7.5 &rarr; 8.75 &rarr; 9.38 &rarr; &hellip; &rarr; 10</div></li>
+        </ol>
+        <p class="note" style="margin-top:14px"><strong>Value leaks backwards from the goal — one bootstrap per visit.</strong> The goal pays once; the Q-table spreads that payment through the maze.</p>
+      </div>
+      <div>
+        <p><strong>After convergence</strong> — \(V^*(s) = \max_a Q^*(s,a)\) with the greedy arrows:</p>
+        <table class="vgrid" aria-label="Converged state values of the 4 by 4 gridworld">
+          <tr><td>6.2<span class="ar">&rarr;</span></td><td>8.0<span class="ar">&rarr;</span></td><td>10<span class="ar">&rarr;</span></td><td class="goal">G<span class="ar">+10</span></td></tr>
+          <tr><td>4.6<span class="ar">&rarr;</span></td><td>6.2<span class="ar">&rarr;</span></td><td>8.0<span class="ar">&nearr;</span></td><td>10<span class="ar">&uarr;</span></td></tr>
+          <tr><td>3.1<span class="ar">&rarr;</span></td><td>4.6<span class="ar">&nearr;</span></td><td>6.2<span class="ar">&nearr;</span></td><td>8.0<span class="ar">&uarr;</span></td></tr>
+          <tr><td class="strt">1.8<span class="ar">&nearr;</span></td><td>3.1<span class="ar">&nearr;</span></td><td>4.6<span class="ar">&nearr;</span></td><td>6.2<span class="ar">&uarr;</span></td></tr>
+        </table>
+        <div class="eq" style="margin-top:18px"><div class="lbl">Check it</div><div class="m mono" style="font-size:.95rem">V(cell) = &minus;1 + 0.9 &middot; V(best neighbour)<br>8.0 = &minus;1 + 0.9&middot;10 &nbsp;&nbsp;&nbsp; 6.2 = &minus;1 + 0.9&middot;8.0 &#10003;</div><div class="read"><b>Values are unique, policies may not be:</b> several monotone paths to G are optimal; \(V^*\) is the same for all of them. And this works because 16&times;4 fits in a table — Go has 10<sup>170</sup> states. Hold that thought.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PLAYGROUND -->
+<section class="chap" id="playground">
+  <div class="wrap">
+    <div class="tag learn">Interactive lab</div>
+    <h2>Playground: drive the agent yourself</h2>
+    <div class="prose">
+      <p>The gridworld from the lecture, live. Pick an algorithm, press <strong>Run</strong>, and watch value leak backwards — or press <strong>Step</strong> and read each update's exact arithmetic. Paint walls, move rewards, change every dial. &ldquo;Best possible&rdquo; is value iteration with the true model: the plan no learner can beat.</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head">
+          <div class="btns" role="group" aria-label="Preset worlds">
+            <button type="button" class="btn" data-preset="lecture">Lecture 4&times;4</button>
+            <button type="button" class="btn" data-preset="cliff">Cliff walk</button>
+            <button type="button" class="btn" data-preset="maze">Maze (sparse reward)</button>
+            <button type="button" class="btn" data-preset="windy">Slippery 4&times;3</button>
+          </div>
+        </div>
+        <div class="plot" id="gw-plot" style="aspect-ratio:1.45"><canvas id="gw-cv" aria-label="Interactive gridworld: shading shows learned value, arrows the greedy policy; click to paint walls and rewards"></canvas></div>
+        <div class="legend" style="margin-top:10px">
+          <span><i class="sw dot" style="background:var(--pos)"></i>goal</span>
+          <span><i class="sw dot" style="background:var(--neg)"></i>trap / cliff</span>
+          <span><i class="sw dot" style="background:var(--muted)"></i>wall</span>
+          <span><i class="sw dot" style="background:var(--ink)"></i>agent</span>
+          <span><i class="sw" style="background:var(--plan)"></i>best-possible arrows (ghost)</span>
+        </div>
+        <div class="upd-log" id="gw-log">Step prints each update here, with the numbers filled in.</div>
+        <div class="tbl-wrap" style="margin-top:14px">
+          <table class="metrics" id="gw-metrics"><tbody></tbody></table>
+        </div>
+        <p class="say-line" id="gw-say"></p>
+        <div class="plot ar-3x1" style="margin-top:16px"><canvas id="gw-chart" aria-label="Return per episode during learning"></canvas></div>
+        <figcaption id="gw-chart-cap">Return per episode (dots) and its 20-episode average (line). In value-iteration mode: the value of the start state after each sweep.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>Algorithm</h4>
+          <div class="seg" role="group" aria-label="Algorithm">
+            <button type="button" data-algo="vi" aria-pressed="true"><i class="sw" style="background:var(--plan)"></i>Value iteration</button>
+            <button type="button" data-algo="ql" aria-pressed="false"><i class="sw" style="background:var(--learn)"></i>Q-learning</button>
+            <button type="button" data-algo="sarsa" aria-pressed="false"><i class="sw" style="background:var(--sarsa)"></i>SARSA</button>
+          </div>
+          <div class="btns">
+            <button type="button" class="btn primary" id="gw-run">Run</button>
+            <button type="button" class="btn" id="gw-step">Step</button>
+            <button type="button" class="btn" id="gw-reset">Reset learning</button>
+          </div>
+          <div class="ctrl" id="gw-speed-wrap"><div class="top"><label for="gw-speed">Speed (updates/frame)</label><output id="gw-speed-o">200</output></div><input type="range" id="gw-speed" min="1" max="1000" step="1" value="200"></div>
+        </div>
+        <div class="grp">
+          <h4>Show</h4>
+          <label class="chk"><input type="checkbox" id="gw-show-heat" checked> Value heatmap</label>
+          <label class="chk"><input type="checkbox" id="gw-show-arr" checked> Greedy policy arrows</label>
+          <label class="chk"><input type="checkbox" id="gw-show-num" checked> Numbers</label>
+          <label class="chk"><input type="checkbox" id="gw-show-opt"> <span class="plan-c">Best-possible plan (ghost)</span></label>
+        </div>
+        <div class="grp">
+          <h4>Environment</h4>
+          <div class="ctrl"><div class="top"><label for="gw-gamma">Discount &gamma;</label><output id="gw-gamma-o"></output></div><input type="range" id="gw-gamma" min="0.5" max="0.99" step="0.01"></div>
+          <div class="ctrl"><div class="top"><label for="gw-noise">Slip chance (noise)</label><output id="gw-noise-o"></output></div><input type="range" id="gw-noise" min="0" max="0.4" step="0.02"></div>
+          <div class="ctrl"><div class="top"><label for="gw-living">Reward per step</label><output id="gw-living-o"></output></div><input type="range" id="gw-living" min="-1" max="0.05" step="0.005"></div>
+          <div class="seg" role="group" aria-label="Paint tool" id="gw-tools">
+            <button type="button" data-tool="wall" aria-pressed="true">Wall</button>
+            <button type="button" data-tool="goal" aria-pressed="false">Goal</button>
+            <button type="button" data-tool="trap" aria-pressed="false">Trap</button>
+            <button type="button" data-tool="start" aria-pressed="false">Start</button>
+            <button type="button" data-tool="erase" aria-pressed="false">Erase</button>
+          </div>
+          <p class="note">Click or drag on the grid to paint.</p>
+        </div>
+        <div class="grp" id="gw-learner-grp">
+          <h4>Learner</h4>
+          <div class="ctrl"><div class="top"><label for="gw-alpha">Step size &alpha;</label><output id="gw-alpha-o"></output></div><input type="range" id="gw-alpha" min="0.05" max="1" step="0.05"></div>
+          <div class="ctrl"><div class="top"><label for="gw-eps">Exploration &epsilon;</label><output id="gw-eps-o"></output></div><input type="range" id="gw-eps" min="0" max="1" step="0.01"></div>
+          <label class="chk"><input type="checkbox" id="gw-decay"> Decay &epsilon; toward 0.01</label>
+        </div>
+      </div>
+    </div>
+
+    <h3>The experiment: who walks closer to the edge?</h3>
+    <div class="prose" style="margin-top:12px">
+      <p>A world with a cliff: every step costs &minus;1, falling costs &minus;100. Two agents train with the <em>same</em> ε-greedy exploration (ε = 0.1) — one learns with SARSA, one with Q-learning. <strong>Vote first:</strong> after training, whose greedy path runs closer to the cliff edge?</p>
+    </div>
+    <div class="lab" style="grid-template-columns: minmax(0,1fr) 300px">
+      <figure>
+        <div class="plot" style="aspect-ratio:2.3"><canvas id="cl-cv" aria-label="Cliff-walking world with the learned paths of Q-learning and SARSA"></canvas></div>
+        <div class="legend" style="margin-top:10px">
+          <span><i class="sw" style="background:var(--learn)"></i>Q-learning's greedy path</span>
+          <span><i class="sw" style="background:var(--sarsa)"></i>SARSA's greedy path</span>
+        </div>
+        <p class="say-line" id="cl-say"></p>
+        <p class="note" id="cl-why"></p>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>Your vote</h4>
+          <div class="btns" style="flex-direction:column;align-items:stretch">
+            <button type="button" class="btn" data-vote="A">A &middot; SARSA — on-policy agents are reckless</button>
+            <button type="button" class="btn" data-vote="B">B &middot; Q-learning — the max-target ignores its own slips</button>
+            <button type="button" class="btn" data-vote="C">C &middot; Both the same — they share the Bellman equation</button>
+          </div>
+        </div>
+        <div class="grp">
+          <button type="button" class="btn primary" id="cl-run">Run the experiment (500 episodes each)</button>
+          <p class="note">Trains both agents from scratch, then draws each one's greedy path and reports the average reward per episode <em>while learning</em>.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>The three dials: &alpha;, &gamma;, &epsilon;</h3>
+    <div class="uses">
+      <div><span class="which">&alpha; · step size</span><h4>How far each update moves</h4><p>Theory wants &sum;&alpha; = &infin;, &sum;&alpha;&sup2; &lt; &infin; (e.g. 1/n). Practice: constant 0.05&ndash;0.5, or Adam in deep RL.</p></div>
+      <div><span class="which">&gamma; · horizon</span><h4>Effective look-ahead &asymp; 1/(1&minus;&gamma;)</h4><p>0.99 &asymp; a 100-step horizon — match it to the task. Higher &gamma; means bigger values, usually a smaller &alpha;.</p></div>
+      <div><span class="which">&epsilon; · exploration</span><h4>Start high, decay low</h4><p>Start &asymp;0.2&ndash;1.0, decay toward &asymp;0.01. GLIE: explore forever, greedy in the limit. Alternatives: UCB, softmax, entropy bonuses.</p></div>
+    </div>
+    <p class="note" style="margin-top:12px"><strong>Guarantee:</strong> tabular Q-learning converges to \(Q^*\) with probability 1 — if every (s, a) is visited infinitely often and &alpha; obeys the conditions above.</p>
+  </div>
+</section>
+
+<!-- BEYOND -->
+<section class="chap" id="beyond">
+  <div class="wrap">
+    <div class="tag">Scaling up</div>
+    <h2>When tables die: deep RL, policy gradients, RLHF</h2>
+
+    <h3 style="margin-top:12px">Function approximation — and its price</h3>
+    <div class="eq"><div class="m">\[ Q(s, a;\, \mathbf{w}), \qquad \mathbf{w} \leftarrow \mathbf{w} + \alpha\, \delta\, \nabla_{\mathbf{w}} Q(s,a;\mathbf{w}) \]</div><div class="read"><b>Read it as:</b> replace the table with a parametrised function — similar states now share estimates, which is the win called generalisation. The price is <b>the deadly triad</b>: function approximation + bootstrapping + off-policy learning together can diverge. No tabular guarantee survives; deep RL is engineering around this triad.</div></div>
+
+    <h3>DQN: Q-learning meets deep networks (Atari, 2015)</h3>
+    <div class="eq"><div class="m">\[ L(\mathbf{w}) = \mathbb{E}\left[ \left( r + \gamma \max_{a'} Q(s', a'; \mathbf{w}^-) - Q(s,a;\mathbf{w}) \right)^2 \right] \]</div><div class="read"><b>Read it as:</b> regression toward a frozen bootstrap target. Two tricks made it work: an <b>experience replay</b> buffer (store transitions, train on random mini-batches — breaks correlation, reuses data) and a <b>target network</b> \(\mathbf{w}^-\) (a frozen copy — stops the target chasing itself). <b>Double DQN</b> fixes the max's overestimation; Rainbow stacks the tricks. Input: raw pixels. Output: superhuman play on dozens of Atari games.</div></div>
+
+    <h3>The other road: optimise the policy directly</h3>
+    <div class="eq"><div class="m">\[ \nabla_\theta J(\theta) \;=\; \mathbb{E}_\pi\left[ \nabla_\theta \log \pi(A \mid S;\, \theta)\; G_t \right] \]</div><div class="read"><b>The policy gradient theorem:</b> make good actions more probable, in proportion to the return that followed them. <b>Why bother?</b> Continuous actions (no argmax needed), stochastic policies for free, smooth updates with no value flip-flops. Subtracting a baseline \(b\) from \(G_t\) cuts variance without adding bias — and an <b>actor&ndash;critic</b> takes that further: the actor \(\pi(a|s;\theta)\) proposes, the critic \(V(s;\mathbf{w})\) grades via the TD error. Lineage: REINFORCE &rarr; A2C/A3C &rarr; TRPO &rarr; <b>PPO</b> (clipped updates; powers RLHF) · SAC for continuous control.</div></div>
+
+    <h3>See the gradient at work</h3>
+    <div class="lab" style="grid-template-columns: minmax(0,1fr) 300px">
+      <figure>
+        <div style="display:grid;gap:14px">
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:.88rem"><span>π(A) — action A truly pays off 70% of the time</span><span class="num" id="pg-pa">50.0%</span></div>
+            <div class="bar-track" style="height:18px"><div class="bar-fill" id="pg-bar-a" style="background:var(--pos);width:50%"></div></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:.88rem"><span>π(B) — action B pays off 40% of the time</span><span class="num" id="pg-pb">50.0%</span></div>
+            <div class="bar-track" style="height:18px"><div class="bar-fill" id="pg-bar-b" style="background:var(--sarsa);width:50%"></div></div>
+          </div>
+        </div>
+        <div class="plot ar-3x1" style="margin-top:16px"><canvas id="pg-cv" aria-label="Average reward of the REINFORCE learner over time"></canvas></div>
+        <figcaption>REINFORCE on a two-action bandit: &theta; moves each action's probability up when it beat the running baseline, down when it fell short. The curve is the running average reward climbing toward 0.7.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="btns">
+            <button type="button" class="btn primary" id="pg-run">Run</button>
+            <button type="button" class="btn" id="pg-reset">Reset</button>
+          </div>
+          <div class="ctrl"><div class="top"><label for="pg-eta">Learning rate &eta;</label><output id="pg-eta-o">0.10</output></div><input type="range" id="pg-eta" min="0.01" max="0.5" step="0.01" value="0.1"></div>
+          <p class="note" id="pg-note">Updates: 0 · baseline: 0.00</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>The modern landscape on one map</h3>
+    <div class="map">
+      <div><span class="hd pos-c">Model-free — learn from experience</span></div>
+      <div><span class="hd plan-c">Model-based — learn a model, then plan</span></div>
+      <div><h4>Value-based</h4><p>DQN · Double/Dueling · Rainbow</p></div>
+      <div><h4>Plan + learn</h4><p>AlphaZero (MCTS) · MuZero</p></div>
+      <div><h4>Policy gradient</h4><p>REINFORCE · PPO · SAC</p></div>
+      <div><h4>Dyna</h4><p>real + imagined replay</p></div>
+      <div><h4>Actor&ndash;critic</h4><p>A3C · DDPG · TD3</p></div>
+      <div><h4>World models</h4><p>Dreamer — learn dynamics, train in imagination</p></div>
+    </div>
+    <p class="note" style="margin-top:10px">Model-based methods trade model error for sample efficiency — robotics cares, simulators don't.</p>
+
+    <h3>RL you used today: RLHF for language models</h3>
+    <ol class="flow">
+      <li><b>SFT</b>Fine-tune the base LLM on human demonstrations.</li>
+      <li><b>Reward model</b>Humans rank pairs of answers; train R(x, y) to predict the preference.</li>
+      <li><b>PPO</b>Optimise the policy against R, with a KL leash back to the SFT model.</li>
+    </ol>
+    <ul class="pts block" style="max-width:820px">
+      <li><b>state s</b><span>the conversation so far</span></li>
+      <li><b>action a</b><span>the next token</span></li>
+      <li><b>policy &pi;</b><span>the language model itself</span></li>
+      <li><b>reward R</b><span>learned from human preferences — sparse, end-of-response</span></li>
+    </ul>
+    <p class="note" style="margin-top:10px">DPO and friends fold step 3 into a direct loss — the framing (optimise against a learned preference) survives.</p>
+
+    <h3>Where RL already runs the show</h3>
+    <div class="uses cols4">
+      <div><span class="which">Games &amp; self-play</span><h4>AlphaGo &rarr; MuZero</h4><p>Superhuman Go, chess, shogi and Atari — from self-play alone.</p></div>
+      <div><span class="which">Robotics</span><h4>Sim-to-real</h4><p>Locomotion, in-hand manipulation, warehouse picking — domain randomisation closes the gap.</p></div>
+      <div><span class="which">Systems</span><h4>Operations</h4><p>Data-centre cooling (&minus;40% energy), chip floorplanning for TPUs, fusion plasma control.</p></div>
+      <div><span class="which">Personalisation</span><h4>Bandits at scale</h4><p>Behind search, ads, feeds and recommendations — billions of decisions per day.</p></div>
+    </div>
+    <p class="note" style="margin-top:10px">Common thread: cheap simulation or abundant interaction data. Where trials are expensive, RL still struggles:</p>
+
+    <h3>Honest limits — and why they matter for safety</h3>
+    <div class="uses cols2" style="max-width:860px">
+      <div><span class="which neg-c">Sample hunger</span><h4>~200M frames per Atari game</h4><p>Humans need minutes. Costly where trials are real: patients, robots, markets.</p></div>
+      <div><span class="which neg-c">Reward hacking</span><h4>Optimises the reward as written</h4><p>Not as intended — the CoastRunners boat circles for points and never finishes the race.</p></div>
+      <div><span class="which neg-c">Sim-to-real &amp; shift</span><h4>Policies overfit the simulator</h4><p>The world is non-stationary and partially observed.</p></div>
+      <div><span class="which neg-c">Fragility</span><h4>Seeds and tuning matter</h4><p>Results can hinge on random seeds; evaluation and reproducibility remain hard.</p></div>
+    </div>
+    <p class="note" style="margin-top:12px"><strong>Why this is a safety topic:</strong> RLHF reward models are learned proxies — the same specification-gaming pressure now applies to frontier LLMs. Reward design is alignment in miniature.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>The lecture in six lines</h2>
+    <ul class="take">
+      <li>RL learns behaviour from evaluative, delayed feedback — no labels, only consequences.</li>
+      <li>The MDP &langle;S, A, P, R, &gamma;&rangle; formalises the problem; the Markov state carries the burden.</li>
+      <li>Bellman: value = reward + &gamma; &middot; next value; optimality replaces the average with a max.</li>
+      <li>DP plans with a model; MC averages real returns; TD bootstraps online — one template update.</li>
+      <li>SARSA learns the policy it runs; Q-learning learns the optimum it doesn't — cliff walking tells them apart.</li>
+      <li>Tables die at scale: function approximation &rarr; DQN, policy gradients, actor&ndash;critic, RLHF.</li>
+    </ul>
+
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>What should Q(state-left-of-G, right) converge to in the 4&times;4 gridworld?</summary><p>Exactly +10. That move enters the terminal goal: the target is r + &gamma;&middot;0 = 10, with no future to discount. Every visit halves the remaining error: 5 &rarr; 7.5 &rarr; 8.75 &rarr; &hellip; &rarr; 10.</p></details>
+      <details class="q"><summary>What is the difference between reward and value?</summary><p>Reward is immediate and given by the environment; value is the expected <em>cumulative discounted</em> reward from here on, and must be estimated. Agents act on value, not reward — a step can pay &minus;1 and still be the best move.</p></details>
+      <details class="q"><summary>&gamma; = 0.99 corresponds to roughly what planning horizon?</summary><p>About 1/(1&minus;&gamma;) = 100 steps. &gamma; = 0 makes the agent myopic (maximise the next reward only); &gamma; &rarr; 1 makes it far-sighted, and usually requires a smaller step size.</p></details>
+      <details class="q"><summary>Same ε-greedy exploration — why does Q-learning hug the cliff while SARSA detours?</summary><p>Q-learning's max-target evaluates pure greedy play, ignoring that its ε-greedy behaviour sometimes slips off the edge — off-policy. SARSA evaluates the ε-greedy policy it actually runs, so the risk of slipping is priced into its values and the safe path scores higher — on-policy. Decay ε to 0 and both converge to optimal.</p></details>
+      <details class="q"><summary>Why explore at all? Greedy already maximises the current estimates.</summary><p>Because the estimates are wrong at first. Pure greedy locks onto the first arm or path that happens to look good and never corrects the others. Exploration buys information; ε-greedy, optimism and UCB are three prices for it.</p></details>
+      <details class="q"><summary>A single camera frame isn't a Markov state. Why, and what's the fix?</summary><p>Velocity is invisible in one frame — the past matters, violating the Markov property. Fix: engineer the state until it is approximately Markov. DQN stacks 4 frames; recurrent networks and belief states are the general tools.</p></details>
+    </div>
+
+    <h3>Take it with you</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn" href="../rl-lda-qda-lecture.pptx" download>&#8595; Slides (.pptx)</a>
+      <a class="btn" href="reinforcement-learning-notes.pdf" download>&#8595; Lecture notes (PDF)</a>
+      <a class="btn" href="../lda-qda/">Next lecture: LDA &amp; QDA &rarr;</a>
+    </div>
+
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Sutton &amp; Barto. <a href="http://incompleteideas.net/book/the-book-2nd.html" target="_blank" rel="noopener">Reinforcement Learning: An Introduction</a>, 2nd ed. — the canonical text, free online; chapters 3&ndash;6 cover this lecture.</li>
+      <li>David Silver. <a href="https://www.davidsilver.uk/teaching/" target="_blank" rel="noopener">RL lecture series</a> (UCL/DeepMind) — ten lectures tracking the same arc, with proofs.</li>
+      <li>OpenAI. <a href="https://spinningup.openai.com/" target="_blank" rel="noopener">Spinning Up in Deep RL</a> — from Q-learning to PPO with working code.</li>
+      <li>Watkins &amp; Dayan (1992). Q-learning. Machine Learning, 8, 279&ndash;292.</li>
+      <li>Mnih et al. (2015). Human-level control through deep reinforcement learning. Nature, 518, 529&ndash;533.</li>
+      <li>Ouyang et al. (2022). Training language models to follow instructions with human feedback (InstructGPT/RLHF).</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- rng ---------- */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(rng) { let u = 0; while (u === 0) u = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng()); }
+
+/* ---------- gridworld engine ---------- */
+const DIRS = [[-1, 0], [0, 1], [1, 0], [0, -1]]; // up right down left
+const ACH = ['↑', '→', '↓', '←'];
+function makeWorld(cols, rows, o) {
+  return { cols, rows, walls: new Set(o.walls || []), terms: new Map(o.terms || []), start: o.start ?? (rows - 1) * cols, living: o.living ?? -1, noise: o.noise ?? 0, gamma: o.gamma ?? 0.9 };
+}
+function moveTo(w, s, d) {
+  const r = (s / w.cols | 0) + DIRS[d][0], c = s % w.cols + DIRS[d][1];
+  if (r < 0 || c < 0 || r >= w.rows || c >= w.cols) return s;
+  const n = r * w.cols + c;
+  return w.walls.has(n) ? s : n;
+}
+function trans(w, s, a) {
+  if (w.noise <= 0) return [[1, moveTo(w, s, a)]];
+  return [[1 - w.noise, moveTo(w, s, a)], [w.noise / 2, moveTo(w, s, (a + 1) % 4)], [w.noise / 2, moveTo(w, s, (a + 3) % 4)]];
+}
+function qExact(w, s, a, V) {
+  let q = 0;
+  for (const [pr, s2] of trans(w, s, a)) q += pr * (w.terms.has(s2) ? w.terms.get(s2) : w.living + w.gamma * V[s2]);
+  return q;
+}
+function viSweep(w, V) {
+  let d = 0; const nV = V.slice();
+  for (let s = 0; s < V.length; s++) {
+    if (w.walls.has(s) || w.terms.has(s)) continue;
+    let b = -1e18;
+    for (let a = 0; a < 4; a++) b = Math.max(b, qExact(w, s, a, V));
+    nV[s] = b; d = Math.max(d, Math.abs(b - V[s]));
+  }
+  return [nV, d];
+}
+function viSolve(w) {
+  let V = new Array(w.cols * w.rows).fill(0), d = 1, k = 0;
+  while (d > 1e-9 && k < 3000) { [V, d] = viSweep(w, V); k++; }
+  return { V, sweeps: k };
+}
+function bestExact(w, s, V) {
+  let b = 0, bv = -1e18;
+  for (let a = 0; a < 4; a++) { const q = qExact(w, s, a, V); if (q > bv) { bv = q; b = a; } }
+  return b;
+}
+function evalPolicy(w, pi) {
+  let V = new Array(w.cols * w.rows).fill(0);
+  for (let k = 0; k < 4000; k++) {
+    let d = 0; const nV = V.slice();
+    for (let s = 0; s < V.length; s++) {
+      if (w.walls.has(s) || w.terms.has(s)) continue;
+      const v = qExact(w, s, pi(s), V);
+      d = Math.max(d, Math.abs(v - V[s])); nV[s] = v;
+    }
+    V = nV; if (d < 1e-9) break;
+  }
+  return V;
+}
+function stepEnv(w, s, a, rng) {
+  let d = a;
+  if (w.noise > 0) { const u = rng(); if (u >= 1 - w.noise) d = (u < 1 - w.noise / 2) ? (a + 1) % 4 : (a + 3) % 4; }
+  const s2 = moveTo(w, s, d);
+  if (w.terms.has(s2)) return [s2, w.terms.get(s2), true];
+  return [s2, w.living, false];
+}
+function makeLearner(w, o) {
+  return { Q: Array.from({ length: w.cols * w.rows }, () => [0, 0, 0, 0]), seen: new Uint8Array(w.cols * w.rows), ep: 0, s: w.start, steps: 0, ret: 0, pendA: -1, rets: [], alpha: o.alpha, eps: o.eps, eps0: o.eps, decay: o.decay, rng: mulberry32(o.seed || 12345) };
+}
+function argmaxQ(row) { let b = 0; for (let i = 1; i < 4; i++) if (row[i] > row[b]) b = i; return b; }
+function pickEG(L, s) {
+  if (L.rng() < L.eps) return L.rng() * 4 | 0;
+  const row = L.Q[s], m = Math.max(...row), ties = [];
+  for (let i = 0; i < 4; i++) if (row[i] === m) ties.push(i);
+  return ties[L.rng() * ties.length | 0];
+}
+function learnStep(L, w, algo) {
+  let a;
+  if (algo === 'sarsa') { if (L.pendA < 0) L.pendA = pickEG(L, L.s); a = L.pendA; }
+  else a = pickEG(L, L.s);
+  const [s2, r, done] = stepEnv(w, L.s, a, L.rng);
+  let nxt = 0;
+  if (!done) {
+    if (algo === 'sarsa') { const a2 = pickEG(L, s2); nxt = L.Q[s2][a2]; L.pendA = a2; }
+    else nxt = Math.max(...L.Q[s2]);
+  }
+  const target = r + (done ? 0 : w.gamma * nxt);
+  const old = L.Q[L.s][a];
+  L.Q[L.s][a] = old + L.alpha * (target - old);
+  L.seen[L.s] = 1;
+  const info = { s: L.s, a, old, r, nxt: done ? 0 : nxt, nu: L.Q[L.s][a], done, gamma: w.gamma, alpha: L.alpha };
+  L.ret += r; L.steps++;
+  if (done || L.steps >= 400) {
+    L.rets.push(L.ret); if (L.rets.length > 3000) L.rets.shift();
+    L.ep++;
+    if (L.decay) L.eps = Math.max(0.01, L.eps0 * Math.pow(0.995, L.ep));
+    L.s = w.start; L.steps = 0; L.ret = 0; L.pendA = -1;
+  } else L.s = s2;
+  return info;
+}
+
+/* ---------- canvas helpers ---------- */
+function fit(cv) {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0);
+  return { c, W: r.width, H: r.height };
+}
+function drawWorld(cv, w, o) {
+  const { c, W, H } = fit(cv), pad = 8;
+  const cs = Math.min((W - 2 * pad) / w.cols, (H - 2 * pad) / w.rows);
+  const ox = (W - cs * w.cols) / 2, oy = (H - cs * w.rows) / 2;
+  const ink = css('--ink'), muted = css('--muted'), line = css('--line'), soft = css('--soft');
+  const pos = css('--pos'), neg = css('--neg'), plan = css('--plan'), surface = css('--surface');
+  let vscale = 1e-9;
+  if (o.V) for (let s = 0; s < o.V.length; s++) if (!w.walls.has(s) && !w.terms.has(s)) vscale = Math.max(vscale, Math.abs(o.V[s]));
+  const cellXY = s => [ox + (s % w.cols) * cs, oy + (s / w.cols | 0) * cs];
+  for (let s = 0; s < w.cols * w.rows; s++) {
+    const [x, y] = cellXY(s);
+    if (w.walls.has(s)) { c.fillStyle = soft; c.fillRect(x, y, cs, cs); c.strokeStyle = muted; c.globalAlpha = .5; c.strokeRect(x + 4, y + 4, cs - 8, cs - 8); c.globalAlpha = 1; continue; }
+    if (w.terms.has(s)) {
+      const tv = w.terms.get(s);
+      c.globalAlpha = .18; c.fillStyle = tv >= 0 ? pos : neg; c.fillRect(x, y, cs, cs); c.globalAlpha = 1;
+      c.strokeStyle = tv >= 0 ? pos : neg; c.lineWidth = 2; c.strokeRect(x + 1.5, y + 1.5, cs - 3, cs - 3); c.lineWidth = 1;
+      c.fillStyle = tv >= 0 ? pos : neg; c.font = `600 ${Math.min(15, cs * .26)}px ${css('--f-mono')}`;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText((tv > 0 ? '+' : '') + tv, x + cs / 2, y + cs / 2);
+      continue;
+    }
+    if (o.V && o.heat) {
+      const v = o.V[s];
+      if (Math.abs(v) > 1e-12) {
+        c.globalAlpha = Math.min(.5, .55 * Math.abs(v) / vscale);
+        c.fillStyle = v >= 0 ? pos : neg;
+        c.fillRect(x, y, cs, cs); c.globalAlpha = 1;
+      }
+    }
+  }
+  c.strokeStyle = line; c.lineWidth = 1; c.beginPath();
+  for (let i = 0; i <= w.cols; i++) { c.moveTo(ox + i * cs, oy); c.lineTo(ox + i * cs, oy + w.rows * cs); }
+  for (let j = 0; j <= w.rows; j++) { c.moveTo(ox, oy + j * cs); c.lineTo(ox + w.cols * cs, oy + j * cs); }
+  c.stroke();
+  function tri(s, a, color, fillIt, scale) {
+    const [x, y] = cellXY(s), cx = x + cs / 2, cy = y + cs / 2, r0 = cs * (scale || .2);
+    const ang = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][a];
+    c.beginPath();
+    c.moveTo(cx + r0 * Math.cos(ang), cy + r0 * Math.sin(ang));
+    c.lineTo(cx + r0 * .7 * Math.cos(ang + 2.5), cy + r0 * .7 * Math.sin(ang + 2.5));
+    c.lineTo(cx + r0 * .7 * Math.cos(ang - 2.5), cy + r0 * .7 * Math.sin(ang - 2.5));
+    c.closePath();
+    if (fillIt) { c.fillStyle = color; c.fill(); }
+    else { c.strokeStyle = color; c.lineWidth = 1.6; c.stroke(); c.lineWidth = 1; }
+  }
+  if (o.ghost) for (let s = 0; s < w.cols * w.rows; s++) { if (w.walls.has(s) || w.terms.has(s)) continue; const a = o.ghost(s); if (a != null) tri(s, a, plan, false, .3); }
+  if (o.arrows) for (let s = 0; s < w.cols * w.rows; s++) { if (w.walls.has(s) || w.terms.has(s)) continue; const a = o.arrows(s); if (a != null) { c.globalAlpha = .85; tri(s, a, ink, true, .18); c.globalAlpha = 1; } }
+  if (o.numbers && o.V && cs > 30) {
+    c.fillStyle = muted; c.font = `10.5px ${css('--f-mono')}`; c.textAlign = 'left'; c.textBaseline = 'top';
+    for (let s = 0; s < o.V.length; s++) { if (w.walls.has(s) || w.terms.has(s)) continue; const [x, y] = cellXY(s); c.fillText(o.V[s].toFixed(1), x + 4, y + 3); }
+  }
+  { const [x, y] = cellXY(w.start); c.fillStyle = muted; c.font = `600 ${Math.min(12, cs * .2)}px ${css('--f-body')}`; c.textAlign = 'right'; c.textBaseline = 'bottom'; c.fillText('S', x + cs - 4, y + cs - 3); }
+  if (o.paths) for (const p of o.paths) {
+    c.strokeStyle = p.color; c.lineWidth = 3; c.lineJoin = 'round'; c.lineCap = 'round';
+    c.setLineDash(p.dash || []); c.beginPath();
+    p.cells.forEach((s, i) => { const [x, y] = cellXY(s); const px = x + cs / 2, py = y + cs / 2; i ? c.lineTo(px, py) : c.moveTo(px, py); });
+    c.stroke(); c.setLineDash([]); c.lineWidth = 1;
+  }
+  if (o.agent != null) {
+    const [x, y] = cellXY(o.agent);
+    c.beginPath(); c.arc(x + cs / 2, y + cs / 2, Math.max(5, cs * .16), 0, 7);
+    c.fillStyle = ink; c.fill(); c.strokeStyle = surface; c.lineWidth = 2; c.stroke(); c.lineWidth = 1;
+  }
+  return { cs, ox, oy };
+}
+function drawSeries(cv, series, opts) {
+  const { c, W, H } = fit(cv), padL = 46, padB = 22, padT = 8, padR = 8;
+  const muted = css('--muted'), line = css('--line');
+  let lo = Infinity, hi = -Infinity, n = 0;
+  for (const s of series) { for (const v of s.data) { if (v < lo) lo = v; if (v > hi) hi = v; } n = Math.max(n, s.data.length); }
+  if (!isFinite(lo) || n < 2) {
+    c.fillStyle = muted; c.font = `12px ${css('--f-body')}`; c.textAlign = 'center';
+    c.fillText(opts && opts.empty || 'No data yet — press Run.', W / 2, H / 2);
+    return;
+  }
+  if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * .08; hi += pad; lo -= pad;
+  const X = i => padL + (W - padL - padR) * i / (n - 1);
+  const Y = v => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo));
+  c.strokeStyle = line; c.beginPath(); c.moveTo(padL, padT); c.lineTo(padL, H - padB); c.lineTo(W - padR, H - padB); c.stroke();
+  c.fillStyle = muted; c.font = `10.5px ${css('--f-mono')}`; c.textAlign = 'right';
+  [lo + pad, (lo + hi) / 2, hi - pad].forEach(v => { c.fillText(v.toFixed(Math.abs(hi) > 99 ? 0 : 1), padL - 5, Y(v) + 3); });
+  c.textAlign = 'center'; c.fillText(String(n), W - padR - 4, H - 7); c.fillText(opts && opts.x || 'episode', (padL + W) / 2, H - 7);
+  for (const s of series) {
+    if (s.dots) {
+      c.fillStyle = s.color; c.globalAlpha = .3;
+      for (let i = 0; i < s.data.length; i++) { c.beginPath(); c.arc(X(i), Y(s.data[i]), 1.4, 0, 7); c.fill(); }
+      c.globalAlpha = 1;
+    }
+    if (s.avg) {
+      const w0 = s.avg, av = [];
+      for (let i = 0; i < s.data.length; i++) { const a = Math.max(0, i - w0 + 1); let m = 0; for (let j = a; j <= i; j++) m += s.data[j]; av.push(m / (i - a + 1)); }
+      c.strokeStyle = s.color; c.lineWidth = 2; c.setLineDash(s.dash || []); c.beginPath();
+      av.forEach((v, i) => i ? c.lineTo(X(i), Y(v)) : c.moveTo(X(i), Y(v))); c.stroke(); c.setLineDash([]); c.lineWidth = 1;
+    } else if (!s.dots) {
+      c.strokeStyle = s.color; c.lineWidth = 2; c.setLineDash(s.dash || []); c.beginPath();
+      s.data.forEach((v, i) => i ? c.lineTo(X(i), Y(v)) : c.moveTo(X(i), Y(v))); c.stroke(); c.setLineDash([]); c.lineWidth = 1;
+    }
+  }
+}
+
+/* ---------- theme / resize redraw ---------- */
+const figs = [];
+function fig(cv, draw) {
+  figs.push(draw); let raf = 0;
+  if ('ResizeObserver' in window) new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); }).observe(cv);
+}
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ---------- preset worlds ---------- */
+function lectureWorld() {
+  return makeWorld(4, 4, { terms: [[3, 10]], start: 12, living: -1, noise: 0, gamma: 0.9 });
+}
+function cliffWorld() {
+  const terms = [[39, 0]];
+  for (let c = 1; c <= 8; c++) terms.push([30 + c, -100]);
+  return makeWorld(10, 4, { terms, start: 30, living: -1, noise: 0, gamma: 0.99 });
+}
+function mazeWorld() {
+  const walls = [];
+  for (let r = 1; r <= 5; r++) walls.push(r * 9 + 2);
+  for (let r = 0; r <= 4; r++) walls.push(r * 9 + 5);
+  return makeWorld(9, 6, { walls, terms: [[8, 10]], start: 45, living: 0, noise: 0, gamma: 0.9 });
+}
+function windyWorld() {
+  return makeWorld(4, 3, { walls: [5], terms: [[3, 1], [7, -1]], start: 8, living: -0.04, noise: 0.2, gamma: 0.95 });
+}
+const PRESETS = {
+  lecture: { make: lectureWorld, alpha: 0.5, eps: 0.2, decay: false, numbers: true, note: 'The lecture world: step −1, goal +10, γ = 0.9. The converged top row should read 6.2 · 8.0 · 10 — the numbers traced by hand above.' },
+  cliff: { make: cliffWorld, alpha: 0.5, eps: 0.1, decay: false, numbers: false, note: 'The cliff: step −1, falling −100. Train Q-learning, then SARSA (Reset between runs), and compare their greedy paths — or use the dedicated experiment below.' },
+  maze: { make: mazeWorld, alpha: 0.5, eps: 0.3, decay: true, numbers: false, note: 'Sparse reward: every step pays 0, only the goal pays. Until the agent stumbles on the goal once, there is nothing to learn from — watch how long that takes.' },
+  windy: { make: windyWorld, alpha: 0.3, eps: 0.2, decay: true, numbers: true, note: 'The classic stochastic 4×3 (Russell–Norvig): 20% slip chance, living reward −0.04, a +1 exit above a −1 trap. Noise makes the agent keep its distance from the trap.' }
+};
+
+/* ---------- hero demo ---------- */
+const heroCv = $('#hero-cv');
+let heroW = lectureWorld(), heroL = makeLearner(heroW, { alpha: 0.5, eps: 0.2, decay: false, seed: 77 });
+let heroMode = 'learn', heroRaf = 0;
+function heroV() { return heroL.Q.map((row, s) => heroL.seen[s] ? Math.max(...row) : 0); }
+function heroDraw() {
+  drawWorld(heroCv, heroW, {
+    V: heroV(), heat: true, numbers: true,
+    arrows: s => heroL.seen[s] ? argmaxQ(heroL.Q[s]) : null,
+    agent: heroMode === 'learn' ? heroL.s : null
+  });
+}
+function heroTick() {
+  for (let i = 0; i < 60; i++) learnStep(heroL, heroW, 'ql');
+  if (heroL.ep > 160) heroL = makeLearner(heroW, { alpha: 0.5, eps: 0.2, decay: false, seed: (Math.random() * 1e9) | 0 });
+  heroDraw();
+  heroRaf = requestAnimationFrame(heroTick);
+}
+function heroFinish() {
+  cancelAnimationFrame(heroRaf);
+  while (heroL.ep < 400) learnStep(heroL, heroW, 'ql');
+  heroDraw();
+}
+function heroStart() {
+  cancelAnimationFrame(heroRaf);
+  heroL = makeLearner(heroW, { alpha: 0.5, eps: 0.2, decay: false, seed: (Math.random() * 1e9) | 0 });
+  if (heroMode === 'done' || reduceMotion) heroFinish(); else heroTick();
+}
+$$('[data-hero]').forEach(b => b.addEventListener('click', () => {
+  heroMode = b.dataset.hero;
+  $$('[data-hero]').forEach(o => o.setAttribute('aria-pressed', String(o === b)));
+  $('#hero-cap').textContent = heroMode === 'learn'
+    ? 'Q-learning, live: each step costs −1, the goal pays +10. Shading is the learned value of each square; arrows are the current best guess. Watch value leak backwards from the goal, episode by episode.'
+    : 'The learned policy after 400 episodes. Compare the top row — 6.2, 8.0, 10 — with the hand calculation further down this page.';
+  heroStart();
+}));
+$('#hero-restart').addEventListener('click', heroStart);
+fig(heroCv, heroDraw);
+if (reduceMotion) heroFinish(); else heroTick();
+
+/* ---------- loop stepper ---------- */
+const LOOP_STORY = [
+  ['lp-agent', 'The agent reads the state: S = three cells from the goal.'],
+  ['lp-act', 'Its policy picks an action: A = → (move right).'],
+  ['lp-env', 'The environment reacts: computes the next state and a reward.'],
+  ['lp-obs', 'Back come R = −1 and S′ = two cells from the goal. t ticks forward.'],
+  ['lp-agent', 'New state in hand, the agent chooses again…'],
+  ['lp-act', 'A = → again.'],
+  ['lp-env', 'The environment reacts…'],
+  ['lp-obs', 'R = −1, S′ = one cell from the goal.'],
+  ['lp-agent', 'One more decision…'],
+  ['lp-act', 'A = →.'],
+  ['lp-env', 'This move enters the goal square.'],
+  ['lp-obs', 'R = +10, episode over. Total collected: −1 −1 +10 = +8.']
+];
+let loopI = -1;
+function loopShow() {
+  $$('.lp').forEach(e => e.classList.remove('on'));
+  if (loopI >= 0) {
+    const [id, txt] = LOOP_STORY[loopI % LOOP_STORY.length];
+    $('#' + id).classList.add('on');
+    $('#loop-say').textContent = txt;
+    if (id === 'lp-obs') {
+      const log = $('#loop-log'), d = document.createElement('div');
+      d.textContent = 't=' + (Math.floor(loopI / 4) + 1) + ':  a=→  r=' + (loopI >= 11 ? '+10 (terminal)' : '−1') + '  s′=' + (loopI >= 11 ? 'GOAL' : (3 - Math.floor(loopI / 4) - 1) + ' cells out');
+      log.appendChild(d);
+      while (log.children.length > 3) log.removeChild(log.firstChild);
+    }
+  }
+}
+$('#loop-step').addEventListener('click', () => { loopI = (loopI + 1) % LOOP_STORY.length; loopShow(); });
+$('#loop-reset').addEventListener('click', () => { loopI = -1; $('#loop-log').innerHTML = ''; $('#loop-say').textContent = 'Press Step to walk one phase of the loop, with a running example from the gridworld above.'; loopShow(); });
+
+/* ---------- bandit lab ---------- */
+const BD = { mus: [], rng: mulberry32(2024), you: null, revealed: false, raced: '', lines: {} };
+function bdNew() {
+  const base = [0.3, 1.2, 0.7, 1.0];
+  for (let i = base.length - 1; i > 0; i--) { const j = BD.rng() * (i + 1) | 0; [base[i], base[j]] = [base[j], base[i]]; }
+  BD.mus = base;
+  BD.you = { n: [0, 0, 0, 0], Q: [0, 0, 0, 0], pulls: 0, score: 0 };
+  BD.revealed = false; BD.raced = '';
+  bdRender();
+  $('#bd-verdict').textContent = '';
+}
+function bdPull(agent, a, rng) { return BD.mus[a] + gaussOf(rng || BD.rng); }
+function bdRender() {
+  const wrap = $('#bd-arms');
+  wrap.innerHTML = BD.mus.map((mu, i) => {
+    const y = BD.you, q = y.n[i] ? y.Q[i] : 0;
+    const pct = Math.max(0, Math.min(100, (q + 0.5) / 2.5 * 100));
+    const truePct = Math.max(0, Math.min(100, (mu + 0.5) / 2.5 * 100));
+    return `<div class="arm">
+      <button type="button" data-arm="${i}" ${y.pulls >= 20 ? 'disabled' : ''}>M${i + 1}<br><span style="font-weight:400;font-size:.78rem">pull</span></button>
+      <div class="est"><span>pulls ${y.n[i]}</span><span>Q̂ ${y.n[i] ? y.Q[i].toFixed(2) : '–'}</span></div>
+      <div class="bar-track">${y.n[i] ? `<div class="bar-fill" style="background:var(--plan);width:${pct}%"></div>` : ''}${BD.revealed ? `<div class="tick" style="left:${truePct}%"></div>` : ''}</div>
+      ${BD.revealed ? `<div class="true-mu">true q* = ${mu.toFixed(2)}${mu === Math.max(...BD.mus) ? ' ← best' : ''}</div>` : ''}
+    </div>`;
+  }).join('');
+  $$('#bd-arms button').forEach(b => b.addEventListener('click', () => {
+    const a = +b.dataset.arm, y = BD.you;
+    if (y.pulls >= 20) return;
+    const r = bdPull(null, a);
+    y.n[a]++; y.Q[a] += (r - y.Q[a]) / y.n[a]; y.pulls++; y.score += r;
+    bdSay(`M${a + 1} paid ${r.toFixed(2)}.`);
+    bdRender();
+  }));
+  bdSay();
+}
+function bdSay(extra) {
+  const y = BD.you;
+  $('#bd-say').textContent = `Pulls left: ${20 - y.pulls} · Your score: ${y.score.toFixed(2)}` + (extra ? ` · ${extra}` : '');
+}
+function bdRegret(n) { const best = Math.max(...BD.mus); let reg = 0; n.forEach((cnt, a) => { reg += cnt * (best - BD.mus[a]); }); return reg; }
+$('#bd-reveal').addEventListener('click', () => {
+  BD.revealed = true; bdRender();
+  const y = BD.you, best = Math.max(...BD.mus);
+  $('#bd-verdict').innerHTML = `Best possible (always the ${BD.mus.indexOf(best) + 1 ? 'best arm' : ''}): <b>${(20 * best).toFixed(1)} expected</b>. Your expected haul: <b>${(20 * best - bdRegret(y.n)).toFixed(1)}</b> → regret <b>${bdRegret(y.n).toFixed(1)}</b>.` + (BD.raced ? ' ' + BD.raced : '');
+});
+$('#bd-race').addEventListener('click', () => {
+  const rng = mulberry32((Math.random() * 1e9) | 0);
+  const ag = { n: [0, 0, 0, 0], Q: [0, 0, 0, 0], score: 0 };
+  for (let t = 0; t < 20; t++) {
+    let a;
+    if (rng() < 0.1) a = rng() * 4 | 0;
+    else { const m = Math.max(...ag.Q), ties = []; ag.Q.forEach((q, i) => { if (q === m) ties.push(i); }); a = ties[rng() * ties.length | 0]; }
+    const r = bdPull(null, a, rng);
+    ag.n[a]++; ag.Q[a] += (r - ag.Q[a]) / ag.n[a]; ag.score += r;
+  }
+  const y = BD.you;
+  const msg = `ε-greedy (ε = 0.1) scored <b>${ag.score.toFixed(2)}</b> on the same machines (expected-regret ${bdRegret(ag.n).toFixed(1)}) vs your <b>${y.score.toFixed(2)}</b> — ${ag.score > y.score ? 'the algorithm wins this round.' : y.pulls >= 20 ? 'you beat the algorithm. Was it skill or luck? Try New machines.' : 'finish your 20 pulls for a fair fight.'}`;
+  BD.raced = msg;
+  $('#bd-verdict').innerHTML = msg;
+});
+$('#bd-new').addEventListener('click', bdNew);
+function bdStrategy(kind, eps, mus, seed) {
+  const rng = mulberry32(seed), n = [0, 0, 0, 0], best = Math.max(...mus), reg = [];
+  const Q = kind === 'opt' ? [3, 3, 3, 3] : [0, 0, 0, 0];
+  let cum = 0;
+  for (let t = 1; t <= 1000; t++) {
+    let a;
+    if (kind === 'ucb') {
+      a = 0; let bv = -1e18;
+      for (let i = 0; i < 4; i++) { const u = n[i] === 0 ? 1e9 : Q[i] + 2 * Math.sqrt(Math.log(t) / n[i]); if (u > bv) { bv = u; a = i; } }
+    } else {
+      const e = kind === 'eg' ? eps : 0;
+      if (rng() < e) a = rng() * 4 | 0;
+      else { const m = Math.max(...Q), ties = []; Q.forEach((q, i) => { if (q === m) ties.push(i); }); a = ties[rng() * ties.length | 0]; }
+    }
+    const r = mus[a] + gaussOf(rng);
+    n[a]++; Q[a] += (r - Q[a]) / n[a];
+    cum += best - mus[a]; reg.push(cum);
+  }
+  return reg;
+}
+function bdChartDraw() {
+  const series = [];
+  if (BD.lines.greedy) series.push({ data: BD.lines.greedy, color: css('--learn') });
+  if (BD.lines.eg) series.push({ data: BD.lines.eg, color: css('--plan') });
+  if (BD.lines.opt) series.push({ data: BD.lines.opt, color: css('--pos') });
+  if (BD.lines.ucb) series.push({ data: BD.lines.ucb, color: css('--sarsa') });
+  drawSeries($('#bd-chart'), series, { x: 'pulls', empty: 'Press “Run the comparison” to race four strategies.' });
+}
+$('#bd-run').addEventListener('click', () => {
+  const eps = +$('#bd-eps').value, RUNS = 100;
+  const kinds = [['greedy', 'greedy'], ['eg', 'eg'], ['opt', 'opt'], ['ucb', 'ucb']];
+  for (const [key, kind] of kinds) {
+    const mean = new Array(1000).fill(0);
+    for (let run = 0; run < RUNS; run++) {
+      const rng = mulberry32(9000 + run);
+      const mus = [0.3, 1.2, 0.7, 1.0];
+      for (let i = 3; i > 0; i--) { const j = rng() * (i + 1) | 0; [mus[i], mus[j]] = [mus[j], mus[i]]; }
+      const reg = bdStrategy(kind, eps, mus, 31 * run + 7);
+      for (let t = 0; t < 1000; t++) mean[t] += reg[t] / RUNS;
+    }
+    BD.lines[key] = mean;
+  }
+  bdChartDraw();
+  const last = k => BD.lines[k][999].toFixed(0);
+  $('#bd-chart-cap').textContent = `Average regret after 1,000 pulls (100 casinos): greedy ${last('greedy')} · ε-greedy(${eps.toFixed(2)}) ${last('eg')} · optimistic ${last('opt')} · UCB ${last('ucb')}. Greedy's line keeps climbing whenever it locks onto the wrong arm; the explorers flatten out.`;
+});
+$('#bd-eps').addEventListener('input', e => { $('#bd-eps-o').textContent = (+e.target.value).toFixed(2); });
+fig($('#bd-chart'), bdChartDraw);
+bdNew();
+
+/* ---------- gamma visualizer ---------- */
+function gmDraw() {
+  const g = +$('#gm-g').value;
+  const { c, W, H } = fit($('#gm-cv'));
+  const muted = css('--muted'), pos = css('--pos'), line = css('--line');
+  const K = 25, padL = 10, padB = 20, bw = (W - 2 * padL) / K;
+  c.strokeStyle = line; c.beginPath(); c.moveTo(0, H - padB + .5); c.lineTo(W, H - padB + .5); c.stroke();
+  for (let k = 0; k < K; k++) {
+    const h = Math.pow(g, k) * (H - padB - 10);
+    c.fillStyle = pos; c.globalAlpha = .75;
+    c.fillRect(padL + k * bw + 1, H - padB - h, bw - 2, h);
+    c.globalAlpha = 1;
+  }
+  c.fillStyle = muted; c.font = `10.5px ${css('--f-mono')}`; c.textAlign = 'center';
+  [0, 5, 10, 15, 20].forEach(k => c.fillText('k=' + k, padL + k * bw + bw / 2, H - 6));
+  $('#gm-g-o').textContent = g.toFixed(2);
+  $('#gm-h').textContent = g >= 0.99 ? '100 steps' : (1 / (1 - g)).toFixed(g > 0.9 ? 0 : 1) + ' steps';
+  $('#gm-10').textContent = (Math.pow(g, 10) * 100).toFixed(g > 0.5 ? 0 : 2) + '% of itself';
+}
+$('#gm-g').addEventListener('input', gmDraw);
+fig($('#gm-cv'), gmDraw);
+gmDraw();
+
+/* ---------- chain ripple ---------- */
+const CH = { V: [0, 0, 0, 0], sweeps: 0, sel: 1, g: 0.9 };
+function chSweep() {
+  const g = CH.g, nV = CH.V.slice();
+  for (let i = 0; i < 4; i++) {
+    const rightV = i === 3 ? null : CH.V[i + 1];
+    const qRight = i === 3 ? 10 : -1 + g * CH.V[i + 1];
+    const qLeft = i === 0 ? -1 + g * CH.V[0] : -1 + g * CH.V[i - 1];
+    nV[i] = Math.max(qRight, qLeft);
+  }
+  const changed = nV.some((v, i) => Math.abs(v - CH.V[i]) > 1e-9);
+  CH.V = nV; CH.sweeps++;
+  return changed;
+}
+function chRender() {
+  const row = $('#ch-row');
+  row.innerHTML = CH.V.map((v, i) => `<div data-ch="${i}" style="flex:1;min-width:70px;cursor:pointer;border:1px solid ${i === CH.sel ? 'var(--plan)' : 'var(--line)'};border-radius:8px;background:var(--surface);padding:10px;text-align:center">
+      <div style="font-size:.72rem;color:var(--muted);font-family:var(--f-mono)">s${i}</div>
+      <div class="num" style="text-align:center;font-size:1.25rem">${v.toFixed(2)}</div>
+    </div>`).join('') +
+    `<div style="flex:1;min-width:70px;border:2px solid var(--pos);border-radius:8px;background:color-mix(in srgb, var(--pos) 12%, var(--surface));padding:10px;text-align:center">
+      <div style="font-size:.72rem;color:var(--pos);font-family:var(--f-mono)">goal</div>
+      <div class="num" style="text-align:center;font-size:1.25rem;color:var(--pos)">+10</div>
+    </div>`;
+  $$('#ch-row [data-ch]').forEach(d => d.addEventListener('click', () => { CH.sel = +d.dataset.ch; chRender(); }));
+  const i = CH.sel, g = CH.g;
+  const nextTxt = i === 3 ? 'entering the goal: target = +10' : `V(s${i + 1}) = ${CH.V[i + 1].toFixed(2)}`;
+  const val = i === 3 ? 10 : -1 + g * CH.V[i + 1];
+  $('#ch-log').innerHTML = `backup for <b>s${i}</b> (best action →): V(s${i}) ← ${i === 3 ? '+10 (terminal reward, no future)' : `−1 + ${g.toFixed(2)} × ${CH.V[i + 1].toFixed(2)} = <b>${val.toFixed(2)}</b>`}  ·  ${nextTxt}`;
+  $('#ch-note').textContent = `Sweeps so far: ${CH.sweeps}` + (CH.sweeps >= 4 ? ' · converged: each sweep carried value exactly one state further left.' : '');
+}
+$('#ch-step').addEventListener('click', () => { chSweep(); chRender(); });
+$('#ch-solve').addEventListener('click', () => { let guard = 0; while (chSweep() && guard++ < 500); chRender(); });
+$('#ch-reset').addEventListener('click', () => { CH.V = [0, 0, 0, 0]; CH.sweeps = 0; chRender(); });
+$('#ch-g').addEventListener('input', e => { CH.g = +e.target.value; $('#ch-g-o').textContent = CH.g.toFixed(2); CH.V = [0, 0, 0, 0]; CH.sweeps = 0; chRender(); });
+chRender();
+
+/* ---------- main gridworld lab ---------- */
+const GW = { w: null, algo: 'vi', L: null, viV: null, viSweeps: 0, viDone: false, viTrace: [], opt: null, running: false, raf: 0, tool: 'wall', presetKey: 'lecture', painting: false, lastCell: -1 };
+function gwApplyPreset(key) {
+  const p = PRESETS[key];
+  GW.presetKey = key;
+  GW.w = p.make();
+  $('#gw-plot').style.aspectRatio = String(Math.max(GW.w.cols / GW.w.rows, 1.35));
+  $('#gw-gamma').value = GW.w.gamma; $('#gw-noise').value = GW.w.noise; $('#gw-living').value = GW.w.living;
+  $('#gw-alpha').value = p.alpha; $('#gw-eps').value = p.eps; $('#gw-decay').checked = p.decay;
+  $('#gw-show-num').checked = p.numbers;
+  gwSyncOutputs();
+  gwResetLearning();
+  $('#gw-say').textContent = p.note;
+}
+function gwSyncOutputs() {
+  $('#gw-gamma-o').textContent = (+$('#gw-gamma').value).toFixed(2);
+  $('#gw-noise-o').textContent = Math.round(+$('#gw-noise').value * 100) + '%';
+  $('#gw-living-o').textContent = (+$('#gw-living').value).toFixed(3).replace(/0+$/, '').replace(/\.$/, '.0');
+  $('#gw-alpha-o').textContent = (+$('#gw-alpha').value).toFixed(2);
+  $('#gw-eps-o').textContent = (+$('#gw-eps').value).toFixed(2);
+  $('#gw-speed-o').textContent = $('#gw-speed').value;
+}
+function gwEnvFromSliders() {
+  GW.w.gamma = +$('#gw-gamma').value;
+  GW.w.noise = +$('#gw-noise').value;
+  GW.w.living = +$('#gw-living').value;
+}
+function gwRecomputeOpt() { GW.opt = viSolve(GW.w); }
+function gwResetLearning() {
+  gwEnvFromSliders();
+  gwRecomputeOpt();
+  GW.L = makeLearner(GW.w, { alpha: +$('#gw-alpha').value, eps: +$('#gw-eps').value, decay: $('#gw-decay').checked, seed: (Math.random() * 1e9) | 0 });
+  GW.viV = new Array(GW.w.cols * GW.w.rows).fill(0);
+  GW.viSweeps = 0; GW.viDone = false; GW.viTrace = [];
+  GW.running = false; cancelAnimationFrame(GW.raf);
+  $('#gw-run').textContent = 'Run';
+  $('#gw-log').textContent = GW.algo === 'vi' ? 'Step performs one full sweep and reports the biggest change.' : 'Step prints each update here, with the numbers filled in.';
+  gwDraw(); gwMetrics(); gwChart();
+}
+function gwValueField() {
+  if (GW.algo === 'vi') return GW.viV;
+  return GW.L.Q.map((row, s) => GW.L.seen[s] ? Math.max(...row) : 0);
+}
+function gwDraw() {
+  drawWorld($('#gw-cv'), GW.w, {
+    V: gwValueField(),
+    heat: $('#gw-show-heat').checked,
+    numbers: $('#gw-show-num').checked,
+    arrows: $('#gw-show-arr').checked ? (GW.algo === 'vi'
+      ? (GW.viSweeps ? s => bestExact(GW.w, s, GW.viV) : () => null)
+      : s => GW.L.seen[s] ? argmaxQ(GW.L.Q[s]) : null) : null,
+    ghost: $('#gw-show-opt').checked ? s => bestExact(GW.w, s, GW.opt.V) : null,
+    agent: GW.algo === 'vi' ? null : GW.L.s
+  });
+}
+function fmt(x, d) { return (+x).toFixed(d == null ? 2 : d); }
+function gwLogUpdate(info) {
+  const sName = `s(${info.s / GW.w.cols | 0},${info.s % GW.w.cols})`;
+  $('#gw-log').innerHTML = `Q(${sName}, ${ACH[info.a]}) ← ${fmt(info.old)} + ${fmt(info.alpha, 2)}·[ ${info.r >= 0 ? '+' : ''}${fmt(info.r, 1)} + ${fmt(info.gamma, 2)}·${fmt(info.nxt)} − ${fmt(info.old)} ] = <b>${fmt(info.nu)}</b>${info.done ? ' · episode ends' : ''}`;
+}
+function gwViStep() {
+  const [nV, d] = viSweep(GW.w, GW.viV);
+  GW.viV = nV; GW.viSweeps++;
+  GW.viTrace.push(GW.viV[GW.w.start]);
+  if (d < 1e-9) GW.viDone = true;
+  $('#gw-log').innerHTML = `sweep ${GW.viSweeps}: biggest change Δ = ${d.toExponential(1)}${GW.viDone ? ' · <b>converged</b> — each sweep shrinks the error by γ' : ''}`;
+}
+function gwMetrics() {
+  const w = GW.w, opt = GW.opt;
+  const rows = [];
+  const vStar = opt.V[w.start];
+  rows.push(`<tr><td class="plan-c" style="font-weight:600">Best possible plan (value iteration)</td><td class="num">V*(start) = ${fmt(vStar)}</td><td class="num">${opt.sweeps} sweeps</td></tr>`);
+  if (GW.algo === 'vi') {
+    rows.push(`<tr><td>This panel's solve</td><td class="num">V(start) = ${fmt(GW.viV[w.start])}</td><td class="num">${GW.viSweeps} sweeps${GW.viDone ? ' · converged' : ''}</td></tr>`);
+  } else {
+    const piV = evalPolicy(w, s => argmaxQ(GW.L.Q[s]));
+    let okCnt = 0, tot = 0;
+    for (let s = 0; s < opt.V.length; s++) {
+      if (w.walls.has(s) || w.terms.has(s)) continue;
+      tot++;
+      if (qExact(w, s, argmaxQ(GW.L.Q[s]), opt.V) >= opt.V[s] - 1e-6) okCnt++;
+    }
+    const col = GW.algo === 'ql' ? 'learn-c' : 'sarsa-c';
+    const name = GW.algo === 'ql' ? 'Q-learning agent' : 'SARSA agent';
+    const last = GW.L.rets.slice(-20);
+    const avg = last.length ? last.reduce((a, b) => a + b, 0) / last.length : NaN;
+    rows.push(`<tr><td class="${col}" style="font-weight:600">${name}'s greedy plan</td><td class="num">V(start) = ${fmt(piV[w.start])}</td><td class="num">${Math.round(100 * okCnt / Math.max(1, tot))}% of states already optimal</td></tr>`);
+    rows.push(`<tr><td>While learning</td><td class="num">${GW.L.ep} episodes</td><td class="num">avg return (last 20): ${isNaN(avg) ? '–' : fmt(avg, 1)}</td></tr>`);
+    const gap = vStar - piV[w.start];
+    $('#gw-say').textContent = GW.L.ep === 0
+      ? PRESETS[GW.presetKey].note
+      : (gap < 0.05 ? `After ${GW.L.ep} episodes the agent's plan is as good as the best possible one — V(start) = ${fmt(piV[w.start])}.`
+        : `After ${GW.L.ep} episodes the agent's plan is worth ${fmt(piV[w.start])} from the start; the best possible is ${fmt(vStar)}. Gap: ${fmt(gap)}.`);
+  }
+  $('#gw-metrics tbody').innerHTML = rows.join('');
+}
+function gwChart() {
+  if (GW.algo === 'vi') {
+    drawSeries($('#gw-chart'), GW.viTrace.length ? [{ data: GW.viTrace, color: css('--plan') }] : [], { x: 'sweep', empty: 'V(start) after each sweep will appear here.' });
+  } else {
+    const col = GW.algo === 'ql' ? css('--learn') : css('--sarsa');
+    const data = GW.L.rets.slice(-500);
+    drawSeries($('#gw-chart'), data.length > 1 ? [{ data, color: col, dots: true }, { data, color: col, avg: 20 }] : [], { x: 'episode', empty: 'Return per episode will appear here — press Run.' });
+  }
+}
+function gwFrame() {
+  if (GW.algo === 'vi') {
+    if (!GW.viDone) gwViStep();
+    gwDraw(); gwMetrics(); gwChart();
+    if (!GW.viDone && GW.running) GW.raf = requestAnimationFrame(gwFrame);
+    else { GW.running = false; $('#gw-run').textContent = 'Run'; }
+  } else {
+    const n = +$('#gw-speed').value;
+    let last = null;
+    for (let i = 0; i < n; i++) last = learnStep(GW.L, GW.w, GW.algo);
+    if (last) gwLogUpdate(last);
+    gwDraw(); gwMetrics(); gwChart();
+    if (GW.running) GW.raf = requestAnimationFrame(gwFrame);
+  }
+}
+$('#gw-run').addEventListener('click', () => {
+  GW.running = !GW.running;
+  $('#gw-run').textContent = GW.running ? 'Pause' : 'Run';
+  if (GW.running) { if (GW.algo === 'vi' && GW.viDone) { GW.viV = new Array(GW.w.cols * GW.w.rows).fill(0); GW.viSweeps = 0; GW.viDone = false; GW.viTrace = []; } gwFrame(); }
+  else cancelAnimationFrame(GW.raf);
+});
+$('#gw-step').addEventListener('click', () => {
+  GW.running = false; cancelAnimationFrame(GW.raf); $('#gw-run').textContent = 'Run';
+  if (GW.algo === 'vi') { if (!GW.viDone) gwViStep(); }
+  else gwLogUpdate(learnStep(GW.L, GW.w, GW.algo));
+  gwDraw(); gwMetrics(); gwChart();
+});
+$('#gw-reset').addEventListener('click', gwResetLearning);
+$$('[data-algo]').forEach(b => b.addEventListener('click', () => {
+  GW.algo = b.dataset.algo;
+  $$('[data-algo]').forEach(o => o.setAttribute('aria-pressed', String(o === b)));
+  $('#gw-learner-grp').style.opacity = GW.algo === 'vi' ? .45 : 1;
+  $('#gw-speed-wrap').style.opacity = GW.algo === 'vi' ? .45 : 1;
+  gwResetLearning();
+  if (GW.algo === 'vi' && reduceMotion) { let guard = 0; while (!GW.viDone && guard++ < 500) gwViStep(); gwDraw(); gwMetrics(); gwChart(); }
+}));
+$$('[data-preset]').forEach(b => b.addEventListener('click', () => gwApplyPreset(b.dataset.preset)));
+['gw-gamma', 'gw-noise', 'gw-living'].forEach(id => $('#' + id).addEventListener('input', () => {
+  gwSyncOutputs(); gwEnvFromSliders(); gwRecomputeOpt();
+  if (GW.algo === 'vi') { GW.viV = new Array(GW.w.cols * GW.w.rows).fill(0); GW.viSweeps = 0; GW.viDone = false; GW.viTrace = []; }
+  gwDraw(); gwMetrics(); gwChart();
+}));
+['gw-alpha', 'gw-eps'].forEach(id => $('#' + id).addEventListener('input', () => {
+  gwSyncOutputs();
+  GW.L.alpha = +$('#gw-alpha').value;
+  GW.L.eps = GW.L.eps0 = +$('#gw-eps').value;
+}));
+$('#gw-decay').addEventListener('change', () => { GW.L.decay = $('#gw-decay').checked; });
+$('#gw-speed').addEventListener('input', gwSyncOutputs);
+['gw-show-heat', 'gw-show-arr', 'gw-show-num', 'gw-show-opt'].forEach(id => $('#' + id).addEventListener('change', gwDraw));
+$$('#gw-tools button').forEach(b => b.addEventListener('click', () => {
+  GW.tool = b.dataset.tool;
+  $$('#gw-tools button').forEach(o => o.setAttribute('aria-pressed', String(o === b)));
+}));
+const gwCv = $('#gw-cv');
+function gwCellAt(e) {
+  const rect = gwCv.getBoundingClientRect();
+  const pad = 8, W = rect.width, H = rect.height, w = GW.w;
+  const cs = Math.min((W - 2 * pad) / w.cols, (H - 2 * pad) / w.rows);
+  const ox = (W - cs * w.cols) / 2, oy = (H - cs * w.rows) / 2;
+  const c = Math.floor((e.clientX - rect.left - ox) / cs), r = Math.floor((e.clientY - rect.top - oy) / cs);
+  if (r < 0 || c < 0 || r >= w.rows || c >= w.cols) return -1;
+  return r * w.cols + c;
+}
+function gwPaint(s) {
+  if (s < 0 || s === GW.lastCell) return;
+  GW.lastCell = s;
+  const w = GW.w, t = GW.tool;
+  if (t === 'wall') { if (s !== w.start && !w.terms.has(s)) w.walls.has(s) ? w.walls.delete(s) : w.walls.add(s); }
+  else if (t === 'goal') { w.walls.delete(s); if (s !== w.start) w.terms.set(s, GW.presetKey === 'lecture' || GW.presetKey === 'maze' ? 10 : 1); }
+  else if (t === 'trap') { w.walls.delete(s); if (s !== w.start) w.terms.set(s, GW.presetKey === 'cliff' ? -100 : -1); }
+  else if (t === 'start') { if (!w.walls.has(s) && !w.terms.has(s)) { w.start = s; GW.L.s = s; } }
+  else { w.walls.delete(s); w.terms.delete(s); }
+  if (![...w.terms.values()].some(v => v > 0)) w.terms.set(GW.w.cols - 1, GW.presetKey === 'lecture' ? 10 : 1);
+  gwRecomputeOpt();
+  if (GW.algo === 'vi') { GW.viV = new Array(w.cols * w.rows).fill(0); GW.viSweeps = 0; GW.viDone = false; GW.viTrace = []; }
+  gwDraw(); gwMetrics();
+}
+gwCv.addEventListener('pointerdown', e => { GW.painting = true; GW.lastCell = -1; gwCv.setPointerCapture(e.pointerId); gwPaint(gwCellAt(e)); e.preventDefault(); });
+gwCv.addEventListener('pointermove', e => { if (GW.painting) gwPaint(gwCellAt(e)); });
+['pointerup', 'pointercancel'].forEach(t => gwCv.addEventListener(t, () => { GW.painting = false; GW.lastCell = -1; }));
+fig(gwCv, () => gwDraw());
+fig($('#gw-chart'), gwChart);
+gwApplyPreset('lecture');
+$('#gw-learner-grp').style.opacity = .45;
+$('#gw-speed-wrap').style.opacity = .45;
+// solve VI once so the page opens with something meaningful
+{ let guard = 0; while (!GW.viDone && guard++ < 500) gwViStep(); gwDraw(); gwMetrics(); gwChart(); }
+
+/* ---------- cliff experiment ---------- */
+const CL = { vote: '', ran: false, paths: null };
+function clBase() { return cliffWorld(); }
+function clDrawEmpty() {
+  const w = clBase();
+  drawWorld($('#cl-cv'), w, { V: null, heat: false, paths: CL.paths || [] });
+}
+function greedyPath(w, Q) {
+  const cells = [w.start]; let s = w.start, guard = 0;
+  const seen = new Set([s]);
+  while (guard++ < 80) {
+    const a = argmaxQ(Q[s]);
+    const s2 = moveTo(w, s, a);
+    cells.push(s2);
+    if (w.terms.has(s2) || seen.has(s2)) break;
+    seen.add(s2); s = s2;
+  }
+  return cells;
+}
+$('#cl-run').addEventListener('click', () => {
+  const res = {};
+  for (const algo of ['ql', 'sarsa']) {
+    const w = clBase();
+    const L = makeLearner(w, { alpha: 0.5, eps: 0.1, decay: false, seed: algo === 'ql' ? 11 : 22 });
+    while (L.ep < 500) learnStep(L, w, algo);
+    res[algo] = { path: greedyPath(w, L.Q), avg: L.rets.reduce((a, b) => a + b, 0) / L.rets.length };
+  }
+  CL.paths = [
+    { cells: res.ql.path, color: css('--learn') },
+    { cells: res.sarsa.path, color: css('--sarsa'), dash: [7, 5] }
+  ];
+  CL.ran = true;
+  clDrawEmpty();
+  $('#cl-say').textContent = `While learning: Q-learning averaged ${res.ql.avg.toFixed(0)} per episode, SARSA ${res.sarsa.avg.toFixed(0)}.`;
+  const correct = 'B';
+  const verdictTxt = CL.vote ? (CL.vote === correct ? `You voted ${CL.vote} — correct. ` : `You voted ${CL.vote}; the experiment says B. `) : '';
+  $('#cl-why').textContent = verdictTxt + 'Q-learning’s greedy path hugs the cliff: its max-target evaluates pure greedy play and ignores that ε-greedy behaviour sometimes slips off the edge — so it keeps falling during training and earns less while learning. SARSA prices its own slips into the values and detours above the cliff. Same Bellman equation, one symbol apart; decay ε to 0 and both become optimal.';
+});
+$$('[data-vote]').forEach(b => b.addEventListener('click', () => {
+  CL.vote = b.dataset.vote;
+  $$('[data-vote]').forEach(o => o.classList.toggle('picked', o === b));
+  if (!CL.ran) $('#cl-say').textContent = `Vote recorded: ${CL.vote}. Now run the experiment.`;
+}));
+fig($('#cl-cv'), clDrawEmpty);
+clDrawEmpty();
+$('#cl-say').textContent = 'Vote, then run the experiment.';
+
+/* ---------- policy gradient widget ---------- */
+const PG = { thA: 0, thB: 0, b: 0, t: 0, running: false, raf: 0, hist: [], rng: mulberry32(321) };
+const PG_PA = 0.7, PG_PB = 0.4;
+function pgProbs() {
+  const m = Math.max(PG.thA, PG.thB);
+  const ea = Math.exp(PG.thA - m), eb = Math.exp(PG.thB - m);
+  return [ea / (ea + eb), eb / (ea + eb)];
+}
+function pgStep(eta) {
+  const [pa, pb] = pgProbs();
+  const aIsA = PG.rng() < pa;
+  const r = PG.rng() < (aIsA ? PG_PA : PG_PB) ? 1 : 0;
+  const adv = r - PG.b;
+  PG.b += 0.02 * (r - PG.b);
+  PG.thA += eta * adv * ((aIsA ? 1 : 0) - pa);
+  PG.thB += eta * adv * ((aIsA ? 0 : 1) - pb);
+  PG.t++;
+  if (PG.t % 10 === 0) { PG.hist.push(PG.b); if (PG.hist.length > 400) PG.hist.shift(); }
+}
+function pgRender() {
+  const [pa, pb] = pgProbs();
+  $('#pg-pa').textContent = (pa * 100).toFixed(1) + '%';
+  $('#pg-pb').textContent = (pb * 100).toFixed(1) + '%';
+  $('#pg-bar-a').style.width = (pa * 100) + '%';
+  $('#pg-bar-b').style.width = (pb * 100) + '%';
+  $('#pg-note').textContent = `Updates: ${PG.t} · baseline: ${PG.b.toFixed(2)}`;
+  drawSeries($('#pg-cv'), PG.hist.length > 1 ? [{ data: PG.hist, color: css('--pos') }] : [], { x: 'updates (×10)', empty: 'Press Run — the average reward will climb toward 0.70.' });
+}
+function pgFrame() {
+  const eta = +$('#pg-eta').value;
+  for (let i = 0; i < 30; i++) pgStep(eta);
+  pgRender();
+  if (PG.running && PG.t < 6000) PG.raf = requestAnimationFrame(pgFrame);
+  else { PG.running = false; $('#pg-run').textContent = PG.t >= 6000 ? 'Done — Reset to rerun' : 'Run'; }
+}
+$('#pg-run').addEventListener('click', () => {
+  if (PG.t >= 6000) return;
+  PG.running = !PG.running;
+  $('#pg-run').textContent = PG.running ? 'Pause' : 'Run';
+  if (PG.running) pgFrame(); else cancelAnimationFrame(PG.raf);
+});
+$('#pg-reset').addEventListener('click', () => {
+  cancelAnimationFrame(PG.raf);
+  Object.assign(PG, { thA: 0, thB: 0, b: 0, t: 0, running: false, hist: [], rng: mulberry32((Math.random() * 1e9) | 0) });
+  $('#pg-run').textContent = 'Run';
+  pgRender();
+});
+$('#pg-eta').addEventListener('input', e => { $('#pg-eta-o').textContent = (+e.target.value).toFixed(2); });
+fig($('#pg-cv'), pgRender);
+pgRender();
+
+/* ---------- nav highlight + J/K ---------- */
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => {
+    ents.forEach(en => {
+      if (en.isIntersecting) {
+        links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id));
+        const on = links.find(a => a.classList.contains('on'));
+        if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+});
+
+/* expose a small hook for automated checks */
+window.__rlDebug = { viSolve, lectureWorld, cliffWorld, makeLearner, learnStep, GW };
+redrawAll();
+})();
+</script>
+</body>
+</html>
