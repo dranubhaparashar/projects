@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on supervised learning: what learning from labelled examples means, the map of its algorithms, a playground where six classifiers fit the same data, and an overfitting lab.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Supervised Learning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the LDA & QDA and RL lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Supervised Learning <span>&middot; learning from labelled examples</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#what">What it is</a>
+      <a href="#map">The map</a>
+      <a href="#playground">Playground</a>
+      <a href="#overfit">Overfitting</a>
+      <a href="#recipe">The recipe</a>
+      <a href="#choose">Choosing</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · the workhorse paradigm</div>
+      <h1>Supervised Learning</h1>
+      <div class="sub">Show the machine labelled examples; it learns the rule</div>
+      <p class="lead">Spam or not. Tumour or not. House price from size. Every one of these is the same game: you hand over examples where the right answer is attached, and the algorithm builds a rule that works on examples it has never seen. This lecture is the map of that game and its players &mdash; try being the teacher yourself, on the right.</p>
+      <dl class="facts">
+        <div><dt>Input</dt><dd>Pairs (x, y): features with the correct label attached</dd></div>
+        <div><dt>Output</dt><dd>A rule &ycirc;(x) that generalises to new data</dd></div>
+        <div><dt>Two flavours</dt><dd>Classification (y is a category) &middot; regression (y is a number)</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="fig-head">
+        <div class="seg" role="group" aria-label="Which class to teach">
+          <button type="button" data-teach="0" aria-pressed="true"><i class="sw dot" style="background:var(--cA)"></i>Teach class A</button>
+          <button type="button" data-teach="1" aria-pressed="false"><i class="sw dot" style="background:var(--cB)"></i>Teach class B</button>
+        </div>
+        <button type="button" class="btn" id="teach-clear">Clear</button>
+      </div>
+      <div class="plot ar-16x10"><canvas id="teach-cv" aria-label="Click to place labelled examples; the learned regions update instantly"></canvas></div>
+      <figcaption id="teach-cap">You are the teacher. Every click is one labelled example (x, y) &mdash; a point and its class. The machine (here, 1-nearest-neighbour) immediately generalises your examples into regions. That loop is the whole subject.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<main>
+<!-- WHAT -->
+<section class="chap" id="what">
+  <div class="wrap">
+    <div class="tag">Foundations</div>
+    <h2>What "supervised" means</h2>
+    <div class="prose">
+      <p>Of the three ways machines learn, supervised learning is the one with a teacher: for every training input, someone supplies the correct answer. (Unsupervised learning gets no answers and looks for structure; <a href="../reinforcement-learning/">reinforcement learning</a> gets only a delayed score. Both have their own lectures here.)</p>
+    </div>
+    <div class="eq"><div class="m">\[ \mathcal{D} = \{(x_1, y_1), (x_2, y_2), \dots, (x_n, y_n)\} \;\xrightarrow{\;\text{learning}\;}\; \hat{f}: x \mapsto \hat{y} \]</div><div class="read"><b>Read it as:</b> the data is a list of solved exercises; learning turns them into a general rule. The rule's quality is judged on <b>new</b> exercises, never on the solved ones &mdash; that single sentence is the hardest idea in this lecture, and the overfitting lab below makes it visible.</div><div class="eq-say"><b>Say it</b><em>"From a dataset of question&ndash;answer pairs, find a function f-hat that maps a new question to a good answer."</em></div></div>
+
+    <h3>Two flavours of the answer</h3>
+    <div class="uses cols2" style="max-width:860px">
+      <div><span class="which a-c">Classification</span><h4>y is a category</h4><p>Spam / not spam &middot; benign / malignant &middot; which of 3 grape cultivars. The rule draws <strong>decision boundaries</strong> in feature space &mdash; the playground below is all about their shapes. Judged by accuracy, sensitivity, specificity (<a class="word-link" href="../lda-qda/#project">defined with visuals in the LDA &amp; QDA project</a>).</p></div>
+      <div><span class="which b-c">Regression</span><h4>y is a number</h4><p>House price from size and location &middot; tomorrow's demand &middot; a patient's length of stay. The rule draws a <strong>fitted curve</strong> through the points. Judged by how far predictions miss, e.g. mean squared error.</p></div>
+    </div>
+
+    <h3>The vocabulary, in one table</h3>
+    <ul class="pts block" style="margin-top:14px">
+      <li><b>Features x</b><span>The measurements you feed in: 13 wine chemicals, 30 cell-nucleus numbers, the pixels of a photo. Also called inputs, predictors, covariates.</span></li>
+      <li><b>Label y</b><span>The right answer attached to each training example &mdash; the "supervision". Expensive: usually a human produced it.</span></li>
+      <li><b>Training set</b><span>The solved exercises the algorithm learns from.</span></li>
+      <li><b>Test set</b><span>Solved exercises <em>hidden</em> during learning, used once at the end to estimate performance on the real world. Never let the model peek.</span></li>
+      <li><b>Generalisation</b><span>Doing well on new data. The whole point. Memorising the training set is trivial and worthless &mdash; a lookup table scores 100% on training and knows nothing.</span></li>
+      <li><b>Loss function</b><span>The number being minimised: how wrong is the rule, averaged over examples.</span></li>
+    </ul>
+    <div class="eq"><div class="m">\[ \hat{f} = \arg\min_{f} \; \frac{1}{n} \sum_{i=1}^{n} L\big(y_i, f(x_i)\big), \qquad L_{\text{MSE}} = (y - \hat{y})^2, \quad L_{\text{0-1}} = \mathbb{1}[y \neq \hat{y}] \]</div><div class="read"><b>Read it as:</b> pick the rule with the smallest average loss on the training set &mdash; squared error for regression, "was it wrong?" for classification (in practice its smooth stand-in, cross-entropy). The catch: minimising <em>training</em> loss too eagerly destroys <em>test</em> performance. That tension has a name &mdash; the <a class="word-link" href="../lda-qda/#bvlab">bias&ndash;variance trade-off</a>, drawn live in the LDA &amp; QDA lecture.</div><div class="eq-say"><b>Say it</b><em>"f-hat is the function that minimises the average loss over the training examples &mdash; subject to not merely memorising them."</em></div></div>
+  </div>
+</section>
+
+<!-- MAP -->
+<section class="chap" id="map">
+  <div class="wrap">
+    <div class="tag">The cast</div>
+    <h2>The map of algorithms</h2>
+    <div class="prose">
+      <p>Every supervised algorithm answers the same question &mdash; <em>what rule connects x to y?</em> &mdash; with a different kind of rule. Group them by the shape of the rule and the zoo becomes four families:</p>
+    </div>
+    <div class="algo-grid">
+      <div class="algo"><span class="fam" style="color:var(--lda)">Linear models</span><h4>Linear regression</h4><p>Fit a straight line (plane) through the points: &ycirc; = w&middot;x + b. The starting point of all regression.</p><div class="meta">regression &middot; interpretable &middot; closed form</div></div>
+      <div class="algo"><span class="fam" style="color:var(--lda)">Linear models</span><h4>Logistic regression</h4><p>A linear score squashed to a probability. The default first classifier in industry.</p><div class="meta">classification &middot; linear boundary</div></div>
+      <div class="algo"><span class="fam" style="color:var(--lda)">Generative models</span><h4>LDA &amp; QDA</h4><p>Model each class as a Gaussian cloud and apply Bayes. Linear or curved boundaries, superb on small data. <a href="../lda-qda/">Full lecture &rarr;</a></p><div class="meta">classification &middot; closed form &middot; small n</div></div>
+      <div class="algo"><span class="fam" style="color:var(--lda)">Generative models</span><h4>Naive Bayes</h4><p>Bayes with a bold shortcut: pretend features are independent. Crude, fast, shockingly useful for text (spam filters).</p><div class="meta">classification &middot; very fast</div></div>
+      <div class="algo"><span class="fam" style="color:var(--cA)">Instance-based</span><h4>k-nearest neighbours</h4><p>No formula at all: a new point is classified by a vote of its k closest training points. The data <em>is</em> the model.</p><div class="meta">both &middot; no training &middot; k = flexibility dial</div></div>
+      <div class="algo"><span class="fam" style="color:var(--cB)">Trees &amp; ensembles</span><h4>Decision tree</h4><p>A flowchart of yes/no questions ("is radius &gt; 15?"). Boundaries are axis-aligned rectangles. Humans can read it.</p><div class="meta">both &middot; interpretable &middot; depth = flexibility</div></div>
+      <div class="algo"><span class="fam" style="color:var(--cB)">Trees &amp; ensembles</span><h4>Random forest</h4><p>Hundreds of decorrelated trees, each trained on a reshuffled sample, voting together. Averaging slashes variance.</p><div class="meta">both &middot; strong tabular default</div></div>
+      <div class="algo"><span class="fam" style="color:var(--cB)">Trees &amp; ensembles</span><h4>Gradient boosting</h4><p>Trees built one after another, each correcting the last one's mistakes. XGBoost/LightGBM win most tabular-data competitions.</p><div class="meta">both &middot; state of the art on tables</div></div>
+      <div class="algo"><span class="fam" style="color:var(--cC)">Margin &amp; kernels</span><h4>Support vector machine</h4><p>Place the boundary to maximise the safety gap to the nearest points; kernels let the "line" live in a bent space.</p><div class="meta">classification &middot; medium n</div></div>
+      <div class="algo"><span class="fam" style="color:var(--cC)">Neural networks</span><h4>Neural nets / deep learning</h4><p>Stacks of linear models with bends between them &mdash; a universal shape-fitter. Unbeatable on images, audio, text; data-hungry on small tables.</p><div class="meta">both &middot; perception tasks &middot; big data</div></div>
+    </div>
+    <p class="note" style="margin-top:14px">Six of these run live in the playground below &mdash; on the same data, so their personalities show.</p>
+  </div>
+</section>
+
+<!-- PLAYGROUND -->
+<section class="chap" id="playground">
+  <div class="wrap">
+    <div class="tag">Interactive lab</div>
+    <h2>One dataset, six minds</h2>
+    <div class="prose">
+      <p>The fastest way to understand an algorithm is to watch the <strong>shape of the boundary it is capable of drawing</strong>. Pick a dataset, pick an algorithm, drag its flexibility dial &mdash; the tinted regions are the rule it learned. Train accuracy is how well it memorised; <strong>test accuracy</strong> (2,000 fresh points from the same source) is what actually counts.</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head">
+          <div class="btns" role="group" aria-label="Dataset">
+            <button type="button" class="btn" data-ds="blobs">Two blobs</button>
+            <button type="button" class="btn" data-ds="moons">Two moons</button>
+            <button type="button" class="btn" data-ds="circles">Circle in a ring</button>
+            <button type="button" class="btn" data-ds="xor">XOR corners</button>
+          </div>
+        </div>
+        <div class="plot ar-16x10"><canvas id="pg-cv" aria-label="Training points with the chosen algorithm's learned decision regions"></canvas></div>
+        <div class="legend" style="margin-top:10px">
+          <span><i class="sw dot" style="background:var(--cA)"></i>class A (train)</span>
+          <span><i class="sw dot" style="background:var(--cB)"></i>class B (train)</span>
+          <span>tinted regions = the learned rule</span>
+        </div>
+        <div class="tbl-wrap" style="margin-top:14px">
+          <table class="metrics"><tbody id="pg-metrics"></tbody></table>
+        </div>
+        <p class="say-line" id="pg-say"></p>
+        <div class="btns" style="margin-top:14px">
+          <button type="button" class="btn primary" id="pg-race">Leaderboard: fit all six on this data</button>
+        </div>
+        <div class="tbl-wrap" style="margin-top:10px" id="pg-board"></div>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>Algorithm</h4>
+          <div class="seg" role="group" aria-label="Algorithm" id="pg-algos" style="flex-direction:column;align-items:stretch;border-radius:10px">
+            <button type="button" data-algo="knn" aria-pressed="true">k-nearest neighbours</button>
+            <button type="button" data-algo="logit" aria-pressed="false">Logistic regression</button>
+            <button type="button" data-algo="lda" aria-pressed="false">LDA</button>
+            <button type="button" data-algo="qda" aria-pressed="false">QDA</button>
+            <button type="button" data-algo="tree" aria-pressed="false">Decision tree</button>
+            <button type="button" data-algo="forest" aria-pressed="false">Random forest</button>
+          </div>
+          <div class="ctrl" id="pg-hyp-wrap"><div class="top"><label for="pg-hyp" id="pg-hyp-lbl">k (neighbours consulted)</label><output id="pg-hyp-o">7</output></div><input type="range" id="pg-hyp" min="1" max="51" step="2" value="7"></div>
+          <p class="note" id="pg-algo-note"></p>
+        </div>
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="pg-n">Training points per class</label><output id="pg-n-o">60</output></div><input type="range" id="pg-n" min="15" max="150" step="5" value="60"></div>
+          <div class="ctrl"><div class="top"><label for="pg-noise">Noise</label><output id="pg-noise-o">0.25</output></div><input type="range" id="pg-noise" min="0.05" max="0.6" step="0.05" value="0.25"></div>
+          <button type="button" class="btn" id="pg-new">Draw a new sample</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- OVERFIT -->
+<section class="chap" id="overfit">
+  <div class="wrap">
+    <div class="tag">The central danger</div>
+    <h2>Overfitting: when memorising beats learning</h2>
+    <div class="prose">
+      <p>Give any flexible algorithm enough freedom and it will fit the training set perfectly &mdash; noise, mistakes and all. The train score climbs to 100% while the test score turns around and falls. Watch it happen: a decision tree on the two-moons data, with depth as the freedom dial.</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="two" style="gap:16px">
+          <div><div class="plot" style="aspect-ratio:1.1"><canvas id="of-cv" aria-label="Decision tree regions at the chosen depth"></canvas></div><figcaption style="text-align:center">the rule at this depth</figcaption></div>
+          <div><div class="plot" style="aspect-ratio:1.1"><canvas id="of-chart" aria-label="Train and test accuracy as tree depth grows"></canvas></div><figcaption style="text-align:center">train vs test accuracy by depth</figcaption></div>
+        </div>
+        <p class="say-line" id="of-say"></p>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="of-d">Tree depth (freedom)</label><output id="of-d-o">3</output></div><input type="range" id="of-d" min="1" max="12" step="1" value="3"></div>
+          <button type="button" class="btn" id="of-new">New training sample</button>
+        </div>
+        <div class="grp">
+          <p class="note"><b style="color:var(--cA)">Teal line:</b> train accuracy &mdash; always rises with freedom.<br><b style="color:var(--qda)">Crimson line:</b> test accuracy &mdash; rises, peaks, then <em>falls</em> as the tree starts carving rectangles around individual noisy points.</p>
+          <p class="note">The gap between the lines is memorisation. Model selection = choosing the depth where the crimson line peaks &mdash; in practice via a held-out validation set or cross-validation.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RECIPE -->
+<section class="chap" id="recipe">
+  <div class="wrap">
+    <div class="tag">Method</div>
+    <h2>The universal recipe</h2>
+    <div class="prose"><p>Whatever the algorithm, a supervised project follows the same five moves &mdash; both lectures on this site follow them to the letter:</p></div>
+    <ol class="steps">
+      <li><div><b>Split before anything else.</b> Lock a test set away (say 30%). It is touched exactly once, at the very end. Peeking = fooling yourself.</div></li>
+      <li><div><b>Look at the data.</b> Class balance, feature ranges, obvious separations, outliers. (The <a class="word-link" href="../lda-qda/#project">tumour project</a> starts with exactly this table.)</div></li>
+      <li><div><b>Fit a simple baseline first.</b> Logistic regression or LDA. Any fancier model must beat it to earn its complexity.</div></li>
+      <li><div><b>Tune flexibility on validation data,</b> not on the test set: cross-validation chooses k, depth, regularisation &mdash; the peak of the crimson curve above.</div></li>
+      <li><div><b>Report on the untouched test set,</b> with the metric that matches the real cost &mdash; in screening, a missed cancer is not worth four false alarms. (<a class="word-link" href="../lda-qda/#project">The threshold explorer</a> makes this choice physical.)</div></li>
+    </ol>
+  </div>
+</section>
+
+<!-- CHOOSE -->
+<section class="chap" id="choose">
+  <div class="wrap">
+    <div class="tag">Judgement</div>
+    <h2>Choosing an algorithm</h2>
+    <div class="rule">
+      <div>
+        <h4>Reach for simple + generative (logistic, LDA/QDA, naive Bayes) when</h4>
+        <ul>
+          <li>data is small or expensive &mdash; hundreds of rows, not millions</li>
+          <li>you must explain the rule to a regulator, doctor or examiner</li>
+          <li>a stable baseline is needed in a day, not a month</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Reach for flexible (forests, boosting, nets) when</h4>
+        <ul>
+          <li>data is plentiful and the truth is clearly non-linear</li>
+          <li>tabular business data &rarr; gradient boosting first</li>
+          <li>images, audio, text &rarr; neural networks, no contest</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px;max-width:70ch"><strong>The honest summary:</strong> flexibility is bought with data. Simple models have bias but survive small samples; flexible models need volume to tame their variance &mdash; the <a class="word-link" href="../lda-qda/#bvlab">bias&ndash;variance lab</a> shows the purchase price, and the tumour project shows a 1936 linear model beating a curved one on 569 real patients.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>The lecture in five lines</h2>
+    <ul class="take">
+      <li>Supervised learning turns solved examples (x, y) into a rule &ycirc;(x) &mdash; judged only on unseen data.</li>
+      <li>Two flavours: classification draws boundaries, regression fits curves.</li>
+      <li>Every algorithm is a different <em>shape of rule</em>: lines, Gaussian clouds, neighbour votes, rectangle flowcharts, committees of trees.</li>
+      <li>Flexibility is a dial, and overfitting is what happens at the far end: train score up, test score down.</li>
+      <li>The method is fixed: split &rarr; explore &rarr; baseline &rarr; tune on validation &rarr; report once on test, with the metric that matches the real cost.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A model scores 100% on training data and 71% on test data. What happened, and what would you turn down?</summary><p>Overfitting: it memorised the training set, noise included. Turn down flexibility &mdash; smaller depth, bigger k, more regularisation &mdash; or get more data. The overfitting lab shows exactly this signature.</p></details>
+      <details class="q"><summary>Why must the test set stay untouched until the very end?</summary><p>Every decision you make after looking at test results leaks information into the model. The test set then measures your tuning, not the real world. Tune on validation folds; spend the test set once.</p></details>
+      <details class="q"><summary>k-NN with k = 1 vs k = 51 &mdash; which overfits, which underfits?</summary><p>k = 1 overfits: every training point rules its own tiny island, noise included. k = 51 underfits: the vote averages over half the dataset and smears real structure. Watch both in the playground.</p></details>
+      <details class="q"><summary>Where do LDA, QDA and reinforcement learning sit relative to this lecture?</summary><p>LDA &amp; QDA are supervised classifiers of the generative family &mdash; their lecture is the deep dive into one cell of this map. Reinforcement learning is a different paradigm entirely: no labels, only delayed rewards from interaction.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn" href="../lda-qda/">Deep dive: LDA &amp; QDA &rarr;</a>
+      <a class="btn" href="../reinforcement-learning/">The other paradigm: Reinforcement Learning &rarr;</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>James, Witten, Hastie, Tibshirani. <a href="https://www.statlearning.com/" target="_blank" rel="noopener">An Introduction to Statistical Learning</a> &mdash; free PDF; chapters 2&ndash;5 are this lecture, expanded.</li>
+      <li>scikit-learn. <a href="https://scikit-learn.org/stable/supervised_learning.html" target="_blank" rel="noopener">Supervised learning user guide</a> &mdash; every algorithm above, runnable in ten lines.</li>
+      <li>Hastie, Tibshirani, Friedman. The Elements of Statistical Learning &mdash; the reference text, free PDF.</li>
+      <li>Domingos (2012). A few useful things to know about machine learning. CACM 55(10) &mdash; the best 9 pages on generalisation ever written.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const COLS = () => [css('--cA'), css('--cB')];
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+
+/* canvas helpers */
+function prep(cv, xlim, ylim) {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, k = Math.min(w / (xlim[1] - xlim[0]), h / (ylim[1] - ylim[0]));
+  const cx = (xlim[0] + xlim[1]) / 2, cy = (ylim[0] + ylim[1]) / 2;
+  return { ctx, w, h, k, X: x => w / 2 + (x - cx) * k, Y: y => h / 2 - (y - cy) * k, iX: px => cx + (px - w / 2) / k, iY: py => cy - (py - h / 2) / k };
+}
+function regions(v, model, cols, cell, alpha) {
+  if (!model) return;
+  cell = cell || 6; alpha = alpha == null ? 0.16 : alpha;
+  const c = v.ctx; c.save(); c.globalAlpha = alpha;
+  for (let py = 0; py < v.h; py += cell) for (let px = 0; px < v.w; px += cell) {
+    const s = model.score([v.iX(px + cell / 2), v.iY(py + cell / 2)]);
+    c.fillStyle = cols[s[0] >= s[1] ? 0 : 1];
+    c.fillRect(px, py, cell + 0.6, cell + 0.6);
+  }
+  c.restore();
+}
+function dots(v, X, y, cols, r, alpha) {
+  const c = v.ctx, edge = css('--surface');
+  c.save(); c.lineWidth = 1; c.globalAlpha = alpha || 1;
+  X.forEach((p, i) => { c.beginPath(); c.arc(v.X(p[0]), v.Y(p[1]), r || 3.2, 0, 7); c.fillStyle = cols[y[i]]; c.fill(); c.strokeStyle = edge; c.stroke(); });
+  c.restore();
+}
+const figs = [];
+function fig(cv, draw) {
+  figs.push(draw); let raf = 0;
+  if ('ResizeObserver' in window) new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); }).observe(cv);
+}
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ---------- linear algebra bits for LDA/QDA ---------- */
+const dot2 = (a, b) => a[0] * b[0] + a[1] * b[1];
+function fitGauss2(X, y) {
+  const idx = [X.filter((_, i) => y[i] === 0), X.filter((_, i) => y[i] === 1)];
+  const mu = idx.map(P => [P.reduce((s, p) => s + p[0], 0) / P.length, P.reduce((s, p) => s + p[1], 0) / P.length]);
+  const S = idx.map((P, k) => {
+    let a = 0, b = 0, d = 0;
+    P.forEach(p => { const dx = p[0] - mu[k][0], dy = p[1] - mu[k][1]; a += dx * dx; b += dx * dy; d += dy * dy; });
+    const m = Math.max(1, P.length - 1);
+    return [[a / m + 1e-4, b / m], [b / m, d / m + 1e-4]];
+  });
+  const n0 = idx[0].length, n1 = idx[1].length;
+  const Sp = [[0, 0], [0, 0]];
+  for (let k = 0; k < 2; k++) { const w = (idx[k].length - 1) / (n0 + n1 - 2); Sp[0][0] += S[k][0][0] * w; Sp[0][1] += S[k][0][1] * w; Sp[1][0] += S[k][1][0] * w; Sp[1][1] += S[k][1][1] * w; }
+  return { mu, S, Sp, pri: [n0 / (n0 + n1), n1 / (n0 + n1)] };
+}
+const inv2 = M => { const d = M[0][0] * M[1][1] - M[0][1] * M[1][0]; return [[M[1][1] / d, -M[0][1] / d], [-M[1][0] / d, M[0][0] / d]]; };
+const det2 = M => M[0][0] * M[1][1] - M[0][1] * M[1][0];
+function ldaModel2(g) {
+  const Si = inv2(g.Sp);
+  const a = g.mu.map(m => [Si[0][0] * m[0] + Si[0][1] * m[1], Si[1][0] * m[0] + Si[1][1] * m[1]]);
+  const c0 = g.mu.map((m, k) => -0.5 * dot2(m, a[k]) + Math.log(g.pri[k]));
+  return { score: x => [dot2(x, a[0]) + c0[0], dot2(x, a[1]) + c0[1]] };
+}
+function qdaModel2(g) {
+  const Si = g.S.map(inv2), ld = g.S.map(S => Math.log(Math.max(det2(S), 1e-12)));
+  return { score: x => g.mu.map((m, k) => { const d = [x[0] - m[0], x[1] - m[1]]; const q = d[0] * (Si[k][0][0] * d[0] + Si[k][0][1] * d[1]) + d[1] * (Si[k][1][0] * d[0] + Si[k][1][1] * d[1]); return -0.5 * ld[k] - 0.5 * q + Math.log(g.pri[k]); }) };
+}
+
+/* ---------- the six algorithms ---------- */
+function knnModel(X, y, k) {
+  k = Math.min(k, X.length);
+  return { score: p => {
+    const d = X.map((q, i) => [(q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2, y[i]]);
+    d.sort((a, b) => a[0] - b[0]);
+    let c1 = 0; for (let i = 0; i < k; i++) c1 += d[i][1];
+    return [k - c1, c1];
+  } };
+}
+function logitModel(X, y) {
+  const n = X.length;
+  const mx = [0, 0], sd = [0, 0];
+  X.forEach(p => { mx[0] += p[0] / n; mx[1] += p[1] / n; });
+  X.forEach(p => { sd[0] += (p[0] - mx[0]) ** 2 / n; sd[1] += (p[1] - mx[1]) ** 2 / n; });
+  sd[0] = Math.sqrt(sd[0]) || 1; sd[1] = Math.sqrt(sd[1]) || 1;
+  const Z = X.map(p => [(p[0] - mx[0]) / sd[0], (p[1] - mx[1]) / sd[1]]);
+  let w = [0, 0], b = 0;
+  for (let it = 0; it < 400; it++) {
+    let g0 = 0, g1 = 0, gb = 0;
+    for (let i = 0; i < n; i++) {
+      const t = w[0] * Z[i][0] + w[1] * Z[i][1] + b;
+      const p = 1 / (1 + Math.exp(-t)), e = p - y[i];
+      g0 += e * Z[i][0]; g1 += e * Z[i][1]; gb += e;
+    }
+    w[0] -= 2 * g0 / n; w[1] -= 2 * g1 / n; b -= 2 * gb / n;
+  }
+  return { score: p => { const t = w[0] * (p[0] - mx[0]) / sd[0] + w[1] * (p[1] - mx[1]) / sd[1] + b; return [-t, t]; } };
+}
+function treeModel(X, y, maxDepth, rng, bagFeat) {
+  const minLeaf = 3;
+  function build(idx, depth) {
+    let n1 = 0; idx.forEach(i => { n1 += y[i]; });
+    const n0 = idx.length - n1;
+    if (depth >= maxDepth || idx.length < 2 * minLeaf || n0 === 0 || n1 === 0) return { leaf: [n0, n1] };
+    let best = null;
+    const feats = bagFeat && rng ? [rng() * 2 | 0] : [0, 1];
+    for (const f of feats) {
+      const vals = idx.map(i => X[i][f]).sort((a, b) => a - b);
+      const cand = new Set();
+      for (let q = 1; q < 18; q++) cand.add(vals[Math.floor(q * vals.length / 18)]);
+      for (const t of cand) {
+        let l0 = 0, l1 = 0, r0 = 0, r1 = 0;
+        idx.forEach(i => { if (X[i][f] < t) { y[i] ? l1++ : l0++; } else { y[i] ? r1++ : r0++; } });
+        const nl = l0 + l1, nr = r0 + r1;
+        if (nl < minLeaf || nr < minLeaf) continue;
+        const gini = nl * (1 - (l0 / nl) ** 2 - (l1 / nl) ** 2) + nr * (1 - (r0 / nr) ** 2 - (r1 / nr) ** 2);
+        if (!best || gini < best.g) best = { g: gini, f, t };
+      }
+    }
+    if (!best) return { leaf: [n0, n1] };
+    return { f: best.f, t: best.t, l: build(idx.filter(i => X[i][best.f] < best.t), depth + 1), r: build(idx.filter(i => X[i][best.f] >= best.t), depth + 1) };
+  }
+  const root = build([...X.keys()], 0);
+  const walk = (nd, p) => nd.leaf ? nd.leaf : walk(p[nd.f] < nd.t ? nd.l : nd.r, p);
+  return { score: p => walk(root, p) };
+}
+function forestModel(X, y, nTrees, rng) {
+  const trees = [];
+  for (let t = 0; t < nTrees; t++) {
+    const bi = X.map(() => rng() * X.length | 0);
+    trees.push(treeModel(bi.map(i => X[i]), bi.map(i => y[i]), 7, rng, true));
+  }
+  return { score: p => {
+    let v1 = 0;
+    trees.forEach(tr => { const s = tr.score(p); v1 += s[1] / (s[0] + s[1]); });
+    return [trees.length - v1, v1];
+  } };
+}
+function accOf(model, X, y) { let c = 0; X.forEach((p, i) => { const s = model.score(p); if ((s[1] > s[0] ? 1 : 0) === y[i]) c++; }); return c / X.length; }
+
+/* ---------- datasets ---------- */
+function genData(kind, nPer, noise, seed) {
+  const r = mulberry32(seed), X = [], y = [];
+  const put = (p, k) => { X.push(p); y.push(k); };
+  for (let i = 0; i < nPer; i++) {
+    const g = () => gaussOf(r) * noise;
+    if (kind === 'blobs') {
+      put([-1.5 + gaussOf(r) * (0.6 + noise), 0.3 + gaussOf(r) * (0.5 + noise)], 0);
+      put([1.5 + gaussOf(r) * (0.6 + noise), -0.3 + gaussOf(r) * (0.5 + noise)], 1);
+    } else if (kind === 'moons') {
+      const t = r() * Math.PI;
+      put([2.4 * Math.cos(t) - 0.6 + g(), 1.8 * Math.sin(t) - 0.6 + g()], 0);
+      put([0.6 - 2.4 * Math.cos(t) + g(), 0.6 - 1.8 * Math.sin(t) + 0.4 + g()], 1);
+    } else if (kind === 'circles') {
+      const a = r() * 2 * Math.PI, a2 = r() * 2 * Math.PI;
+      const r1 = 0.9 + g(), r2 = 2.4 + g();
+      put([r1 * Math.cos(a) * 1.3, r1 * Math.sin(a)], 0);
+      put([r2 * Math.cos(a2) * 1.3, r2 * Math.sin(a2)], 1);
+    } else { /* xor */
+      const sx = r() < 0.5 ? 1 : -1, sy = r() < 0.5 ? 1 : -1;
+      put([sx * 1.6 + gaussOf(r) * (0.45 + noise * 0.8), sy * 1.1 + gaussOf(r) * (0.35 + noise * 0.6)], sx * sy > 0 ? 0 : 1);
+      const sx2 = r() < 0.5 ? 1 : -1, sy2 = r() < 0.5 ? 1 : -1;
+      put([sx2 * 1.6 + gaussOf(r) * (0.45 + noise * 0.8), sy2 * 1.1 + gaussOf(r) * (0.35 + noise * 0.6)], sx2 * sy2 > 0 ? 0 : 1);
+    }
+  }
+  return { X, y };
+}
+const XL = [-5, 5], YL = [-3.2, 3.2];
+
+/* ---------- hero: teach it ---------- */
+const TE = { pts: [], lab: [], cls: 0 };
+function teachDraw() {
+  const v = prep($('#teach-cv'), XL, YL), C = COLS();
+  if (TE.pts.length >= 2 && new Set(TE.lab).size === 2) {
+    regions(v, knnModel(TE.pts, TE.lab, 1), C, 7, 0.18);
+  }
+  dots(v, TE.pts, TE.lab, C, 5);
+  if (!TE.pts.length) {
+    const c = v.ctx; c.fillStyle = css('--muted'); c.font = '14px ' + css('--f-body'); c.textAlign = 'center';
+    c.fillText('Click here to place your first labelled example', v.w / 2, v.h / 2);
+  }
+}
+$('#teach-cv').addEventListener('pointerdown', e => {
+  const r = $('#teach-cv').getBoundingClientRect();
+  const v = prep($('#teach-cv'), XL, YL);
+  const x = v.iX(e.clientX - r.left), y = v.iY(e.clientY - r.top);
+  if (!isFinite(x)) return;
+  TE.pts.push([x, y]); TE.lab.push(TE.cls);
+  teachDraw(); e.preventDefault();
+});
+$$('[data-teach]').forEach(b => b.addEventListener('click', () => {
+  TE.cls = +b.dataset.teach;
+  $$('[data-teach]').forEach(o => o.setAttribute('aria-pressed', String(o === b)));
+}));
+$('#teach-clear').addEventListener('click', () => { TE.pts = []; TE.lab = []; teachDraw(); });
+fig($('#teach-cv'), teachDraw);
+teachDraw();
+
+/* ---------- playground ---------- */
+const ALGO_META = {
+  knn: { name: 'k-nearest neighbours', hyp: { lbl: 'k (neighbours consulted)', min: 1, max: 51, step: 2, val: 7 }, note: 'No training phase: the data is the model. Small k → jagged islands (overfits); huge k → one blurry vote (underfits).' },
+  logit: { name: 'Logistic regression', hyp: null, note: 'One straight line, fitted by gradient descent on cross-entropy. Watch it shrug at the circles and XOR — no line can separate them.' },
+  lda: { name: 'LDA', hyp: null, note: 'Gaussian clouds with a shared shape → a straight boundary, fitted by counting and averaging. See the full lecture for everything inside it.' },
+  qda: { name: 'QDA', hyp: null, note: 'Each class keeps its own cloud → curved (conic) boundaries. Beautiful on the circle-in-ring data — that boundary is an ellipse.' },
+  tree: { name: 'Decision tree', hyp: { lbl: 'Max depth (freedom)', min: 1, max: 12, step: 1, val: 4 }, note: 'Axis-aligned yes/no questions → rectangular regions. Crank the depth and watch it carve boxes around single noisy points.' },
+  forest: { name: 'Random forest', hyp: { lbl: 'Number of trees', min: 1, max: 30, step: 1, val: 12 }, note: 'Many decorrelated trees vote. One tree is jumpy; thirty average into smooth, confident regions — variance reduction live.' }
+};
+const PG = { ds: 'moons', algo: 'knn', n: 60, noise: 0.25, seed: 7, hyp: { knn: 7, tree: 4, forest: 12 }, train: null, test: null, model: null };
+function pgGen() {
+  PG.train = genData(PG.ds, PG.n, PG.noise, PG.seed);
+  PG.test = genData(PG.ds, 1000, PG.noise, PG.seed + 5000);
+}
+function pgBuild(algo, hypVal) {
+  const { X, y } = PG.train;
+  if (algo === 'knn') return knnModel(X, y, hypVal);
+  if (algo === 'logit') return logitModel(X, y);
+  if (algo === 'lda') return ldaModel2(fitGauss2(X, y));
+  if (algo === 'qda') return qdaModel2(fitGauss2(X, y));
+  if (algo === 'tree') return treeModel(X, y, hypVal);
+  return forestModel(X, y, hypVal, mulberry32(PG.seed * 13 + 1));
+}
+function pgFit() { PG.model = pgBuild(PG.algo, PG.hyp[PG.algo]); }
+function pgDraw() {
+  const v = prep($('#pg-cv'), XL, YL), C = COLS();
+  regions(v, PG.model, C, PG.algo === 'knn' || PG.algo === 'forest' ? 7 : 5, 0.17);
+  dots(v, PG.train.X, PG.train.y, C, PG.n <= 25 ? 4.5 : 3.2);
+}
+function pgReport() {
+  const tr = accOf(PG.model, PG.train.X, PG.train.y), te = accOf(PG.model, PG.test.X, PG.test.y);
+  const pc = x => (x * 100).toFixed(1) + '%';
+  $('#pg-metrics').innerHTML = `<tr><td style="font-weight:600">${ALGO_META[PG.algo].name}</td><td class="num">train ${pc(tr)}</td><td class="num"><b>test ${pc(te)}</b></td><td class="num" style="color:${tr - te > 0.08 ? 'var(--qda)' : 'var(--muted)'}">gap ${pc(tr - te)}</td></tr>`;
+  $('#pg-say').textContent = tr - te > 0.1
+    ? 'A big train–test gap: this setting is memorising noise. Lower the freedom, or feed it more data.'
+    : te < 0.72 && (PG.algo === 'logit' || PG.algo === 'lda') && PG.ds !== 'blobs'
+      ? 'A straight line simply cannot cut this shape — that failure is bias, not bad luck. Try QDA, the tree, or k-NN.'
+      : 'Healthy fit: the rule does almost as well on points it has never seen.';
+}
+function pgSyncHyp() {
+  const m = ALGO_META[PG.algo].hyp;
+  $('#pg-hyp-wrap').style.display = m ? '' : 'none';
+  if (m) {
+    const el = $('#pg-hyp');
+    $('#pg-hyp-lbl').textContent = m.lbl;
+    el.min = m.min; el.max = m.max; el.step = m.step; el.value = PG.hyp[PG.algo];
+    $('#pg-hyp-o').textContent = PG.hyp[PG.algo];
+  }
+  $('#pg-algo-note').textContent = ALGO_META[PG.algo].note;
+}
+let pgT = 0;
+function pgUpdate(regen, refit) {
+  clearTimeout(pgT);
+  pgT = setTimeout(() => {
+    if (regen) pgGen();
+    if (refit || regen) pgFit();
+    pgDraw(); pgReport();
+  }, 30);
+}
+$$('#pg-algos button').forEach(b => b.addEventListener('click', () => {
+  PG.algo = b.dataset.algo;
+  $$('#pg-algos button').forEach(o => o.setAttribute('aria-pressed', String(o === b)));
+  pgSyncHyp(); pgUpdate(false, true);
+}));
+$$('[data-ds]').forEach(b => b.addEventListener('click', () => { PG.ds = b.dataset.ds; $('#pg-board').innerHTML = ''; pgUpdate(true, true); }));
+$('#pg-hyp').addEventListener('input', e => { PG.hyp[PG.algo] = +e.target.value; $('#pg-hyp-o').textContent = e.target.value; pgUpdate(false, true); });
+$('#pg-n').addEventListener('input', e => { PG.n = +e.target.value; $('#pg-n-o').textContent = e.target.value; pgUpdate(true, true); });
+$('#pg-noise').addEventListener('input', e => { PG.noise = +e.target.value; $('#pg-noise-o').textContent = (+e.target.value).toFixed(2); pgUpdate(true, true); });
+$('#pg-new').addEventListener('click', () => { PG.seed++; pgUpdate(true, true); });
+$('#pg-race').addEventListener('click', () => {
+  const rows = Object.keys(ALGO_META).map(a => {
+    const m = pgBuild(a, PG.hyp[a] || 0);
+    return { a, tr: accOf(m, PG.train.X, PG.train.y), te: accOf(m, PG.test.X, PG.test.y) };
+  }).sort((p, q) => q.te - p.te);
+  const pc = x => (x * 100).toFixed(1) + '%';
+  $('#pg-board').innerHTML = `<table><thead><tr><th>#</th><th>Algorithm</th><th class="num">Train</th><th class="num">Test (what counts)</th></tr></thead><tbody>` +
+    rows.map((r, i) => `<tr${i === 0 ? ' style="font-weight:600"' : ''}><td>${i + 1}</td><td>${ALGO_META[r.a].name}${i === 0 ? ' ← wins here' : ''}</td><td class="num">${pc(r.tr)}</td><td class="num">${pc(r.te)}</td></tr>`).join('') +
+    `</tbody></table><p class="note" style="margin-top:8px">Rankings flip when the data's shape changes — run this on each dataset. No algorithm wins everywhere (the "no free lunch" principle).</p>`;
+});
+fig($('#pg-cv'), () => { if (PG.model) pgDraw(); });
+pgGen(); pgSyncHyp(); pgFit(); pgDraw(); pgReport();
+
+/* ---------- overfitting lab ---------- */
+const OF = { seed: 11, d: 3, data: null, test: null, curves: null };
+function ofGen() {
+  OF.data = genData('moons', 80, 0.34, OF.seed);
+  OF.test = genData('moons', 1000, 0.34, OF.seed + 999);
+  OF.curves = [];
+  for (let d = 1; d <= 12; d++) {
+    const m = treeModel(OF.data.X, OF.data.y, d);
+    OF.curves.push([accOf(m, OF.data.X, OF.data.y), accOf(m, OF.test.X, OF.test.y)]);
+  }
+}
+function ofDraw() {
+  const v = prep($('#of-cv'), XL, YL), C = COLS();
+  const m = treeModel(OF.data.X, OF.data.y, OF.d);
+  regions(v, m, C, 5, 0.17);
+  dots(v, OF.data.X, OF.data.y, C, 3);
+  /* chart */
+  const cv = $('#of-chart'), r = cv.getBoundingClientRect(), dp = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dp); cv.height = Math.round(r.height * dp);
+  const c = cv.getContext('2d'); c.setTransform(dp, 0, 0, dp, 0, 0);
+  const W = r.width, H = r.height, pL = 44, pB = 30, pT = 12, pR = 10;
+  const lo = 0.6, hi = 1.02;
+  const Xp = d => pL + (W - pL - pR) * (d - 1) / 11;
+  const Yp = a => pT + (H - pT - pB) * (1 - (a - lo) / (hi - lo));
+  c.strokeStyle = css('--line'); c.beginPath(); c.moveTo(pL, pT); c.lineTo(pL, H - pB); c.lineTo(W - pR, H - pB); c.stroke();
+  c.fillStyle = css('--muted'); c.font = '10.5px ' + css('--f-mono'); c.textAlign = 'right';
+  [0.6, 0.7, 0.8, 0.9, 1.0].forEach(a => { c.fillText(Math.round(a * 100) + '%', pL - 5, Yp(a) + 3); c.strokeStyle = css('--soft'); c.beginPath(); c.moveTo(pL, Yp(a)); c.lineTo(W - pR, Yp(a)); c.stroke(); });
+  c.textAlign = 'center';
+  [1, 4, 8, 12].forEach(d => c.fillText('d=' + d, Xp(d), H - 12));
+  [[0, '--cA'], [1, '--qda']].forEach(([j, col]) => {
+    c.strokeStyle = css(col); c.lineWidth = 2.2; c.beginPath();
+    OF.curves.forEach((p, i) => { const x = Xp(i + 1), y2 = Yp(p[j]); i ? c.lineTo(x, y2) : c.moveTo(x, y2); });
+    c.stroke(); c.lineWidth = 1;
+  });
+  c.strokeStyle = css('--ink'); c.setLineDash([4, 4]); c.beginPath(); c.moveTo(Xp(OF.d), pT); c.lineTo(Xp(OF.d), H - pB); c.stroke(); c.setLineDash([]);
+  const cur = OF.curves[OF.d - 1];
+  $('#of-say').textContent = `Depth ${OF.d}: train ${(cur[0] * 100).toFixed(1)}%, test ${(cur[1] * 100).toFixed(1)}% — gap ${((cur[0] - cur[1]) * 100).toFixed(1)} points. ${OF.d <= 2 ? 'Underfitting: too simple to even use the training data.' : cur[0] - cur[1] > 0.1 ? 'Overfitting: the extra depth is being spent on memorising noise.' : 'Near the sweet spot — this is the depth validation would pick.'}`;
+  $('#of-d-o').textContent = OF.d;
+}
+$('#of-d').addEventListener('input', e => { OF.d = +e.target.value; ofDraw(); });
+$('#of-new').addEventListener('click', () => { OF.seed++; ofGen(); ofDraw(); });
+fig($('#of-cv'), ofDraw);
+ofGen(); ofDraw();
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+window.__slDebug = { genData, treeModel, knnModel, logitModel, accOf, PG, OF };
+redrawAll();
+})();
+</script>
+</body>
+</html>
