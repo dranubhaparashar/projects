@@ -1,0 +1,1316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on logistic regression: why a straight line fails for yes/no, the sigmoid, odds and log-odds, log-loss, gradient descent by hand, decision boundaries, softmax, and a Titanic survival project with odds ratios, thresholds and ROC.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Logistic Regression</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+
+.cm { max-width: 520px; }
+.cm td { font-size: 1.25rem; text-align: center; }
+.cm td.ok { background: color-mix(in srgb, var(--cA) 12%, transparent); }
+.cm td.bad { background: color-mix(in srgb, var(--qda) 10%, transparent); }
+.cm th { white-space: nowrap; }
+.ortab { display: grid; gap: 10px; max-width: 980px; }
+.or-row { display: grid; grid-template-columns: minmax(0, 12em) minmax(80px, 1fr) 5.2em minmax(0, 2.2fr); gap: 12px; align-items: center; font-size: 0.9rem; }
+.or-row .or-n { font-weight: 500; }
+.or-row .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.or-row .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.or-row .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.or-row .or-v { text-align: right; }
+.or-row .or-t { color: var(--muted); font-size: 0.86rem; }
+.cf-track.one::after { display: none; }
+.pax { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 16px 18px; display: grid; gap: 8px; }
+.pax-name { font-family: var(--f-display); font-size: 1.35rem; font-weight: 600; line-height: 1.2; }
+.gauge { position: relative; height: 34px; border-radius: 8px; background: var(--soft); overflow: hidden; margin-top: 6px; }
+.gauge i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--qda), var(--cB) 50%, var(--cA)); opacity: .55; transition: width .15s ease; }
+.gauge > span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.95rem; font-weight: 500; }
+.pax-out { font-weight: 600; }
+.pax-out.ok { color: var(--cA); } .pax-out.bad { color: var(--qda); }
+#tt-form .seg { justify-self: start; }
+@media (max-width: 760px) { .or-row { grid-template-columns: minmax(0, 1fr) 5em; } .or-row .cf-track { grid-column: 1 / -1; grid-row: 2; } .or-row .or-t { grid-column: 1 / -1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Logistic Regression <span>&middot; from a line to a probability</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Why</a>
+      <a href="#sigmoid">The sigmoid</a>
+      <a href="#odds">Odds</a>
+      <a href="#loss">Log-loss</a>
+      <a href="#train">Training</a>
+      <a href="#boundary">Boundary</a>
+      <a href="#softmax">Softmax</a>
+      <a href="#project">Titanic</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.3 · classification</div>
+      <h1>Logistic Regression</h1>
+      <div class="sub">A straight line, bent into a probability</div>
+      <p class="lead">Will this student pass? Is this email spam? Did this passenger survive? When the answer is <em>yes or no</em>, we want a probability between 0 and 1. Logistic regression takes the straight line from the last chapter and squashes it through an S-shaped curve. It's the most widely used classifier in medicine, finance and the social sciences, and it's the single neuron at the heart of every neural network.</p>
+      <dl class="facts">
+        <div><dt>Model</dt><dd>p = &sigma;(w&#8320; + w&#8321;x): a line inside a sigmoid</dd></div>
+        <div><dt>Learns by</dt><dd>Minimising log-loss (maximum likelihood)</dd></div>
+        <div><dt>Gives you</dt><dd>Probabilities, a straight boundary, odds ratios</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="fig-head">
+        <div class="legend"><span><i class="sw dot" style="background:var(--cA)"></i>passed (y = 1)</span><span><i class="sw dot" style="background:var(--cB)"></i>failed (y = 0)</span><span><i class="sw" style="background:var(--lda)"></i>P(pass)</span></div>
+        <button type="button" class="btn" id="hero-reset">Reset</button>
+      </div>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Pass or fail against hours studied, with the fitted logistic curve. Hover to read a probability; click to add a student."></canvas></div>
+      <figcaption id="hero-cap">Hover to read the probability. Click in the top half to add a student who passed, or the bottom half for one who failed.</figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>9 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Yes or no needs a new line</a></li>
+    <li><a href="#sigmoid"><i>02</i>The S-curve that squashes</a></li>
+    <li><a href="#odds"><i>03</i>Odds: the hidden straight line</a></li>
+    <li><a href="#loss"><i>04</i>Punishing confident mistakes</a></li>
+    <li><a href="#train"><i>05</i>Downhill on the log-loss bowl</a></li>
+    <li><a href="#boundary"><i>06</i>A straight cut between classes</a></li>
+    <li><a href="#softmax"><i>07</i>Softmax: more than two answers</a></li>
+    <li><a href="#project"><i>08</i>Who survived the Titanic?</a></li>
+    <li><a href="#summary"><i>09</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">Foundations</div>
+    <h2>Yes or no needs a new line</h2>
+    <div class="prose">
+      <p>Why not just use linear regression on 0/1 labels? Try it. Below, the dashed line is ordinary least squares fitted to pass (1) and fail (0); we classify as &ldquo;pass&rdquo; wherever it rises above 0.5. It sort of works &mdash; until three very hard-working students arrive. They passed, as expected, so they should change nothing. Watch what they do to each model's cut-off.</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="why-cv" aria-label="Linear regression vs logistic regression on pass/fail data"></canvas></div>
+        <figcaption><span style="color:var(--muted)">&#9644; &#9644;</span> least-squares line &nbsp; <span style="color:var(--lda)">&#9644;</span> logistic curve &nbsp; red bands = &ldquo;probabilities&rdquo; below 0 or above 1, which are impossible. Vertical ticks mark each model's 0.5 cut-off.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>The experiment</h4>
+          <div class="btns"><button type="button" class="btn primary" id="why-add" aria-pressed="false">Add 3 hard workers</button></div>
+          <div class="stats">
+            <div class="stat"><div class="v" id="why-ls"></div><div class="k">line's cut-off (hours)</div></div>
+            <div class="stat"><div class="v" id="why-lg"></div><div class="k">logistic cut-off (hours)</div></div>
+            <div class="stat"><div class="v" id="why-lsm"></div><div class="k">line: misclassified</div></div>
+            <div class="stat"><div class="v" id="why-lgm"></div><div class="k">logistic: misclassified</div></div>
+          </div>
+          <p class="note" id="why-say"></p>
+        </div>
+      </div>
+    </div>
+    <h3>Two problems, one fix</h3>
+    <ul class="pts" style="margin-top:14px">
+      <li><b>Impossible outputs</b><span>A straight line runs off to &plusmn;&infin;, so it predicts &ldquo;probabilities&rdquo; like &minus;0.3 or 1.4. We need something squeezed into (0, 1).</span></li>
+      <li><b>Wrong pull</b><span>Squared error punishes a confident, <em>correct</em> prediction far from the line (the hard workers), dragging the boundary to the wrong place. We need a loss that only cares about being right.</span></li>
+      <li><b>The fix</b><span>Keep the line, z = w&#8320; + w&#8321;x, but pass it through the <strong>sigmoid</strong> &sigma;(z), and train it with <strong>log-loss</strong>. That is logistic regression.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- SIGMOID -->
+<section class="chap" id="sigmoid">
+  <div class="wrap">
+    <div class="tag">The model</div>
+    <h2>The S-curve that squashes</h2>
+    <div class="eq"><div class="m">\[ \sigma(z) = \frac{1}{1 + e^{-z}} \qquad\qquad p(x) = P(y = 1 \mid x) = \sigma(w_0 + w_1 x) \]</div><div class="read"><b>Read it as:</b> any number z goes in; a number between 0 and 1 comes out. Big positive z &rarr; close to 1; big negative z &rarr; close to 0; z = 0 &rarr; exactly 0.5. The model first computes a straight line z, then squashes it.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Sigma of z is one over one plus e to the minus z. The probability of y equals one is sigma of w-zero plus w-one x.&rdquo;</em></div><div class="eq-run" id="run-sig"></div></div>
+    <div class="two block">
+      <figure>
+        <div class="fig-head"><div class="ctrl" style="flex:1;min-width:200px"><div class="top"><label for="sig-z">Input z</label><output id="sig-z-o"></output></div><input type="range" id="sig-z" min="-8" max="8" step="0.1" value="1.5"></div></div>
+        <div class="plot ar-16x10"><canvas id="sig-cv" aria-label="The sigmoid function with a movable input"></canvas></div>
+        <figcaption>The sigmoid on its own. Notice it's steepest at z = 0 and flattens at both ends: it is very sure only when z is far from zero.</figcaption>
+      </figure>
+      <figure>
+        <div class="fig-head" style="gap:14px">
+          <div class="ctrl" style="flex:1;min-width:140px"><div class="top"><label for="w0">Intercept w&#8320;</label><output id="w0-o"></output></div><input type="range" id="w0" min="-12" max="4" step="0.1" value="-2"></div>
+          <div class="ctrl" style="flex:1;min-width:140px"><div class="top"><label for="w1">Slope w&#8321;</label><output id="w1-o"></output></div><input type="range" id="w1" min="-0.5" max="3" step="0.02" value="0.5"></div>
+        </div>
+        <div class="plot ar-16x10"><canvas id="fit-cv" aria-label="Your logistic curve on the pass/fail data"></canvas></div>
+        <figcaption id="fit-cap"></figcaption>
+      </figure>
+    </div>
+    <div class="btns" style="margin-top:12px"><button type="button" class="btn" id="fit-best">Snap to the best fit</button></div>
+    <ul class="pts" style="margin-top:18px">
+      <li><b>w&#8320; slides it</b><span>Changing the intercept moves the whole S left or right.</span></li>
+      <li><b>w&#8321; sharpens it</b><span>A bigger slope makes the S steeper: the model switches from &ldquo;fail&rdquo; to &ldquo;pass&rdquo; over fewer hours. w&#8321; &lt; 0 flips it, so more x means less likely.</span></li>
+      <li><b>The 50% point</b><span>p = 0.5 exactly where z = 0, i.e. at x = &minus;w&#8320; / w&#8321;. That point is the <strong>decision boundary</strong>.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ODDS -->
+<section class="chap" id="odds">
+  <div class="wrap">
+    <div class="tag">Interpretation</div>
+    <h2>Odds: the hidden straight line</h2>
+    <div class="prose">
+      <p>Betting shops don't say &ldquo;80% chance&rdquo;; they say &ldquo;4 to 1&rdquo;. Those are <em class="term">odds</em>: p / (1 &minus; p). Take their logarithm and you get the <em class="term">log-odds</em>, which runs from &minus;&infin; to +&infin;. Here's the secret of logistic regression: <strong>the log-odds is exactly the straight line z.</strong> Drag the probability and watch the three scales move together.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \text{odds} = \frac{p}{1-p}, \qquad \ln\frac{p}{1-p} = w_0 + w_1 x \]</div><div class="read"><b>Read it as:</b> the sigmoid's inverse is the log-odds (also called the <b>logit</b>). So logistic regression is linear regression on the log-odds scale: each extra unit of x <b>adds</b> w&#8321; to the log-odds, which <b>multiplies</b> the odds by e<sup>w&#8321;</sup>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The log of p over one minus p equals w-zero plus w-one x.&rdquo;</em></div><div class="eq-run" id="run-odds"></div></div>
+    <figure class="block">
+      <div class="fig-head"><div class="ctrl" style="flex:1;max-width:420px"><div class="top"><label for="odds-p">Probability p</label><output id="odds-p-o"></output></div><input type="range" id="odds-p" min="0.01" max="0.99" step="0.01" value="0.8"></div></div>
+      <div class="plot" style="aspect-ratio:3.4/1"><canvas id="odds-cv" aria-label="Three linked scales: probability, odds and log-odds"></canvas></div>
+      <figcaption>Probability is squeezed into [0, 1]; odds stretch to +&infin; on one side; log-odds are symmetric around 0 and unbounded both ways, which is why a straight line can model them.</figcaption>
+    </figure>
+    <h3>The odds ratio: what a weight means</h3>
+    <div class="two block">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="logit-cv" aria-label="The model's log-odds is a straight line in hours studied"></canvas></div>
+        <figcaption>Your current model (sliders in the section above) on the log-odds scale: a straight line. Passed students sit at +&infin;, failed ones at &minus;&infin; (shown as arrows).</figcaption>
+      </figure>
+      <div>
+        <div class="eq" style="margin-top:0"><div class="m">\[ \frac{\text{odds}(x+1)}{\text{odds}(x)} = e^{w_1} \]</div><div class="read"><b>Read it as:</b> the <b>odds ratio</b>. One more unit of x multiplies the odds by e<sup>w&#8321;</sup>, whatever x was. This is how doctors read logistic models: &ldquo;smokers have 2.3&times; the odds of&hellip;&rdquo;</div><div class="eq-say"><b>Say it</b><em>&ldquo;The odds ratio for one unit of x is e to the w-one.&rdquo;</em></div><div class="eq-run" id="run-or"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOSS -->
+<section class="chap" id="loss">
+  <div class="wrap">
+    <div class="tag">The objective</div>
+    <h2>Punishing confident mistakes</h2>
+    <div class="prose">
+      <p>How do we score a probability? If a student passed (y = 1) and we said p = 0.9, that's good; p = 0.01 is a disaster. <em class="term">Log-loss</em> charges &minus;ln p when the answer was 1 and &minus;ln(1 &minus; p) when it was 0. Being confidently wrong costs almost infinitely much; squared error would cap the cost at 1. Slide the prediction:</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="ctrl" style="flex:1;max-width:420px"><div class="top"><label for="ll-p">Predicted P(y = 1)</label><output id="ll-p-o"></output></div><input type="range" id="ll-p" min="0.01" max="0.99" step="0.01" value="0.2"></div></div>
+        <div class="plot ar-16x10"><canvas id="ll-cv" aria-label="Log-loss for y = 1 and y = 0 against the predicted probability, with squared error for comparison"></canvas></div>
+        <figcaption><span style="color:var(--cA)">&#9644;</span> cost if the truth is 1: &minus;ln p &nbsp; <span style="color:var(--cB)">&#9644;</span> cost if the truth is 0: &minus;ln(1&minus;p) &nbsp; <span style="color:var(--muted)">&#9644; &#9644;</span> squared error, for comparison</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>At this prediction</h4>
+          <div class="stats">
+            <div class="stat"><div class="v" id="ll-1"></div><div class="k">log-loss if y = 1</div></div>
+            <div class="stat"><div class="v" id="ll-0"></div><div class="k">log-loss if y = 0</div></div>
+            <div class="stat"><div class="v" id="ll-s1"></div><div class="k">squared error if y = 1</div></div>
+            <div class="stat"><div class="v" id="ll-s0"></div><div class="k">squared error if y = 0</div></div>
+          </div>
+          <p class="note" id="ll-say"></p>
+        </div>
+      </div>
+    </div>
+    <div class="eq"><div class="m">\[ \mathcal{L}(w) = -\frac{1}{n}\sum_{i=1}^{n}\Big[\, y_i \ln p_i + (1 - y_i)\ln(1 - p_i) \,\Big], \qquad p_i = \sigma(w_0 + w_1x_i) \]</div><div class="read"><b>Read it as:</b> for each example, only one of the two terms is alive. If y&#7522; = 1 we pay &minus;ln p&#7522;; if y&#7522; = 0 we pay &minus;ln(1 &minus; p&#7522;). Average over everyone. Also called <b>binary cross-entropy</b>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The loss is minus the average of y log p plus one-minus-y log one-minus-p.&rdquo;</em></div><div class="eq-run" id="run-ll"></div></div>
+    <details class="how"><summary>Where does log-loss come from? (maximum likelihood, in four lines)</summary><div>
+      <p><b>1.</b> The model says example i has label 1 with probability p&#7522;, so the probability it assigns to the label we actually saw is p&#7522;<sup>y&#7522;</sup>(1 &minus; p&#7522;)<sup>1&minus;y&#7522;</sup> (this picks p&#7522; when y&#7522; = 1 and 1 &minus; p&#7522; when y&#7522; = 0).</p>
+      <p><b>2.</b> Assuming examples are independent, the probability of the whole dataset (the <b>likelihood</b>) is the product of these over all i.</p>
+      <p><b>3.</b> Products of many small numbers underflow, and are hard to differentiate. Taking the log turns the product into a sum.</p>
+      <p><b>4.</b> Maximising the log-likelihood = minimising its negative average = minimising log-loss. So &ldquo;minimise log-loss&rdquo; and &ldquo;choose the weights that make the observed labels most probable&rdquo; are the same instruction.</p>
+    </div></details>
+    <h3>Two landscapes: why not squared error?</h3>
+    <div class="prose"><p>Each point is one model (w&#8320;, w&#8321;). Left: log-loss &mdash; one smooth bowl, guaranteed to have a single bottom (it's <b>convex</b>). Right: squared error of the sigmoid's output &mdash; flat plateaus where the gradient vanishes and a bent valley. <strong>Click either map</strong> to set the model; the sliders above follow.</p></div>
+    <div class="two block">
+      <figure><div class="plot ar-16x10"><canvas id="land-ll" aria-label="Log-loss landscape over intercept and slope"></canvas></div><figcaption>Log-loss: a clean bowl.</figcaption></figure>
+      <figure><div class="plot ar-16x10"><canvas id="land-se" aria-label="Squared-error landscape over intercept and slope"></canvas></div><figcaption>Squared error through a sigmoid: plateaus and bends.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<!-- TRAIN -->
+<section class="chap" id="train">
+  <div class="wrap">
+    <div class="tag">Training</div>
+    <h2>Downhill on the log-loss bowl</h2>
+    <div class="prose">
+      <p>Unlike linear regression, there is no closed-form answer: setting the derivative to zero gives equations with &sigma; inside that can't be solved by hand. So we roll downhill. And the gradient turns out to be beautifully simple &mdash; the <em>same shape</em> as linear regression's, with p in place of &ycirc;.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \frac{\partial \mathcal{L}}{\partial w_j} = \frac{1}{n}\sum_{i=1}^{n} (p_i - y_i)\, x_{ij} \qquad\qquad w_j \leftarrow w_j - \eta\,\frac{\partial \mathcal{L}}{\partial w_j} \]</div><div class="read"><b>Read it as:</b> (p&#7522; &minus; y&#7522;) is the prediction error for example i: positive if we said too high, negative if too low. Each weight moves against the error, scaled by its feature (x&#7522;&#8320; = 1 for the intercept).</div><div class="eq-say"><b>Say it</b><em>&ldquo;The gradient for weight j is the average of prediction-minus-label, times feature j.&rdquo;</em></div></div>
+    <details class="how"><summary>Why is the gradient so simple? (the sigmoid's derivative cancels)</summary><div>
+      <p>The sigmoid has a lovely derivative: &sigma;&prime;(z) = &sigma;(z)(1 &minus; &sigma;(z)) = p(1 &minus; p).</p>
+      <p>For one example, &part;/&part;z of &minus;[y ln p + (1&minus;y) ln(1&minus;p)] = &minus;[y/p &minus; (1&minus;y)/(1&minus;p)] &middot; p(1&minus;p) = &minus;[y(1&minus;p) &minus; (1&minus;y)p] = <b>p &minus; y</b>.</p>
+      <p>Then by the chain rule &part;z/&part;w&#11388; = x&#11388;, so &part;loss/&part;w&#11388; = (p &minus; y) x&#11388;. The p(1&minus;p) from the sigmoid exactly cancels the 1/p and 1/(1&minus;p) from the logs. That cancellation is why sigmoid and log-loss are always used together.</p>
+    </div></details>
+
+    <h3>One step, by hand</h3>
+    <div class="prose"><p>Four students, learning rate &eta; = 0.5. Every number is computed live; hover any of them. Press <strong>Take a step</strong> and the table recomputes from the new weights &mdash; that is literally the training loop.</p></div>
+    <div class="tbl-wrap block">
+      <table class="hand" id="hand">
+        <thead><tr><th>x hours</th><th>y</th><th>z = w&#8320; + w&#8321;x</th><th>p = &sigma;(z)</th><th>p &minus; y</th><th>(p &minus; y)&middot;x</th><th>loss</th></tr></thead>
+        <tbody></tbody><tfoot></tfoot>
+      </table>
+    </div>
+    <div class="eq-run" id="run-hand" style="max-width:860px"></div>
+    <div class="btns" style="margin-top:12px"><button type="button" class="btn primary" id="hand-step">Take a step</button><button type="button" class="btn" id="hand-reset">Reset</button><span class="note" id="hand-n" style="align-self:center"></span></div>
+
+    <h3>Thousands of steps, watched</h3>
+    <div class="lab">
+      <div>
+        <div class="two">
+          <figure><div class="plot ar-16x10"><canvas id="gd-land" aria-label="Gradient descent path on the log-loss bowl; click to choose the start"></canvas></div><figcaption>The path in weight space. Click to start elsewhere.</figcaption></figure>
+          <figure><div class="plot ar-16x10"><canvas id="gd-data" aria-label="The current curve on the data"></canvas></div><figcaption>The curve it represents.</figcaption></figure>
+        </div>
+        <figure style="margin-top:16px"><div class="plot ar-3x1"><canvas id="gd-chart" aria-label="Log-loss against iteration"></canvas></div><figcaption>Log-loss after each step. The dashed line is the best possible.</figcaption></figure>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <h4>Controls</h4>
+          <div class="ctrl"><div class="top"><label for="gd-lr">Learning rate &eta;</label><output id="gd-lr-o"></output></div><input type="range" id="gd-lr" min="0" max="100" step="1" value="70"></div>
+          <div class="btns"><button type="button" class="btn primary" id="gd-run">Run</button><button type="button" class="btn" id="gd-step">Step</button><button type="button" class="btn" id="gd-reset">Reset</button></div>
+        </div>
+        <div class="grp"><h4>Status</h4><p class="num" id="gd-status" style="font-size:.88rem"></p><p class="note" id="gd-say"></p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BOUNDARY -->
+<section class="chap" id="boundary">
+  <div class="wrap">
+    <div class="tag">Two features</div>
+    <h2>A straight cut between classes</h2>
+    <div class="prose">
+      <p>With two features, z = w&#8320; + w&#8321;x&#8321; + w&#8322;x&#8322; is a tilted plane, and the 50% boundary z = 0 is a <strong>straight line</strong>. The colour shows the probability, fading to white at 50%; the dashed lines are the 10% and 90% contours. <strong>Click to add points</strong> of the chosen class and watch the model refit instantly.</p>
+    </div>
+    <div class="eq"><div class="m">\[ P(y=1 \mid \mathbf{x}) = \sigma(w_0 + w_1x_1 + w_2x_2), \qquad \text{boundary: } w_0 + w_1x_1 + w_2x_2 = 0 \]</div><div class="read"><b>Read it as:</b> the boundary is where the log-odds are zero. (w&#8321;, w&#8322;) points across the boundary, towards class 1; its length sets how sharp the transition is.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The decision boundary is the line where w-zero plus w-one x-one plus w-two x-two equals zero.&rdquo;</em></div><div class="eq-run" id="run-bd"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head">
+          <div class="seg" role="group" aria-label="Class to add">
+            <button type="button" data-bdc="1" aria-pressed="true"><i class="sw dot" style="background:var(--cA)"></i>Add class 1</button>
+            <button type="button" data-bdc="0" aria-pressed="false"><i class="sw dot" style="background:var(--cB)"></i>Add class 0</button>
+          </div>
+          <button type="button" class="btn" id="bd-clear">Clear</button>
+        </div>
+        <div class="plot ar-16x10"><canvas id="bd-cv" aria-label="Two-feature logistic regression; click to add points"></canvas></div>
+        <figcaption>Solid line: the 50% boundary. Dashed: 10% and 90%.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>Dataset</h4>
+          <div class="seg" role="group" aria-label="Preset">
+            <button type="button" data-bdp="overlap" aria-pressed="true">Overlapping</button>
+            <button type="button" data-bdp="sep" aria-pressed="false">Separable</button>
+            <button type="button" data-bdp="xor" aria-pressed="false">XOR</button>
+          </div>
+        </div>
+        <div class="grp">
+          <h4>Model</h4>
+          <div class="ctrl"><div class="top"><label for="bd-l">L2 penalty &lambda;</label><output id="bd-l-o"></output></div><input type="range" id="bd-l" min="0" max="100" step="1" value="0"></div>
+          <div class="btns"><button type="button" class="btn" id="bd-cross" aria-pressed="false">Add feature x&#8321;&middot;x&#8322;</button></div>
+          <div class="stats">
+            <div class="stat"><div class="v" id="bd-acc"></div><div class="k">training accuracy</div></div>
+            <div class="stat"><div class="v" id="bd-w"></div><div class="k">‖w‖ (steepness)</div></div>
+          </div>
+          <p class="note" id="bd-say"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOFTMAX -->
+<section class="chap" id="softmax">
+  <div class="wrap">
+    <div class="tag">Many classes</div>
+    <h2>Softmax: more than two answers</h2>
+    <div class="prose">
+      <p>Cat, dog or bird? Give each class its own line z&#8342; = w&#8342;&middot;x &mdash; a &ldquo;score&rdquo;, or <em class="term">logit</em> &mdash; then turn the scores into probabilities that add up to 1 with the <em class="term">softmax</em>. With two classes, softmax is exactly the sigmoid again. This is also the very last layer of every language model: it turns scores for 100,000 possible next words into probabilities.</p>
+    </div>
+    <div class="eq"><div class="m">\[ P(y = k \mid \mathbf{x}) = \frac{e^{z_k}}{\sum_{j=1}^{K} e^{z_j}}, \qquad z_k = \mathbf{w}_k^\top \mathbf{x} \]</div><div class="read"><b>Read it as:</b> exponentiate every score (so all are positive and bigger scores dominate), then divide by their total (so they add to 1). Trained with the same cross-entropy: &minus;ln of the probability given to the true class.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The probability of class k is e to its score, over the sum of e to every score.&rdquo;</em></div><div class="eq-run" id="run-sm"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head">
+          <div class="seg" role="group" aria-label="Overlap">
+            <button type="button" data-smp="0.7" aria-pressed="true">Clear groups</button>
+            <button type="button" data-smp="1.3" aria-pressed="false">Overlapping</button>
+          </div>
+          <span class="note">Click anywhere to probe a point</span>
+        </div>
+        <div class="plot ar-16x10"><canvas id="sm-cv" aria-label="Three-class softmax regression regions; click to probe"></canvas></div>
+        <figcaption>Each colour is the most probable class; pale = unsure. The boundaries between classes are straight lines, because each pair's log-odds is linear.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp"><h4>At the probe</h4><div id="sm-bars" class="coefs"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: who survived the Titanic?</h2>
+    <div class="prose">
+      <p>On 15 April 1912 the RMS Titanic sank on her maiden voyage. The passenger list survives: 1,308 people with their ticket class, sex, age, family aboard and fare &mdash; and whether they lived. 500 did. Was it luck, or did &ldquo;women and children first&rdquo; and the class of your ticket decide? We fit logistic regression on 981 passengers and test it on 327 it has never seen.</p>
+      <p class="note"><b>A deliberate omission:</b> the dataset also has <span class="mono">boat</span> (lifeboat number) and <span class="mono">body</span> (body identification number). Both were recorded <em>after</em> the sinking and would give the answer away. Using them would be a <b>data leak</b> &mdash; a model that is brilliant in the lab and useless in reality.</p>
+    </div>
+    <div class="block">
+      <h4 class="mini">Features the model may use <span class="note">(click to toggle)</span></h4>
+      <div class="chips" id="tt-feats" role="group" aria-label="Features"></div>
+    </div>
+    <div class="stats block" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      <div class="stat"><div class="v" id="tt-acc"></div><div class="k">test accuracy (at 50%)</div></div>
+      <div class="stat"><div class="v" id="tt-auc"></div><div class="k">test AUC</div></div>
+      <div class="stat"><div class="v" id="tt-ll"></div><div class="k">test log-loss</div></div>
+      <div class="stat"><div class="v" id="tt-base"></div><div class="k">guess "everyone died"</div></div>
+    </div>
+    <p class="say-line" id="tt-say"></p>
+
+    <h3>What the weights say: odds ratios</h3>
+    <div id="tt-or" class="ortab block"></div>
+    <p class="note" style="margin-top:8px;max-width:70ch">Each ratio holds the other features fixed. A ratio of 1 means no effect; the bar is on a log scale, so &times;2 and &times;&frac12; are the same length either side.</p>
+
+    <h3>Choosing the threshold</h3>
+    <div class="prose"><p>The model outputs a probability; to say &ldquo;survived&rdquo; or &ldquo;died&rdquo; we must pick a cut-off. 50% is only a convention. Lower it and we catch more survivors but raise more false alarms. Every cut-off is one point on the <em class="term">ROC curve</em>; the area under it (<em class="term">AUC</em>) is the chance that a random survivor gets a higher score than a random victim.</p></div>
+    <div class="ctrl block" style="max-width:520px"><div class="top"><label for="tt-t">Threshold: predict &ldquo;survived&rdquo; if p &ge;</label><output id="tt-t-o"></output></div><input type="range" id="tt-t" min="0.05" max="0.95" step="0.01" value="0.5"></div>
+    <div class="two block">
+      <figure><div class="plot ar-16x10"><canvas id="tt-hist" aria-label="Predicted probabilities of test passengers, split by outcome"></canvas></div><figcaption><span style="color:var(--cA)">&#9632;</span> survived &nbsp; <span style="color:var(--cB)">&#9632;</span> died. Everything right of the dashed line is predicted &ldquo;survived&rdquo;.</figcaption></figure>
+      <figure><div class="plot ar-16x10"><canvas id="tt-roc" aria-label="ROC curve with the current threshold marked"></canvas></div><figcaption id="tt-roc-cap"></figcaption></figure>
+    </div>
+    <div class="two block">
+      <div class="tbl-wrap"><table class="cm" id="tt-cm"></table></div>
+      <div class="stats" id="tt-mets"></div>
+    </div>
+
+    <h3>Find a passenger</h3>
+    <div class="prose"><p>Pick a real person from the passenger list, or build your own. The forecast uses all seven features; the bars show how each one pushed the log-odds up or down from the starting point.</p></div>
+    <div class="btns block" id="tt-famous"></div>
+    <div class="lab">
+      <div>
+        <div class="pax" id="tt-pax"></div>
+        <div id="tt-contrib" class="coefs" style="margin-top:14px"></div>
+      </div>
+      <div class="panel" id="tt-form"></div>
+    </div>
+
+    <h3>The same project in scikit-learn</h3>
+<pre class="code"><code>import numpy as np
+from sklearn.datasets import fetch_openml
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, roc_auc_score
+
+df = fetch_openml("titanic", version=1, as_frame=True).frame
+df = df[df.fare.notna()].reset_index(drop=True)            # 1 passenger has no fare
+y = df.survived.astype(int).values
+tr, te = train_test_split(np.arange(len(y)), test_size=0.25,
+                          random_state=42, stratify=y)
+age = df.age.astype(float).fillna(np.nanmedian(df.age.astype(float)[tr]))   # 28.0
+X = np.c_[df.sex == "female", df.pclass == 2, df.pclass == 3, age,
+          df.sibsp, df.parch, np.log1p(df.fare.astype(float))].astype(float)
+
+m = LogisticRegression(penalty=None).fit(X[tr], y[tr])
+p = m.predict_proba(X[te])[:, 1]
+print("odds ratios:", np.round(np.exp(m.coef_[0]), 3))
+print(f"accuracy {accuracy_score(y[te], p >= 0.5):.3f}   AUC {roc_auc_score(y[te], p):.3f}")</code></pre>
+<pre class="code out"><code>odds ratios: [11.491  0.398  0.208  0.964  0.662  0.943  1.356]
+accuracy 0.807   AUC 0.875</code></pre>
+    <p class="note" style="max-width:70ch">The page's own JavaScript fits the same model (Newton's method) and reproduces these numbers exactly on the same 327 test passengers.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Logistic regression computes a line z = w&middot;x and squashes it with the sigmoid into a probability p = &sigma;(z).</li>
+      <li>The line is the log-odds: each unit of a feature adds w to the log-odds and multiplies the odds by e<sup>w</sup> &mdash; the odds ratio.</li>
+      <li>It is trained by minimising log-loss (= maximum likelihood), which punishes confident mistakes; the gradient is simply (p &minus; y)&middot;x.</li>
+      <li>The decision boundary is a straight line (a hyperplane); curved boundaries need engineered features such as x&#8321;x&#8322;, and separable data needs regularisation.</li>
+      <li>The threshold is a choice, not part of the model; judge the scores with AUC and pick the cut-off from the costs. Softmax extends it all to many classes.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A coefficient for &ldquo;smoker&rdquo; is 0.83. What does that mean in plain words?</summary><p>e<sup>0.83</sup> &asymp; 2.3: smokers have about 2.3 times the odds of the outcome, holding the other features fixed. Note: odds, not probability. If the base probability is small, the probability roughly doubles too; if it is large, much less.</p></details>
+      <details class="q"><summary>Why do we not train logistic regression with squared error?</summary><p>Through a sigmoid, squared error is not convex (plateaus and bends, as in the right-hand landscape) and it barely punishes confident mistakes, so learning is slow. Log-loss is convex, punishes confident errors hard, and gives the clean (p &minus; y)x gradient.</p></details>
+      <details class="q"><summary>On perfectly separable data, gradient descent never stops and the weights keep growing. Why?</summary><p>A steeper sigmoid makes every training probability closer to 0 or 1, which always lowers log-loss a bit more; the optimum is at infinity. Add an L2 penalty (as in the boundary lab) or stop early.</p></details>
+      <details class="q"><summary>The &ldquo;women survive, men don't&rdquo; rule scores 80.4% accuracy; the full model 80.7%. Is the full model pointless?</summary><p>No. Accuracy at one threshold hides it; the AUC jumps from 0.79 to 0.875. The full model ranks passengers much better &mdash; it can tell a first-class girl from a third-class woman &mdash; which matters as soon as you choose a different threshold or need calibrated probabilities.</p></details>
+      <details class="q"><summary>How is logistic regression related to a neural network?</summary><p>It <em>is</em> a neural network with one neuron: a weighted sum followed by a sigmoid, trained with cross-entropy by gradient descent. Deep networks stack many of these, and end with a softmax layer exactly like the one above.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn" href="../linear-regression/">&larr; Previous: Linear Regression</a>
+      <a class="btn primary" href="../lda-qda/">Next chapter: LDA &amp; QDA &rarr;</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>James, Witten, Hastie, Tibshirani. <a href="https://www.statlearning.com/" target="_blank" rel="noopener">An Introduction to Statistical Learning</a> &mdash; chapter 4 (classification).</li>
+      <li>Jurafsky &amp; Martin. <a href="https://web.stanford.edu/~jurafsky/slp3/" target="_blank" rel="noopener">Speech and Language Processing</a> &mdash; chapter 5, logistic regression from the NLP side, with softmax.</li>
+      <li>Hosmer, Lemeshow &amp; Sturdivant. <em>Applied Logistic Regression</em> &mdash; the classic for odds ratios in medicine.</li>
+      <li>scikit-learn. <a href="https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression" target="_blank" rel="noopener">Logistic regression user guide</a>.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+
+/* ---------- logistic core ---------- */
+const sig = z => z >= 0 ? 1 / (1 + Math.exp(-z)) : Math.exp(z) / (1 + Math.exp(z));
+const cp = p => Math.min(1 - 1e-12, Math.max(1e-12, p));
+const logit = p => Math.log(p / (1 - p));
+function solve(A, rhs) {
+  const n = rhs.length, M = A.map((r, i) => [...r, rhs[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]]; const d = M[c][c] || 1e-300;
+    for (let r = c + 1; r < n; r++) { const f = M[r][c] / d; if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  const x = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / (M[r][r] || 1e-300); }
+  return x;
+}
+const dotp = (w, f) => { let s = 0; for (let k = 0; k < w.length; k++) s += w[k] * f[k]; return s; };
+/* Newton's method on  (1/n)·Σ logloss + λ·Σ_{j≥1} w_j²   (rows of X start with 1) */
+function logitFit(X, y, lam, iters) {
+  const n = X.length, d = X[0].length; let w = new Array(d).fill(0);
+  for (let it = 0; it < (iters || 60); it++) {
+    const g = new Array(d).fill(0), H = Array.from({ length: d }, () => new Array(d).fill(0));
+    for (let i = 0; i < n; i++) { const f = X[i], p = sig(dotp(w, f)), e = p - y[i], s = Math.max(p * (1 - p), 1e-12);
+      for (let a = 0; a < d; a++) { g[a] += e * f[a] / n; for (let b = a; b < d; b++) H[a][b] += s * f[a] * f[b] / n; } }
+    for (let a = 0; a < d; a++) for (let b = 0; b < a; b++) H[a][b] = H[b][a];
+    for (let a = 1; a < d; a++) { g[a] += 2 * lam * w[a]; H[a][a] += 2 * lam; }
+    const st = solve(H, g); let mx = 0; for (let a = 0; a < d; a++) { w[a] -= st[a]; mx = Math.max(mx, Math.abs(st[a])); }
+    if (!w.every(isFinite)) return w;
+    if (mx < 1e-11) break;
+  }
+  return w;
+}
+function meanLL(X, y, w) { let s = 0; for (let i = 0; i < X.length; i++) { const p = cp(sig(dotp(w, X[i]))); s -= y[i] ? Math.log(p) : Math.log(1 - p); } return s / X.length; }
+function heat(v, grid, NX, NY, lo, hi, col, maxA) {
+  const c = v.ctx, cw = v.pw / NX, ch = v.ph / NY; c.save(); c.fillStyle = col;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const t = Math.max(0, Math.min(1, (grid[j * NX + i] - lo) / (hi - lo))), band = Math.floor(t * 13);
+    c.globalAlpha = (maxA || .58) * (1 - band / 13) + .03 + (band % 2 ? .04 : 0); c.fillRect(v.pad.l + i * cw, v.pad.t + j * ch, cw + .6, ch + .6); }
+  c.restore();
+}
+/* marching squares: draw the level set fn(x, y) = level */
+function contour(v, fn, level, col, lw, dash) {
+  const st = 5, nx = Math.ceil(v.pw / st) + 1, ny = Math.ceil(v.ph / st) + 1, F = new Float64Array(nx * ny);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) F[j * nx + i] = fn(v.iX(v.pad.l + i * st), v.iY(v.pad.t + j * st)) - level;
+  const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); c.beginPath();
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const a = F[j * nx + i], b = F[j * nx + i + 1], d = F[(j + 1) * nx + i], e = F[(j + 1) * nx + i + 1], x0 = v.pad.l + i * st, y0 = v.pad.t + j * st, P = [];
+    if ((a > 0) !== (b > 0)) P.push([x0 + st * a / (a - b), y0]);
+    if ((b > 0) !== (e > 0)) P.push([x0 + st, y0 + st * b / (b - e)]);
+    if ((d > 0) !== (e > 0)) P.push([x0 + st * d / (d - e), y0 + st]);
+    if ((a > 0) !== (d > 0)) P.push([x0, y0 + st * a / (a - d)]);
+    for (let k = 0; k + 1 < P.length; k += 2) { c.moveTo(P[k][0], P[k][1]); c.lineTo(P[k + 1][0], P[k + 1][1]); }
+  }
+  c.stroke(); c.restore();
+}
+const C0 = () => ({ y1: css('--cA'), y0: css('--cB'), cC: css('--cC'), curve: css('--lda'), bad: css('--qda'), ink: css('--ink'), muted: css('--muted'), surf: css('--surface') });
+const pct = p => fmt(p * 100, p < 0.1 || p > 0.9 ? 1 : 0) + '%';
+
+/* ---------- the class: 24 students, pass/fail vs hours ---------- */
+const PF = (() => { const r = mulberry32(3), P = []; for (let i = 0; i < 24; i++) { const x = +(0.4 + 9.2 * i / 23 + (r() - .5) * .3).toFixed(2); P.push([x, r() < sig(-4.2 + 0.95 * x) ? 1 : 0]); } return P; })();
+const jit = i => ((i * 37) % 11 - 5) / 5 * 0.035;
+const X1 = P => P.map(p => [1, p[0]]), Y1 = P => P.map(p => p[1]);
+const fit1 = P => logitFit(X1(P), Y1(P), 1e-5, 80);
+const WBEST = fit1(PF);
+function plotPF(v, P, C) { P.forEach((p, i) => dot(v, p[0], p[1] + jit(i), p[1] ? C.y1 : C.y0, 5)); }
+
+/* ---------- hero ---------- */
+const HERO = { pts: PF.map(p => p.slice()), v: null, hx: null };
+function drawHero() {
+  const C = C0(), v = HERO.v = frame($('#hero-cv'), [0, 10], [-0.12, 1.12]); axes(v, 'hours studied', 'P(pass)', { sy: 0.25 }); clip(v);
+  const w = fit1(HERO.pts);
+  seg(v, 0, .5, 10, .5, C.muted, 1, [4, 4]);
+  curve(v, x => sig(w[0] + w[1] * x), C.curve, 3);
+  plotPF(v, HERO.pts, C);
+  if (HERO.hx != null) { const x = HERO.hx, p = sig(w[0] + w[1] * x), c = v.ctx;
+    seg(v, x, -0.12, x, 1.12, C.ink, 1, [3, 3]); dot(v, x, p, C.curve, 6);
+    const txt = `${fmt(x, 1)} h → ${pct(p)} chance of passing`; c.font = '600 13px ' + css('--f-body'); const tw = c.measureText(txt).width, px = Math.min(v.X(x) + 10, v.w - v.pad.r - tw - 14), py = v.Y(p) - 30;
+    c.fillStyle = C.ink; c.globalAlpha = .92; c.fillRect(px, py, tw + 14, 22); c.globalAlpha = 1; c.fillStyle = C.surf; c.fillText(txt, px + 7, py + 15); }
+  v.ctx.restore();
+  const xb = -w[0] / w[1];
+  $('#hero-cap').innerHTML = `Fitted model: <b class="num">P(pass) = σ(${fmt(w[0], 2)} + ${fmt(w[1], 2)} × hours)</b> &middot; 50% point at <b>${fmt(xb, 1)} h</b>. <b>Hover</b> to read a probability; <b>click</b> in the top half to add a student who passed, bottom half for one who failed.`;
+}
+{ const cv = $('#hero-cv');
+  cv.addEventListener('pointermove', e => { if (!HERO.v) return; HERO.hx = clamp(HERO.v.iX(evPos(cv, e)[0]), 0, 10); drawHero(); });
+  cv.addEventListener('pointerleave', () => { HERO.hx = null; drawHero(); });
+  cv.addEventListener('click', e => { if (!HERO.v) return; const [px, py] = evPos(cv, e); HERO.pts.push([clamp(HERO.v.iX(px), 0.1, 9.9), HERO.v.iY(py) > 0.5 ? 1 : 0]); drawHero(); });
+  cv.style.cursor = 'crosshair'; }
+$('#hero-reset').addEventListener('click', () => { HERO.pts = PF.map(p => p.slice()); drawHero(); });
+fig($('#hero-cv'), drawHero);
+
+/* ---------- why not a straight line ---------- */
+const WHY = { add: false, extra: [[28, 1], [29, 1], [30, 1]] };
+function ls01(P) { const n = P.length; let mx = 0, my = 0; P.forEach(p => { mx += p[0]; my += p[1]; }); mx /= n; my /= n; let sxy = 0, sxx = 0; P.forEach(p => { sxy += (p[0] - mx) * (p[1] - my); sxx += (p[0] - mx) ** 2; }); const m = sxy / sxx; return { b: my - m * mx, m }; }
+function whyStats(P) { const l = ls01(P), w = fit1(P); return { l, w, cl: (0.5 - l.b) / l.m, cg: -w[0] / w[1] }; }
+function drawWhy() {
+  const C = C0(), P = WHY.add ? [...PF, ...WHY.extra] : PF, s = whyStats(P), s0 = whyStats(PF);
+  const v = frame($('#why-cv'), [0, 31], [-0.45, 1.45]); axes(v, 'hours studied', 'y  /  probability', { sx: 5, sy: 0.5 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.bad; c.globalAlpha = .07; c.fillRect(v.pad.l, v.Y(0), v.pw, v.h - v.pad.b - v.Y(0)); c.fillRect(v.pad.l, v.pad.t, v.pw, v.Y(1) - v.pad.t); c.restore();
+  seg(v, 0, 0, 31, 0, C.muted, 1); seg(v, 0, 1, 31, 1, C.muted, 1); seg(v, 0, .5, 31, .5, C.muted, 1, [4, 4]);
+  curve(v, x => s.l.b + s.l.m * x, C.muted, 2.4, [8, 5]);
+  curve(v, x => sig(s.w[0] + s.w[1] * x), C.curve, 2.8);
+  [[s.cl, C.muted], [s.cg, C.curve]].forEach(([x, col]) => { seg(v, x, .28, x, .72, col, 3); });
+  P.forEach((p, i) => dot(v, p[0], p[1] + jit(i), p[1] ? C.y1 : C.y0, i >= PF.length ? 6.5 : 4.5));
+  c.restore();
+  const missL = PF.filter(p => (s.l.b + s.l.m * p[0] >= .5 ? 1 : 0) !== p[1]).length, missG = PF.filter(p => (p[0] >= s.cg ? 1 : 0) !== p[1]).length;
+  $('#why-ls').textContent = fmt(s.cl, 2); $('#why-lg').textContent = fmt(s.cg, 2);
+  $('#why-lsm').textContent = `${missL} / 24`; $('#why-lgm').textContent = `${missG} / 24`;
+  const missL0 = PF.filter(p => (s0.l.b + s0.l.m * p[0] >= .5 ? 1 : 0) !== p[1]).length;
+  $('#why-say').innerHTML = WHY.add
+    ? `The three students passed, as everyone expected &mdash; yet they dragged the straight line's cut-off from <b>${fmt(s0.cl, 2)} h</b> to <b>${fmt(s.cl, 2)} h</b>, and it now gets ${missL} of the original 24 wrong (was ${missL0}). The logistic cut-off moved from ${fmt(s0.cg, 2)} to ${fmt(s.cg, 2)} h: correct, confident points barely pull it.`
+    : `Both models put the cut-off around ${fmt(s0.cg, 1)} hours. But look at the dashed line: it already predicts &ldquo;probabilities&rdquo; below 0 and above 1 (red bands). Now add the hard workers.`;
+}
+$('#why-add').addEventListener('click', e => { WHY.add = !WHY.add; e.target.setAttribute('aria-pressed', WHY.add); e.target.textContent = WHY.add ? 'Remove them' : 'Add 3 hard workers'; drawWhy(); });
+fig($('#why-cv'), drawWhy);
+
+/* ---------- sigmoid + your curve (shared model W) ---------- */
+const W = { w0: -2, w1: 0.5 }, SZ = { z: 1.5 };
+function drawSig() {
+  const C = C0(), v = frame($('#sig-cv'), [-8, 8], [-0.06, 1.06]); axes(v, 'z', 'σ(z)', { sx: 2, sy: 0.25 }); clip(v);
+  seg(v, -8, .5, 8, .5, C.muted, 1, [4, 4]); seg(v, 0, -1, 0, 2, C.muted, 1, [4, 4]);
+  curve(v, sig, C.curve, 3); const z = SZ.z, p = sig(z);
+  seg(v, z, -0.06, z, p, C.y0, 1.4, [3, 3]); seg(v, -8, p, z, p, C.y0, 1.4, [3, 3]); dot(v, z, p, C.y0, 6.5);
+  v.ctx.restore();
+  $('#sig-z-o').textContent = fmt(z, 1);
+  const ez = Math.exp(-z), x6 = W.w0 + W.w1 * 6;
+  $('#run-sig').innerHTML = `<b>Running example</b>: σ(${fmt(z, 1)}) = 1 ÷ (1 + ${tip(fmt(ez, 3), `e^(−z) = e^(${fmt(-z, 1)})`)}) = <b>${fmt(p, 3)}</b>. With your model, a student who studies 6 h: z = ${fmt(W.w0, 1)} + ${fmt(W.w1, 2)} × 6 = ${tip(fmt(x6, 2), 'the straight line, before squashing')} &rarr; p = σ(${fmt(x6, 2)}) = <b>${pct(sig(x6))}</b>.`;
+}
+function drawFit1() {
+  const C = C0(), v = frame($('#fit-cv'), [0, 10], [-0.12, 1.12]); axes(v, 'hours studied', 'P(pass)', { sy: 0.25 }); clip(v);
+  const xb = -W.w0 / W.w1;
+  if (isFinite(xb) && xb > 0 && xb < 10) seg(v, xb, -0.12, xb, 1.12, C.ink, 1.2, [4, 4]);
+  curve(v, x => sig(W.w0 + W.w1 * x), C.y0 === '' ? C.curve : C.curve, 3);
+  PF.forEach((p, i) => { const q = sig(W.w0 + W.w1 * p[0]); seg(v, p[0], p[1] + jit(i), p[0], q, C.bad, 1.3, null, .5); });
+  plotPF(v, PF, C); v.ctx.restore();
+  const L = meanLL(X1(PF), Y1(PF), [W.w0, W.w1]), Lb = meanLL(X1(PF), Y1(PF), WBEST);
+  $('#fit-cap').innerHTML = `50% boundary at x = −w₀ ÷ w₁ = ${tip(isFinite(xb) ? fmt(xb, 2) : '—', `−(${fmt(W.w0, 1)}) ÷ ${fmt(W.w1, 2)}`)} h &middot; log-loss ${tip(fmt(L, 3), 'mean of −ln(probability given to the true label)\nover the 24 students')} (best possible ${fmt(Lb, 3)}). Red sticks: how far each student is from the probability the model gave them.`;
+}
+function syncW() {
+  $('#w0').value = W.w0; $('#w1').value = W.w1; $('#w0-o').textContent = fmt(W.w0, 1); $('#w1-o').textContent = fmt(W.w1, 2);
+  drawSig(); drawFit1(); drawLogit(); drawLands(); runLL(); runOR();
+}
+$('#sig-z').addEventListener('input', e => { SZ.z = +e.target.value; drawSig(); });
+$('#w0').addEventListener('input', e => { W.w0 = +e.target.value; syncW(); });
+$('#w1').addEventListener('input', e => { W.w1 = +e.target.value; syncW(); });
+$('#fit-best').addEventListener('click', () => { W.w0 = +WBEST[0].toFixed(2); W.w1 = +WBEST[1].toFixed(3); syncW(); });
+fig($('#sig-cv'), drawSig); fig($('#fit-cv'), drawFit1);
+
+/* ---------- odds ---------- */
+const OD = { p: 0.8 };
+function drawOdds() {
+  const C = C0(), cv = $('#odds-cv'), r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, r.width, r.height);
+  const w = r.width, h = r.height, L = Math.min(110, w * .26), R = w - 22, p = OD.p, odds = p / (1 - p), lo = Math.log(odds);
+  const rows = [
+    { name: 'probability', y: h * .2, a: 0, b: 1, v: p, ticks: [0, .25, .5, .75, 1], f: t => fmt(t, 2) },
+    { name: 'odds', y: h * .52, a: 0, b: 10, v: Math.min(odds, 10), ticks: [0, 1, 2, 4, 6, 8, 10], f: t => t === 10 ? '10+' : fmt(t, 0) },
+    { name: 'log-odds', y: h * .84, a: -5, b: 5, v: lo, ticks: [-4, -2, 0, 2, 4], f: t => fmt(t, 0) }];
+  c.font = '11px ' + css('--f-mono'); c.lineWidth = 1;
+  const pts = rows.map(rw => {
+    const X = t => L + (t - rw.a) / (rw.b - rw.a) * (R - L);
+    c.strokeStyle = C.muted; c.beginPath(); c.moveTo(L, rw.y); c.lineTo(R, rw.y); c.stroke();
+    c.fillStyle = C.muted; c.textAlign = 'center'; c.textBaseline = 'top';
+    rw.ticks.forEach(t => { c.beginPath(); c.moveTo(X(t), rw.y - 4); c.lineTo(X(t), rw.y + 4); c.stroke(); c.fillText(rw.f(t), X(t), rw.y + 7); });
+    c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = C.ink; c.font = '600 12px ' + css('--f-body'); c.fillText(rw.name, 4, rw.y); c.font = '11px ' + css('--f-mono');
+    return [X(rw.v), rw.y];
+  });
+  c.save(); c.strokeStyle = C.cC; c.setLineDash([4, 4]); c.lineWidth = 1.5; c.beginPath(); pts.forEach((q, i) => i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])); c.stroke(); c.restore();
+  const labels = [fmt(p, 2), odds > 10 ? fmt(odds, 1) + ' →' : fmt(odds, 2), fmt(lo, 2)];
+  pts.forEach((q, i) => { c.beginPath(); c.arc(q[0], q[1], 7, 0, 7); c.fillStyle = C.y0; c.fill(); c.strokeStyle = C.surf; c.lineWidth = 2; c.stroke();
+    c.fillStyle = C.ink; c.font = '600 12px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillText(labels[i], q[0], q[1] - 10); });
+  $('#odds-p-o').textContent = fmt(p, 2);
+  const frac = odds >= 1 ? `${fmt(odds, odds % 1 ? 2 : 0)} to 1 on` : `1 to ${fmt(1 / odds, 2)} against`;
+  $('#run-odds').innerHTML = `<b>Running example</b>: p = ${fmt(p, 2)} &rarr; odds = ${fmt(p, 2)} ÷ ${fmt(1 - p, 2)} = ${tip(fmt(odds, 3), `p ÷ (1 − p)\nin betting language: ${frac}`)} &rarr; log-odds = ln ${fmt(odds, 3)} = <b>${fmt(lo, 3)}</b>. And back again: σ(${fmt(lo, 3)}) = ${fmt(p, 2)}.`;
+}
+$('#odds-p').addEventListener('input', e => { OD.p = +e.target.value; drawOdds(); });
+fig($('#odds-cv'), drawOdds);
+function drawLogit() {
+  const C = C0(), v = frame($('#logit-cv'), [0, 10], [-8, 8]); axes(v, 'hours studied', 'log-odds z', { sy: 2 }); clip(v);
+  seg(v, 0, 0, 10, 0, C.muted, 1, [4, 4]); curve(v, x => W.w0 + W.w1 * x, C.curve, 3);
+  const c = v.ctx; PF.forEach(p => { const x = v.X(p[0]), y = p[1] ? v.Y(7.2) : v.Y(-7.2), dir = p[1] ? -1 : 1; c.beginPath(); c.moveTo(x, y + dir * 7); c.lineTo(x - 5, y); c.lineTo(x + 5, y); c.closePath(); c.fillStyle = p[1] ? C.y1 : C.y0; c.fill(); });
+  c.restore();
+}
+function runOR() {
+  const e = Math.exp(W.w1), z4 = W.w0 + 4 * W.w1, z5 = z4 + W.w1;
+  $('#run-or').innerHTML = `<b>Running example</b> (your model): w₁ = ${fmt(W.w1, 2)} &rarr; e<sup>w₁</sup> = ${tip(fmt(e, 3), `e^${fmt(W.w1, 2)}`)}. At 4 h the odds are e<sup>${fmt(z4, 2)}</sup> = ${fmt(Math.exp(z4), 3)}; at 5 h, e<sup>${fmt(z5, 2)}</sup> = ${fmt(Math.exp(z5), 3)}; ratio = <b>${fmt(Math.exp(z5) / Math.exp(z4), 3)}</b>. Each extra hour multiplies the odds of passing by ${fmt(e, 2)}.`;
+}
+fig($('#logit-cv'), drawLogit);
+
+/* ---------- log-loss ---------- */
+const LLS = { p: 0.2 };
+function drawLL() {
+  const C = C0(), v = frame($('#ll-cv'), [0, 1], [0, 5]); axes(v, 'predicted P(y = 1)', 'cost', { sx: 0.25, sy: 1 }); clip(v);
+  curve(v, p => (1 - p) ** 2, C.muted, 1.8, [7, 5]); curve(v, p => p * p, C.muted, 1.8, [2, 4]);
+  curve(v, p => -Math.log(Math.max(p, 1e-9)), C.y1, 3); curve(v, p => -Math.log(Math.max(1 - p, 1e-9)), C.y0, 3);
+  const p = LLS.p; seg(v, p, 0, p, 5, C.ink, 1.2, [4, 4]);
+  dot(v, p, -Math.log(p), C.y1, 6); dot(v, p, -Math.log(1 - p), C.y0, 6); v.ctx.restore();
+  $('#ll-p-o').textContent = fmt(p, 2);
+  $('#ll-1').innerHTML = tip(fmt(-Math.log(p), 3), `−ln(${fmt(p, 2)})`); $('#ll-0').innerHTML = tip(fmt(-Math.log(1 - p), 3), `−ln(1 − ${fmt(p, 2)}) = −ln(${fmt(1 - p, 2)})`);
+  $('#ll-s1').innerHTML = tip(fmt((1 - p) ** 2, 3), `(1 − ${fmt(p, 2)})²`); $('#ll-s0').innerHTML = tip(fmt(p * p, 3), `(0 − ${fmt(p, 2)})²`);
+  const big = p < .5 ? { who: 'passed (y = 1)', ll: -Math.log(p), se: (1 - p) ** 2 } : { who: 'failed (y = 0)', ll: -Math.log(1 - p), se: p * p };
+  $('#ll-say').innerHTML = `Saying ${fmt(p, 2)} for someone who actually ${big.who} costs <b>${fmt(big.ll, 2)}</b> in log-loss but only ${fmt(big.se, 2)} in squared error. ${big.ll > 2 ? 'Log-loss is shouting: confident and wrong is the worst thing a classifier can be.' : 'Push the slider to an extreme and watch log-loss explode while squared error stays capped at 1.'}`;
+}
+$('#ll-p').addEventListener('input', e => { LLS.p = +e.target.value; drawLL(); });
+fig($('#ll-cv'), drawLL);
+function runLL() {
+  const rows = PF.slice(0, 3).map(p => { const q = sig(W.w0 + W.w1 * p[0]); return tip(p[1] ? `−ln ${fmt(q, 3)}` : `−ln(1 − ${fmt(q, 3)})`, `student at ${p[0]} h, y = ${p[1]}\np = σ(${fmt(W.w0, 1)} + ${fmt(W.w1, 2)} × ${p[0]}) = ${fmt(q, 4)}\ncost = ${fmt(p[1] ? -Math.log(cp(q)) : -Math.log(cp(1 - q)), 3)}`); });
+  const L = meanLL(X1(PF), Y1(PF), [W.w0, W.w1]);
+  $('#run-ll').innerHTML = `<b>Running example</b> (your model from the sliders): 𝓛 = (1/24) × [ ${rows.join(' + ')} + … 21 more ] = <b>${fmt(L, 3)}</b>. Best possible: ${fmt(meanLL(X1(PF), Y1(PF), WBEST), 3)}.`;
+}
+// landscapes over (w0, w1)
+const LR_ = { b: [-12, 4], m: [-0.5, 3], NX: 80, NY: 56 };
+const LAND = (() => {
+  const ll = new Float32Array(LR_.NX * LR_.NY), se = new Float32Array(LR_.NX * LR_.NY); let a = [Infinity, -Infinity], b = [Infinity, -Infinity], seMin = [0, 0, Infinity];
+  for (let j = 0; j < LR_.NY; j++) for (let i = 0; i < LR_.NX; i++) {
+    const w0 = LR_.b[0] + (i + .5) / LR_.NX * (LR_.b[1] - LR_.b[0]), w1 = LR_.m[1] - (j + .5) / LR_.NY * (LR_.m[1] - LR_.m[0]);
+    let L = 0, S = 0; PF.forEach(p => { const q = sig(w0 + w1 * p[0]); L -= p[1] ? Math.log(cp(q)) : Math.log(cp(1 - q)); S += (p[1] - q) ** 2; }); L /= PF.length; S /= PF.length;
+    const l = Math.log(L); ll[j * LR_.NX + i] = l; se[j * LR_.NX + i] = S; a = [Math.min(a[0], l), Math.max(a[1], l)]; b = [Math.min(b[0], S), Math.max(b[1], S)]; if (S < seMin[2]) seMin = [w0, w1, S];
+  }
+  return { ll, se, a, b, seMin };
+})();
+const landV = {};
+function drawLands() {
+  const C = C0();
+  [['land-ll', LAND.ll, LAND.a, C.curve, WBEST], ['land-se', LAND.se, LAND.b, C.cC, LAND.seMin]].forEach(([id, g, r, col, best]) => {
+    const v = landV[id] = frame($('#' + id), LR_.b, LR_.m); heat(v, g, LR_.NX, LR_.NY, r[0], r[1], col); axes(v, 'w₀  intercept', 'w₁  slope', { sy: 0.5 }); clip(v);
+    star(v, best[0], best[1], C.bad, 9); dot(v, clamp(W.w0, -12, 4), clamp(W.w1, -.5, 3), C.y0, 6.5); v.ctx.restore();
+  });
+}
+['land-ll', 'land-se'].forEach(id => { const cv = $('#' + id); let down = false; cv.style.cursor = 'crosshair';
+  const set = e => { const v = landV[id]; if (!v) return; const [px, py] = evPos(cv, e); W.w0 = +clamp(v.iX(px), -12, 4).toFixed(1); W.w1 = +clamp(v.iY(py), -.5, 3).toFixed(2); syncW(); };
+  cv.addEventListener('pointerdown', e => { down = true; cv.setPointerCapture(e.pointerId); set(e); e.preventDefault(); });
+  cv.addEventListener('pointermove', e => { if (down) set(e); }); cv.addEventListener('pointerup', () => { down = false; }); cv.addEventListener('pointercancel', () => { down = false; });
+  fig(cv, drawLands); });
+
+/* ---------- one step by hand ---------- */
+const HAND = { x: [1, 3, 5, 7], y: [0, 0, 1, 1], w: [-2, 0.5], n: 0, eta: 0.5 };
+function handRows() { return HAND.x.map((x, i) => { const z = HAND.w[0] + HAND.w[1] * x, p = sig(z), e = p - HAND.y[i]; return { x, y: HAND.y[i], z, p, e, ex: e * x, l: HAND.y[i] ? -Math.log(p) : -Math.log(1 - p) }; }); }
+function drawHand() {
+  const R = handRows(), [w0, w1] = HAND.w, n = R.length, sE = R.reduce((a, r) => a + r.e, 0), sEX = R.reduce((a, r) => a + r.ex, 0), L = R.reduce((a, r) => a + r.l, 0) / n;
+  $('#hand tbody').innerHTML = R.map(r => `<tr><td class="num">${r.x}</td><td class="num">${r.y}</td><td class="num">${tip(fmt(r.z, 3), `${fmt(w0, 3)} + ${fmt(w1, 3)} × ${r.x}`)}</td><td class="num">${tip(fmt(r.p, 3), `1 ÷ (1 + e^(−${fmt(r.z, 3)}))`)}</td><td class="num">${tip(fmt(r.e, 3), `${fmt(r.p, 3)} − ${r.y}`)}</td><td class="num">${tip(fmt(r.ex, 3), `(${fmt(r.e, 3)}) × ${r.x}`)}</td><td class="num">${tip(fmt(r.l, 3), r.y ? `−ln(${fmt(r.p, 3)})` : `−ln(1 − ${fmt(r.p, 3)})`)}</td></tr>`).join('');
+  $('#hand tfoot').innerHTML = `<tr><th colspan="4">sums</th><th class="num">Σ = ${fmt(sE, 3)}</th><th class="num">Σ = ${fmt(sEX, 3)}</th><th class="num">mean ${fmt(L, 3)}</th></tr>`;
+  const g0 = sE / n, g1 = sEX / n;
+  $('#run-hand').innerHTML = `<b>The update</b>: ∂𝓛/∂w₀ = ${tip(fmt(g0, 4), `Σ(p − y) ÷ ${n} = ${fmt(sE, 3)} ÷ ${n}`)}, ∂𝓛/∂w₁ = ${tip(fmt(g1, 4), `Σ(p − y)·x ÷ ${n} = ${fmt(sEX, 3)} ÷ ${n}`)}. New w₀ = ${fmt(w0, 3)} − 0.5 × ${fmt(g0, 4)} = <b>${fmt(w0 - HAND.eta * g0, 3)}</b>; new w₁ = ${fmt(w1, 3)} − 0.5 × ${fmt(g1, 4)} = <b>${fmt(w1 - HAND.eta * g1, 3)}</b>.`;
+  $('#hand-n').textContent = `step ${HAND.n} · w = (${fmt(w0, 3)}, ${fmt(w1, 3)}) · mean loss ${fmt(L, 3)}`;
+}
+$('#hand-step').addEventListener('click', () => { const R = handRows(), n = R.length; HAND.w = [HAND.w[0] - HAND.eta * R.reduce((a, r) => a + r.e, 0) / n, HAND.w[1] - HAND.eta * R.reduce((a, r) => a + r.ex, 0) / n]; HAND.n++; drawHand(); });
+$('#hand-reset').addEventListener('click', () => { HAND.w = [-2, 0.5]; HAND.n = 0; drawHand(); });
+
+/* ---------- gradient descent on the bowl ---------- */
+const GD = { lrI: 70, w: [2, -0.3], path: [], losses: [], it: 0, timer: 0, state: 'ready', g: [0, 0] };
+const gdLR = () => Math.pow(10, -2.5 + GD.lrI / 100 * 3);
+const gdL = () => meanLL(X1(PF), Y1(PF), GD.w), BESTL = meanLL(X1(PF), Y1(PF), WBEST);
+let gdV = null;
+function gdReset(w) { gdStop(); GD.w = w ? w.slice() : [2, -0.3]; GD.path = [GD.w.slice()]; GD.losses = [gdL()]; GD.it = 0; GD.state = 'ready'; GD.g = [0, 0]; drawGD(); }
+function gdStop() { clearInterval(GD.timer); GD.timer = 0; $('#gd-run').textContent = 'Run'; }
+function gdStep() {
+  if (GD.state !== 'ready' && GD.state !== 'running') return false;
+  let g0 = 0, g1 = 0; PF.forEach(p => { const e = sig(GD.w[0] + GD.w[1] * p[0]) - p[1]; g0 += e; g1 += e * p[0]; }); g0 /= PF.length; g1 /= PF.length; GD.g = [g0, g1];
+  const lr = gdLR(); GD.w = [GD.w[0] - lr * g0, GD.w[1] - lr * g1]; GD.it++;
+  const L = gdL(); GD.losses.push(L); if (GD.path.length < 6000) GD.path.push(GD.w.slice());
+  if (!isFinite(L) || L > 40) { GD.state = 'diverged'; gdStop(); return false; }
+  if (Math.hypot(g0, g1) < 1e-3) { GD.state = 'converged'; gdStop(); return false; }
+  if (GD.it >= 5000) { GD.state = 'slow'; gdStop(); return false; }
+  GD.state = 'running'; return true;
+}
+function drawGD() {
+  const C = C0();
+  { const v = gdV = frame($('#gd-land'), LR_.b, LR_.m); heat(v, LAND.ll, LR_.NX, LR_.NY, LAND.a[0], LAND.a[1], C.curve); axes(v, 'w₀', 'w₁', { sy: 0.5 }); clip(v); star(v, WBEST[0], WBEST[1], C.bad, 9);
+    const c = v.ctx; c.save(); c.strokeStyle = C.y0; c.lineWidth = 1.8; c.beginPath(); GD.path.forEach((p, i) => { const x = clamp(v.X(p[0]), -4000, 4000), y = clamp(v.Y(p[1]), -4000, 4000); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore();
+    dot(v, GD.w[0], GD.w[1], C.y0, 6.5); v.ctx.restore(); }
+  { const v = frame($('#gd-data'), [0, 10], [-0.12, 1.12]); axes(v, 'hours', 'P(pass)', { sy: 0.25 }); clip(v); curve(v, x => sig(GD.w[0] + GD.w[1] * x), C.y0, 3); plotPF(v, PF, C); v.ctx.restore(); }
+  { const N = Math.max(60, GD.losses.length - 1), hi = Math.max(BESTL * 1.2, ...GD.losses.slice(0, 400).filter(isFinite).map(l => Math.min(l, 6))) * 1.05;
+    const v = frame($('#gd-chart'), [0, N], [BESTL * 0.9, hi], { b: 26, l: 48 }); axes(v, 'iteration', 'log-loss', { ny: 3 }); clip(v);
+    seg(v, 0, BESTL, N, BESTL, C.bad, 1.2, [5, 4]);
+    const c = v.ctx; c.strokeStyle = C.y0; c.lineWidth = 2; c.beginPath(); GD.losses.forEach((l, i) => { const y = v.Y(Math.min(l, hi * 2)); i ? c.lineTo(v.X(i), y) : c.moveTo(v.X(i), y); }); c.stroke(); c.restore(); }
+  const L = GD.losses[GD.losses.length - 1];
+  $('#gd-lr-o').textContent = gdLR() < 0.01 ? gdLR().toFixed(4) : gdLR() < 1 ? gdLR().toFixed(3) : gdLR().toFixed(2);
+  $('#gd-status').innerHTML = `iteration ${GD.it} · log-loss ${isFinite(L) ? fmt(L, 4) : '∞'} · |gradient| ${fmt(Math.hypot(...GD.g), 4)}`;
+  $('#gd-say').innerHTML = { ready: 'Press Run or Step. Click the bowl to start elsewhere.', running: 'Rolling…',
+    converged: `Converged in <b>${GD.it}</b> steps to w = (${fmt(GD.w[0], 2)}, ${fmt(GD.w[1], 3)}), the same answer Newton's method gives (the star).`,
+    diverged: '<b>Diverged</b>: the steps are so large the ball is thrown out of the valley. Lower η.',
+    slow: gdLR() > 1 ? `5000 steps and still bouncing: η is so big that each step jumps across the steep wall of the valley instead of settling. Lower η.` : `5000 steps and still crawling: the valley is long and thin because hours aren't centred, and η is small. Raise η a little (around 0.4 works).` }[GD.state];
+}
+$('#gd-lr').addEventListener('input', e => { GD.lrI = +e.target.value; if (GD.state !== 'ready' && GD.state !== 'running') gdReset(GD.path[0]); else drawGD(); });
+$('#gd-step').addEventListener('click', () => { gdStep(); drawGD(); });
+$('#gd-reset').addEventListener('click', () => gdReset());
+$('#gd-run').addEventListener('click', () => {
+  if (GD.timer) { gdStop(); return; }
+  if (GD.state !== 'ready' && GD.state !== 'running') gdReset(GD.path[0]);
+  $('#gd-run').textContent = 'Pause';
+  GD.timer = setInterval(() => { for (let k = 0; k < 8; k++) if (!gdStep()) break; drawGD(); }, 40);
+});
+$('#gd-land').addEventListener('click', e => { if (!gdV) return; const [px, py] = evPos($('#gd-land'), e); gdReset([gdV.iX(px), gdV.iY(py)]); });
+$('#gd-land').style.cursor = 'crosshair';
+fig($('#gd-land'), drawGD); fig($('#gd-data'), drawGD); fig($('#gd-chart'), drawGD);
+
+/* ---------- 2-D decision boundary ---------- */
+const BD = { pts: [], cls: 1, lamI: 0, cross: false, preset: 'overlap', v: null };
+function genBD(kind) {
+  const r = mulberry32(kind === 'sep' ? 17 : kind === 'xor' ? 23 : 13), P = [];
+  if (kind === 'xor') [[1.6, 1.2, 1], [-1.6, -1.2, 1], [1.6, -1.2, 0], [-1.6, 1.2, 0]].forEach(([mx, my, c]) => { for (let i = 0; i < 12; i++) P.push([mx + .55 * gaussOf(r), my + .55 * gaussOf(r), c]); });
+  else { const s = kind === 'sep' ? .6 : 1.05, d = kind === 'sep' ? [1.6, 1.1] : [1, .6]; for (let i = 0; i < 25; i++) { P.push([d[0] + s * gaussOf(r), d[1] + s * gaussOf(r), 1]); P.push([-d[0] + s * gaussOf(r), -d[1] + s * gaussOf(r), 0]); } }
+  return P;
+}
+const bdF = (x, y) => BD.cross ? [1, x, y, x * y] : [1, x, y];
+const bdLam = () => BD.lamI === 0 ? 1e-7 : Math.pow(10, -4 + BD.lamI / 100 * 4);
+function drawBD() {
+  const C = C0(), v = BD.v = frame($('#bd-cv'), [-4, 4], [-3, 3], null, true); axes(v, 'x₁', 'x₂', { sx: 1, sy: 1 }); clip(v);
+  const P = BD.pts, has = P.some(p => p[2]) && P.some(p => !p[2]);
+  let w = null;
+  if (has) {
+    w = logitFit(P.map(p => bdF(p[0], p[1])), P.map(p => p[2]), bdLam(), 100);
+    const c = v.ctx, cell = 6; c.save();
+    for (let py = v.pad.t; py < v.pad.t + v.ph; py += cell) for (let px = v.pad.l; px < v.pad.l + v.pw; px += cell) {
+      const p = sig(dotp(w, bdF(v.iX(px + cell / 2), v.iY(py + cell / 2)))); c.globalAlpha = Math.abs(p - .5) * 2 * .4; c.fillStyle = p > .5 ? C.y1 : C.y0; c.fillRect(px, py, cell + .5, cell + .5); }
+    c.restore();
+    const z = (x, y) => dotp(w, bdF(x, y));
+    contour(v, z, logit(0.1), C.ink, 1.2, [5, 4]); contour(v, z, logit(0.9), C.ink, 1.2, [5, 4]); contour(v, z, 0, C.ink, 2.6);
+  }
+  P.forEach(p => dot(v, p[0], p[1], p[2] ? C.y1 : C.y0, 5)); v.ctx.restore();
+  $('#bd-l-o').textContent = BD.lamI === 0 ? '0' : bdLam().toPrecision(2);
+  if (!w) { $('#bd-acc').textContent = '—'; $('#bd-w').textContent = '—'; $('#bd-say').textContent = 'Add points of both classes.'; $('#run-bd').innerHTML = ''; return; }
+  const acc = P.filter(p => (dotp(w, bdF(p[0], p[1])) >= 0 ? 1 : 0) === p[2]).length / P.length, nw = Math.hypot(...w.slice(1));
+  $('#bd-acc').textContent = pct(acc); $('#bd-w').innerHTML = tip(nw > 999 ? nw.toExponential(1) : fmt(nw, 2), `√(${w.slice(1).map(x => `${fmt(x, 2)}²`).join(' + ')})\nbigger = sharper transition`);
+  $('#bd-say').innerHTML = acc === 1 && BD.lamI === 0 && !BD.cross ? `<b>Perfectly separable.</b> Any straight line in the gap scores 100%, and making the sigmoid steeper always lowers log-loss a little more, so the best weights are infinitely large: ‖w‖ is ${nw > 999 ? nw.toExponential(1) : fmt(nw, 1)} and keeps growing with every extra iteration. Notice the 10%/90% band has collapsed onto the line. Raise λ to get a sensible, finite model.`
+    : BD.preset === 'xor' && !BD.cross ? `<b>No straight line can split XOR</b>: accuracy is stuck near chance (${pct(acc)}). Press <b>Add feature x₁·x₂</b>: the model is still linear in its weights, but the boundary in (x₁, x₂) becomes curved.`
+    : BD.cross ? `With the x₁·x₂ feature, the boundary w₀ + w₁x₁ + w₂x₂ + w₃x₁x₂ = 0 is a hyperbola. Same algorithm, new feature &mdash; that is <b>feature engineering</b> (and what hidden layers in a neural net learn to do automatically).`
+    : `The 50% boundary is a straight line; between the dashed 10% and 90% lines the model is unsure. ${BD.lamI > 0 ? 'λ > 0 shrinks the weights: the band widens (less confident).' : 'Try raising λ: the band widens as the weights shrink.'}`;
+  $('#run-bd').innerHTML = BD.cross ? `<b>Current model</b>: z = ${fmt(w[0], 2)} + ${fmt(w[1], 2)}x₁ + ${fmt(w[2], 2)}x₂ + ${fmt(w[3], 2)}x₁x₂` : `<b>Current model</b>: z = ${tip(fmt(w[0], 2), 'w₀')} + ${tip(fmt(w[1], 2), 'w₁')}·x₁ + ${tip(fmt(w[2], 2), 'w₂')}·x₂ &rarr; boundary: x₂ = −(${fmt(w[0], 2)} + ${fmt(w[1], 2)}·x₁) ÷ ${fmt(w[2], 2)}. A point at (1, 0): z = ${fmt(w[0] + w[1], 2)}, P(class 1) = ${pct(sig(w[0] + w[1]))}.`;
+}
+$('#bd-cv').addEventListener('click', e => { if (!BD.v) return; const [px, py] = evPos($('#bd-cv'), e); BD.pts.push([BD.v.iX(px), BD.v.iY(py), BD.cls]); drawBD(); });
+$('#bd-cv').style.cursor = 'crosshair';
+seg1('[data-bdc]', 'data-bdc', k => { BD.cls = +k; });
+seg1('[data-bdp]', 'data-bdp', k => { BD.preset = k; BD.pts = genBD(k); if (k !== 'xor' && BD.cross) { BD.cross = false; $('#bd-cross').setAttribute('aria-pressed', 'false'); $('#bd-cross').textContent = 'Add feature x₁·x₂'; } drawBD(); });
+$('#bd-clear').addEventListener('click', () => { BD.pts = []; drawBD(); });
+$('#bd-l').addEventListener('input', e => { BD.lamI = +e.target.value; drawBD(); });
+$('#bd-cross').addEventListener('click', e => { BD.cross = !BD.cross; e.target.setAttribute('aria-pressed', BD.cross); e.target.textContent = BD.cross ? 'Remove x₁·x₂' : 'Add feature x₁·x₂'; drawBD(); });
+BD.pts = genBD('overlap');
+fig($('#bd-cv'), drawBD);
+
+/* ---------- softmax ---------- */
+const SM = { spread: 0.7, probe: [0.3, 0.2], W: null, P: [], v: null };
+const SMN = ['Class A', 'Class B', 'Class C'];
+function smTrain() {
+  const r = mulberry32(9), P = [];
+  [[-1.7, -1.1], [1.7, -1.1], [0, 1.7]].forEach((m, k) => { for (let i = 0; i < 30; i++) P.push([m[0] + SM.spread * gaussOf(r), m[1] + SM.spread * gaussOf(r), k]); });
+  let Wm = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (let it = 0; it < 700; it++) { const G = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    P.forEach(p => { const f = [1, p[0], p[1]], pr = smProb(Wm, f); for (let k = 0; k < 3; k++) { const e = pr[k] - (p[2] === k ? 1 : 0); for (let a = 0; a < 3; a++) G[k][a] += e * f[a] / P.length; } });
+    for (let k = 0; k < 3; k++) for (let a = 0; a < 3; a++) Wm[k][a] -= 0.8 * (G[k][a] + (a ? 2e-3 * Wm[k][a] : 0)); }
+  SM.W = Wm; SM.P = P;
+}
+function smZ(Wm, f) { return Wm.map(w => dotp(w, f)); }
+function smProb(Wm, f) { const z = smZ(Wm, f), m = Math.max(...z), e = z.map(x => Math.exp(x - m)), s = e[0] + e[1] + e[2]; return e.map(x => x / s); }
+function drawSM() {
+  const C = C0(), cols = [C.y1, C.y0, C.cC], v = SM.v = frame($('#sm-cv'), [-4, 4], [-3, 3.4], null, true); axes(v, 'x₁', 'x₂', { sx: 1, sy: 1 }); clip(v);
+  const c = v.ctx, cell = 6; c.save();
+  for (let py = v.pad.t; py < v.pad.t + v.ph; py += cell) for (let px = v.pad.l; px < v.pad.l + v.pw; px += cell) {
+    const pr = smProb(SM.W, [1, v.iX(px + cell / 2), v.iY(py + cell / 2)]), k = pr.indexOf(Math.max(...pr)); c.globalAlpha = .06 + .36 * (pr[k] - 1 / 3) * 1.5; c.fillStyle = cols[k]; c.fillRect(px, py, cell + .5, cell + .5); }
+  c.restore();
+  SM.P.forEach(p => dot(v, p[0], p[1], cols[p[2]], 4.2));
+  const [qx, qy] = SM.probe; c.beginPath(); c.arc(v.X(qx), v.Y(qy), 9, 0, 7); c.strokeStyle = C.ink; c.lineWidth = 2.2; c.stroke(); c.beginPath(); c.arc(v.X(qx), v.Y(qy), 2.5, 0, 7); c.fillStyle = C.ink; c.fill();
+  v.ctx.restore();
+  const f = [1, qx, qy], z = smZ(SM.W, f), m = Math.max(...z), ez = z.map(x => Math.exp(x)), s = ez.reduce((a, b) => a + b), pr = ez.map(x => x / s);
+  $('#sm-bars').innerHTML = pr.map((p, k) => `<div class="cf"><span><i class="sw dot" style="background:${cols[k]};margin-right:6px"></i>${SMN[k]}</span><span class="cf-track one"><i style="left:0;width:${p * 100}%;background:${cols[k]}"></i></span><span class="num">${tip(pct(p), `e^${fmt(z[k], 2)} ÷ Σ\n= ${fmt(ez[k], 3)} ÷ ${fmt(s, 3)}`)}</span></div>`).join('')
+    + `<p class="note" style="margin-top:8px">Scores (logits) z = (${z.map(x => fmt(x, 2)).join(', ')}). The biggest score wins, but softmax also says <b>how much</b> it wins by.</p>`;
+  $('#run-sm').innerHTML = `<b>Running example</b> at the probe (${fmt(qx, 1)}, ${fmt(qy, 1)}): z = (${z.map(x => fmt(x, 2)).join(', ')}) &rarr; e<sup>z</sup> = (${ez.map(x => fmt(x, 3)).join(', ')}) &rarr; total ${fmt(s, 3)} &rarr; P = (${pr.map(p => fmt(p, 3)).join(', ')}), which adds to 1.`;
+}
+$('#sm-cv').addEventListener('click', e => { if (!SM.v) return; const [px, py] = evPos($('#sm-cv'), e); SM.probe = [SM.v.iX(px), SM.v.iY(py)]; drawSM(); });
+$('#sm-cv').style.cursor = 'crosshair';
+seg1('[data-smp]', 'data-smp', k => { SM.spread = +k; smTrain(); drawSM(); });
+smTrain(); fig($('#sm-cv'), drawSM);
+
+/* ---------- project: Titanic ---------- */
+const TT = {"rows":[["Allen, Miss. Elisabeth Walton",1,1,29.0,0,0,211.3375,1],["Allison, Master. Hudson Trevor",1,0,0.92,1,2,151.55,1],["Allison, Miss. Helen Loraine",1,1,2.0,1,2,151.55,0],["Allison, Mr. Hudson Joshua Creighton",1,0,30.0,1,2,151.55,0],["Allison, Mrs. Hudson J C (Bessie Waldo Daniels)",1,1,25.0,1,2,151.55,0],["Anderson, Mr. Harry",1,0,48.0,0,0,26.55,1],["Andrews, Miss. Kornelia Theodosia",1,1,63.0,1,0,77.9583,1],["Andrews, Mr. Thomas Jr",1,0,39.0,0,0,0.0,0],["Appleton, Mrs. Edward Dale (Charlotte Lamson)",1,1,53.0,2,0,51.4792,1],["Artagaveytia, Mr. Ramon",1,0,71.0,0,0,49.5042,0],["Astor, Col. John Jacob",1,0,47.0,1,0,227.525,0],["Astor, Mrs. John Jacob (Madeleine Talmadge Force)",1,1,18.0,1,0,227.525,1],["Aubart, Mme. Leontine Pauline",1,1,24.0,0,0,69.3,1],["Barber, Miss. Ellen 'Nellie'",1,1,26.0,0,0,78.85,1],["Barkworth, Mr. Algernon Henry Wilson",1,0,80.0,0,0,30.0,1],["Baumann, Mr. John D",1,0,null,0,0,25.925,0],["Baxter, Mr. Quigg Edmond",1,0,24.0,0,1,247.5208,0],["Baxter, Mrs. James (Helene DeLaudeniere Chaput)",1,1,50.0,0,1,247.5208,1],["Bazzani, Miss. Albina",1,1,32.0,0,0,76.2917,1],["Beattie, Mr. Thomson",1,0,36.0,0,0,75.2417,0],["Beckwith, Mr. Richard Leonard",1,0,37.0,1,1,52.5542,1],["Beckwith, Mrs. Richard Leonard (Sallie Monypeny)",1,1,47.0,1,1,52.5542,1],["Behr, Mr. Karl Howell",1,0,26.0,0,0,30.0,1],["Bidois, Miss. Rosalie",1,1,42.0,0,0,227.525,1],["Bird, Miss. Ellen",1,1,29.0,0,0,221.7792,1],["Birnbaum, Mr. Jakob",1,0,25.0,0,0,26.0,0],["Bishop, Mr. Dickinson H",1,0,25.0,1,0,91.0792,1],["Bishop, Mrs. Dickinson H (Helen Walton)",1,1,19.0,1,0,91.0792,1],["Bissette, Miss. Amelia",1,1,35.0,0,0,135.6333,1],["Bjornstrom-Steffansson, Mr. Mauritz Hakan",1,0,28.0,0,0,26.55,1],["Blackwell, Mr. Stephen Weart",1,0,45.0,0,0,35.5,0],["Blank, Mr. Henry",1,0,40.0,0,0,31.0,1],["Bonnell, Miss. Caroline",1,1,30.0,0,0,164.8667,1],["Bonnell, Miss. Elizabeth",1,1,58.0,0,0,26.55,1],["Borebank, Mr. John James",1,0,42.0,0,0,26.55,0],["Bowen, Miss. Grace Scott",1,1,45.0,0,0,262.375,1],["Bowerman, Miss. Elsie Edith",1,1,22.0,0,1,55.0,1],["Bradley, Mr. George ('George Arthur Brayton')",1,0,null,0,0,26.55,1],["Brady, Mr. John Bertram",1,0,41.0,0,0,30.5,0],["Brandeis, Mr. Emil",1,0,48.0,0,0,50.4958,0],["Brewe, Dr. Arthur Jackson",1,0,null,0,0,39.6,0],["Brown, Mrs. James Joseph (Margaret Tobin)",1,1,44.0,0,0,27.7208,1],["Brown, Mrs. John Murray (Caroline Lane Lamson)",1,1,59.0,2,0,51.4792,1],["Bucknell, Mrs. William Robert (Emma Eliza Ward)",1,1,60.0,0,0,76.2917,1],["Burns, Miss. Elizabeth Margaret",1,1,41.0,0,0,134.5,1],["Butt, Major. Archibald Willingham",1,0,45.0,0,0,26.55,0],["Cairns, Mr. Alexander",1,0,null,0,0,31.0,0],["Calderhead, Mr. Edward Pennington",1,0,42.0,0,0,26.2875,1],["Candee, Mrs. Edward (Helen Churchill Hungerford)",1,1,53.0,0,0,27.4458,1],["Cardeza, Mr. Thomas Drake Martinez",1,0,36.0,0,1,512.3292,1],["Cardeza, Mrs. James Warburton Martinez (Charlotte Wardle Drake)",1,1,58.0,0,1,512.3292,1],["Carlsson, Mr. Frans Olof",1,0,33.0,0,0,5.0,0],["Carrau, Mr. Francisco M",1,0,28.0,0,0,47.1,0],["Carrau, Mr. Jose Pedro",1,0,17.0,0,0,47.1,0],["Carter, Master. William Thornton II",1,0,11.0,1,2,120.0,1],["Carter, Miss. Lucile Polk",1,1,14.0,1,2,120.0,1],["Carter, Mr. William Ernest",1,0,36.0,1,2,120.0,1],["Carter, Mrs. William Ernest (Lucile Polk)",1,1,36.0,1,2,120.0,1],["Case, Mr. Howard Brown",1,0,49.0,0,0,26.0,0],["Cassebeer, Mrs. Henry Arthur Jr (Eleanor Genevieve Fosdick)",1,1,null,0,0,27.7208,1],["Cavendish, Mr. Tyrell William",1,0,36.0,1,0,78.85,0],["Cavendish, Mrs. Tyrell William (Julia Florence Siegel)",1,1,76.0,1,0,78.85,1],["Chaffee, Mr. Herbert Fuller",1,0,46.0,1,0,61.175,0],["Chaffee, Mrs. Herbert Fuller (Carrie Constance Toogood)",1,1,47.0,1,0,61.175,1],["Chambers, Mr. Norman Campbell",1,0,27.0,1,0,53.1,1],["Chambers, Mrs. Norman Campbell (Bertha Griggs)",1,1,33.0,1,0,53.1,1],["Chaudanson, Miss. Victorine",1,1,36.0,0,0,262.375,1],["Cherry, Miss. Gladys",1,1,30.0,0,0,86.5,1],["Chevre, Mr. Paul Romaine",1,0,45.0,0,0,29.7,1],["Chibnall, Mrs. (Edith Martha Bowerman)",1,1,null,0,1,55.0,1],["Chisholm, Mr. Roderick Robert Crispin",1,0,null,0,0,0.0,0],["Clark, Mr. Walter Miller",1,0,27.0,1,0,136.7792,0],["Clark, Mrs. Walter Miller (Virginia McDowell)",1,1,26.0,1,0,136.7792,1],["Cleaver, Miss. Alice",1,1,22.0,0,0,151.55,1],["Clifford, Mr. George Quincy",1,0,null,0,0,52.0,0],["Colley, Mr. Edward Pomeroy",1,0,47.0,0,0,25.5875,0],["Compton, Miss. Sara Rebecca",1,1,39.0,1,1,83.1583,1],["Compton, Mr. Alexander Taylor Jr",1,0,37.0,1,1,83.1583,0],["Compton, Mrs. Alexander Taylor (Mary Eliza Ingersoll)",1,1,64.0,0,2,83.1583,1],["Cornell, Mrs. Robert Clifford (Malvina Helen Lamson)",1,1,55.0,2,0,25.7,1],["Crafton, Mr. John Bertram",1,0,null,0,0,26.55,0],["Crosby, Capt. Edward Gifford",1,0,70.0,1,1,71.0,0],["Crosby, Miss. Harriet R",1,1,36.0,0,2,71.0,1],["Crosby, Mrs. Edward Gifford (Catherine Elizabeth Halstead)",1,1,64.0,1,1,26.55,1],["Cumings, Mr. John Bradley",1,0,39.0,1,0,71.2833,0],["Cumings, Mrs. John Bradley (Florence Briggs Thayer)",1,1,38.0,1,0,71.2833,1],["Daly, Mr. Peter Denis",1,0,51.0,0,0,26.55,1],["Daniel, Mr. Robert Williams",1,0,27.0,0,0,30.5,1],["Daniels, Miss. Sarah",1,1,33.0,0,0,151.55,1],["Davidson, Mr. Thornton",1,0,31.0,1,0,52.0,0],["Davidson, Mrs. Thornton (Orian Hays)",1,1,27.0,1,2,52.0,1],["Dick, Mr. Albert Adrian",1,0,31.0,1,0,57.0,1],["Dick, Mrs. Albert Adrian (Vera Gillespie)",1,1,17.0,1,0,57.0,1],["Dodge, Dr. Washington",1,0,53.0,1,1,81.8583,1],["Dodge, Master. Washington",1,0,4.0,0,2,81.8583,1],["Dodge, Mrs. Washington (Ruth Vidaver)",1,1,54.0,1,1,81.8583,1],["Douglas, Mr. Walter Donald",1,0,50.0,1,0,106.425,0],["Douglas, Mrs. Frederick Charles (Mary Helene Baxter)",1,1,27.0,1,1,247.5208,1],["Douglas, Mrs. Walter Donald (Mahala Dutton)",1,1,48.0,1,0,106.425,1],["Duff Gordon, Lady. (Lucille Christiana Sutherland) ('Mrs Morgan')",1,1,48.0,1,0,39.6,1],["Duff Gordon, Sir. Cosmo Edmund ('Mr Morgan')",1,0,49.0,1,0,56.9292,1],["Dulles, Mr. William Crothers",1,0,39.0,0,0,29.7,0],["Earnshaw, Mrs. Boulton (Olive Potter)",1,1,23.0,0,1,83.1583,1],["Endres, Miss. Caroline Louise",1,1,38.0,0,0,227.525,1],["Eustis, Miss. Elizabeth Mussey",1,1,54.0,1,0,78.2667,1],["Evans, Miss. Edith Corse",1,1,36.0,0,0,31.6792,0],["Farthing, Mr. John",1,0,null,0,0,221.7792,0],["Flegenheim, Mrs. Alfred (Antoinette)",1,1,null,0,0,31.6833,1],["Fleming, Miss. Margaret",1,1,null,0,0,110.8833,1],["Flynn, Mr. John Irwin ('Irving')",1,0,36.0,0,0,26.3875,1],["Foreman, Mr. Benjamin Laventall",1,0,30.0,0,0,27.75,0],["Fortune, Miss. Alice Elizabeth",1,1,24.0,3,2,263.0,1],["Fortune, Miss. Ethel Flora",1,1,28.0,3,2,263.0,1],["Fortune, Miss. Mabel Helen",1,1,23.0,3,2,263.0,1],["Fortune, Mr. Charles Alexander",1,0,19.0,3,2,263.0,0],["Fortune, Mr. Mark",1,0,64.0,1,4,263.0,0],["Fortune, Mrs. Mark (Mary McDougald)",1,1,60.0,1,4,263.0,1],["Francatelli, Miss. Laura Mabel",1,1,30.0,0,0,56.9292,1],["Franklin, Mr. Thomas Parham",1,0,null,0,0,26.55,0],["Frauenthal, Dr. Henry William",1,0,50.0,2,0,133.65,1],["Frauenthal, Mr. Isaac Gerald",1,0,43.0,1,0,27.7208,1],["Frauenthal, Mrs. Henry William (Clara Heinsheimer)",1,1,null,1,0,133.65,1],["Frolicher, Miss. Hedwig Margaritha",1,1,22.0,0,2,49.5,1],["Frolicher-Stehli, Mr. Maxmillian",1,0,60.0,1,1,79.2,1],["Frolicher-Stehli, Mrs. Maxmillian (Margaretha Emerentia Stehli)",1,1,48.0,1,1,79.2,1],["Fry, Mr. Richard",1,0,null,0,0,0.0,0],["Futrelle, Mr. Jacques Heath",1,0,37.0,1,0,53.1,0],["Futrelle, Mrs. Jacques Heath (Lily May Peel)",1,1,35.0,1,0,53.1,1],["Gee, Mr. Arthur H",1,0,47.0,0,0,38.5,0],["Geiger, Miss. Amalie",1,1,35.0,0,0,211.5,1],["Gibson, Miss. Dorothy Winifred",1,1,22.0,0,1,59.4,1],["Gibson, Mrs. Leonard (Pauline C Boeson)",1,1,45.0,0,1,59.4,1],["Giglio, Mr. Victor",1,0,24.0,0,0,79.2,0],["Goldenberg, Mr. Samuel L",1,0,49.0,1,0,89.1042,1],["Goldenberg, Mrs. Samuel L (Edwiga Grabowska)",1,1,null,1,0,89.1042,1],["Goldschmidt, Mr. George B",1,0,71.0,0,0,34.6542,0],["Gracie, Col. Archibald IV",1,0,53.0,0,0,28.5,1],["Graham, Miss. Margaret Edith",1,1,19.0,0,0,30.0,1],["Graham, Mr. George Edward",1,0,38.0,0,1,153.4625,0],["Graham, Mrs. William Thompson (Edith Junkins)",1,1,58.0,0,1,153.4625,1],["Greenfield, Mr. William Bertram",1,0,23.0,0,1,63.3583,1],["Greenfield, Mrs. Leo David (Blanche Strouse)",1,1,45.0,0,1,63.3583,1],["Guggenheim, Mr. Benjamin",1,0,46.0,0,0,79.2,0],["Harder, Mr. George Achilles",1,0,25.0,1,0,55.4417,1],["Harder, Mrs. George Achilles (Dorothy Annan)",1,1,25.0,1,0,55.4417,1],["Harper, Mr. Henry Sleeper",1,0,48.0,1,0,76.7292,1],["Harper, Mrs. Henry Sleeper (Myna Haxtun)",1,1,49.0,1,0,76.7292,1],["Harrington, Mr. Charles H",1,0,null,0,0,42.4,0],["Harris, Mr. Henry Birkhardt",1,0,45.0,1,0,83.475,0],["Harris, Mrs. Henry Birkhardt (Irene Wallach)",1,1,35.0,1,0,83.475,1],["Harrison, Mr. William",1,0,40.0,0,0,0.0,0],["Hassab, Mr. Hammad",1,0,27.0,0,0,76.7292,1],["Hawksford, Mr. Walter James",1,0,null,0,0,30.0,1],["Hays, Miss. Margaret Bechstein",1,1,24.0,0,0,83.1583,1],["Hays, Mr. Charles Melville",1,0,55.0,1,1,93.5,0],["Hays, Mrs. Charles Melville (Clara Jennings Gregg)",1,1,52.0,1,1,93.5,1],["Head, Mr. Christopher",1,0,42.0,0,0,42.5,0],["Hilliard, Mr. Herbert Henry",1,0,null,0,0,51.8625,0],["Hipkins, Mr. William Edward",1,0,55.0,0,0,50.0,0],["Hippach, Miss. Jean Gertrude",1,1,16.0,0,1,57.9792,1],["Hippach, Mrs. Louis Albert (Ida Sophia Fischer)",1,1,44.0,0,1,57.9792,1],["Hogeboom, Mrs. John C (Anna Andrews)",1,1,51.0,1,0,77.9583,1],["Holverson, Mr. Alexander Oskar",1,0,42.0,1,0,52.0,0],["Holverson, Mrs. Alexander Oskar (Mary Aline Towner)",1,1,35.0,1,0,52.0,1],["Homer, Mr. Harry ('Mr E Haven')",1,0,35.0,0,0,26.55,1],["Hoyt, Mr. Frederick Maxfield",1,0,38.0,1,0,90.0,1],["Hoyt, Mr. William Fisher",1,0,null,0,0,30.6958,0],["Hoyt, Mrs. Frederick Maxfield (Jane Anne Forby)",1,1,35.0,1,0,90.0,1],["Icard, Miss. Amelie",1,1,38.0,0,0,80.0,1],["Isham, Miss. Ann Elizabeth",1,1,50.0,0,0,28.7125,0],["Ismay, Mr. Joseph Bruce",1,0,49.0,0,0,0.0,1],["Jones, Mr. Charles Cresson",1,0,46.0,0,0,26.0,0],["Julian, Mr. Henry Forbes",1,0,50.0,0,0,26.0,0],["Keeping, Mr. Edwin",1,0,32.5,0,0,211.5,0],["Kent, Mr. Edward Austin",1,0,58.0,0,0,29.7,0],["Kenyon, Mr. Frederick R",1,0,41.0,1,0,51.8625,0],["Kenyon, Mrs. Frederick R (Marion)",1,1,null,1,0,51.8625,1],["Kimball, Mr. Edwin Nelson Jr",1,0,42.0,1,0,52.5542,1],["Kimball, Mrs. Edwin Nelson Jr (Gertrude Parsons)",1,1,45.0,1,0,52.5542,1],["Klaber, Mr. Herman",1,0,null,0,0,26.55,0],["Kreuchen, Miss. Emilie",1,1,39.0,0,0,211.3375,1],["Leader, Dr. Alice (Farnham)",1,1,49.0,0,0,25.9292,1],["LeRoy, Miss. Bertha",1,1,30.0,0,0,106.425,1],["Lesurer, Mr. Gustave J",1,0,35.0,0,0,512.3292,1],["Lewy, Mr. Ervin G",1,0,null,0,0,27.7208,0],["Lindeberg-Lind, Mr. Erik Gustaf ('Mr Edward Lingrey')",1,0,42.0,0,0,26.55,0],["Lindstrom, Mrs. Carl Johan (Sigrid Posse)",1,1,55.0,0,0,27.7208,1],["Lines, Miss. Mary Conover",1,1,16.0,0,1,39.4,1],["Lines, Mrs. Ernest H (Elizabeth Lindsey James)",1,1,51.0,0,1,39.4,1],["Long, Mr. Milton Clyde",1,0,29.0,0,0,30.0,0],["Longley, Miss. Gretchen Fiske",1,1,21.0,0,0,77.9583,1],["Loring, Mr. Joseph Holland",1,0,30.0,0,0,45.5,0],["Lurette, Miss. Elise",1,1,58.0,0,0,146.5208,1],["Madill, Miss. Georgette Alexandra",1,1,15.0,0,1,211.3375,1],["Maguire, Mr. John Edward",1,0,30.0,0,0,26.0,0],["Maioni, Miss. Roberta",1,1,16.0,0,0,86.5,1],["Marechal, Mr. Pierre",1,0,null,0,0,29.7,1],["Marvin, Mr. Daniel Warner",1,0,19.0,1,0,53.1,0],["Marvin, Mrs. Daniel Warner (Mary Graham Carmichael Farquarson)",1,1,18.0,1,0,53.1,1],["Mayne, Mlle. Berthe Antonine ('Mrs de Villiers')",1,1,24.0,0,0,49.5042,1],["McCaffry, Mr. Thomas Francis",1,0,46.0,0,0,75.2417,0],["McCarthy, Mr. Timothy J",1,0,54.0,0,0,51.8625,0],["McGough, Mr. James Robert",1,0,36.0,0,0,26.2875,1],["Meyer, Mr. Edgar Joseph",1,0,28.0,1,0,82.1708,0],["Meyer, Mrs. Edgar Joseph (Leila Saks)",1,1,null,1,0,82.1708,1],["Millet, Mr. Francis Davis",1,0,65.0,0,0,26.55,0],["Minahan, Dr. William Edward",1,0,44.0,2,0,90.0,0],["Minahan, Miss. Daisy E",1,1,33.0,1,0,90.0,1],["Minahan, Mrs. William Edward (Lillian E Thorpe)",1,1,37.0,1,0,90.0,1],["Mock, Mr. Philipp Edmund",1,0,30.0,1,0,57.75,1],["Molson, Mr. Harry Markland",1,0,55.0,0,0,30.5,0],["Moore, Mr. Clarence Bloomfield",1,0,47.0,0,0,42.4,0],["Natsch, Mr. Charles H",1,0,37.0,0,1,29.7,0],["Newell, Miss. Madeleine",1,1,31.0,1,0,113.275,1],["Newell, Miss. Marjorie",1,1,23.0,1,0,113.275,1],["Newell, Mr. Arthur Webster",1,0,58.0,0,2,113.275,0],["Newsom, Miss. Helen Monypeny",1,1,19.0,0,2,26.2833,1],["Nicholson, Mr. Arthur Ernest",1,0,64.0,0,0,26.0,0],["Oliva y Ocana, Dona. Fermina",1,1,39.0,0,0,108.9,1],["Omont, Mr. Alfred Fernand",1,0,null,0,0,25.7417,1],["Ostby, Miss. Helene Ragnhild",1,1,22.0,0,1,61.9792,1],["Ostby, Mr. Engelhart Cornelius",1,0,65.0,0,1,61.9792,0],["Ovies y Rodriguez, Mr. Servando",1,0,28.5,0,0,27.7208,0],["Parr, Mr. William Henry Marsh",1,0,null,0,0,0.0,0],["Partner, Mr. Austen",1,0,45.5,0,0,28.5,0],["Payne, Mr. Vivian Ponsonby",1,0,23.0,0,0,93.5,0],["Pears, Mr. Thomas Clinton",1,0,29.0,1,0,66.6,0],["Pears, Mrs. Thomas (Edith Wearne)",1,1,22.0,1,0,66.6,1],["Penasco y Castellana, Mr. Victor de Satode",1,0,18.0,1,0,108.9,0],["Penasco y Castellana, Mrs. Victor de Satode (Maria Josefa Perez de Soto y Vallejo)",1,1,17.0,1,0,108.9,1],["Perreault, Miss. Anne",1,1,30.0,0,0,93.5,1],["Peuchen, Major. Arthur Godfrey",1,0,52.0,0,0,30.5,1],["Porter, Mr. Walter Chamberlain",1,0,47.0,0,0,52.0,0],["Potter, Mrs. Thomas Jr (Lily Alexenia Wilson)",1,1,56.0,0,1,83.1583,1],["Reuchlin, Jonkheer. John George",1,0,38.0,0,0,0.0,0],["Rheims, Mr. George Alexander Lucien",1,0,null,0,0,39.6,1],["Ringhini, Mr. Sante",1,0,22.0,0,0,135.6333,0],["Robbins, Mr. Victor",1,0,null,0,0,227.525,0],["Robert, Mrs. Edward Scott (Elisabeth Walton McMillan)",1,1,43.0,0,1,211.3375,1],["Roebling, Mr. Washington Augustus II",1,0,31.0,0,0,50.4958,0],["Romaine, Mr. Charles Hallace ('Mr C Rolmane')",1,0,45.0,0,0,26.55,1],["Rood, Mr. Hugh Roscoe",1,0,null,0,0,50.0,0],["Rosenbaum, Miss. Edith Louise",1,1,33.0,0,0,27.7208,1],["Rosenshine, Mr. George ('Mr George Thorne')",1,0,46.0,0,0,79.2,0],["Ross, Mr. John Hugo",1,0,36.0,0,0,40.125,0],["Rothes, the Countess. of (Lucy Noel Martha Dyer-Edwards)",1,1,33.0,0,0,86.5,1],["Rothschild, Mr. Martin",1,0,55.0,1,0,59.4,0],["Rothschild, Mrs. Martin (Elizabeth L. Barrett)",1,1,54.0,1,0,59.4,1],["Rowe, Mr. Alfred G",1,0,33.0,0,0,26.55,0],["Ryerson, Master. John Borie",1,0,13.0,2,2,262.375,1],["Ryerson, Miss. Emily Borie",1,1,18.0,2,2,262.375,1],["Ryerson, Miss. Susan Parker 'Suzette'",1,1,21.0,2,2,262.375,1],["Ryerson, Mr. Arthur Larned",1,0,61.0,1,3,262.375,0],["Ryerson, Mrs. Arthur Larned (Emily Maria Borie)",1,1,48.0,1,3,262.375,1],["Saalfeld, Mr. Adolphe",1,0,null,0,0,30.5,1],["Sagesser, Mlle. Emma",1,1,24.0,0,0,69.3,1],["Salomon, Mr. Abraham L",1,0,null,0,0,26.0,1],["Schabert, Mrs. Paul (Emma Mock)",1,1,35.0,1,0,57.75,1],["Serepeca, Miss. Augusta",1,1,30.0,0,0,31.0,1],["Seward, Mr. Frederic Kimber",1,0,34.0,0,0,26.55,1],["Shutes, Miss. Elizabeth W",1,1,40.0,0,0,153.4625,1],["Silverthorne, Mr. Spencer Victor",1,0,35.0,0,0,26.2875,1],["Silvey, Mr. William Baird",1,0,50.0,1,0,55.9,0],["Silvey, Mrs. William Baird (Alice Munger)",1,1,39.0,1,0,55.9,1],["Simonius-Blumer, Col. Oberst Alfons",1,0,56.0,0,0,35.5,1],["Sloper, Mr. William Thompson",1,0,28.0,0,0,35.5,1],["Smart, Mr. John Montgomery",1,0,56.0,0,0,26.55,0],["Smith, Mr. James Clinch",1,0,56.0,0,0,30.6958,0],["Smith, Mr. Lucien Philip",1,0,24.0,1,0,60.0,0],["Smith, Mr. Richard William",1,0,null,0,0,26.0,0],["Smith, Mrs. Lucien Philip (Mary Eloise Hughes)",1,1,18.0,1,0,60.0,1],["Snyder, Mr. John Pillsbury",1,0,24.0,1,0,82.2667,1],["Snyder, Mrs. John Pillsbury (Nelle Stevenson)",1,1,23.0,1,0,82.2667,1],["Spedden, Master. Robert Douglas",1,0,6.0,0,2,134.5,1],["Spedden, Mr. Frederic Oakley",1,0,45.0,1,1,134.5,1],["Spedden, Mrs. Frederic Oakley (Margaretta Corning Stone)",1,1,40.0,1,1,134.5,1],["Spencer, Mr. William Augustus",1,0,57.0,1,0,146.5208,0],["Spencer, Mrs. William Augustus (Marie Eugenie)",1,1,null,1,0,146.5208,1],["Stahelin-Maeglin, Dr. Max",1,0,32.0,0,0,30.5,1],["Stead, Mr. William Thomas",1,0,62.0,0,0,26.55,0],["Stengel, Mr. Charles Emil Henry",1,0,54.0,1,0,55.4417,1],["Stengel, Mrs. Charles Emil Henry (Annie May Morris)",1,1,43.0,1,0,55.4417,1],["Stephenson, Mrs. Walter Bertram (Martha Eustis)",1,1,52.0,1,0,78.2667,1],["Stewart, Mr. Albert A",1,0,null,0,0,27.7208,0],["Stone, Mrs. George Nelson (Martha Evelyn)",1,1,62.0,0,0,80.0,1],["Straus, Mr. Isidor",1,0,67.0,1,0,221.7792,0],["Straus, Mrs. Isidor (Rosalie Ida Blun)",1,1,63.0,1,0,221.7792,0],["Sutton, Mr. Frederick",1,0,61.0,0,0,32.3208,0],["Swift, Mrs. Frederick Joel (Margaret Welles Barron)",1,1,48.0,0,0,25.9292,1],["Taussig, Miss. Ruth",1,1,18.0,0,2,79.65,1],["Taussig, Mr. Emil",1,0,52.0,1,1,79.65,0],["Taussig, Mrs. Emil (Tillie Mandelbaum)",1,1,39.0,1,1,79.65,1],["Taylor, Mr. Elmer Zebley",1,0,48.0,1,0,52.0,1],["Taylor, Mrs. Elmer Zebley (Juliet Cummins Wright)",1,1,null,1,0,52.0,1],["Thayer, Mr. John Borland",1,0,49.0,1,1,110.8833,0],["Thayer, Mr. John Borland Jr",1,0,17.0,0,2,110.8833,1],["Thayer, Mrs. John Borland (Marian Longstreth Morris)",1,1,39.0,1,1,110.8833,1],["Thorne, Mrs. Gertrude Maybelle",1,1,null,0,0,79.2,1],["Tucker, Mr. Gilbert Milligan Jr",1,0,31.0,0,0,28.5375,1],["Uruchurtu, Don. Manuel E",1,0,40.0,0,0,27.7208,0],["Van der hoef, Mr. Wyckoff",1,0,61.0,0,0,33.5,0],["Walker, Mr. William Anderson",1,0,47.0,0,0,34.0208,0],["Ward, Miss. Anna",1,1,35.0,0,0,512.3292,1],["Warren, Mr. Frank Manley",1,0,64.0,1,0,75.25,0],["Warren, Mrs. Frank Manley (Anna Sophia Atkinson)",1,1,60.0,1,0,75.25,1],["Weir, Col. John",1,0,60.0,0,0,26.55,0],["White, Mr. Percival Wayland",1,0,54.0,0,1,77.2875,0],["White, Mr. Richard Frasar",1,0,21.0,0,1,77.2875,0],["White, Mrs. John Stuart (Ella Holmes)",1,1,55.0,0,0,135.6333,1],["Wick, Miss. Mary Natalie",1,1,31.0,0,2,164.8667,1],["Wick, Mr. George Dennick",1,0,57.0,1,1,164.8667,0],["Wick, Mrs. George Dennick (Mary Hitchcock)",1,1,45.0,1,1,164.8667,1],["Widener, Mr. George Dunton",1,0,50.0,1,1,211.5,0],["Widener, Mr. Harry Elkins",1,0,27.0,0,2,211.5,0],["Widener, Mrs. George Dunton (Eleanor Elkins)",1,1,50.0,1,1,211.5,1],["Willard, Miss. Constance",1,1,21.0,0,0,26.55,1],["Williams, Mr. Charles Duane",1,0,51.0,0,1,61.3792,0],["Williams, Mr. Richard Norris II",1,0,21.0,0,1,61.3792,1],["Williams-Lambert, Mr. Fletcher Fellows",1,0,null,0,0,35.0,0],["Wilson, Miss. Helen Alice",1,1,31.0,0,0,134.5,1],["Woolner, Mr. Hugh",1,0,null,0,0,35.5,1],["Wright, Mr. George",1,0,62.0,0,0,26.55,0],["Young, Miss. Marie Grice",1,1,36.0,0,0,135.6333,1],["Abelson, Mr. Samuel",2,0,30.0,1,0,24.0,0],["Abelson, Mrs. Samuel (Hannah Wizosky)",2,1,28.0,1,0,24.0,1],["Aldworth, Mr. Charles Augustus",2,0,30.0,0,0,13.0,0],["Andrew, Mr. Edgardo Samuel",2,0,18.0,0,0,11.5,0],["Andrew, Mr. Frank Thomas",2,0,25.0,0,0,10.5,0],["Angle, Mr. William A",2,0,34.0,1,0,26.0,0],["Angle, Mrs. William A (Florence 'Mary' Agnes Hughes)",2,1,36.0,1,0,26.0,1],["Ashby, Mr. John",2,0,57.0,0,0,13.0,0],["Bailey, Mr. Percy Andrew",2,0,18.0,0,0,11.5,0],["Baimbrigge, Mr. Charles Robert",2,0,23.0,0,0,10.5,0],["Ball, Mrs. (Ada E Hall)",2,1,36.0,0,0,13.0,1],["Banfield, Mr. Frederick James",2,0,28.0,0,0,10.5,0],["Bateman, Rev. Robert James",2,0,51.0,0,0,12.525,0],["Beane, Mr. Edward",2,0,32.0,1,0,26.0,1],["Beane, Mrs. Edward (Ethel Clarke)",2,1,19.0,1,0,26.0,1],["Beauchamp, Mr. Henry James",2,0,28.0,0,0,26.0,0],["Becker, Master. Richard F",2,0,1.0,2,1,39.0,1],["Becker, Miss. Marion Louise",2,1,4.0,2,1,39.0,1],["Becker, Miss. Ruth Elizabeth",2,1,12.0,2,1,39.0,1],["Becker, Mrs. Allen Oliver (Nellie E Baumgardner)",2,1,36.0,0,3,39.0,1],["Beesley, Mr. Lawrence",2,0,34.0,0,0,13.0,1],["Bentham, Miss. Lilian W",2,1,19.0,0,0,13.0,1],["Berriman, Mr. William John",2,0,23.0,0,0,13.0,0],["Botsford, Mr. William Hull",2,0,26.0,0,0,13.0,0],["Bowenur, Mr. Solomon",2,0,42.0,0,0,13.0,0],["Bracken, Mr. James H",2,0,27.0,0,0,13.0,0],["Brown, Miss. Amelia 'Mildred'",2,1,24.0,0,0,13.0,1],["Brown, Miss. Edith Eileen",2,1,15.0,0,2,39.0,1],["Brown, Mr. Thomas William Solomon",2,0,60.0,1,1,39.0,0],["Brown, Mrs. Thomas William Solomon (Elizabeth Catherine Ford)",2,1,40.0,1,1,39.0,1],["Bryhl, Miss. Dagmar Jenny Ingeborg",2,1,20.0,1,0,26.0,1],["Bryhl, Mr. Kurt Arnold Gottfrid",2,0,25.0,1,0,26.0,0],["Buss, Miss. Kate",2,1,36.0,0,0,13.0,1],["Butler, Mr. Reginald Fenton",2,0,25.0,0,0,13.0,0],["Byles, Rev. Thomas Roussel Davids",2,0,42.0,0,0,13.0,0],["Bystrom, Mrs. (Karolina)",2,1,42.0,0,0,13.0,1],["Caldwell, Master. Alden Gates",2,0,0.83,0,2,29.0,1],["Caldwell, Mr. Albert Francis",2,0,26.0,1,1,29.0,1],["Caldwell, Mrs. Albert Francis (Sylvia Mae Harbaugh)",2,1,22.0,1,1,29.0,1],["Cameron, Miss. Clear Annie",2,1,35.0,0,0,21.0,1],["Campbell, Mr. William",2,0,null,0,0,0.0,0],["Carbines, Mr. William",2,0,19.0,0,0,13.0,0],["Carter, Mrs. Ernest Courtenay (Lilian Hughes)",2,1,44.0,1,0,26.0,0],["Carter, Rev. Ernest Courtenay",2,0,54.0,1,0,26.0,0],["Chapman, Mr. Charles Henry",2,0,52.0,0,0,13.5,0],["Chapman, Mr. John Henry",2,0,37.0,1,0,26.0,0],["Chapman, Mrs. John Henry (Sara Elizabeth Lawry)",2,1,29.0,1,0,26.0,0],["Christy, Miss. Julie Rachel",2,1,25.0,1,1,30.0,1],["Christy, Mrs. (Alice Frances)",2,1,45.0,0,2,30.0,1],["Clarke, Mr. Charles Valentine",2,0,29.0,1,0,26.0,0],["Clarke, Mrs. Charles V (Ada Maria Winfield)",2,1,28.0,1,0,26.0,1],["Coleridge, Mr. Reginald Charles",2,0,29.0,0,0,10.5,0],["Collander, Mr. Erik Gustaf",2,0,28.0,0,0,13.0,0],["Collett, Mr. Sidney C Stuart",2,0,24.0,0,0,10.5,1],["Collyer, Miss. Marjorie 'Lottie'",2,1,8.0,0,2,26.25,1],["Collyer, Mr. Harvey",2,0,31.0,1,1,26.25,0],["Collyer, Mrs. Harvey (Charlotte Annie Tate)",2,1,31.0,1,1,26.25,1],["Cook, Mrs. (Selena Rogers)",2,1,22.0,0,0,10.5,1],["Corbett, Mrs. Walter H (Irene Colvin)",2,1,30.0,0,0,13.0,0],["Corey, Mrs. Percy C (Mary Phyllis Elizabeth Miller)",2,1,null,0,0,21.0,0],["Cotterill, Mr. Henry 'Harry'",2,0,21.0,0,0,11.5,0],["Cunningham, Mr. Alfred Fleming",2,0,null,0,0,0.0,0],["Davies, Master. John Morgan Jr",2,0,8.0,1,1,36.75,1],["Davies, Mr. Charles Henry",2,0,18.0,0,0,73.5,0],["Davies, Mrs. John Morgan (Elizabeth Agnes Mary White)",2,1,48.0,0,2,36.75,1],["Davis, Miss. Mary",2,1,28.0,0,0,13.0,1],["de Brito, Mr. Jose Joaquim",2,0,32.0,0,0,13.0,0],["Deacon, Mr. Percy William",2,0,17.0,0,0,73.5,0],["del Carlo, Mr. Sebastiano",2,0,29.0,1,0,27.7208,0],["del Carlo, Mrs. Sebastiano (Argenia Genovesi)",2,1,24.0,1,0,27.7208,1],["Denbury, Mr. Herbert",2,0,25.0,0,0,31.5,0],["Dibden, Mr. William",2,0,18.0,0,0,73.5,0],["Doling, Miss. Elsie",2,1,18.0,0,1,23.0,1],["Doling, Mrs. John T (Ada Julia Bone)",2,1,34.0,0,1,23.0,1],["Downton, Mr. William James",2,0,54.0,0,0,26.0,0],["Drew, Master. Marshall Brines",2,0,8.0,0,2,32.5,1],["Drew, Mr. James Vivian",2,0,42.0,1,1,32.5,0],["Drew, Mrs. James Vivian (Lulu Thorne Christian)",2,1,34.0,1,1,32.5,1],["Duran y More, Miss. Asuncion",2,1,27.0,1,0,13.8583,1],["Duran y More, Miss. Florentina",2,1,30.0,1,0,13.8583,1],["Eitemiller, Mr. George Floyd",2,0,23.0,0,0,13.0,0],["Enander, Mr. Ingvar",2,0,21.0,0,0,13.0,0],["Fahlstrom, Mr. Arne Jonas",2,0,18.0,0,0,13.0,0],["Faunthorpe, Mr. Harry",2,0,40.0,1,0,26.0,0],["Faunthorpe, Mrs. Lizzie (Elizabeth Anne Wilkinson)",2,1,29.0,1,0,26.0,1],["Fillbrook, Mr. Joseph Charles",2,0,18.0,0,0,10.5,0],["Fox, Mr. Stanley Hubert",2,0,36.0,0,0,13.0,0],["Frost, Mr. Anthony Wood 'Archie'",2,0,null,0,0,0.0,0],["Funk, Miss. Annie Clemmer",2,1,38.0,0,0,13.0,0],["Fynney, Mr. Joseph J",2,0,35.0,0,0,26.0,0],["Gale, Mr. Harry",2,0,38.0,1,0,21.0,0],["Gale, Mr. Shadrach",2,0,34.0,1,0,21.0,0],["Garside, Miss. Ethel",2,1,34.0,0,0,13.0,1],["Gaskell, Mr. Alfred",2,0,16.0,0,0,26.0,0],["Gavey, Mr. Lawrence",2,0,26.0,0,0,10.5,0],["Gilbert, Mr. William",2,0,47.0,0,0,10.5,0],["Giles, Mr. Edgar",2,0,21.0,1,0,11.5,0],["Giles, Mr. Frederick Edward",2,0,21.0,1,0,11.5,0],["Giles, Mr. Ralph",2,0,24.0,0,0,13.5,0],["Gill, Mr. John William",2,0,24.0,0,0,13.0,0],["Gillespie, Mr. William Henry",2,0,34.0,0,0,13.0,0],["Givard, Mr. Hans Kristensen",2,0,30.0,0,0,13.0,0],["Greenberg, Mr. Samuel",2,0,52.0,0,0,13.0,0],["Hale, Mr. Reginald",2,0,30.0,0,0,13.0,0],["Hamalainen, Master. Viljo",2,0,0.67,1,1,14.5,1],["Hamalainen, Mrs. William (Anna)",2,1,24.0,0,2,14.5,1],["Harbeck, Mr. William H",2,0,44.0,0,0,13.0,0],["Harper, Miss. Annie Jessie 'Nina'",2,1,6.0,0,1,33.0,1],["Harper, Rev. John",2,0,28.0,0,1,33.0,0],["Harris, Mr. George",2,0,62.0,0,0,10.5,1],["Harris, Mr. Walter",2,0,30.0,0,0,10.5,0],["Hart, Miss. Eva Miriam",2,1,7.0,0,2,26.25,1],["Hart, Mr. Benjamin",2,0,43.0,1,1,26.25,0],["Hart, Mrs. Benjamin (Esther Ada Bloomfield)",2,1,45.0,1,1,26.25,1],["Herman, Miss. Alice",2,1,24.0,1,2,65.0,1],["Herman, Miss. Kate",2,1,24.0,1,2,65.0,1],["Herman, Mr. Samuel",2,0,49.0,1,2,65.0,0],["Herman, Mrs. Samuel (Jane Laver)",2,1,48.0,1,2,65.0,1],["Hewlett, Mrs. (Mary D Kingcome)",2,1,55.0,0,0,16.0,1],["Hickman, Mr. Leonard Mark",2,0,24.0,2,0,73.5,0],["Hickman, Mr. Lewis",2,0,32.0,2,0,73.5,0],["Hickman, Mr. Stanley George",2,0,21.0,2,0,73.5,0],["Hiltunen, Miss. Marta",2,1,18.0,1,1,13.0,0],["Hocking, Miss. Ellen 'Nellie'",2,1,20.0,2,1,23.0,1],["Hocking, Mr. Richard George",2,0,23.0,2,1,11.5,0],["Hocking, Mr. Samuel James Metcalfe",2,0,36.0,0,0,13.0,0],["Hocking, Mrs. Elizabeth (Eliza Needs)",2,1,54.0,1,3,23.0,1],["Hodges, Mr. Henry Price",2,0,50.0,0,0,13.0,0],["Hold, Mr. Stephen",2,0,44.0,1,0,26.0,0],["Hold, Mrs. Stephen (Annie Margaret Hill)",2,1,29.0,1,0,26.0,1],["Hood, Mr. Ambrose Jr",2,0,21.0,0,0,73.5,0],["Hosono, Mr. Masabumi",2,0,42.0,0,0,13.0,1],["Howard, Mr. Benjamin",2,0,63.0,1,0,26.0,0],["Howard, Mrs. Benjamin (Ellen Truelove Arman)",2,1,60.0,1,0,26.0,0],["Hunt, Mr. George Henry",2,0,33.0,0,0,12.275,0],["Ilett, Miss. Bertha",2,1,17.0,0,0,10.5,1],["Jacobsohn, Mr. Sidney Samuel",2,0,42.0,1,0,27.0,0],["Jacobsohn, Mrs. Sidney Samuel (Amy Frances Christy)",2,1,24.0,2,1,27.0,1],["Jarvis, Mr. John Denzil",2,0,47.0,0,0,15.0,0],["Jefferys, Mr. Clifford Thomas",2,0,24.0,2,0,31.5,0],["Jefferys, Mr. Ernest Wilfred",2,0,22.0,2,0,31.5,0],["Jenkin, Mr. Stephen Curnow",2,0,32.0,0,0,10.5,0],["Jerwan, Mrs. Amin S (Marie Marthe Thuillard)",2,1,23.0,0,0,13.7917,1],["Kantor, Mr. Sinai",2,0,34.0,1,0,26.0,0],["Kantor, Mrs. Sinai (Miriam Sternin)",2,1,24.0,1,0,26.0,1],["Karnes, Mrs. J Frank (Claire Bennett)",2,1,22.0,0,0,21.0,0],["Keane, Miss. Nora A",2,1,null,0,0,12.35,1],["Keane, Mr. Daniel",2,0,35.0,0,0,12.35,0],["Kelly, Mrs. Florence 'Fannie'",2,1,45.0,0,0,13.5,1],["Kirkland, Rev. Charles Leonard",2,0,57.0,0,0,12.35,0],["Knight, Mr. Robert J",2,0,null,0,0,0.0,0],["Kvillner, Mr. Johan Henrik Johannesson",2,0,31.0,0,0,10.5,0],["Lahtinen, Mrs. William (Anna Sylfven)",2,1,26.0,1,1,26.0,0],["Lahtinen, Rev. William",2,0,30.0,1,1,26.0,0],["Lamb, Mr. John Joseph",2,0,null,0,0,10.7083,0],["Laroche, Miss. Louise",2,1,1.0,1,2,41.5792,1],["Laroche, Miss. Simonne Marie Anne Andree",2,1,3.0,1,2,41.5792,1],["Laroche, Mr. Joseph Philippe Lemercier",2,0,25.0,1,2,41.5792,0],["Laroche, Mrs. Joseph (Juliette Marie Louise Lafargue)",2,1,22.0,1,2,41.5792,1],["Lehmann, Miss. Bertha",2,1,17.0,0,0,12.0,1],["Leitch, Miss. Jessie Wills",2,1,null,0,0,33.0,1],["Lemore, Mrs. (Amelia Milley)",2,1,34.0,0,0,10.5,1],["Levy, Mr. Rene Jacques",2,0,36.0,0,0,12.875,0],["Leyson, Mr. Robert William Norman",2,0,24.0,0,0,10.5,0],["Lingane, Mr. John",2,0,61.0,0,0,12.35,0],["Louch, Mr. Charles Alexander",2,0,50.0,1,0,26.0,0],["Louch, Mrs. Charles Alexander (Alice Adelaide Slow)",2,1,42.0,1,0,26.0,1],["Mack, Mrs. (Mary)",2,1,57.0,0,0,10.5,0],["Malachard, Mr. Noel",2,0,null,0,0,15.0458,0],["Mallet, Master. Andre",2,0,1.0,0,2,37.0042,1],["Mallet, Mr. Albert",2,0,31.0,1,1,37.0042,0],["Mallet, Mrs. Albert (Antoinette Magnin)",2,1,24.0,1,1,37.0042,1],["Mangiavacchi, Mr. Serafino Emilio",2,0,null,0,0,15.5792,0],["Matthews, Mr. William John",2,0,30.0,0,0,13.0,0],["Maybery, Mr. Frank Hubert",2,0,40.0,0,0,16.0,0],["McCrae, Mr. Arthur Gordon",2,0,32.0,0,0,13.5,0],["McCrie, Mr. James Matthew",2,0,30.0,0,0,13.0,0],["McKane, Mr. Peter David",2,0,46.0,0,0,26.0,0],["Mellinger, Miss. Madeleine Violet",2,1,13.0,0,1,19.5,1],["Mellinger, Mrs. (Elizabeth Anne Maidment)",2,1,41.0,0,1,19.5,1],["Mellors, Mr. William John",2,0,19.0,0,0,10.5,1],["Meyer, Mr. August",2,0,39.0,0,0,13.0,0],["Milling, Mr. Jacob Christian",2,0,48.0,0,0,13.0,0],["Mitchell, Mr. Henry Michael",2,0,70.0,0,0,10.5,0],["Montvila, Rev. Juozas",2,0,27.0,0,0,13.0,0],["Moraweck, Dr. Ernest",2,0,54.0,0,0,14.0,0],["Morley, Mr. Henry Samuel ('Mr Henry Marshall')",2,0,39.0,0,0,26.0,0],["Mudd, Mr. Thomas Charles",2,0,16.0,0,0,10.5,0],["Myles, Mr. Thomas Francis",2,0,62.0,0,0,9.6875,0],["Nasser, Mr. Nicholas",2,0,32.5,1,0,30.0708,0],["Nasser, Mrs. Nicholas (Adele Achem)",2,1,14.0,1,0,30.0708,1],["Navratil, Master. Edmond Roger",2,0,2.0,1,1,26.0,1],["Navratil, Master. Michel M",2,0,3.0,1,1,26.0,1],["Navratil, Mr. Michel ('Louis M Hoffman')",2,0,36.5,0,2,26.0,0],["Nesson, Mr. Israel",2,0,26.0,0,0,13.0,0],["Nicholls, Mr. Joseph Charles",2,0,19.0,1,1,36.75,0],["Norman, Mr. Robert Douglas",2,0,28.0,0,0,13.5,0],["Nourney, Mr. Alfred ('Baron von Drachstedt')",2,0,20.0,0,0,13.8625,1],["Nye, Mrs. (Elizabeth Ramell)",2,1,29.0,0,0,10.5,1],["Otter, Mr. Richard",2,0,39.0,0,0,13.0,0],["Oxenham, Mr. Percy Thomas",2,0,22.0,0,0,10.5,1],["Padro y Manent, Mr. Julian",2,0,null,0,0,13.8625,1],["Pain, Dr. Alfred",2,0,23.0,0,0,10.5,0],["Pallas y Castello, Mr. Emilio",2,0,29.0,0,0,13.8583,1],["Parker, Mr. Clifford Richard",2,0,28.0,0,0,10.5,0],["Parkes, Mr. Francis 'Frank'",2,0,null,0,0,0.0,0],["Parrish, Mrs. (Lutie Davis)",2,1,50.0,0,1,26.0,1],["Pengelly, Mr. Frederick William",2,0,19.0,0,0,10.5,0],["Pernot, Mr. Rene",2,0,null,0,0,15.05,0],["Peruschitz, Rev. Joseph Maria",2,0,41.0,0,0,13.0,0],["Phillips, Miss. Alice Frances Louisa",2,1,21.0,0,1,21.0,1],["Phillips, Miss. Kate Florence ('Mrs Kate Louise Phillips Marshall')",2,1,19.0,0,0,26.0,1],["Phillips, Mr. Escott Robert",2,0,43.0,0,1,21.0,0],["Pinsky, Mrs. (Rosa)",2,1,32.0,0,0,13.0,1],["Ponesell, Mr. Martin",2,0,34.0,0,0,13.0,0],["Portaluppi, Mr. Emilio Ilario Giuseppe",2,0,30.0,0,0,12.7375,1],["Pulbaum, Mr. Franz",2,0,27.0,0,0,15.0333,0],["Quick, Miss. Phyllis May",2,1,2.0,1,1,26.0,1],["Quick, Miss. Winifred Vera",2,1,8.0,1,1,26.0,1],["Quick, Mrs. Frederick Charles (Jane Richards)",2,1,33.0,0,2,26.0,1],["Reeves, Mr. David",2,0,36.0,0,0,10.5,0],["Renouf, Mr. Peter Henry",2,0,34.0,1,0,21.0,0],["Renouf, Mrs. Peter Henry (Lillian Jefferys)",2,1,30.0,3,0,21.0,1],["Reynaldo, Ms. Encarnacion",2,1,28.0,0,0,13.0,1],["Richard, Mr. Emile",2,0,23.0,0,0,15.0458,0],["Richards, Master. George Sibley",2,0,0.83,1,1,18.75,1],["Richards, Master. William Rowe",2,0,3.0,1,1,18.75,1],["Richards, Mrs. Sidney (Emily Hocking)",2,1,24.0,2,3,18.75,1],["Ridsdale, Miss. Lucy",2,1,50.0,0,0,10.5,1],["Rogers, Mr. Reginald Harry",2,0,19.0,0,0,10.5,0],["Rugg, Miss. Emily",2,1,21.0,0,0,10.5,1],["Schmidt, Mr. August",2,0,26.0,0,0,13.0,0],["Sedgwick, Mr. Charles Frederick Waddington",2,0,25.0,0,0,13.0,0],["Sharp, Mr. Percival James R",2,0,27.0,0,0,26.0,0],["Shelley, Mrs. William (Imanita Parrish Hall)",2,1,25.0,0,1,26.0,1],["Silven, Miss. Lyyli Karoliina",2,1,18.0,0,2,13.0,1],["Sincock, Miss. Maude",2,1,20.0,0,0,36.75,1],["Sinkkonen, Miss. Anna",2,1,30.0,0,0,13.0,1],["Sjostedt, Mr. Ernst Adolf",2,0,59.0,0,0,13.5,0],["Slayter, Miss. Hilda Mary",2,1,30.0,0,0,12.35,1],["Slemen, Mr. Richard James",2,0,35.0,0,0,10.5,0],["Smith, Miss. Marion Elsie",2,1,40.0,0,0,13.0,1],["Sobey, Mr. Samuel James Hayden",2,0,25.0,0,0,13.0,0],["Stanton, Mr. Samuel Ward",2,0,41.0,0,0,15.0458,0],["Stokes, Mr. Philip Joseph",2,0,25.0,0,0,10.5,0],["Swane, Mr. George",2,0,18.5,0,0,13.0,0],["Sweet, Mr. George Frederick",2,0,14.0,0,0,65.0,0],["Toomey, Miss. Ellen",2,1,50.0,0,0,10.5,1],["Troupiansky, Mr. Moses Aaron",2,0,23.0,0,0,13.0,0],["Trout, Mrs. William H (Jessie L)",2,1,28.0,0,0,12.65,1],["Troutt, Miss. Edwina Celia 'Winnie'",2,1,27.0,0,0,10.5,1],["Turpin, Mr. William John Robert",2,0,29.0,1,0,21.0,0],["Turpin, Mrs. William John Robert (Dorothy Ann Wonnacott)",2,1,27.0,1,0,21.0,0],["Veal, Mr. James",2,0,40.0,0,0,13.0,0],["Walcroft, Miss. Nellie",2,1,31.0,0,0,21.0,1],["Ware, Mr. John James",2,0,30.0,1,0,21.0,0],["Ware, Mr. William Jeffery",2,0,23.0,1,0,10.5,0],["Ware, Mrs. John James (Florence Louise Long)",2,1,31.0,0,0,21.0,1],["Watson, Mr. Ennis Hastings",2,0,null,0,0,0.0,0],["Watt, Miss. Bertha J",2,1,12.0,0,0,15.75,1],["Watt, Mrs. James (Elizabeth 'Bessie' Inglis Milne)",2,1,40.0,0,0,15.75,1],["Webber, Miss. Susan",2,1,32.5,0,0,13.0,1],["Weisz, Mr. Leopold",2,0,27.0,1,0,26.0,0],["Weisz, Mrs. Leopold (Mathilde Francoise Pede)",2,1,29.0,1,0,26.0,1],["Wells, Master. Ralph Lester",2,0,2.0,1,1,23.0,1],["Wells, Miss. Joan",2,1,4.0,1,1,23.0,1],["Wells, Mrs. Arthur Henry ('Addie' Dart Trevaskis)",2,1,29.0,0,2,23.0,1],["West, Miss. Barbara J",2,1,0.92,1,2,27.75,1],["West, Miss. Constance Mirium",2,1,5.0,1,2,27.75,1],["West, Mr. Edwy Arthur",2,0,36.0,1,2,27.75,0],["West, Mrs. Edwy Arthur (Ada Mary Worth)",2,1,33.0,1,2,27.75,1],["Wheadon, Mr. Edward H",2,0,66.0,0,0,10.5,0],["Wheeler, Mr. Edwin 'Frederick'",2,0,null,0,0,12.875,0],["Wilhelms, Mr. Charles",2,0,31.0,0,0,13.0,1],["Williams, Mr. Charles Eugene",2,0,null,0,0,13.0,1],["Wright, Miss. Marion",2,1,26.0,0,0,13.5,1],["Yrois, Miss. Henriette ('Mrs Harbeck')",2,1,24.0,0,0,13.0,0],["Abbing, Mr. Anthony",3,0,42.0,0,0,7.55,0],["Abbott, Master. Eugene Joseph",3,0,13.0,0,2,20.25,0],["Abbott, Mr. Rossmore Edward",3,0,16.0,1,1,20.25,0],["Abbott, Mrs. Stanton (Rosa Hunt)",3,1,35.0,1,1,20.25,1],["Abelseth, Miss. Karen Marie",3,1,16.0,0,0,7.65,1],["Abelseth, Mr. Olaus Jorgensen",3,0,25.0,0,0,7.65,1],["Abrahamsson, Mr. Abraham August Johannes",3,0,20.0,0,0,7.925,1],["Abrahim, Mrs. Joseph (Sophie Halaut Easu)",3,1,18.0,0,0,7.2292,1],["Adahl, Mr. Mauritz Nils Martin",3,0,30.0,0,0,7.25,0],["Adams, Mr. John",3,0,26.0,0,0,8.05,0],["Ahlin, Mrs. Johan (Johanna Persdotter Larsson)",3,1,40.0,1,0,9.475,0],["Aks, Master. Philip Frank",3,0,0.83,0,1,9.35,1],["Aks, Mrs. Sam (Leah Rosen)",3,1,18.0,0,1,9.35,1],["Albimona, Mr. Nassef Cassem",3,0,26.0,0,0,18.7875,1],["Alexander, Mr. William",3,0,26.0,0,0,7.8875,0],["Alhomaki, Mr. Ilmari Rudolf",3,0,20.0,0,0,7.925,0],["Ali, Mr. Ahmed",3,0,24.0,0,0,7.05,0],["Ali, Mr. William",3,0,25.0,0,0,7.05,0],["Allen, Mr. William Henry",3,0,35.0,0,0,8.05,0],["Allum, Mr. Owen George",3,0,18.0,0,0,8.3,0],["Andersen, Mr. Albert Karvin",3,0,32.0,0,0,22.525,0],["Andersen-Jensen, Miss. Carla Christine Nielsine",3,1,19.0,1,0,7.8542,1],["Andersson, Master. Sigvard Harald Elias",3,0,4.0,4,2,31.275,0],["Andersson, Miss. Ebba Iris Alfrida",3,1,6.0,4,2,31.275,0],["Andersson, Miss. Ellis Anna Maria",3,1,2.0,4,2,31.275,0],["Andersson, Miss. Erna Alexandra",3,1,17.0,4,2,7.925,1],["Andersson, Miss. Ida Augusta Margareta",3,1,38.0,4,2,7.775,0],["Andersson, Miss. Ingeborg Constanzia",3,1,9.0,4,2,31.275,0],["Andersson, Miss. Sigrid Elisabeth",3,1,11.0,4,2,31.275,0],["Andersson, Mr. Anders Johan",3,0,39.0,1,5,31.275,0],["Andersson, Mr. August Edvard ('Wennerstrom')",3,0,27.0,0,0,7.7958,1],["Andersson, Mr. Johan Samuel",3,0,26.0,0,0,7.775,0],["Andersson, Mrs. Anders Johan (Alfrida Konstantia Brogren)",3,1,39.0,1,5,31.275,0],["Andreasson, Mr. Paul Edvin",3,0,20.0,0,0,7.8542,0],["Angheloff, Mr. Minko",3,0,26.0,0,0,7.8958,0],["Arnold-Franchi, Mr. Josef",3,0,25.0,1,0,17.8,0],["Arnold-Franchi, Mrs. Josef (Josefine Franchi)",3,1,18.0,1,0,17.8,0],["Aronsson, Mr. Ernst Axel Algot",3,0,24.0,0,0,7.775,0],["Asim, Mr. Adola",3,0,35.0,0,0,7.05,0],["Asplund, Master. Carl Edgar",3,0,5.0,4,2,31.3875,0],["Asplund, Master. Clarence Gustaf Hugo",3,0,9.0,4,2,31.3875,0],["Asplund, Master. Edvin Rojj Felix",3,0,3.0,4,2,31.3875,1],["Asplund, Master. Filip Oscar",3,0,13.0,4,2,31.3875,0],["Asplund, Miss. Lillian Gertrud",3,1,5.0,4,2,31.3875,1],["Asplund, Mr. Carl Oscar Vilhelm Gustafsson",3,0,40.0,1,5,31.3875,0],["Asplund, Mr. Johan Charles",3,0,23.0,0,0,7.7958,1],["Asplund, Mrs. Carl Oscar (Selma Augusta Emilia Johansson)",3,1,38.0,1,5,31.3875,1],["Assaf Khalil, Mrs. Mariana ('Miriam')",3,1,45.0,0,0,7.225,1],["Assaf, Mr. Gerios",3,0,21.0,0,0,7.225,0],["Assam, Mr. Ali",3,0,23.0,0,0,7.05,0],["Attalah, Miss. Malake",3,1,17.0,0,0,14.4583,0],["Attalah, Mr. Sleiman",3,0,30.0,0,0,7.225,0],["Augustsson, Mr. Albert",3,0,23.0,0,0,7.8542,0],["Ayoub, Miss. Banoura",3,1,13.0,0,0,7.2292,1],["Baccos, Mr. Raffull",3,0,20.0,0,0,7.225,0],["Backstrom, Mr. Karl Alfred",3,0,32.0,1,0,15.85,0],["Backstrom, Mrs. Karl Alfred (Maria Mathilda Gustafsson)",3,1,33.0,3,0,15.85,1],["Baclini, Miss. Eugenie",3,1,0.75,2,1,19.2583,1],["Baclini, Miss. Helene Barbara",3,1,0.75,2,1,19.2583,1],["Baclini, Miss. Marie Catherine",3,1,5.0,2,1,19.2583,1],["Baclini, Mrs. Solomon (Latifa Qurban)",3,1,24.0,0,3,19.2583,1],["Badman, Miss. Emily Louisa",3,1,18.0,0,0,8.05,1],["Badt, Mr. Mohamed",3,0,40.0,0,0,7.225,0],["Balkic, Mr. Cerin",3,0,26.0,0,0,7.8958,0],["Barah, Mr. Hanna Assi",3,0,20.0,0,0,7.2292,1],["Barbara, Miss. Saiide",3,1,18.0,0,1,14.4542,0],["Barbara, Mrs. (Catherine David)",3,1,45.0,0,1,14.4542,0],["Barry, Miss. Julia",3,1,27.0,0,0,7.8792,0],["Barton, Mr. David John",3,0,22.0,0,0,8.05,0],["Beavan, Mr. William Thomas",3,0,19.0,0,0,8.05,0],["Bengtsson, Mr. John Viktor",3,0,26.0,0,0,7.775,0],["Berglund, Mr. Karl Ivar Sven",3,0,22.0,0,0,9.35,0],["Betros, Master. Seman",3,0,null,0,0,7.2292,0],["Betros, Mr. Tannous",3,0,20.0,0,0,4.0125,0],["Bing, Mr. Lee",3,0,32.0,0,0,56.4958,1],["Birkeland, Mr. Hans Martin Monsen",3,0,21.0,0,0,7.775,0],["Bjorklund, Mr. Ernst Herbert",3,0,18.0,0,0,7.75,0],["Bostandyeff, Mr. Guentcho",3,0,26.0,0,0,7.8958,0],["Boulos, Master. Akar",3,0,6.0,1,1,15.2458,0],["Boulos, Miss. Nourelain",3,1,9.0,1,1,15.2458,0],["Boulos, Mr. Hanna",3,0,null,0,0,7.225,0],["Boulos, Mrs. Joseph (Sultana)",3,1,null,0,2,15.2458,0],["Bourke, Miss. Mary",3,1,null,0,2,7.75,0],["Bourke, Mr. John",3,0,40.0,1,1,15.5,0],["Bourke, Mrs. John (Catherine)",3,1,32.0,1,1,15.5,0],["Bowen, Mr. David John 'Dai'",3,0,21.0,0,0,16.1,0],["Bradley, Miss. Bridget Delia",3,1,22.0,0,0,7.725,1],["Braf, Miss. Elin Ester Maria",3,1,20.0,0,0,7.8542,0],["Braund, Mr. Lewis Richard",3,0,29.0,1,0,7.0458,0],["Braund, Mr. Owen Harris",3,0,22.0,1,0,7.25,0],["Brobeck, Mr. Karl Rudolf",3,0,22.0,0,0,7.7958,0],["Brocklebank, Mr. William Alfred",3,0,35.0,0,0,8.05,0],["Buckley, Miss. Katherine",3,1,18.5,0,0,7.2833,0],["Buckley, Mr. Daniel",3,0,21.0,0,0,7.8208,1],["Burke, Mr. Jeremiah",3,0,19.0,0,0,6.75,0],["Burns, Miss. Mary Delia",3,1,18.0,0,0,7.8792,0],["Cacic, Miss. Manda",3,1,21.0,0,0,8.6625,0],["Cacic, Miss. Marija",3,1,30.0,0,0,8.6625,0],["Cacic, Mr. Jego Grga",3,0,18.0,0,0,8.6625,0],["Cacic, Mr. Luka",3,0,38.0,0,0,8.6625,0],["Calic, Mr. Jovo",3,0,17.0,0,0,8.6625,0],["Calic, Mr. Petar",3,0,17.0,0,0,8.6625,0],["Canavan, Miss. Mary",3,1,21.0,0,0,7.75,0],["Canavan, Mr. Patrick",3,0,21.0,0,0,7.75,0],["Cann, Mr. Ernest Charles",3,0,21.0,0,0,8.05,0],["Caram, Mr. Joseph",3,0,null,1,0,14.4583,0],["Caram, Mrs. Joseph (Maria Elias)",3,1,null,1,0,14.4583,0],["Carlsson, Mr. August Sigfrid",3,0,28.0,0,0,7.7958,0],["Carlsson, Mr. Carl Robert",3,0,24.0,0,0,7.8542,0],["Carr, Miss. Helen 'Ellen'",3,1,16.0,0,0,7.75,1],["Carr, Miss. Jeannie",3,1,37.0,0,0,7.75,0],["Carver, Mr. Alfred John",3,0,28.0,0,0,7.25,0],["Celotti, Mr. Francesco",3,0,24.0,0,0,8.05,0],["Charters, Mr. David",3,0,21.0,0,0,7.7333,0],["Chip, Mr. Chang",3,0,32.0,0,0,56.4958,1],["Christmann, Mr. Emil",3,0,29.0,0,0,8.05,0],["Chronopoulos, Mr. Apostolos",3,0,26.0,1,0,14.4542,0],["Chronopoulos, Mr. Demetrios",3,0,18.0,1,0,14.4542,0],["Coelho, Mr. Domingos Fernandeo",3,0,20.0,0,0,7.05,0],["Cohen, Mr. Gurshon 'Gus'",3,0,18.0,0,0,8.05,1],["Colbert, Mr. Patrick",3,0,24.0,0,0,7.25,0],["Coleff, Mr. Peju",3,0,36.0,0,0,7.4958,0],["Coleff, Mr. Satio",3,0,24.0,0,0,7.4958,0],["Conlon, Mr. Thomas Henry",3,0,31.0,0,0,7.7333,0],["Connaghton, Mr. Michael",3,0,31.0,0,0,7.75,0],["Connolly, Miss. Kate",3,1,22.0,0,0,7.75,1],["Connolly, Miss. Kate",3,1,30.0,0,0,7.6292,0],["Connors, Mr. Patrick",3,0,70.5,0,0,7.75,0],["Cook, Mr. Jacob",3,0,43.0,0,0,8.05,0],["Cor, Mr. Bartol",3,0,35.0,0,0,7.8958,0],["Cor, Mr. Ivan",3,0,27.0,0,0,7.8958,0],["Cor, Mr. Liudevit",3,0,19.0,0,0,7.8958,0],["Corn, Mr. Harry",3,0,30.0,0,0,8.05,0],["Coutts, Master. Eden Leslie 'Neville'",3,0,9.0,1,1,15.9,1],["Coutts, Master. William Loch 'William'",3,0,3.0,1,1,15.9,1],["Coutts, Mrs. William (Winnie 'Minnie' Treanor)",3,1,36.0,0,2,15.9,1],["Coxon, Mr. Daniel",3,0,59.0,0,0,7.25,0],["Crease, Mr. Ernest James",3,0,19.0,0,0,8.1583,0],["Cribb, Miss. Laura Alice",3,1,17.0,0,1,16.1,1],["Cribb, Mr. John Hatfield",3,0,44.0,0,1,16.1,0],["Culumovic, Mr. Jeso",3,0,17.0,0,0,8.6625,0],["Daher, Mr. Shedid",3,0,22.5,0,0,7.225,0],["Dahl, Mr. Karl Edwart",3,0,45.0,0,0,8.05,1],["Dahlberg, Miss. Gerda Ulrika",3,1,22.0,0,0,10.5167,0],["Dakic, Mr. Branko",3,0,19.0,0,0,10.1708,0],["Daly, Miss. Margaret Marcella 'Maggie'",3,1,30.0,0,0,6.95,1],["Daly, Mr. Eugene Patrick",3,0,29.0,0,0,7.75,1],["Danbom, Master. Gilbert Sigvard Emanuel",3,0,0.33,0,2,14.4,0],["Danbom, Mr. Ernst Gilbert",3,0,34.0,1,1,14.4,0],["Danbom, Mrs. Ernst Gilbert (Anna Sigrid Maria Brogren)",3,1,28.0,1,1,14.4,0],["Danoff, Mr. Yoto",3,0,27.0,0,0,7.8958,0],["Dantcheff, Mr. Ristiu",3,0,25.0,0,0,7.8958,0],["Davies, Mr. Alfred J",3,0,24.0,2,0,24.15,0],["Davies, Mr. Evan",3,0,22.0,0,0,8.05,0],["Davies, Mr. John Samuel",3,0,21.0,2,0,24.15,0],["Davies, Mr. Joseph",3,0,17.0,2,0,8.05,0],["Davison, Mr. Thomas Henry",3,0,null,1,0,16.1,0],["Davison, Mrs. Thomas Henry (Mary E Finck)",3,1,null,1,0,16.1,1],["de Messemaeker, Mr. Guillaume Joseph",3,0,36.5,1,0,17.4,1],["de Messemaeker, Mrs. Guillaume Joseph (Emma)",3,1,36.0,1,0,17.4,1],["de Mulder, Mr. Theodore",3,0,30.0,0,0,9.5,1],["de Pelsmaeker, Mr. Alfons",3,0,16.0,0,0,9.5,0],["Dean, Master. Bertram Vere",3,0,1.0,1,2,20.575,1],["Dean, Miss. Elizabeth Gladys 'Millvina'",3,1,0.17,1,2,20.575,1],["Dean, Mr. Bertram Frank",3,0,26.0,1,2,20.575,0],["Dean, Mrs. Bertram (Eva Georgetta Light)",3,1,33.0,1,2,20.575,1],["Delalic, Mr. Redjo",3,0,25.0,0,0,7.8958,0],["Demetri, Mr. Marinko",3,0,null,0,0,7.8958,0],["Denkoff, Mr. Mitto",3,0,null,0,0,7.8958,0],["Dennis, Mr. Samuel",3,0,22.0,0,0,7.25,0],["Dennis, Mr. William",3,0,36.0,0,0,7.25,0],["Devaney, Miss. Margaret Delia",3,1,19.0,0,0,7.8792,1],["Dika, Mr. Mirko",3,0,17.0,0,0,7.8958,0],["Dimic, Mr. Jovan",3,0,42.0,0,0,8.6625,0],["Dintcheff, Mr. Valtcho",3,0,43.0,0,0,7.8958,0],["Doharr, Mr. Tannous",3,0,null,0,0,7.2292,0],["Dooley, Mr. Patrick",3,0,32.0,0,0,7.75,0],["Dorking, Mr. Edward Arthur",3,0,19.0,0,0,8.05,1],["Dowdell, Miss. Elizabeth",3,1,30.0,0,0,12.475,1],["Doyle, Miss. Elizabeth",3,1,24.0,0,0,7.75,0],["Drapkin, Miss. Jennie",3,1,23.0,0,0,8.05,1],["Drazenoic, Mr. Jozef",3,0,33.0,0,0,7.8958,0],["Duane, Mr. Frank",3,0,65.0,0,0,7.75,0],["Duquemin, Mr. Joseph",3,0,24.0,0,0,7.55,1],["Dyker, Mr. Adolf Fredrik",3,0,23.0,1,0,13.9,0],["Dyker, Mrs. Adolf Fredrik (Anna Elisabeth Judith Andersson)",3,1,22.0,1,0,13.9,1],["Edvardsson, Mr. Gustaf Hjalmar",3,0,18.0,0,0,7.775,0],["Eklund, Mr. Hans Linus",3,0,16.0,0,0,7.775,0],["Ekstrom, Mr. Johan",3,0,45.0,0,0,6.975,0],["Elias, Mr. Dibo",3,0,null,0,0,7.225,0],["Elias, Mr. Joseph",3,0,39.0,0,2,7.2292,0],["Elias, Mr. Joseph Jr",3,0,17.0,1,1,7.2292,0],["Elias, Mr. Tannous",3,0,15.0,1,1,7.2292,0],["Elsbury, Mr. William James",3,0,47.0,0,0,7.25,0],["Emanuel, Miss. Virginia Ethel",3,1,5.0,0,0,12.475,1],["Emir, Mr. Farred Chehab",3,0,null,0,0,7.225,0],["Everett, Mr. Thomas James",3,0,40.5,0,0,15.1,0],["Farrell, Mr. James",3,0,40.5,0,0,7.75,0],["Finoli, Mr. Luigi",3,0,null,0,0,7.05,1],["Fischer, Mr. Eberhard Thelander",3,0,18.0,0,0,7.7958,0],["Fleming, Miss. Honora",3,1,null,0,0,7.75,0],["Flynn, Mr. James",3,0,null,0,0,7.75,0],["Flynn, Mr. John",3,0,null,0,0,6.95,0],["Foley, Mr. Joseph",3,0,26.0,0,0,7.8792,0],["Foley, Mr. William",3,0,null,0,0,7.75,0],["Foo, Mr. Choong",3,0,null,0,0,56.4958,1],["Ford, Miss. Doolina Margaret 'Daisy'",3,1,21.0,2,2,34.375,0],["Ford, Miss. Robina Maggie 'Ruby'",3,1,9.0,2,2,34.375,0],["Ford, Mr. Arthur",3,0,null,0,0,8.05,0],["Ford, Mr. Edward Watson",3,0,18.0,2,2,34.375,0],["Ford, Mr. William Neal",3,0,16.0,1,3,34.375,0],["Ford, Mrs. Edward (Margaret Ann Watson)",3,1,48.0,1,3,34.375,0],["Fox, Mr. Patrick",3,0,null,0,0,7.75,0],["Franklin, Mr. Charles (Charles Fardon)",3,0,null,0,0,7.25,0],["Gallagher, Mr. Martin",3,0,25.0,0,0,7.7417,0],["Garfirth, Mr. John",3,0,null,0,0,14.5,0],["Gheorgheff, Mr. Stanio",3,0,null,0,0,7.8958,0],["Gilinski, Mr. Eliezer",3,0,22.0,0,0,8.05,0],["Gilnagh, Miss. Katherine 'Katie'",3,1,16.0,0,0,7.7333,1],["Glynn, Miss. Mary Agatha",3,1,null,0,0,7.75,1],["Goldsmith, Master. Frank John William 'Frankie'",3,0,9.0,0,2,20.525,1],["Goldsmith, Mr. Frank John",3,0,33.0,1,1,20.525,0],["Goldsmith, Mr. Nathan",3,0,41.0,0,0,7.85,0],["Goldsmith, Mrs. Frank John (Emily Alice Brown)",3,1,31.0,1,1,20.525,1],["Goncalves, Mr. Manuel Estanslas",3,0,38.0,0,0,7.05,0],["Goodwin, Master. Harold Victor",3,0,9.0,5,2,46.9,0],["Goodwin, Master. Sidney Leonard",3,0,1.0,5,2,46.9,0],["Goodwin, Master. William Frederick",3,0,11.0,5,2,46.9,0],["Goodwin, Miss. Jessie Allis",3,1,10.0,5,2,46.9,0],["Goodwin, Miss. Lillian Amy",3,1,16.0,5,2,46.9,0],["Goodwin, Mr. Charles Edward",3,0,14.0,5,2,46.9,0],["Goodwin, Mr. Charles Frederick",3,0,40.0,1,6,46.9,0],["Goodwin, Mrs. Frederick (Augusta Tyler)",3,1,43.0,1,6,46.9,0],["Green, Mr. George Henry",3,0,51.0,0,0,8.05,0],["Gronnestad, Mr. Daniel Danielsen",3,0,32.0,0,0,8.3625,0],["Guest, Mr. Robert",3,0,null,0,0,8.05,0],["Gustafsson, Mr. Alfred Ossian",3,0,20.0,0,0,9.8458,0],["Gustafsson, Mr. Anders Vilhelm",3,0,37.0,2,0,7.925,0],["Gustafsson, Mr. Johan Birger",3,0,28.0,2,0,7.925,0],["Gustafsson, Mr. Karl Gideon",3,0,19.0,0,0,7.775,0],["Haas, Miss. Aloisia",3,1,24.0,0,0,8.85,0],["Hagardon, Miss. Kate",3,1,17.0,0,0,7.7333,0],["Hagland, Mr. Ingvald Olai Olsen",3,0,null,1,0,19.9667,0],["Hagland, Mr. Konrad Mathias Reiersen",3,0,null,1,0,19.9667,0],["Hakkarainen, Mr. Pekka Pietari",3,0,28.0,1,0,15.85,0],["Hakkarainen, Mrs. Pekka Pietari (Elin Matilda Dolck)",3,1,24.0,1,0,15.85,1],["Hampe, Mr. Leon",3,0,20.0,0,0,9.5,0],["Hanna, Mr. Mansour",3,0,23.5,0,0,7.2292,0],["Hansen, Mr. Claus Peter",3,0,41.0,2,0,14.1083,0],["Hansen, Mr. Henrik Juul",3,0,26.0,1,0,7.8542,0],["Hansen, Mr. Henry Damsgaard",3,0,21.0,0,0,7.8542,0],["Hansen, Mrs. Claus Peter (Jennie L Howard)",3,1,45.0,1,0,14.1083,1],["Harknett, Miss. Alice Phoebe",3,1,null,0,0,7.55,0],["Harmer, Mr. Abraham (David Lishin)",3,0,25.0,0,0,7.25,0],["Hart, Mr. Henry",3,0,null,0,0,6.8583,0],["Hassan, Mr. Houssein G N",3,0,11.0,0,0,18.7875,0],["Healy, Miss. Hanora 'Nora'",3,1,null,0,0,7.75,1],["Hedman, Mr. Oskar Arvid",3,0,27.0,0,0,6.975,1],["Hee, Mr. Ling",3,0,null,0,0,56.4958,1],["Hegarty, Miss. Hanora 'Nora'",3,1,18.0,0,0,6.75,0],["Heikkinen, Miss. Laina",3,1,26.0,0,0,7.925,1],["Heininen, Miss. Wendla Maria",3,1,23.0,0,0,7.925,0],["Hellstrom, Miss. Hilda Maria",3,1,22.0,0,0,8.9625,1],["Hendekovic, Mr. Ignjac",3,0,28.0,0,0,7.8958,0],["Henriksson, Miss. Jenny Lovisa",3,1,28.0,0,0,7.775,0],["Henry, Miss. Delia",3,1,null,0,0,7.75,0],["Hirvonen, Miss. Hildur E",3,1,2.0,0,1,12.2875,1],["Hirvonen, Mrs. Alexander (Helga E Lindqvist)",3,1,22.0,1,1,12.2875,1],["Holm, Mr. John Fredrik Alexander",3,0,43.0,0,0,6.45,0],["Holthen, Mr. Johan Martin",3,0,28.0,0,0,22.525,0],["Honkanen, Miss. Eliina",3,1,27.0,0,0,7.925,1],["Horgan, Mr. John",3,0,null,0,0,7.75,0],["Howard, Miss. May Elizabeth",3,1,null,0,0,8.05,1],["Humblen, Mr. Adolf Mathias Nicolai Olsen",3,0,42.0,0,0,7.65,0],["Hyman, Mr. Abraham",3,0,null,0,0,7.8875,1],["Ibrahim Shawah, Mr. Yousseff",3,0,30.0,0,0,7.2292,0],["Ilieff, Mr. Ylio",3,0,null,0,0,7.8958,0],["Ilmakangas, Miss. Ida Livija",3,1,27.0,1,0,7.925,0],["Ilmakangas, Miss. Pieta Sofia",3,1,25.0,1,0,7.925,0],["Ivanoff, Mr. Kanio",3,0,null,0,0,7.8958,0],["Jalsevac, Mr. Ivan",3,0,29.0,0,0,7.8958,1],["Jansson, Mr. Carl Olof",3,0,21.0,0,0,7.7958,1],["Jardin, Mr. Jose Neto",3,0,null,0,0,7.05,0],["Jensen, Mr. Hans Peder",3,0,20.0,0,0,7.8542,0],["Jensen, Mr. Niels Peder",3,0,48.0,0,0,7.8542,0],["Jensen, Mr. Svend Lauritz",3,0,17.0,1,0,7.0542,0],["Jermyn, Miss. Annie",3,1,null,0,0,7.75,1],["Johannesen-Bratthammer, Mr. Bernt",3,0,null,0,0,8.1125,1],["Johanson, Mr. Jakob Alfred",3,0,34.0,0,0,6.4958,0],["Johansson Palmquist, Mr. Oskar Leander",3,0,26.0,0,0,7.775,1],["Johansson, Mr. Erik",3,0,22.0,0,0,7.7958,0],["Johansson, Mr. Gustaf Joel",3,0,33.0,0,0,8.6542,0],["Johansson, Mr. Karl Johan",3,0,31.0,0,0,7.775,0],["Johansson, Mr. Nils",3,0,29.0,0,0,7.8542,0],["Johnson, Master. Harold Theodor",3,0,4.0,1,1,11.1333,1],["Johnson, Miss. Eleanor Ileen",3,1,1.0,1,1,11.1333,1],["Johnson, Mr. Alfred",3,0,49.0,0,0,0.0,0],["Johnson, Mr. Malkolm Joackim",3,0,33.0,0,0,7.775,0],["Johnson, Mr. William Cahoone Jr",3,0,19.0,0,0,0.0,0],["Johnson, Mrs. Oscar W (Elisabeth Vilhelmina Berg)",3,1,27.0,0,2,11.1333,1],["Johnston, Master. William Arthur 'Willie'",3,0,null,1,2,23.45,0],["Johnston, Miss. Catherine Helen 'Carrie'",3,1,null,1,2,23.45,0],["Johnston, Mr. Andrew G",3,0,null,1,2,23.45,0],["Johnston, Mrs. Andrew G (Elizabeth 'Lily' Watson)",3,1,null,1,2,23.45,0],["Jonkoff, Mr. Lalio",3,0,23.0,0,0,7.8958,0],["Jonsson, Mr. Carl",3,0,32.0,0,0,7.8542,1],["Jonsson, Mr. Nils Hilding",3,0,27.0,0,0,7.8542,0],["Jussila, Miss. Katriina",3,1,20.0,1,0,9.825,0],["Jussila, Miss. Mari Aina",3,1,21.0,1,0,9.825,0],["Jussila, Mr. Eiriik",3,0,32.0,0,0,7.925,1],["Kallio, Mr. Nikolai Erland",3,0,17.0,0,0,7.125,0],["Kalvik, Mr. Johannes Halvorsen",3,0,21.0,0,0,8.4333,0],["Karaic, Mr. Milan",3,0,30.0,0,0,7.8958,0],["Karlsson, Mr. Einar Gervasius",3,0,21.0,0,0,7.7958,1],["Karlsson, Mr. Julius Konrad Eugen",3,0,33.0,0,0,7.8542,0],["Karlsson, Mr. Nils August",3,0,22.0,0,0,7.5208,0],["Karun, Miss. Manca",3,1,4.0,0,1,13.4167,1],["Karun, Mr. Franz",3,0,39.0,0,1,13.4167,1],["Kassem, Mr. Fared",3,0,null,0,0,7.2292,0],["Katavelas, Mr. Vassilios ('Catavelas Vassilios')",3,0,18.5,0,0,7.2292,0],["Keane, Mr. Andrew 'Andy'",3,0,null,0,0,7.75,0],["Keefe, Mr. Arthur",3,0,null,0,0,7.25,0],["Kelly, Miss. Anna Katherine 'Annie Kate'",3,1,null,0,0,7.75,1],["Kelly, Miss. Mary",3,1,null,0,0,7.75,1],["Kelly, Mr. James",3,0,34.5,0,0,7.8292,0],["Kelly, Mr. James",3,0,44.0,0,0,8.05,0],["Kennedy, Mr. John",3,0,null,0,0,7.75,1],["Khalil, Mr. Betros",3,0,null,1,0,14.4542,0],["Khalil, Mrs. Betros (Zahie 'Maria' Elias)",3,1,null,1,0,14.4542,0],["Kiernan, Mr. John",3,0,null,1,0,7.75,0],["Kiernan, Mr. Philip",3,0,null,1,0,7.75,0],["Kilgannon, Mr. Thomas J",3,0,null,0,0,7.7375,0],["Kink, Miss. Maria",3,1,22.0,2,0,8.6625,0],["Kink, Mr. Vincenz",3,0,26.0,2,0,8.6625,0],["Kink-Heilmann, Miss. Luise Gretchen",3,1,4.0,0,2,22.025,1],["Kink-Heilmann, Mr. Anton",3,0,29.0,3,1,22.025,1],["Kink-Heilmann, Mrs. Anton (Luise Heilmann)",3,1,26.0,1,1,22.025,1],["Klasen, Miss. Gertrud Emilia",3,1,1.0,1,1,12.1833,0],["Klasen, Mr. Klas Albin",3,0,18.0,1,1,7.8542,0],["Klasen, Mrs. (Hulda Kristina Eugenia Lofqvist)",3,1,36.0,0,2,12.1833,0],["Kraeff, Mr. Theodor",3,0,null,0,0,7.8958,0],["Krekorian, Mr. Neshan",3,0,25.0,0,0,7.2292,1],["Lahoud, Mr. Sarkis",3,0,null,0,0,7.225,0],["Laitinen, Miss. Kristina Sofia",3,1,37.0,0,0,9.5875,0],["Laleff, Mr. Kristo",3,0,null,0,0,7.8958,0],["Lam, Mr. Ali",3,0,null,0,0,56.4958,1],["Lam, Mr. Len",3,0,null,0,0,56.4958,0],["Landergren, Miss. Aurora Adelia",3,1,22.0,0,0,7.25,1],["Lane, Mr. Patrick",3,0,null,0,0,7.75,0],["Lang, Mr. Fang",3,0,26.0,0,0,56.4958,1],["Larsson, Mr. August Viktor",3,0,29.0,0,0,9.4833,0],["Larsson, Mr. Bengt Edvin",3,0,29.0,0,0,7.775,0],["Larsson-Rondberg, Mr. Edvard A",3,0,22.0,0,0,7.775,0],["Leeni, Mr. Fahim ('Philip Zenni')",3,0,22.0,0,0,7.225,1],["Lefebre, Master. Henry Forbes",3,0,null,3,1,25.4667,0],["Lefebre, Miss. Ida",3,1,null,3,1,25.4667,0],["Lefebre, Miss. Jeannie",3,1,null,3,1,25.4667,0],["Lefebre, Miss. Mathilde",3,1,null,3,1,25.4667,0],["Lefebre, Mrs. Frank (Frances)",3,1,null,0,4,25.4667,0],["Leinonen, Mr. Antti Gustaf",3,0,32.0,0,0,7.925,0],["Lemberopolous, Mr. Peter L",3,0,34.5,0,0,6.4375,0],["Lennon, Miss. Mary",3,1,null,1,0,15.5,0],["Lennon, Mr. Denis",3,0,null,1,0,15.5,0],["Leonard, Mr. Lionel",3,0,36.0,0,0,0.0,0],["Lester, Mr. James",3,0,39.0,0,0,24.15,0],["Lievens, Mr. Rene Aime",3,0,24.0,0,0,9.5,0],["Lindahl, Miss. Agda Thorilda Viktoria",3,1,25.0,0,0,7.775,0],["Lindblom, Miss. Augusta Charlotta",3,1,45.0,0,0,7.75,0],["Lindell, Mr. Edvard Bengtsson",3,0,36.0,1,0,15.55,0],["Lindell, Mrs. Edvard Bengtsson (Elin Gerda Persson)",3,1,30.0,1,0,15.55,0],["Lindqvist, Mr. Eino William",3,0,20.0,1,0,7.925,1],["Linehan, Mr. Michael",3,0,null,0,0,7.8792,0],["Ling, Mr. Lee",3,0,28.0,0,0,56.4958,0],["Lithman, Mr. Simon",3,0,null,0,0,7.55,0],["Lobb, Mr. William Arthur",3,0,30.0,1,0,16.1,0],["Lobb, Mrs. William Arthur (Cordelia K Stanlick)",3,1,26.0,1,0,16.1,0],["Lockyer, Mr. Edward",3,0,null,0,0,7.8792,0],["Lovell, Mr. John Hall ('Henry')",3,0,20.5,0,0,7.25,0],["Lulic, Mr. Nikola",3,0,27.0,0,0,8.6625,1],["Lundahl, Mr. Johan Svensson",3,0,51.0,0,0,7.0542,0],["Lundin, Miss. Olga Elida",3,1,23.0,0,0,7.8542,1],["Lundstrom, Mr. Thure Edvin",3,0,32.0,0,0,7.5792,1],["Lyntakoff, Mr. Stanko",3,0,null,0,0,7.8958,0],["MacKay, Mr. George William",3,0,null,0,0,7.55,0],["Madigan, Miss. Margaret 'Maggie'",3,1,null,0,0,7.75,1],["Madsen, Mr. Fridtjof Arne",3,0,24.0,0,0,7.1417,1],["Maenpaa, Mr. Matti Alexanteri",3,0,22.0,0,0,7.125,0],["Mahon, Miss. Bridget Delia",3,1,null,0,0,7.8792,0],["Mahon, Mr. John",3,0,null,0,0,7.75,0],["Maisner, Mr. Simon",3,0,null,0,0,8.05,0],["Makinen, Mr. Kalle Edvard",3,0,29.0,0,0,7.925,0],["Mamee, Mr. Hanna",3,0,null,0,0,7.2292,1],["Mangan, Miss. Mary",3,1,30.5,0,0,7.75,0],["Mannion, Miss. Margareth",3,1,null,0,0,7.7375,1],["Mardirosian, Mr. Sarkis",3,0,null,0,0,7.2292,0],["Markoff, Mr. Marin",3,0,35.0,0,0,7.8958,0],["Markun, Mr. Johann",3,0,33.0,0,0,7.8958,0],["Masselmani, Mrs. Fatima",3,1,null,0,0,7.225,1],["Matinoff, Mr. Nicola",3,0,null,0,0,7.8958,0],["McCarthy, Miss. Catherine 'Katie'",3,1,null,0,0,7.75,1],["McCormack, Mr. Thomas Joseph",3,0,null,0,0,7.75,1],["McCoy, Miss. Agnes",3,1,null,2,0,23.25,1],["McCoy, Miss. Alicia",3,1,null,2,0,23.25,1],["McCoy, Mr. Bernard",3,0,null,2,0,23.25,1],["McDermott, Miss. Brigdet Delia",3,1,null,0,0,7.7875,1],["McEvoy, Mr. Michael",3,0,null,0,0,15.5,0],["McGovern, Miss. Mary",3,1,null,0,0,7.8792,1],["McGowan, Miss. Anna 'Annie'",3,1,15.0,0,0,8.0292,1],["McGowan, Miss. Katherine",3,1,35.0,0,0,7.75,0],["McMahon, Mr. Martin",3,0,null,0,0,7.75,0],["McNamee, Mr. Neal",3,0,24.0,1,0,16.1,0],["McNamee, Mrs. Neal (Eileen O'Leary)",3,1,19.0,1,0,16.1,0],["McNeill, Miss. Bridget",3,1,null,0,0,7.75,0],["Meanwell, Miss. (Marion Ogden)",3,1,null,0,0,8.05,0],["Meek, Mrs. Thomas (Annie Louise Rowley)",3,1,null,0,0,8.05,0],["Meo, Mr. Alfonzo",3,0,55.5,0,0,8.05,0],["Mernagh, Mr. Robert",3,0,null,0,0,7.75,0],["Midtsjo, Mr. Karl Albert",3,0,21.0,0,0,7.775,1],["Miles, Mr. Frank",3,0,null,0,0,8.05,0],["Mineff, Mr. Ivan",3,0,24.0,0,0,7.8958,0],["Minkoff, Mr. Lazar",3,0,21.0,0,0,7.8958,0],["Mionoff, Mr. Stoytcho",3,0,28.0,0,0,7.8958,0],["Mitkoff, Mr. Mito",3,0,null,0,0,7.8958,0],["Mockler, Miss. Helen Mary 'Ellie'",3,1,null,0,0,7.8792,1],["Moen, Mr. Sigurd Hansen",3,0,25.0,0,0,7.65,0],["Moor, Master. Meier",3,0,6.0,0,1,12.475,1],["Moor, Mrs. (Beila)",3,1,27.0,0,1,12.475,1],["Moore, Mr. Leonard Charles",3,0,null,0,0,8.05,0],["Moran, Miss. Bertha",3,1,null,1,0,24.15,1],["Moran, Mr. Daniel J",3,0,null,1,0,24.15,0],["Moran, Mr. James",3,0,null,0,0,8.4583,0],["Morley, Mr. William",3,0,34.0,0,0,8.05,0],["Morrow, Mr. Thomas Rowan",3,0,null,0,0,7.75,0],["Moss, Mr. Albert Johan",3,0,null,0,0,7.775,1],["Moubarek, Master. Gerios",3,0,null,1,1,15.2458,1],["Moubarek, Master. Halim Gonios ('William George')",3,0,null,1,1,15.2458,1],["Moubarek, Mrs. George (Omine 'Amenia' Alexander)",3,1,null,0,2,15.2458,1],["Moussa, Mrs. (Mantoura Boulos)",3,1,null,0,0,7.2292,1],["Moutal, Mr. Rahamin Haim",3,0,null,0,0,8.05,0],["Mullens, Miss. Katherine 'Katie'",3,1,null,0,0,7.7333,1],["Mulvihill, Miss. Bertha E",3,1,24.0,0,0,7.75,1],["Murdlin, Mr. Joseph",3,0,null,0,0,8.05,0],["Murphy, Miss. Katherine 'Kate'",3,1,null,1,0,15.5,1],["Murphy, Miss. Margaret Jane",3,1,null,1,0,15.5,1],["Murphy, Miss. Nora",3,1,null,0,0,15.5,1],["Myhrman, Mr. Pehr Fabian Oliver Malkolm",3,0,18.0,0,0,7.75,0],["Naidenoff, Mr. Penko",3,0,22.0,0,0,7.8958,0],["Najib, Miss. Adele Kiamie 'Jane'",3,1,15.0,0,0,7.225,1],["Nakid, Miss. Maria ('Mary')",3,1,1.0,0,2,15.7417,1],["Nakid, Mr. Sahid",3,0,20.0,1,1,15.7417,1],["Nakid, Mrs. Said (Waika 'Mary' Mowad)",3,1,19.0,1,1,15.7417,1],["Nancarrow, Mr. William Henry",3,0,33.0,0,0,8.05,0],["Nankoff, Mr. Minko",3,0,null,0,0,7.8958,0],["Nasr, Mr. Mustafa",3,0,null,0,0,7.2292,0],["Naughton, Miss. Hannah",3,1,null,0,0,7.75,0],["Nenkoff, Mr. Christo",3,0,null,0,0,7.8958,0],["Nicola-Yarred, Master. Elias",3,0,12.0,1,0,11.2417,1],["Nicola-Yarred, Miss. Jamila",3,1,14.0,1,0,11.2417,1],["Nieminen, Miss. Manta Josefina",3,1,29.0,0,0,7.925,0],["Niklasson, Mr. Samuel",3,0,28.0,0,0,8.05,0],["Nilsson, Miss. Berta Olivia",3,1,18.0,0,0,7.775,1],["Nilsson, Miss. Helmina Josefina",3,1,26.0,0,0,7.8542,1],["Nilsson, Mr. August Ferdinand",3,0,21.0,0,0,7.8542,0],["Nirva, Mr. Iisakki Antino Aijo",3,0,41.0,0,0,7.125,0],["Niskanen, Mr. Juha",3,0,39.0,0,0,7.925,1],["Nosworthy, Mr. Richard Cater",3,0,21.0,0,0,7.8,0],["Novel, Mr. Mansouer",3,0,28.5,0,0,7.2292,0],["Nysten, Miss. Anna Sofia",3,1,22.0,0,0,7.75,1],["Nysveen, Mr. Johan Hansen",3,0,61.0,0,0,6.2375,0],["O'Brien, Mr. Thomas",3,0,null,1,0,15.5,0],["O'Brien, Mr. Timothy",3,0,null,0,0,7.8292,0],["O'Brien, Mrs. Thomas (Johanna 'Hannah' Godfrey)",3,1,null,1,0,15.5,1],["O'Connell, Mr. Patrick D",3,0,null,0,0,7.7333,0],["O'Connor, Mr. Maurice",3,0,null,0,0,7.75,0],["O'Connor, Mr. Patrick",3,0,null,0,0,7.75,0],["Odahl, Mr. Nils Martin",3,0,23.0,0,0,9.225,0],["O'Donoghue, Ms. Bridget",3,1,null,0,0,7.75,0],["O'Driscoll, Miss. Bridget",3,1,null,0,0,7.75,1],["O'Dwyer, Miss. Ellen 'Nellie'",3,1,null,0,0,7.8792,1],["Ohman, Miss. Velin",3,1,22.0,0,0,7.775,1],["O'Keefe, Mr. Patrick",3,0,null,0,0,7.75,1],["O'Leary, Miss. Hanora 'Norah'",3,1,null,0,0,7.8292,1],["Olsen, Master. Artur Karl",3,0,9.0,0,1,3.1708,1],["Olsen, Mr. Henry Margido",3,0,28.0,0,0,22.525,0],["Olsen, Mr. Karl Siegwart Andreas",3,0,42.0,0,1,8.4042,0],["Olsen, Mr. Ole Martin",3,0,null,0,0,7.3125,0],["Olsson, Miss. Elina",3,1,31.0,0,0,7.8542,0],["Olsson, Mr. Nils Johan Goransson",3,0,28.0,0,0,7.8542,0],["Olsson, Mr. Oscar Wilhelm",3,0,32.0,0,0,7.775,1],["Olsvigen, Mr. Thor Anderson",3,0,20.0,0,0,9.225,0],["Oreskovic, Miss. Jelka",3,1,23.0,0,0,8.6625,0],["Oreskovic, Miss. Marija",3,1,20.0,0,0,8.6625,0],["Oreskovic, Mr. Luka",3,0,20.0,0,0,8.6625,0],["Osen, Mr. Olaf Elon",3,0,16.0,0,0,9.2167,0],["Osman, Mrs. Mara",3,1,31.0,0,0,8.6833,1],["O'Sullivan, Miss. Bridget Mary",3,1,null,0,0,7.6292,0],["Palsson, Master. Gosta Leonard",3,0,2.0,3,1,21.075,0],["Palsson, Master. Paul Folke",3,0,6.0,3,1,21.075,0],["Palsson, Miss. Stina Viola",3,1,3.0,3,1,21.075,0],["Palsson, Miss. Torborg Danira",3,1,8.0,3,1,21.075,0],["Palsson, Mrs. Nils (Alma Cornelia Berglund)",3,1,29.0,0,4,21.075,0],["Panula, Master. Eino Viljami",3,0,1.0,4,1,39.6875,0],["Panula, Master. Juha Niilo",3,0,7.0,4,1,39.6875,0],["Panula, Master. Urho Abraham",3,0,2.0,4,1,39.6875,0],["Panula, Mr. Ernesti Arvid",3,0,16.0,4,1,39.6875,0],["Panula, Mr. Jaako Arnold",3,0,14.0,4,1,39.6875,0],["Panula, Mrs. Juha (Maria Emilia Ojala)",3,1,41.0,0,5,39.6875,0],["Pasic, Mr. Jakob",3,0,21.0,0,0,8.6625,0],["Patchett, Mr. George",3,0,19.0,0,0,14.5,0],["Paulner, Mr. Uscher",3,0,null,0,0,8.7125,0],["Pavlovic, Mr. Stefo",3,0,32.0,0,0,7.8958,0],["Peacock, Master. Alfred Edward",3,0,0.75,1,1,13.775,0],["Peacock, Miss. Treasteall",3,1,3.0,1,1,13.775,0],["Peacock, Mrs. Benjamin (Edith Nile)",3,1,26.0,0,2,13.775,0],["Pearce, Mr. Ernest",3,0,null,0,0,7.0,0],["Pedersen, Mr. Olaf",3,0,null,0,0,7.775,0],["Peduzzi, Mr. Joseph",3,0,null,0,0,8.05,0],["Pekoniemi, Mr. Edvard",3,0,21.0,0,0,7.925,0],["Peltomaki, Mr. Nikolai Johannes",3,0,25.0,0,0,7.925,0],["Perkin, Mr. John Henry",3,0,22.0,0,0,7.25,0],["Persson, Mr. Ernst Ulrik",3,0,25.0,1,0,7.775,1],["Peter, Master. Michael J",3,0,null,1,1,22.3583,1],["Peter, Miss. Anna",3,1,null,1,1,22.3583,1],["Peter, Mrs. Catherine (Catherine Rizk)",3,1,null,0,2,22.3583,1],["Peters, Miss. Katie",3,1,null,0,0,8.1375,0],["Petersen, Mr. Marius",3,0,24.0,0,0,8.05,0],["Petranec, Miss. Matilda",3,1,28.0,0,0,7.8958,0],["Petroff, Mr. Nedelio",3,0,19.0,0,0,7.8958,0],["Petroff, Mr. Pastcho ('Pentcho')",3,0,null,0,0,7.8958,0],["Petterson, Mr. Johan Emil",3,0,25.0,1,0,7.775,0],["Pettersson, Miss. Ellen Natalia",3,1,18.0,0,0,7.775,0],["Pickard, Mr. Berk (Berk Trembisky)",3,0,32.0,0,0,8.05,1],["Plotcharsky, Mr. Vasil",3,0,null,0,0,7.8958,0],["Pokrnic, Mr. Mate",3,0,17.0,0,0,8.6625,0],["Pokrnic, Mr. Tome",3,0,24.0,0,0,8.6625,0],["Radeff, Mr. Alexander",3,0,null,0,0,7.8958,0],["Rasmussen, Mrs. (Lena Jacobsen Solvang)",3,1,null,0,0,8.1125,0],["Razi, Mr. Raihed",3,0,null,0,0,7.2292,0],["Reed, Mr. James George",3,0,null,0,0,7.25,0],["Rekic, Mr. Tido",3,0,38.0,0,0,7.8958,0],["Reynolds, Mr. Harold J",3,0,21.0,0,0,8.05,0],["Rice, Master. Albert",3,0,10.0,4,1,29.125,0],["Rice, Master. Arthur",3,0,4.0,4,1,29.125,0],["Rice, Master. Eric",3,0,7.0,4,1,29.125,0],["Rice, Master. Eugene",3,0,2.0,4,1,29.125,0],["Rice, Master. George Hugh",3,0,8.0,4,1,29.125,0],["Rice, Mrs. William (Margaret Norton)",3,1,39.0,0,5,29.125,0],["Riihivouri, Miss. Susanna Juhantytar 'Sanni'",3,1,22.0,0,0,39.6875,0],["Rintamaki, Mr. Matti",3,0,35.0,0,0,7.125,0],["Riordan, Miss. Johanna 'Hannah'",3,1,null,0,0,7.7208,1],["Risien, Mr. Samuel Beard",3,0,null,0,0,14.5,0],["Risien, Mrs. Samuel (Emma)",3,1,null,0,0,14.5,0],["Robins, Mr. Alexander A",3,0,50.0,1,0,14.5,0],["Robins, Mrs. Alexander A (Grace Charity Laury)",3,1,47.0,1,0,14.5,0],["Rogers, Mr. William John",3,0,null,0,0,8.05,0],["Rommetvedt, Mr. Knud Paust",3,0,null,0,0,7.775,0],["Rosblom, Miss. Salli Helena",3,1,2.0,1,1,20.2125,0],["Rosblom, Mr. Viktor Richard",3,0,18.0,1,1,20.2125,0],["Rosblom, Mrs. Viktor (Helena Wilhelmina)",3,1,41.0,0,2,20.2125,0],["Roth, Miss. Sarah A",3,1,null,0,0,8.05,1],["Rouse, Mr. Richard Henry",3,0,50.0,0,0,8.05,0],["Rush, Mr. Alfred George John",3,0,16.0,0,0,8.05,0],["Ryan, Mr. Edward",3,0,null,0,0,7.75,1],["Ryan, Mr. Patrick",3,0,null,0,0,24.15,0],["Saad, Mr. Amin",3,0,null,0,0,7.2292,0],["Saad, Mr. Khalil",3,0,25.0,0,0,7.225,0],["Saade, Mr. Jean Nassr",3,0,null,0,0,7.225,0],["Sadlier, Mr. Matthew",3,0,null,0,0,7.7292,0],["Sadowitz, Mr. Harry",3,0,null,0,0,7.575,0],["Saether, Mr. Simon Sivertsen",3,0,38.5,0,0,7.25,0],["Sage, Master. Thomas Henry",3,0,null,8,2,69.55,0],["Sage, Master. William Henry",3,0,14.5,8,2,69.55,0],["Sage, Miss. Ada",3,1,null,8,2,69.55,0],["Sage, Miss. Constance Gladys",3,1,null,8,2,69.55,0],["Sage, Miss. Dorothy Edith 'Dolly'",3,1,null,8,2,69.55,0],["Sage, Miss. Stella Anna",3,1,null,8,2,69.55,0],["Sage, Mr. Douglas Bullen",3,0,null,8,2,69.55,0],["Sage, Mr. Frederick",3,0,null,8,2,69.55,0],["Sage, Mr. George John Jr",3,0,null,8,2,69.55,0],["Sage, Mr. John George",3,0,null,1,9,69.55,0],["Sage, Mrs. John (Annie Bullen)",3,1,null,1,9,69.55,0],["Salander, Mr. Karl Johan",3,0,24.0,0,0,9.325,0],["Salkjelsvik, Miss. Anna Kristine",3,1,21.0,0,0,7.65,1],["Salonen, Mr. Johan Werner",3,0,39.0,0,0,7.925,0],["Samaan, Mr. Elias",3,0,null,2,0,21.6792,0],["Samaan, Mr. Hanna",3,0,null,2,0,21.6792,0],["Samaan, Mr. Youssef",3,0,null,2,0,21.6792,0],["Sandstrom, Miss. Beatrice Irene",3,1,1.0,1,1,16.7,1],["Sandstrom, Mrs. Hjalmar (Agnes Charlotta Bengtsson)",3,1,24.0,0,2,16.7,1],["Sandstrom, Miss. Marguerite Rut",3,1,4.0,1,1,16.7,1],["Sap, Mr. Julius",3,0,25.0,0,0,9.5,1],["Saundercock, Mr. William Henry",3,0,20.0,0,0,8.05,0],["Sawyer, Mr. Frederick Charles",3,0,24.5,0,0,8.05,0],["Scanlan, Mr. James",3,0,null,0,0,7.725,0],["Sdycoff, Mr. Todor",3,0,null,0,0,7.8958,0],["Shaughnessy, Mr. Patrick",3,0,null,0,0,7.75,0],["Sheerlinck, Mr. Jan Baptist",3,0,29.0,0,0,9.5,1],["Shellard, Mr. Frederick William",3,0,null,0,0,15.1,0],["Shine, Miss. Ellen Natalia",3,1,null,0,0,7.7792,1],["Shorney, Mr. Charles Joseph",3,0,null,0,0,8.05,0],["Simmons, Mr. John",3,0,null,0,0,8.05,0],["Sirayanian, Mr. Orsen",3,0,22.0,0,0,7.2292,0],["Sirota, Mr. Maurice",3,0,null,0,0,8.05,0],["Sivic, Mr. Husein",3,0,40.0,0,0,7.8958,0],["Sivola, Mr. Antti Wilhelm",3,0,21.0,0,0,7.925,0],["Sjoblom, Miss. Anna Sofia",3,1,18.0,0,0,7.4958,1],["Skoog, Master. Harald",3,0,4.0,3,2,27.9,0],["Skoog, Master. Karl Thorsten",3,0,10.0,3,2,27.9,0],["Skoog, Miss. Mabel",3,1,9.0,3,2,27.9,0],["Skoog, Miss. Margit Elizabeth",3,1,2.0,3,2,27.9,0],["Skoog, Mr. Wilhelm",3,0,40.0,1,4,27.9,0],["Skoog, Mrs. William (Anna Bernhardina Karlsson)",3,1,45.0,1,4,27.9,0],["Slabenoff, Mr. Petco",3,0,null,0,0,7.8958,0],["Slocovski, Mr. Selman Francis",3,0,null,0,0,8.05,0],["Smiljanic, Mr. Mile",3,0,null,0,0,8.6625,0],["Smith, Mr. Thomas",3,0,null,0,0,7.75,0],["Smyth, Miss. Julia",3,1,null,0,0,7.7333,1],["Soholt, Mr. Peter Andreas Lauritz Andersen",3,0,19.0,0,0,7.65,0],["Somerton, Mr. Francis William",3,0,30.0,0,0,8.05,0],["Spector, Mr. Woolf",3,0,null,0,0,8.05,0],["Spinner, Mr. Henry John",3,0,32.0,0,0,8.05,0],["Staneff, Mr. Ivan",3,0,null,0,0,7.8958,0],["Stankovic, Mr. Ivan",3,0,33.0,0,0,8.6625,0],["Stanley, Miss. Amy Zillah Elsie",3,1,23.0,0,0,7.55,1],["Stanley, Mr. Edward Roland",3,0,21.0,0,0,8.05,0],["Stoytcheff, Mr. Ilia",3,0,19.0,0,0,7.8958,0],["Strandberg, Miss. Ida Sofia",3,1,22.0,0,0,9.8375,0],["Stranden, Mr. Juho",3,0,31.0,0,0,7.925,1],["Strilic, Mr. Ivan",3,0,27.0,0,0,8.6625,0],["Strom, Miss. Telma Matilda",3,1,2.0,0,1,10.4625,0],["Strom, Mrs. Wilhelm (Elna Matilda Persson)",3,1,29.0,1,1,10.4625,0],["Sunderland, Mr. Victor Francis",3,0,16.0,0,0,8.05,1],["Sundman, Mr. Johan Julian",3,0,44.0,0,0,7.925,1],["Sutehall, Mr. Henry Jr",3,0,25.0,0,0,7.05,0],["Svensson, Mr. Johan",3,0,74.0,0,0,7.775,0],["Svensson, Mr. Johan Cervin",3,0,14.0,0,0,9.225,1],["Svensson, Mr. Olof",3,0,24.0,0,0,7.7958,0],["Tenglin, Mr. Gunnar Isidor",3,0,25.0,0,0,7.7958,1],["Theobald, Mr. Thomas Leonard",3,0,34.0,0,0,8.05,0],["Thomas, Master. Assad Alexander",3,0,0.42,0,1,8.5167,1],["Thomas, Mr. Charles P",3,0,null,1,0,6.4375,0],["Thomas, Mr. John",3,0,null,0,0,6.4375,0],["Thomas, Mr. Tannous",3,0,null,0,0,7.225,0],["Thomas, Mrs. Alexander (Thamine 'Thelma')",3,1,16.0,1,1,8.5167,1],["Thomson, Mr. Alexander Morrison",3,0,null,0,0,8.05,0],["Thorneycroft, Mr. Percival",3,0,null,1,0,16.1,0],["Thorneycroft, Mrs. Percival (Florence Kate White)",3,1,null,1,0,16.1,1],["Tikkanen, Mr. Juho",3,0,32.0,0,0,7.925,0],["Tobin, Mr. Roger",3,0,null,0,0,7.75,0],["Todoroff, Mr. Lalio",3,0,null,0,0,7.8958,0],["Tomlin, Mr. Ernest Portage",3,0,30.5,0,0,8.05,0],["Torber, Mr. Ernst William",3,0,44.0,0,0,8.05,0],["Torfa, Mr. Assad",3,0,null,0,0,7.2292,0],["Tornquist, Mr. William Henry",3,0,25.0,0,0,0.0,1],["Toufik, Mr. Nakli",3,0,null,0,0,7.2292,0],["Touma, Master. Georges Youssef",3,0,7.0,1,1,15.2458,1],["Touma, Miss. Maria Youssef",3,1,9.0,1,1,15.2458,1],["Touma, Mrs. Darwis (Hanne Youssef Razi)",3,1,29.0,0,2,15.2458,1],["Turcin, Mr. Stjepan",3,0,36.0,0,0,7.8958,0],["Turja, Miss. Anna Sofia",3,1,18.0,0,0,9.8417,1],["Turkula, Mrs. (Hedwig)",3,1,63.0,0,0,9.5875,1],["van Billiard, Master. James William",3,0,null,1,1,14.5,0],["van Billiard, Master. Walter John",3,0,11.5,1,1,14.5,0],["van Billiard, Mr. Austin Blyler",3,0,40.5,0,2,14.5,0],["Van Impe, Miss. Catharina",3,1,10.0,0,2,24.15,0],["Van Impe, Mr. Jean Baptiste",3,0,36.0,1,1,24.15,0],["Van Impe, Mrs. Jean Baptiste (Rosalie Paula Govaert)",3,1,30.0,1,1,24.15,0],["van Melkebeke, Mr. Philemon",3,0,null,0,0,9.5,0],["Vande Velde, Mr. Johannes Joseph",3,0,33.0,0,0,9.5,0],["Vande Walle, Mr. Nestor Cyriel",3,0,28.0,0,0,9.5,0],["Vanden Steen, Mr. Leo Peter",3,0,28.0,0,0,9.5,0],["Vander Cruyssen, Mr. Victor",3,0,47.0,0,0,9.0,0],["Vander Planke, Miss. Augusta Maria",3,1,18.0,2,0,18.0,0],["Vander Planke, Mr. Julius",3,0,31.0,3,0,18.0,0],["Vander Planke, Mr. Leo Edmondus",3,0,16.0,2,0,18.0,0],["Vander Planke, Mrs. Julius (Emelia Maria Vandemoortele)",3,1,31.0,1,0,18.0,0],["Vartanian, Mr. David",3,0,22.0,0,0,7.225,1],["Vendel, Mr. Olof Edvin",3,0,20.0,0,0,7.8542,0],["Vestrom, Miss. Hulda Amanda Adolfina",3,1,14.0,0,0,7.8542,0],["Vovk, Mr. Janko",3,0,22.0,0,0,7.8958,0],["Waelens, Mr. Achille",3,0,22.0,0,0,9.0,0],["Ware, Mr. Frederick",3,0,null,0,0,8.05,0],["Warren, Mr. Charles William",3,0,null,0,0,7.55,0],["Webber, Mr. James",3,0,null,0,0,8.05,0],["Wenzel, Mr. Linhart",3,0,32.5,0,0,9.5,0],["Whabee, Mrs. George Joseph (Shawneene Abi-Saab)",3,1,38.0,0,0,7.2292,1],["Widegren, Mr. Carl/Charles Peter",3,0,51.0,0,0,7.75,0],["Wiklund, Mr. Jakob Alfred",3,0,18.0,1,0,6.4958,0],["Wiklund, Mr. Karl Johan",3,0,21.0,1,0,6.4958,0],["Wilkes, Mrs. James (Ellen Needs)",3,1,47.0,1,0,7.0,1],["Willer, Mr. Aaron ('Abi Weller')",3,0,null,0,0,8.7125,0],["Willey, Mr. Edward",3,0,null,0,0,7.55,0],["Williams, Mr. Howard Hugh 'Harry'",3,0,null,0,0,8.05,0],["Williams, Mr. Leslie",3,0,28.5,0,0,16.1,0],["Windelov, Mr. Einar",3,0,21.0,0,0,7.25,0],["Wirz, Mr. Albert",3,0,27.0,0,0,8.6625,0],["Wiseman, Mr. Phillippe",3,0,null,0,0,7.25,0],["Wittevrongel, Mr. Camille",3,0,36.0,0,0,9.5,0],["Yasbeck, Mr. Antoni",3,0,27.0,1,0,14.4542,0],["Yasbeck, Mrs. Antoni (Selini Alexander)",3,1,15.0,1,0,14.4542,1],["Youseff, Mr. Gerious",3,0,45.5,0,0,7.225,0],["Yousif, Mr. Wazli",3,0,null,0,0,7.225,0],["Yousseff, Mr. Gerious",3,0,null,0,0,14.4583,0],["Zabour, Miss. Hileni",3,1,14.5,1,0,14.4542,0],["Zabour, Miss. Thamine",3,1,null,1,0,14.4542,0],["Zakarian, Mr. Mapriededer",3,0,26.5,0,0,7.225,0],["Zakarian, Mr. Ortin",3,0,27.0,0,0,7.225,0],["Zimmerman, Mr. Leo",3,0,29.0,0,0,7.875,0]],"train":[1,2,4,6,7,10,14,15,16,17,18,19,24,25,26,27,28,29,30,31,33,34,35,38,41,43,44,45,46,47,48,49,51,52,53,54,55,56,57,61,62,63,65,66,67,70,71,73,74,75,76,79,80,81,82,83,84,85,87,88,89,90,91,93,94,95,97,98,101,102,104,107,109,110,111,112,113,114,115,117,118,119,120,121,123,124,126,128,129,130,131,132,133,134,135,138,139,140,141,142,143,144,145,146,148,150,151,152,153,154,155,156,158,159,161,162,164,166,169,170,171,173,174,175,176,177,178,180,182,184,187,188,189,190,191,194,195,196,197,198,199,200,201,202,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,223,224,225,226,227,229,232,233,235,236,237,238,239,242,243,244,245,246,247,250,251,252,253,254,255,257,258,259,260,261,262,263,264,265,268,269,270,272,273,274,275,277,278,279,280,281,282,283,287,288,289,290,291,292,293,294,295,297,298,299,300,302,303,304,305,306,307,309,310,311,312,313,314,315,316,317,320,321,322,323,324,325,326,327,328,331,333,334,335,336,337,338,339,341,342,343,344,346,347,348,350,353,354,356,357,358,360,361,362,363,364,365,366,367,368,369,370,371,372,373,374,375,376,378,381,382,383,386,387,389,392,394,396,397,398,399,401,403,405,406,408,410,411,412,413,414,415,416,417,418,419,420,421,422,423,424,425,426,427,428,430,431,432,434,435,436,437,438,441,442,443,444,445,446,447,448,449,450,451,454,456,457,458,459,460,463,464,466,467,468,469,470,471,472,473,475,478,479,480,481,483,484,486,487,488,489,490,492,493,494,495,496,497,498,500,501,502,503,506,507,508,509,510,511,515,519,520,522,523,524,525,526,527,528,529,530,531,534,536,537,538,539,540,541,542,543,544,546,547,548,550,553,554,555,556,557,558,559,560,561,563,565,566,567,569,570,573,575,576,577,579,580,581,582,583,584,586,587,589,590,592,593,594,595,597,599,600,602,604,605,606,607,608,609,610,611,613,614,616,617,618,619,620,621,622,624,625,626,627,628,629,630,631,632,633,634,635,636,637,639,640,641,642,643,644,645,646,647,649,651,653,654,655,657,658,659,660,661,662,663,664,665,666,667,668,669,670,671,672,674,675,676,677,678,679,680,682,684,685,686,687,689,691,694,695,696,697,698,699,700,701,702,703,705,706,707,708,709,710,711,712,714,715,716,717,718,719,720,723,724,727,730,731,732,733,734,735,736,738,743,745,746,747,750,751,752,753,755,756,757,758,759,760,761,762,765,766,767,768,769,772,773,774,776,777,778,779,780,782,784,785,786,787,789,790,791,792,793,795,796,797,798,800,801,802,803,804,805,806,807,809,810,811,812,813,815,816,817,818,819,820,821,822,824,825,826,827,828,829,830,833,834,839,840,841,842,844,845,846,847,848,851,852,856,857,858,859,860,861,862,863,864,865,866,868,869,870,872,873,874,875,876,877,879,880,881,884,885,886,887,888,891,893,894,895,896,897,899,900,903,904,905,910,911,912,913,914,915,917,918,919,920,921,923,925,927,928,930,931,932,933,934,936,937,938,939,940,941,942,943,944,945,946,948,950,951,953,954,955,956,957,958,960,961,962,963,964,965,967,970,971,972,973,978,980,981,984,985,986,987,988,989,990,991,992,993,996,997,998,999,1000,1001,1002,1003,1004,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1027,1029,1030,1031,1032,1033,1034,1035,1036,1038,1039,1040,1041,1042,1046,1047,1048,1049,1050,1051,1052,1053,1054,1055,1056,1059,1060,1061,1062,1063,1064,1065,1067,1068,1070,1071,1072,1073,1074,1076,1077,1078,1079,1080,1081,1082,1083,1085,1086,1087,1088,1089,1092,1093,1094,1095,1097,1098,1099,1100,1101,1104,1105,1107,1108,1112,1113,1114,1116,1117,1119,1123,1124,1125,1126,1127,1128,1130,1131,1133,1134,1135,1137,1138,1139,1140,1141,1142,1144,1145,1146,1147,1148,1149,1150,1152,1153,1157,1158,1160,1161,1162,1164,1166,1167,1168,1169,1170,1175,1177,1178,1179,1180,1181,1182,1184,1186,1187,1188,1190,1191,1192,1193,1194,1195,1198,1199,1200,1201,1204,1205,1206,1207,1208,1211,1212,1213,1214,1216,1217,1219,1220,1222,1224,1225,1226,1227,1228,1229,1231,1232,1234,1235,1236,1237,1238,1239,1240,1241,1242,1243,1245,1246,1247,1248,1249,1251,1252,1254,1255,1257,1258,1259,1260,1261,1264,1267,1268,1269,1270,1271,1272,1273,1274,1275,1277,1278,1279,1281,1282,1284,1285,1286,1287,1289,1291,1292,1293,1294,1296,1297,1298,1299,1302,1303,1304,1306,1307],"ageMed":28.0};
+const ROWS = TT.rows, TRS = new Set(TT.train), TRI = [], TEI = [];
+ROWS.forEach((_, i) => (TRS.has(i) ? TRI : TEI).push(i));
+const feat7 = r => [r[2], r[1] === 2 ? 1 : 0, r[1] === 3 ? 1 : 0, r[3] == null ? TT.ageMed : r[3], r[4], r[5], Math.log1p(r[6])];
+const FX7 = ROWS.map(feat7), YY = ROWS.map(r => r[7]);
+const GROUPS = [{ k: 'sex', n: 'Sex', c: [0] }, { k: 'class', n: 'Ticket class', c: [1, 2] }, { k: 'age', n: 'Age', c: [3] }, { k: 'sibsp', n: 'Siblings / spouses', c: [4] }, { k: 'parch', n: 'Parents / children', c: [5] }, { k: 'fare', n: 'Fare', c: [6] }];
+const TTS = { on: new Set(GROUPS.map(g => g.k)), t: 0.5 };
+const ttCols = () => GROUPS.filter(g => TTS.on.has(g.k)).flatMap(g => g.c);
+function ttFit(cols) { return logitFit(TRI.map(i => [1, ...cols.map(c => FX7[i][c])]), TRI.map(i => YY[i]), 0, 100); }
+const ttP = (w, cols, i) => sig(w[0] + cols.reduce((a, c, k) => a + w[k + 1] * FX7[i][c], 0));
+function auc(s, y) {
+  const idx = s.map((v, i) => i).sort((a, b) => s[a] - s[b]), rk = new Array(s.length); let i = 0;
+  while (i < idx.length) { let j = i; while (j + 1 < idx.length && s[idx[j + 1]] === s[idx[i]]) j++; for (let k = i; k <= j; k++) rk[idx[k]] = (i + j) / 2 + 1; i = j + 1; }
+  const n1 = y.filter(Boolean).length, n0 = y.length - n1; let R = 0; y.forEach((v, k) => { if (v) R += rk[k]; }); return (R - n1 * (n1 + 1) / 2) / (n1 * n0);
+}
+const FULLW = ttFit([0, 1, 2, 3, 4, 5, 6]);
+const SEXONLY = (() => { const w = ttFit([0]), p = TEI.map(i => ttP(w, [0], i)); return { acc: TEI.filter((i, k) => (p[k] >= .5 ? 1 : 0) === YY[i]).length / TEI.length, auc: auc(p, TEI.map(i => YY[i])) }; })();
+let TTM = null;
+$('#tt-feats').innerHTML = GROUPS.map(g => `<button type="button" data-g="${g.k}" aria-pressed="true">${g.n}</button>`).join('');
+function ttRefit() {
+  const cols = ttCols(); if (!cols.length) { TTM = null; return; }
+  const w = ttFit(cols), p = TEI.map(i => ttP(w, cols, i)), y = TEI.map(i => YY[i]);
+  TTM = { cols, w, p, y, auc: auc(p, y), ll: -p.reduce((a, q, k) => a + (y[k] ? Math.log(cp(q)) : Math.log(cp(1 - q))), 0) / p.length };
+}
+const OR_TXT = [
+  (o) => `Women had <b>${fmt(o, 1)}×</b> the odds of surviving that men had.`,
+  (o) => `Second class: <b>×${fmt(o, 2)}</b> the odds of first class.`,
+  (o) => `Third class: <b>×${fmt(o, 2)}</b> the odds of first class &mdash; about ${fmt(1 / o, 1)} times lower.`,
+  (o) => `Each extra year of age: odds <b>×${fmt(o, 3)}</b> (${fmt((o - 1) * 100, 1)}%); ten years: ×${fmt(Math.pow(o, 10), 2)}.`,
+  (o) => `Each sibling or spouse aboard: odds <b>×${fmt(o, 2)}</b>.`,
+  (o) => `Each parent or child aboard: odds <b>×${fmt(o, 2)}</b>.`,
+  (o, w) => `Doubling the fare: odds roughly <b>×${fmt(Math.pow(2, w), 2)}</b> (weight ${fmt(w, 3)} on ln(1 + fare)).`];
+const OR_NAME = ['Female (vs male)', '2nd class (vs 1st)', '3rd class (vs 1st)', 'Age, per year', 'Siblings / spouses, each', 'Parents / children, each', 'Fare, log scale'];
+function drawTT() {
+  $$('#tt-feats button').forEach(b => b.setAttribute('aria-pressed', TTS.on.has(b.dataset.g) ? 'true' : 'false'));
+  const died = TEI.filter(i => !YY[i]).length / TEI.length;
+  $('#tt-base').innerHTML = tip(pct(died), `${TEI.filter(i => !YY[i]).length} of ${TEI.length} test passengers died:\nthe accuracy to beat`);
+  if (!TTM) { ['#tt-acc', '#tt-auc', '#tt-ll'].forEach(s => { $(s).textContent = '—'; }); $('#tt-or').innerHTML = '<p class="note">Pick at least one feature.</p>'; $('#tt-say').textContent = ''; drawThresh(); return; }
+  const acc = TTM.p.filter((q, k) => (q >= .5 ? 1 : 0) === TTM.y[k]).length / TTM.p.length;
+  $('#tt-acc').innerHTML = tip(pct(acc), `correct at threshold 0.5,\nover the ${TEI.length} test passengers`);
+  $('#tt-auc').innerHTML = tip(fmt(TTM.auc, 3), 'probability that a random survivor\ngets a higher score than a random victim');
+  $('#tt-ll').innerHTML = tip(fmt(TTM.ll, 3), 'mean −ln(probability of what happened)\nlower is better');
+  const sexOnly = TTM.cols.length === 1 && TTM.cols[0] === 0;
+  $('#tt-say').innerHTML = sexOnly ? `Sex alone: ${pct(acc)} accuracy &mdash; the rule &ldquo;women live, men die&rdquo;. But AUC is only ${fmt(TTM.auc, 3)}: the model can't rank anyone within a sex. Switch the other features back on.`
+    : `With ${TTM.cols.length === 7 ? 'all seven features' : TTM.cols.length + ' features'}: accuracy ${pct(acc)}, AUC ${fmt(TTM.auc, 3)}. Sex alone gives ${pct(SEXONLY.acc)} accuracy but AUC ${fmt(SEXONLY.auc, 3)} &mdash; the extra features barely move accuracy at 50%, yet rank passengers far better.`;
+  $('#tt-or').innerHTML = TTM.cols.map((c, k) => { const w = TTM.w[k + 1], o = Math.exp(w), L = Math.max(-1, Math.min(1, Math.log(o) / Math.log(16))) * 50;
+    return `<div class="or-row"><span class="or-n">${OR_NAME[c]}</span><span class="cf-track"><i style="${L >= 0 ? `left:50%;width:${L}%` : `left:${50 + L}%;width:${-L}%`};background:${L >= 0 ? 'var(--cA)' : 'var(--qda)'}"></i></span><span class="num or-v">${tip('×' + fmt(o, o < 1 ? 3 : 2), `e^w = e^${fmt(w, 4)}`)}</span><span class="or-t">${OR_TXT[c](o, w)}</span></div>`; }).join('');
+  drawThresh();
+}
+function drawThresh() {
+  const C = C0(), t = TTS.t; $('#tt-t-o').textContent = fmt(t, 2);
+  if (!TTM) return;
+  const { p, y } = TTM; let TP = 0, FP = 0, TN = 0, FN = 0; p.forEach((q, k) => { if (q >= t) { if (y[k]) TP++; else FP++; } else { if (y[k]) FN++; else TN++; } });
+  // histogram
+  { const v = frame($('#tt-hist'), [0, 1], [-60, 60], { l: 40 }); axes(v, 'predicted P(survived)', 'passengers', { sx: 0.2, sy: 20, fy: y_ => fmt(Math.abs(y_), 0) }); clip(v);
+    const B = 20, hs = new Array(B).fill(0), hd = new Array(B).fill(0); p.forEach((q, k) => { const b = Math.min(B - 1, Math.floor(q * B)); (y[k] ? hs : hd)[b]++; });
+    const c = v.ctx; for (let b = 0; b < B; b++) { const x0 = v.X(b / B) + 1, x1 = v.X((b + 1) / B) - 1; c.fillStyle = C.y1; c.fillRect(x0, v.Y(hs[b]), x1 - x0, v.Y(0) - v.Y(hs[b])); c.fillStyle = C.y0; c.fillRect(x0, v.Y(0), x1 - x0, v.Y(-hd[b]) - v.Y(0)); }
+    seg(v, 0, 0, 1, 0, C.ink, 1); seg(v, t, -60, t, 60, C.ink, 1.6, [5, 4]);
+    c.fillStyle = C.muted; c.font = '11px ' + css('--f-mono'); c.textAlign = 'right'; c.fillText('survived ↑', v.w - v.pad.r - 6, v.Y(50)); c.fillText('died ↓', v.w - v.pad.r - 6, v.Y(-44)); c.restore(); }
+  // ROC
+  { const v = frame($('#tt-roc'), [0, 1], [0, 1], { l: 40 }, true); axes(v, 'false positive rate', 'true positive rate', { sx: 0.25, sy: 0.25 }); clip(v);
+    seg(v, 0, 0, 1, 1, C.muted, 1, [4, 4]);
+    const ord = p.map((q, k) => k).sort((a, b) => p[b] - p[a]), n1 = y.filter(Boolean).length, n0 = y.length - n1; let tp = 0, fp = 0; const c = v.ctx;
+    c.save(); c.strokeStyle = C.curve; c.lineWidth = 2.6; c.beginPath(); c.moveTo(v.X(0), v.Y(0)); ord.forEach(k => { if (y[k]) tp++; else fp++; c.lineTo(v.X(fp / n0), v.Y(tp / n1)); }); c.stroke(); c.restore();
+    dot(v, FP / n0, TP / n1, C.bad, 7); v.ctx.restore();
+    $('#tt-roc-cap').innerHTML = `ROC curve, AUC = <b>${fmt(TTM.auc, 3)}</b> (0.5 = coin flip, 1 = perfect). The red dot is your threshold: ${pct(TP / n1)} of survivors caught, ${pct(FP / n0)} of victims wrongly flagged.`; }
+  $('#tt-cm').innerHTML = `<thead><tr><th></th><th>predicted survived</th><th>predicted died</th></tr></thead><tbody><tr><th>actually survived</th><td class="num ok">${tip(TP, 'true positives: survivors\nthe model said would survive')}</td><td class="num bad">${tip(FN, 'false negatives: survivors\nthe model wrote off')}</td></tr><tr><th>actually died</th><td class="num bad">${tip(FP, 'false positives: victims\nthe model said would survive')}</td><td class="num ok">${tip(TN, 'true negatives: victims\ncorrectly predicted')}</td></tr></tbody>`;
+  const prec = TP / Math.max(1, TP + FP), rec = TP / Math.max(1, TP + FN), spec = TN / Math.max(1, TN + FP), acc = (TP + TN) / p.length;
+  $('#tt-mets').innerHTML = [['accuracy', acc, `(TP + TN) ÷ all\n= (${TP} + ${TN}) ÷ ${p.length}`], ['precision', prec, `TP ÷ (TP + FP) = ${TP} ÷ ${TP + FP}\nof those predicted to survive, how many did`], ['recall (sensitivity)', rec, `TP ÷ (TP + FN) = ${TP} ÷ ${TP + FN}\nof the survivors, how many we caught`], ['specificity', spec, `TN ÷ (TN + FP) = ${TN} ÷ ${TN + FP}\nof the victims, how many we called correctly`]]
+    .map(([k, v_, h]) => `<div class="stat"><div class="v">${tip(pct(v_), h)}</div><div class="k">${k}</div></div>`).join('');
+}
+$('#tt-feats').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const g = b.dataset.g; TTS.on.has(g) ? TTS.on.delete(g) : TTS.on.add(g); ttRefit(); drawTT(); });
+$('#tt-t').addEventListener('input', e => { TTS.t = +e.target.value; drawThresh(); });
+fig($('#tt-hist'), drawThresh); fig($('#tt-roc'), drawThresh);
+
+// passenger lab (always the full seven-feature model)
+const FAMOUS = [[763, 'Millvina Dean, 9 weeks old'], [41, '“Unsinkable” Molly Brown'], [11, 'Madeleine Astor'], [10, 'John Jacob Astor IV'], [7, 'Thomas Andrews, the ship’s designer'], [170, 'J. Bruce Ismay, White Star chairman'], [142, 'Benjamin Guggenheim']];
+const PAX = { i: 763, f: null };
+$('#tt-famous').innerHTML = FAMOUS.map(([i, n]) => `<button type="button" class="btn" data-px="${i}">${n}</button>`).join('') + '<button type="button" class="btn primary" data-px="rand">Random passenger</button>';
+$('#tt-form').innerHTML = `<div class="grp"><h4>Or build a passenger</h4>
+  <div class="seg" role="group" aria-label="Sex"><button type="button" data-fs="1">Female</button><button type="button" data-fs="0">Male</button></div>
+  <div class="seg" role="group" aria-label="Class"><button type="button" data-fc="1">1st</button><button type="button" data-fc="2">2nd</button><button type="button" data-fc="3">3rd</button></div>
+  <div class="ctrl"><div class="top"><label for="fa">Age</label><output id="fa-o"></output></div><input type="range" id="fa" min="0" max="80" step="1"></div>
+  <div class="ctrl"><div class="top"><label for="fsb">Siblings / spouses aboard</label><output id="fsb-o"></output></div><input type="range" id="fsb" min="0" max="8" step="1"></div>
+  <div class="ctrl"><div class="top"><label for="fpc">Parents / children aboard</label><output id="fpc-o"></output></div><input type="range" id="fpc" min="0" max="6" step="1"></div>
+  <div class="ctrl"><div class="top"><label for="ff">Fare (£)</label><output id="ff-o"></output></div><input type="range" id="ff" min="0" max="263" step="1"></div></div>`;
+function paxRow() { return PAX.f || ROWS[PAX.i]; }
+function drawPax() {
+  const C = C0(), r = paxRow(), f = feat7(r), w = FULLW, parts = f.map((x, j) => w[j + 1] * x), z = w[0] + parts.reduce((a, b) => a + b, 0), p = sig(z), real = !PAX.f;
+  $('#tt-pax').innerHTML = `<div class="pax-name">${real ? escA(r[0]) : 'Your passenger'}</div>
+    <div class="note">${r[1]}${['st', 'nd', 'rd'][r[1] - 1]} class · ${r[2] ? 'female' : 'male'} · age ${r[3] == null ? 'unknown (model uses 28)' : fmt(r[3], r[3] < 1 ? 2 : 0)} · ${r[4]} sibling/spouse · ${r[5]} parent/child · fare £${fmt(r[6], 2)}</div>
+    <div class="gauge"><i style="width:${p * 100}%"></i><span>${tip(pct(p), `σ(z) = σ(${fmt(z, 3)})`)} chance of survival</span></div>
+    ${real ? `<div class="pax-out ${r[7] ? 'ok' : 'bad'}">${r[7] ? 'Survived' : 'Did not survive'} <span class="note">· ${TRS.has(PAX.i) ? 'in the training set' : 'in the test set: the model never saw them'}</span></div>` : ''}`;
+  const rowsH = [['starting point (intercept)', w[0], `w₀ = ${fmt(w[0], 4)}`], ...OR_NAME.map((n, j) => [n.replace(', per year', '').replace(', each', '').replace(', log scale', ''), parts[j], `${fmt(w[j + 1], 4)} × ${fmt(f[j], 3)}`])].filter(q => Math.abs(q[1]) > 1e-9);
+  const mx = Math.max(1.5, ...rowsH.map(q => Math.abs(q[1])));
+  $('#tt-contrib').innerHTML = rowsH.map(([n, v_, h]) => `<div class="cf"><span>${n}</span><span class="cf-track"><i style="${v_ >= 0 ? `left:50%;width:${v_ / mx * 50}%` : `left:${50 + v_ / mx * 50}%;width:${-v_ / mx * 50}%`};background:${v_ >= 0 ? 'var(--cA)' : 'var(--qda)'}"></i></span><span class="num">${tip((v_ >= 0 ? '+' : '−') + fmt(Math.abs(v_), 2), h)}</span></div>`).join('')
+    + `<p class="note" style="margin-top:6px">Log-odds contributions: <span style="color:var(--cA)">green</span> pushes towards survival, <span style="color:var(--qda)">red</span> away. Total z = ${fmt(z, 2)} &rarr; p = σ(z) = ${pct(p)}.</p>`;
+  // form mirrors the passenger
+  $$('[data-fs]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.fs === r[2] ? 'true' : 'false'));
+  $$('[data-fc]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.fc === r[1] ? 'true' : 'false'));
+  const age = r[3] == null ? TT.ageMed : r[3];
+  [['fa', Math.round(age)], ['fsb', r[4]], ['fpc', r[5]], ['ff', Math.round(Math.min(263, r[6]))]].forEach(([id, val]) => { $('#' + id).value = val; $('#' + id + '-o').textContent = id === 'ff' ? '£' + val : val; });
+}
+function toCustom() { if (!PAX.f) { const r = ROWS[PAX.i]; PAX.f = [r[0], r[1], r[2], r[3] == null ? TT.ageMed : r[3], r[4], r[5], r[6], r[7]]; } }
+$('#tt-famous').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; PAX.f = null; PAX.i = b.dataset.px === 'rand' ? TEI[Math.floor(Math.random() * TEI.length)] : +b.dataset.px; drawPax(); });
+$('#tt-form').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; toCustom(); if (b.dataset.fs) PAX.f[2] = +b.dataset.fs; if (b.dataset.fc) PAX.f[1] = +b.dataset.fc; drawPax(); });
+[['fa', 3], ['fsb', 4], ['fpc', 5], ['ff', 6]].forEach(([id, k]) => $('#' + id).addEventListener('input', e => { toCustom(); PAX.f[k] = +e.target.value; drawPax(); }));
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+syncW(); drawOdds(); drawLL(); drawHand(); gdReset(); ttRefit(); drawTT(); drawPax();
+window.__lgDebug = { PF, WBEST, fit1, logitFit, meanLL, FULLW, SEXONLY, auc, ttFit, TEI, TRI, YY, FX7, ttRefit, get TTM() { return TTM; }, TTS, GD, gdStep, gdReset, BD, genBD, SM, W, HAND, LAND };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

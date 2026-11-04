@@ -78,13 +78,26 @@ export const tracks: Track[] = [
 			{
 				title: "Logistic Regression",
 				summary:
-					"Turning a line into a probability: the sigmoid, odds and log-odds, why we use log-loss instead of squared error, and the straight decision boundary it draws.",
+					"Turning a line into a probability: the sigmoid, odds and odds ratios, why log-loss beats squared error, a gradient step by hand, decision boundaries and softmax — then a Titanic survival project with live thresholds, ROC curves and a find-a-passenger lab.",
 				topics: [
 					"The sigmoid squash",
 					"Odds & log-odds",
 					"Log-loss",
-					"Decision threshold",
+					"Decision threshold & ROC",
 					"Softmax for many classes",
+				],
+				href: "/lectures/logistic-regression/",
+				length: "~25 min",
+				index: [
+					["why", "Yes or no needs a new line"],
+					["sigmoid", "The S-curve that squashes"],
+					["odds", "Odds: the hidden straight line"],
+					["loss", "Punishing confident mistakes"],
+					["train", "Downhill on the log-loss bowl"],
+					["boundary", "A straight cut between classes"],
+					["softmax", "Softmax: more than two answers"],
+					["project", "Who survived the Titanic?"],
+					["summary", "Five lines to remember"],
 				],
 			},
 			{
