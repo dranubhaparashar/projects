@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on linear regression: least squares by hand, the loss bowl, the normal equation, gradient descent, R² and residual plots, polynomial features, ridge and lasso, and a real diabetes-progression project.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Linear Regression</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Linear Regression <span>&middot; the best straight line</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Why</a>
+      <a href="#fit">You draw it</a>
+      <a href="#loss">The loss</a>
+      <a href="#solve">Closed form</a>
+      <a href="#gd">Gradient descent</a>
+      <a href="#score">R² &amp; residuals</a>
+      <a href="#poly">Polynomials</a>
+      <a href="#reg">Ridge &amp; lasso</a>
+      <a href="#project">Project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.2 · regression</div>
+      <h1>Linear Regression</h1>
+      <div class="sub">One straight line, fitted so the misses are as small as possible</div>
+      <p class="lead">How much will this house sell for? How many units will we sell next month? How fast will this patient's disease progress? When the answer is a <em>number</em>, the first model anyone should try is a straight line. This lecture builds it three ways &mdash; by hand, by formula, and by rolling downhill &mdash; and then teaches it to bend and to behave.</p>
+      <dl class="facts">
+        <div><dt>Model</dt><dd>&ycirc; = w&#8320; + w&#8321;x &mdash; an intercept and a slope</dd></div>
+        <div><dt>Learns by</dt><dd>Minimising the mean squared error</dd></div>
+        <div><dt>Solved by</dt><dd>A closed-form formula, or gradient descent</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="fig-head">
+        <div class="legend"><span><i class="sw dot" style="background:var(--cA)"></i>student</span><span><i class="sw" style="background:var(--lda)"></i>best line</span><span><i class="sw" style="background:var(--qda)"></i>miss (residual)</span></div>
+        <button type="button" class="btn" id="hero-reset">Reset</button>
+      </div>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Twelve students: hours studied against exam score, with the least-squares line. Drag any point."></canvas></div>
+      <figcaption id="hero-cap">Drag any student and watch the line re-balance itself.</figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>The oldest line in data science</a></li>
+    <li><a href="#fit"><i>02</i>You draw it, the error judges</a></li>
+    <li><a href="#loss"><i>03</i>Why we square the misses</a></li>
+    <li><a href="#solve"><i>04</i>Solving it in one shot</a></li>
+    <li><a href="#gd"><i>05</i>Rolling downhill to the answer</a></li>
+    <li><a href="#score"><i>06</i>Grading the fit: R² and residuals</a></li>
+    <li><a href="#poly"><i>07</i>Bending a straight line</a></li>
+    <li><a href="#reg"><i>08</i>Ridge &amp; lasso: a leash on the weights</a></li>
+    <li><a href="#project"><i>09</i>Forecasting diabetes, a year ahead</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">Foundations</div>
+    <h2>The oldest line in data science</h2>
+    <div class="prose">
+      <p>In 1886 Francis Galton measured the heights of parents and their grown-up children. Tall parents had tall children &mdash; but <em>less</em> tall than themselves; short parents had children a little closer to average. He called it &ldquo;regression towards mediocrity&rdquo;, drew the best straight line through his scatter of heights, and the name <em class="term">regression</em> stuck to the whole method.</p>
+      <p>The idea is the same today: we have pairs <span class="num">(x, y)</span> &mdash; a feature and a number we want to predict &mdash; and we look for the straight line that predicts y from x with the smallest possible misses.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \hat{y} = w_0 + w_1 x \]</div><div class="read"><b>Read it as:</b> the prediction &ycirc; (&ldquo;y-hat&rdquo;) starts at <b>w&#8320;</b>, the <b>intercept</b> (the prediction when x = 0), and rises by <b>w&#8321;</b>, the <b>slope</b>, for every extra unit of x. Learning = choosing w&#8320; and w&#8321;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Y-hat equals w-zero plus w-one times x.&rdquo;</em></div><div class="eq-run" id="run-model"></div></div>
+    <div class="eq"><div class="m">\[ \hat{y} = w_0 + w_1x_1 + w_2x_2 + \dots + w_dx_d = \mathbf{w}^\top\mathbf{x} \]</div><div class="read"><b>Read it as:</b> with many features, each one gets its own weight; the prediction is their weighted sum. Still &ldquo;linear&rdquo;: no feature is squared or multiplied by another &mdash; the model is a flat plane (or hyperplane) instead of a line. The project at the end uses ten features.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Y-hat is the dot product of the weight vector with the feature vector.&rdquo;</em></div></div>
+
+    <h3>Where you meet it</h3>
+    <div class="uses">
+      <div><span class="which a-c">Business</span><h4>Forecasting demand</h4><p>Units sold vs. price, season and advertising spend. The slopes say &ldquo;each extra &#8377;1 lakh of ads brings ~120 sales&rdquo;.</p></div>
+      <div><span class="which a-c">Real estate</span><h4>Pricing houses</h4><p>Price from area, rooms, age and distance to the metro. Every weight has a unit and a story.</p></div>
+      <div><span class="which a-c">Medicine</span><h4>Dose and progression</h4><p>How a biomarker responds to dose; how fast a disease progresses from BMI and blood tests (our project).</p></div>
+      <div><span class="which b-c">Science</span><h4>Calibration curves</h4><p>Turning a sensor's voltage into a temperature, or absorbance into concentration. The lab's oldest tool.</p></div>
+      <div><span class="which b-c">Economics</span><h4>Effect sizes</h4><p>&ldquo;One more year of schooling is associated with X% higher wages&rdquo; is a regression slope.</p></div>
+      <div><span class="which b-c">Machine learning</span><h4>The baseline</h4><p>Before any neural net, fit a line. If the fancy model can't beat it, the fancy model isn't learning anything.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FIT -->
+<section class="chap" id="fit">
+  <div class="wrap">
+    <div class="tag">Hands on</div>
+    <h2>You draw it, the error judges</h2>
+    <div class="prose">
+      <p>Before any formula: <strong>you</strong> are the learning algorithm. Move the two sliders to place a line through the twelve students. Every vertical red stick is a <em class="term">residual</em> &mdash; the miss between what the student actually scored and what your line predicts. Switch to <strong>squares</strong> to see what the computer actually adds up: each miss, squared, drawn as a real square. Make the total red area as small as you can.</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head">
+          <div class="seg" role="group" aria-label="Show errors as">
+            <button type="button" data-fshow="sticks" aria-pressed="true">Misses as sticks</button>
+            <button type="button" data-fshow="squares" aria-pressed="false">Misses as squares</button>
+          </div>
+          <div class="legend"><span><i class="sw" style="background:var(--cB)"></i>your line</span><span><i class="sw" style="background:var(--lda)"></i>best line</span></div>
+        </div>
+        <div class="plot ar-16x10"><canvas id="fit-cv" aria-label="Your line through the twelve students, with their residuals"></canvas></div>
+        <figcaption>Squared misses are literally areas: a miss twice as big costs four times as much. That is why one far-off point matters so much.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>Your line</h4>
+          <div class="ctrl"><div class="top"><label for="fit-b">Intercept w&#8320;</label><output id="fit-b-o"></output></div><input type="range" id="fit-b" min="0" max="90" step="0.5" value="40"></div>
+          <div class="ctrl"><div class="top"><label for="fit-m">Slope w&#8321;</label><output id="fit-m-o"></output></div><input type="range" id="fit-m" min="-2" max="10" step="0.05" value="2"></div>
+        </div>
+        <div class="grp">
+          <h4>The scoreboard</h4>
+          <div class="stats">
+            <div class="stat"><div class="v" id="fit-mse"></div><div class="k">your MSE</div></div>
+            <div class="stat"><div class="v" id="fit-best"></div><div class="k">best possible</div></div>
+          </div>
+          <div class="meter" aria-hidden="true"><i id="fit-bar"></i></div>
+          <p class="note" id="fit-verdict"></p>
+        </div>
+        <div class="grp">
+          <div class="btns">
+            <button type="button" class="btn" id="fit-reveal" aria-pressed="false">Show best line</button>
+            <button type="button" class="btn" id="fit-snap">Snap to best</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOSS -->
+<section class="chap" id="loss">
+  <div class="wrap">
+    <div class="tag">The objective</div>
+    <h2>Why we square the misses</h2>
+    <div class="prose">
+      <p>To let a computer choose the line, we need a single number that says how bad a line is. Adding the raw misses fails &mdash; positive and negative misses cancel, and a terrible line can score zero. So we square them (all become positive, and big misses are punished hard), add them up, and divide by n. That is the <em class="term">mean squared error</em>, the number on your scoreboard.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \text{MSE}(w_0, w_1) = \frac{1}{n}\sum_{i=1}^{n}\big(\,y_i - (w_0 + w_1x_i)\,\big)^2 \]</div><div class="read"><b>Read it as:</b> for each student i, take the real score y&#7522;, subtract the line's prediction, square the difference, then average over all n students. Notice what's on the left: MSE is a function of the <b>weights</b>, not the data &mdash; the data is fixed; we are searching over lines.</div><div class="eq-say"><b>Say it</b><em>&ldquo;MSE of w-zero, w-one is one over n times the sum of the squared residuals.&rdquo;</em></div><div class="eq-run" id="run-mse"></div></div>
+
+    <h3>Every line is a point in a bowl</h3>
+    <div class="prose"><p>Here is the big idea of this lecture. Each possible line is one pair (w&#8320;, w&#8321;) &mdash; one point on the right-hand map. Colour each point by that line's MSE and you get a landscape shaped like a bowl: darker = lower error. <strong>Click or drag anywhere on the bowl</strong> and the line on the left becomes that point. The star marks the bottom &mdash; the best line. (It's the same line as your sliders above; they move together.)</p></div>
+    <div class="two block">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="loss-cv" aria-label="The current line through the data"></canvas></div>
+        <figcaption>Data space: one line through twelve points.</figcaption>
+      </figure>
+      <figure>
+        <div class="plot ar-16x10"><canvas id="land-cv" aria-label="Loss landscape: intercept on the horizontal axis, slope on the vertical; click to pick a line"></canvas></div>
+        <figcaption id="land-cap">Weight space: every point is a whole line. Click to move.</figcaption>
+      </figure>
+    </div>
+    <p class="say-line" id="land-say"></p>
+
+    <h3>Squared vs absolute: the outlier test</h3>
+    <div class="prose"><p>Squaring has a price: a point that misses by 30 costs 900, as much as 36 points that miss by 5. So one bad point can drag the whole line. The alternative, <strong>absolute error</strong> &sum;|y&#7522; &minus; &ycirc;&#7522;|, treats a big miss as just big, not huge. Add an outlier &mdash; then <strong>drag it</strong> &mdash; and compare the two lines.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="out-cv" aria-label="Squared-error line and absolute-error line, with an optional outlier you can drag"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9644;</span> squared-error line (least squares) &nbsp; <span style="color:var(--cB)">&#9644;</span> absolute-error line (least absolute deviations)</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>The test</h4>
+          <div class="btns"><button type="button" class="btn primary" id="out-toggle" aria-pressed="false">Add an outlier</button></div>
+          <div class="stats">
+            <div class="stat"><div class="v" id="out-ls"></div><div class="k">slope · squared</div></div>
+            <div class="stat"><div class="v" id="out-l1"></div><div class="k">slope · absolute</div></div>
+          </div>
+          <p class="note" id="out-say"></p>
+        </div>
+        <div class="grp">
+          <h4>So why square at all?</h4>
+          <p class="note">Squared error is smooth (it has a derivative everywhere, so calculus and gradient descent work), has a one-line closed-form solution, and is exactly right when the noise is bell-shaped (Gaussian). Absolute error is more robust but needs iterative solvers. Pick by the data you have.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOLVE -->
+<section class="chap" id="solve">
+  <div class="wrap">
+    <div class="tag">Route 1 · the formula</div>
+    <h2>Solving it in one shot</h2>
+    <div class="prose">
+      <p>The bowl has exactly one bottom, and at the bottom the ground is flat &mdash; the slope of the MSE in every direction is zero. Setting both derivatives to zero and solving gives a formula you can compute with a pencil. Let's do it by hand on five students. <strong>The scores are editable</strong>: change any y and every number below recomputes.</p>
+    </div>
+    <div class="two block">
+      <div class="tbl-wrap">
+        <table class="hand" id="hand">
+          <thead><tr><th>x hours</th><th>y score</th><th>x &minus; x&#772;</th><th>y &minus; y&#772;</th><th>(x&minus;x&#772;)(y&minus;y&#772;)</th><th>(x&minus;x&#772;)&sup2;</th></tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+      <figure>
+        <div class="plot ar-16x10"><canvas id="solve-cv" aria-label="The five points, their mean point and the fitted line"></canvas></div>
+        <figcaption>The fitted line always passes through the mean point (x&#772;, y&#772;) &mdash; the dashed crosshair. That's what w&#8320; = y&#772; &minus; w&#8321;x&#772; says.</figcaption>
+      </figure>
+    </div>
+    <div class="eq"><div class="m">\[ w_1 = \frac{\sum_i (x_i-\bar{x})(y_i-\bar{y})}{\sum_i (x_i-\bar{x})^2}, \qquad w_0 = \bar{y} - w_1\,\bar{x} \]</div><div class="read"><b>Read it as:</b> the slope is &ldquo;how much x and y move together&rdquo; (top) divided by &ldquo;how much x moves on its own&rdquo; (bottom). When x is above its average and y is too, the product is positive and pushes the slope up. Then the intercept is chosen so the line goes through the mean point.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Slope equals the sum of cross-deviations over the sum of squared x-deviations; intercept equals y-bar minus slope times x-bar.&rdquo;</em></div><div class="eq-run" id="run-slope"></div></div>
+    <details class="how"><summary>Where does this formula come from? (two derivatives, set to zero)</summary><div>
+      <p>Start from MSE(w&#8320;, w&#8321;) = (1/n)&sum;(y&#7522; &minus; w&#8320; &minus; w&#8321;x&#7522;)&sup2;.</p>
+      <p><b>Step 1 &mdash; derivative in w&#8320;:</b> &part;MSE/&part;w&#8320; = &minus;(2/n)&sum;(y&#7522; &minus; w&#8320; &minus; w&#8321;x&#7522;). Setting it to 0 gives &sum;y&#7522; = n&middot;w&#8320; + w&#8321;&sum;x&#7522;, i.e. <b>w&#8320; = y&#772; &minus; w&#8321;x&#772;</b>. The residuals of the best line always add up to zero.</p>
+      <p><b>Step 2 &mdash; derivative in w&#8321;:</b> &part;MSE/&part;w&#8321; = &minus;(2/n)&sum;x&#7522;(y&#7522; &minus; w&#8320; &minus; w&#8321;x&#7522;) = 0. Substitute w&#8320; from step 1 and rearrange: &sum;x&#7522;(y&#7522; &minus; y&#772;) = w&#8321;&sum;x&#7522;(x&#7522; &minus; x&#772;), which equals the deviation form above because &sum;(x&#7522; &minus; x&#772;) = 0.</p>
+      <p><b>Why it's a minimum, not a maximum:</b> the second derivative in w&#8321; is (2/n)&sum;x&#7522;&sup2; &gt; 0 &mdash; the bowl curves upward.</p>
+    </div></details>
+
+    <h3>The same thing with matrices: the normal equation</h3>
+    <div class="eq"><div class="m">\[ \mathbf{w} = (X^\top X)^{-1} X^\top \mathbf{y} \]</div><div class="read"><b>Read it as:</b> stack the data into a matrix X with a column of 1s (for the intercept) and a column per feature. Then one matrix formula gives <b>all</b> the weights at once &mdash; for 1 feature or 1,000. This is what <span class="mono">LinearRegression().fit()</span> computes (via a numerically safer route).</div><div class="eq-say"><b>Say it</b><em>&ldquo;W equals X-transpose-X inverse, times X-transpose y.&rdquo;</em></div><div class="eq-run" id="run-normal"></div></div>
+    <details class="how"><summary>How exactly: building X, XᵀX and Xᵀy for these five rows</summary><div id="how-normal"></div></details>
+  </div>
+</section>
+
+<!-- GD -->
+<section class="chap" id="gd">
+  <div class="wrap">
+    <div class="tag">Route 2 · rolling downhill</div>
+    <h2>Rolling downhill to the answer</h2>
+    <div class="prose">
+      <p>The formula needs (X&#7488;X)&#8315;&sup1;, and inverting a matrix with a million features is impossible. So the method that trains every neural network does something humbler: stand somewhere on the bowl, feel which way is downhill (the <em class="term">gradient</em>), take a small step that way, repeat. The step size is the <em class="term">learning rate</em> &eta;. Press <strong>Run</strong>, then try a tiny and a huge learning rate. <strong>Click the bowl</strong> to choose where to start.</p>
+    </div>
+    <div class="eq"><div class="m">\[ w_j \leftarrow w_j - \eta\,\frac{\partial\,\text{MSE}}{\partial w_j}, \qquad \frac{\partial\,\text{MSE}}{\partial w_0} = \frac{2}{n}\sum_i(\hat{y}_i - y_i), \quad \frac{\partial\,\text{MSE}}{\partial w_1} = \frac{2}{n}\sum_i(\hat{y}_i - y_i)\,x_i \]</div><div class="read"><b>Read it as:</b> each weight moves against its own slope, scaled by &eta;. If the line predicts too high on average, (&ycirc; &minus; y) is positive, so the intercept goes <b>down</b>. If it's too high mostly where x is big, the slope goes down too.</div><div class="eq-say"><b>Say it</b><em>&ldquo;New weight equals old weight minus learning-rate times the partial derivative of the loss.&rdquo;</em></div><div class="eq-run" id="run-gd"></div></div>
+    <div class="lab">
+      <div>
+        <div class="two">
+          <figure>
+            <div class="plot ar-16x10"><canvas id="gd-land" aria-label="Gradient descent path on the loss bowl; click to set the start"></canvas></div>
+            <figcaption>Weight space: the path of the ball.</figcaption>
+          </figure>
+          <figure>
+            <div class="plot ar-16x10"><canvas id="gd-data" aria-label="The current line in data space"></canvas></div>
+            <figcaption>Data space: the line it represents.</figcaption>
+          </figure>
+        </div>
+        <figure style="margin-top:16px">
+          <div class="plot ar-3x1"><canvas id="gd-chart" aria-label="MSE against iteration, log scale"></canvas></div>
+          <figcaption>MSE after each step (log scale). A healthy run falls fast, then flattens.</figcaption>
+        </figure>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <h4>Controls</h4>
+          <div class="ctrl"><div class="top"><label for="gd-lr">Learning rate &eta;</label><output id="gd-lr-o"></output></div><input type="range" id="gd-lr" min="0" max="100" step="1" value="45"></div>
+          <div class="btns">
+            <button type="button" class="btn primary" id="gd-run">Run</button>
+            <button type="button" class="btn" id="gd-step">Step</button>
+            <button type="button" class="btn" id="gd-reset">Reset</button>
+          </div>
+        </div>
+        <div class="grp">
+          <h4>Feature x</h4>
+          <div class="seg" role="group" aria-label="Feature scaling">
+            <button type="button" data-gdc="0" aria-pressed="true">Raw hours</button>
+            <button type="button" data-gdc="1" aria-pressed="false">Centred (x &minus; x&#772;)</button>
+          </div>
+          <p class="note">Raw hours make a long, tilted valley: slope and intercept fight each other and the ball zig-zags. Centring x makes the bowl round, and the same learning rate gets there in a fraction of the steps. This is why we <b>scale features</b> before gradient descent.</p>
+        </div>
+        <div class="grp">
+          <h4>Status</h4>
+          <p class="num" id="gd-status" style="font-size:.88rem"></p>
+          <p class="note" id="gd-say"></p>
+        </div>
+      </div>
+    </div>
+    <div class="rule">
+      <div><h4>Closed form (route 1)</h4><ul><li>Exact answer in one computation</li><li>No learning rate to tune</li><li>Cost grows like d&sup3; in the number of features &mdash; fine up to a few thousand</li></ul></div>
+      <div><h4>Gradient descent (route 2)</h4><ul><li>Approximate, iterative, needs &eta; and scaled features</li><li>Works for any number of features, and for data streaming in batches (SGD)</li><li>The same algorithm trains logistic regression and every neural net</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- SCORE -->
+<section class="chap" id="score">
+  <div class="wrap">
+    <div class="tag">Diagnosis</div>
+    <h2>Grading the fit: R² and residuals</h2>
+    <div class="prose">
+      <p>MSE has awkward units (&ldquo;marks squared&rdquo;), so we also report <em class="term">R&sup2;</em>: the share of y's variation that the line explains. Start from the dumbest possible model &mdash; always predict the average y&#772; &mdash; whose error is SST. The line's error is SSE. R&sup2; = how much of SST the line removed.</p>
+    </div>
+    <div class="eq"><div class="m">\[ R^2 = 1 - \frac{\text{SSE}}{\text{SST}} = 1 - \frac{\sum_i (y_i-\hat{y}_i)^2}{\sum_i (y_i-\bar{y})^2} \]</div><div class="read"><b>Read it as:</b> 1 means perfect predictions; 0 means no better than guessing the average; negative (possible on test data) means worse than the average. But a high R&sup2; does <b>not</b> prove the line is the right shape &mdash; the residual plot does that.</div><div class="eq-say"><b>Say it</b><em>&ldquo;R-squared is one minus the residual sum of squares over the total sum of squares.&rdquo;</em></div><div class="eq-run" id="run-r2"></div></div>
+    <div class="fig-head block">
+      <div class="seg" role="group" aria-label="Dataset">
+        <button type="button" data-sc="line" aria-pressed="true">Straight trend</button>
+        <button type="button" data-sc="curve" aria-pressed="false">Curved truth</button>
+        <button type="button" data-sc="fan" aria-pressed="false">Fanning noise</button>
+        <button type="button" data-sc="outlier" aria-pressed="false">One outlier</button>
+      </div>
+    </div>
+    <div class="two">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="sc-cv" aria-label="Data, fitted line and residuals"></canvas></div>
+        <figcaption>The fit.</figcaption>
+      </figure>
+      <figure>
+        <div class="plot ar-16x10"><canvas id="sc-res" aria-label="Residual plot: residual against prediction"></canvas></div>
+        <figcaption>The residual plot: miss (y &minus; &ycirc;) against prediction &ycirc;. A good fit leaves a shapeless band around 0.</figcaption>
+      </figure>
+    </div>
+    <div class="r2bar block" aria-hidden="true"><div class="r2-track"><i id="sc-sse"></i><span id="sc-bar-l"></span></div></div>
+    <p class="note" style="margin-top:6px">Bar = SST, all the variation in y. <span style="color:var(--qda)">Red</span> = SSE, what the line could not explain. The rest is R&sup2;.</p>
+    <p class="say-line" id="sc-say"></p>
+    <h3>The four checks (L-I-N-E)</h3>
+    <ul class="pts" style="margin-top:14px">
+      <li><b>Linear</b><span>The mean of y really changes in a straight line with x. Broken by <em>Curved truth</em> &rarr; the residuals smile.</span></li>
+      <li><b>Independent</b><span>One point's miss tells you nothing about the next. Broken by time series, where today's error predicts tomorrow's.</span></li>
+      <li><b>Normal</b><span>Misses are roughly bell-shaped. Needed for confidence intervals, not for the line itself.</span></li>
+      <li><b>Equal variance</b><span>The spread of misses is the same everywhere. Broken by <em>Fanning noise</em> &rarr; the residuals form a cone.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- POLY -->
+<section class="chap" id="poly">
+  <div class="wrap">
+    <div class="tag">Bending the line</div>
+    <h2>Bending a straight line</h2>
+    <div class="prose">
+      <p>A surprise: linear regression can fit curves. Make new features x&sup2;, x&sup3;, &hellip; and fit a weight to each. The model is still <em>linear in the weights</em> &mdash; the same normal equation solves it &mdash; but the prediction now bends. The question is how much bending is too much. Fifteen noisy points from a smooth wave; slide the degree.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \hat{y} = w_0 + w_1x + w_2x^2 + \dots + w_dx^d \]</div><div class="read"><b>Read it as:</b> a degree-d polynomial; d + 1 weights. Degree 1 is the straight line. Each extra degree lets the curve change direction once more &mdash; and gives it one more way to chase noise.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Y-hat is a polynomial of degree d in x.&rdquo;</em></div></div>
+    <div class="lab">
+      <div>
+        <figure>
+          <div class="fig-head"><div class="legend"><span><i class="sw dot" style="background:var(--cA)"></i>15 training points</span><span id="poly-test-leg"><i class="sw dot" style="background:var(--cB)"></i>80 unseen test points</span><span><i class="sw" style="background:var(--muted)"></i>the true wave</span><span><i class="sw" style="background:var(--lda)"></i>fitted curve</span></div></div>
+          <div class="plot ar-16x10"><canvas id="poly-cv" aria-label="Polynomial fit of chosen degree to fifteen noisy points"></canvas></div>
+        </figure>
+        <figure style="margin-top:16px">
+          <div class="plot ar-3x1"><canvas id="poly-chart" aria-label="Training and test error against polynomial degree"></canvas></div>
+          <figcaption><span style="color:var(--cA)">&#9644;</span> training error keeps falling &nbsp; <span style="color:var(--qda)">&#9644;</span> test error falls, then shoots up. The dashed marker is your degree.</figcaption>
+        </figure>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <h4>Model</h4>
+          <div class="ctrl"><div class="top"><label for="poly-d">Degree d</label><output id="poly-d-o"></output></div><input type="range" id="poly-d" min="1" max="12" step="1" value="3"></div>
+          <div class="btns"><button type="button" class="btn" id="poly-test" aria-pressed="true">Hide test points</button></div>
+        </div>
+        <div class="grp">
+          <div class="stats">
+            <div class="stat"><div class="v" id="poly-tr"></div><div class="k">train RMSE</div></div>
+            <div class="stat"><div class="v" id="poly-te"></div><div class="k">test RMSE</div></div>
+          </div>
+          <p class="note" id="poly-say"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- REG -->
+<section class="chap" id="reg">
+  <div class="wrap">
+    <div class="tag">Taming it</div>
+    <h2>Ridge &amp; lasso: a leash on the weights</h2>
+    <div class="prose">
+      <p>The degree-12 curve overfits because its weights become enormous: huge positive and negative terms cancelling to thread every training point. <em class="term">Regularisation</em> adds a second cost &mdash; a price on big weights &mdash; and lets you choose how hard to pull with &lambda; (lambda). Two flavours: <strong>ridge</strong> charges for squared weights and shrinks them all smoothly; <strong>lasso</strong> charges for absolute weights and pushes some to <strong>exactly zero</strong> &mdash; it selects features for you.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \text{Ridge:}\;\; \min_{\mathbf{w}} \frac{1}{n}\lVert\mathbf{y}-X\mathbf{w}\rVert^2 + \lambda\sum_{j\ge1} w_j^2 \]</div><div class="read"><b>Read it as:</b> fit error plus &lambda; times the sum of squared weights (the intercept is not charged). Still a closed form: <span class="mono">w = (X&#7488;X + n&lambda;I&prime;)&#8315;&sup1;X&#7488;y</span>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Minimise the mean squared error plus lambda times the squared length of w.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \text{Lasso:}\;\; \min_{\mathbf{w}} \frac{1}{2n}\lVert\mathbf{y}-X\mathbf{w}\rVert^2 + \lambda\sum_{j\ge1} |w_j| \]</div><div class="read"><b>Read it as:</b> same idea, but the penalty is the sum of absolute weights. No closed form; solved by <b>coordinate descent</b> (one weight at a time, soft-thresholding it toward zero).</div><div class="eq-say"><b>Say it</b><em>&ldquo;Minimise half the mean squared error plus lambda times the L1 norm of w.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <div>
+        <div class="two">
+          <figure>
+            <div class="plot ar-16x10"><canvas id="reg-cv" aria-label="Degree-12 polynomial fit under the chosen penalty"></canvas></div>
+            <figcaption>Degree 12, leashed by &lambda;.</figcaption>
+          </figure>
+          <figure>
+            <div class="plot ar-16x10"><canvas id="reg-coef" aria-label="The twelve weights as bars"></canvas></div>
+            <figcaption>The 12 weights w&#8321;&hellip;w&#8321;&#8322; (symmetric log scale). Hollow = exactly zero.</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <h4>Penalty</h4>
+          <div class="seg" role="group" aria-label="Penalty type">
+            <button type="button" data-rg="ridge" aria-pressed="true">Ridge (L2)</button>
+            <button type="button" data-rg="lasso" aria-pressed="false">Lasso (L1)</button>
+          </div>
+          <div class="ctrl"><div class="top"><label for="reg-l">Strength &lambda;</label><output id="reg-l-o"></output></div><input type="range" id="reg-l" min="0" max="100" step="1" value="0"></div>
+          <div class="btns"><button type="button" class="btn" id="reg-best">Find the sweet spot</button></div>
+        </div>
+        <div class="grp">
+          <div class="stats">
+            <div class="stat"><div class="v" id="reg-tr"></div><div class="k">train RMSE</div></div>
+            <div class="stat"><div class="v" id="reg-te"></div><div class="k">test RMSE</div></div>
+            <div class="stat"><div class="v" id="reg-zero"></div><div class="k">weights at zero</div></div>
+            <div class="stat"><div class="v" id="reg-big"></div><div class="k">largest |w|</div></div>
+          </div>
+          <p class="note" id="reg-say"></p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Why lasso makes exact zeros: the picture</h3>
+    <div class="prose"><p>Imagine only two weights. The loss is a bowl whose bottom (the red star) is the unpenalised answer. The penalty says &ldquo;stay inside this region&rdquo;: a <strong>circle</strong> for ridge, a <strong>diamond</strong> for lasso. The answer is where the smallest loss contour first touches the region. A diamond has corners sitting on the axes &mdash; and contours very often touch a corner first, where one weight is exactly zero. A circle has no corners, so ridge almost never gives exact zeros. Shrink the budget and watch.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="geo-cv" aria-label="Two-weight picture: loss contours touching the circle or diamond constraint"></canvas></div>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="seg" role="group" aria-label="Constraint shape">
+            <button type="button" data-geo="lasso" aria-pressed="true">Lasso &#9670;</button>
+            <button type="button" data-geo="ridge" aria-pressed="false">Ridge &#9679;</button>
+          </div>
+          <div class="ctrl"><div class="top"><label for="geo-t">Weight budget t</label><output id="geo-t-o"></output></div><input type="range" id="geo-t" min="0.2" max="3" step="0.05" value="1.2"></div>
+          <p class="num" id="geo-w" style="font-size:.95rem"></p>
+          <p class="note" id="geo-say"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: forecasting diabetes, a year ahead</h2>
+    <div class="prose">
+      <p>442 real diabetes patients (Efron, Hastie, Johnstone &amp; Tibshirani, 2004 &mdash; the paper that introduced the LARS algorithm for lasso). At the first visit, doctors recorded ten baseline measurements. One year later they measured how far the disease had progressed, as a score from 25 to 346. <strong>Can a straight-line model forecast that score from the first visit?</strong></p>
+      <p>We hold out 111 patients as a test set the model never sees, fit on the other 331, and grade on the 111. Choose which measurements the model may use &mdash; the result may surprise you.</p>
+    </div>
+    <div class="block">
+      <h4 class="mini">Features the model may use <span class="note">(click to toggle)</span></h4>
+      <div class="chips" id="pj-feats" role="group" aria-label="Features"></div>
+      <div class="btns" style="margin-top:10px" id="pj-presets">
+        <button type="button" class="btn" data-pj="2">BMI only</button>
+        <button type="button" class="btn" data-pj="2,3,8">BMI + BP + triglycerides</button>
+        <button type="button" class="btn" data-pj="all">All ten</button>
+      </div>
+    </div>
+    <div class="lab">
+      <div>
+        <figure>
+          <div class="plot ar-16x10"><canvas id="pj-cv" aria-label="Predicted against actual progression for the 111 test patients"></canvas></div>
+          <figcaption>Each dot is one of the 111 test patients: real progression (across) vs. the model's forecast (up). Perfect forecasts would sit on the dashed diagonal.</figcaption>
+        </figure>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <h4>Test-set grade</h4>
+          <div class="stats">
+            <div class="stat"><div class="v" id="pj-r2"></div><div class="k">test R&sup2;</div></div>
+            <div class="stat"><div class="v" id="pj-rmse"></div><div class="k">RMSE (points)</div></div>
+            <div class="stat"><div class="v" id="pj-mae"></div><div class="k">MAE (points)</div></div>
+            <div class="stat"><div class="v" id="pj-k"></div><div class="k">features used</div></div>
+          </div>
+          <div class="ctrl"><div class="top"><label for="pj-l">Lasso &lambda; (0 = plain least squares)</label><output id="pj-l-o"></output></div><input type="range" id="pj-l" min="0" max="20" step="0.5" value="0"></div>
+        </div>
+        <div class="grp">
+          <h4>Weights (per 1 standard deviation)</h4>
+          <div id="pj-coef" class="coefs"></div>
+        </div>
+      </div>
+    </div>
+    <p class="say-line" id="pj-say"></p>
+
+    <h3>The feature race: lasso's path</h3>
+    <div class="prose"><p>Start with a huge &lambda; (every weight forced to zero) and slowly relax it. Features enter the model one at a time, most useful first. This is how lasso <em>ranks</em> the ten measurements &mdash; and it agrees with the 2004 paper: BMI first, then triglycerides, then blood pressure.</p></div>
+    <figure class="block">
+      <div class="plot ar-3x1" style="aspect-ratio:2.6/1"><canvas id="pj-path" aria-label="Lasso coefficient paths for all ten features as lambda decreases"></canvas></div>
+      <figcaption id="pj-path-cap"></figcaption>
+    </figure>
+
+    <h3>One patient, explained</h3>
+    <div class="prose"><p>Using the three-feature model, set a patient's measurements. A linear model is fully explainable: the forecast is the average patient's score plus one contribution per feature, and you can see each one.</p></div>
+    <div class="lab">
+      <div>
+        <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+          <div class="stat big"><div class="v" id="pt-pred"></div><div class="k">forecast progression in one year</div></div>
+          <div class="stat big"><div class="v" id="pt-base"></div><div class="k">average patient (training set)</div></div>
+        </div>
+        <div id="pt-contrib" class="coefs" style="margin-top:16px"></div>
+      </div>
+      <div class="panel" id="pt-sliders"></div>
+    </div>
+
+    <h3>The same project in scikit-learn</h3>
+<pre class="code"><code>from sklearn.datasets import load_diabetes
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression, lasso_path
+from sklearn.metrics import r2_score, mean_squared_error
+
+d = load_diabetes(scaled=False)
+X, y = d.data, d.target
+idx = range(len(y))
+tr, te = train_test_split(list(idx), test_size=0.25, random_state=42)
+
+def grade(cols):
+    sc = StandardScaler().fit(X[tr][:, cols])
+    m = LinearRegression().fit(sc.transform(X[tr][:, cols]), y[tr])
+    p = m.predict(sc.transform(X[te][:, cols]))
+    return r2_score(y[te], p), mean_squared_error(y[te], p) ** 0.5
+
+for name, cols in [("All ten", list(range(10))), ("BMI + BP + s5", [2, 3, 8]), ("BMI only", [2])]:
+    r2, rmse = grade(cols)
+    print(f"{name:16s} test R² = {r2:.3f}   RMSE = {rmse:.1f}")</code></pre>
+<pre class="code out"><code>All ten          test R² = 0.485   RMSE = 53.4
+BMI + BP + s5    test R² = 0.502   RMSE = 52.5
+BMI only         test R² = 0.317   RMSE = 61.5
+Lasso entry order: bmi → s5 → bp → s3 → sex → s2 → s1 → s6 → age → s4</code></pre>
+    <p class="note" style="max-width:70ch">The numbers above were produced by scikit-learn 1.9 on exactly this split; the page's own JavaScript reproduces them, so what you see in the lab is what Python gives.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Linear regression predicts a number as a weighted sum of features: &ycirc; = w&#8320; + w&#8321;x&#8321; + &hellip; + w_dx_d.</li>
+      <li>It picks the weights that minimise the mean squared error &mdash; a bowl in weight space with one bottom.</li>
+      <li>Reach the bottom by formula (w = (X&#7488;X)&#8315;&sup1;X&#7488;y) or by gradient descent (small steps downhill, scaled features, a sensible &eta;).</li>
+      <li>Judge it by R&sup2; on <em>test</em> data and by the residual plot; a smile, a cone or a lone outlier each tell a different story.</li>
+      <li>Polynomial features bend the line; ridge and lasso stop it bending too far, and lasso also chooses features.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why can't we just add up the residuals instead of squaring them?</summary><p>Positive and negative misses cancel. A flat line through the mean has residuals summing to exactly zero, however bad it is. Squaring (or taking absolute values) makes every miss count.</p></details>
+      <details class="q"><summary>Gradient descent's MSE goes up every step. What happened, and what do you change?</summary><p>The learning rate is too large: each step overshoots the valley and lands higher on the other side. Lower &eta;, or scale the features so the bowl is rounder &mdash; try both in the lab.</p></details>
+      <details class="q"><summary>A model has R&sup2; = 0.95 but the residual plot is a clear U shape. Is the model good?</summary><p>It's the wrong shape. The line explains a lot of variation, but the misses are systematic: positive at the ends, negative in the middle. Add a curved feature (x&sup2;) or transform the data.</p></details>
+      <details class="q"><summary>In the project, why did three features beat all ten on the test set?</summary><p>Each extra feature adds a weight estimated from only 331 patients. Weak or redundant features (the six blood tests are strongly correlated) add estimation noise more than signal &mdash; variance. Lasso finds this automatically.</p></details>
+      <details class="q"><summary>You need a model with only the important features, for a clinic form. Ridge or lasso?</summary><p>Lasso: its L1 penalty sets unhelpful weights to exactly zero, so the remaining features are the ones to measure. Ridge shrinks all weights but keeps every feature.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn" href="../supervised-learning/">&larr; Previous: Supervised Learning</a>
+      <a class="btn" href="../lda-qda/">Classification next: LDA &amp; QDA &rarr;</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>James, Witten, Hastie, Tibshirani. <a href="https://www.statlearning.com/" target="_blank" rel="noopener">An Introduction to Statistical Learning</a> &mdash; chapter 3 (linear regression) and chapter 6 (ridge and lasso).</li>
+      <li>Efron, Hastie, Johnstone, Tibshirani (2004). Least angle regression. <em>Annals of Statistics</em> 32(2) &mdash; the source of the diabetes data and the lasso path.</li>
+      <li>Galton, F. (1886). Regression towards mediocrity in hereditary stature. <em>Journal of the Anthropological Institute</em> 15 &mdash; where the word comes from.</li>
+      <li>scikit-learn. <a href="https://scikit-learn.org/stable/modules/linear_model.html" target="_blank" rel="noopener">Linear models user guide</a>.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+/* ---------- least squares, one feature ---------- */
+function ls1(P) {
+  const n = P.length; let mx = 0, my = 0; P.forEach(p => { mx += p[0]; my += p[1]; }); mx /= n; my /= n;
+  let sxy = 0, sxx = 0, syy = 0; P.forEach(p => { sxy += (p[0] - mx) * (p[1] - my); sxx += (p[0] - mx) ** 2; syy += (p[1] - my) ** 2; });
+  const m = sxx > 0 ? sxy / sxx : 0; return { b: my - m * mx, m, mx, my, sxy, sxx, syy, n };
+}
+function sse(P, b, m) { let s = 0; for (const p of P) { const r = p[1] - (b + m * p[0]); s += r * r; } return s; }
+function l1fit(P) {
+  let { b, m } = ls1(P);
+  for (let it = 0; it < 80; it++) {
+    let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (const p of P) { const w = 1 / Math.max(1e-4, Math.abs(p[1] - b - m * p[0])); sw += w; sx += w * p[0]; sy += w * p[1]; sxx += w * p[0] * p[0]; sxy += w * p[0] * p[1]; }
+    const mx = sx / sw, my = sy / sw, den = sxx - sw * mx * mx; m = den > 0 ? (sxy - sw * mx * my) / den : 0; b = my - m * mx;
+  }
+  return { b, m };
+}
+/* Gaussian elimination with partial pivoting */
+function solve(A, rhs) {
+  const n = rhs.length, M = A.map((r, i) => [...r, rhs[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]]; const d = M[c][c] || 1e-300;
+    for (let r = c + 1; r < n; r++) { const f = M[r][c] / d; if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  const x = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / (M[r][r] || 1e-300); }
+  return x;
+}
+
+/* ---------- the class dataset: 12 students ---------- */
+const HS = (() => { const r = mulberry32(11), xs = [1, 1.5, 2.5, 3, 3.5, 4.5, 5, 6, 6.5, 7.5, 8.5, 9.5]; return xs.map(x => [x, +(45 + 4.5 * x + 4 * gaussOf(r)).toFixed(1)]); })();
+const HSfit = ls1(HS);
+const FX = [0, 10.5], FY = [30, 105];
+const COL = () => ({ pt: css('--cA'), best: css('--lda'), you: css('--cB'), miss: css('--qda'), ink: css('--ink'), muted: css('--muted'), surf: css('--surface'), cC: css('--cC') });
+
+/* ---------- hero ---------- */
+const HERO = { pts: HS.map(p => p.slice()), v: null };
+function drawHero() {
+  const cv = $('#hero-cv'), v = HERO.v = frame(cv, FX, FY), C = COL(); axes(v, 'hours studied', 'exam score');
+  const f = ls1(HERO.pts); clip(v);
+  HERO.pts.forEach(p => seg(v, p[0], p[1], p[0], f.b + f.m * p[0], C.miss, 2, null, .8));
+  curve(v, x => f.b + f.m * x, C.best, 2.8);
+  HERO.pts.forEach(p => dot(v, p[0], p[1], C.pt, 5.5));
+  v.ctx.restore();
+  const R2 = f.syy > 0 ? 1 - sse(HERO.pts, f.b, f.m) / f.syy : 0;
+  $('#hero-cap').innerHTML = `Least-squares line: <b class="num">ŷ = ${fmt(f.b)} + ${fmt(f.m, 2)} × hours</b> &middot; R² = ${fmt(R2, 2)}. <b>Drag any student</b> and watch the line re-balance itself &mdash; the red sticks are the misses it keeps as small as possible.`;
+  const rm = $('#run-model');
+  if (rm) rm.innerHTML = `<b>Running example</b> on the hero plot: ŷ = ${tip(fmt(f.b), `w₀ = ȳ − w₁·x̄\n= ${fmt(f.my, 2)} − ${fmt(f.m, 3)} × ${fmt(f.mx, 2)}\n= ${fmt(f.b, 2)}`)} + ${tip(fmt(f.m, 2), `w₁ = Σ(x−x̄)(y−ȳ) ÷ Σ(x−x̄)²\n= ${fmt(f.sxy, 1)} ÷ ${fmt(f.sxx, 2)}\n= ${fmt(f.m, 3)}`)} × hours. A student who studies 6 hours is predicted ${tip(fmt(f.b + 6 * f.m), `${fmt(f.b, 2)} + ${fmt(f.m, 3)} × 6`)} marks; each extra hour is worth ${fmt(f.m, 1)} marks.`;
+}
+fig($('#hero-cv'), drawHero);
+draggable($('#hero-cv'), () => HERO.v, () => HERO.pts, drawHero);
+$('#hero-reset').addEventListener('click', () => { HERO.pts = HS.map(p => p.slice()); drawHero(); });
+
+/* ---------- you draw it + the loss landscape (shared line) ---------- */
+const LINE = { b: 40, m: 2, show: 'sticks', best: false };
+const bestMSE = sse(HS, HSfit.b, HSfit.m) / HS.length;
+function landscape(P, center) {
+  const f0 = ls1(P), mx = center ? f0.mx : 0, Pc = P.map(p => [p[0] - mx, p[1]]), fc = ls1(Pc), n = P.length;
+  const bl = [fc.b - 35, fc.b + 35], ml = [fc.m - 5.5, fc.m + 5.5], NX = 90, NY = 64, L = new Float32Array(NX * NY);
+  let lo = Infinity, hi = -Infinity;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+    const b = bl[0] + (i + .5) / NX * (bl[1] - bl[0]), m = ml[1] - (j + .5) / NY * (ml[1] - ml[0]);
+    const l = Math.log(sse(Pc, b, m) / n); L[j * NX + i] = l; if (l < lo) lo = l; if (l > hi) hi = l;
+  }
+  return { Pc, fc, bl, ml, NX, NY, L, lo, hi, mx, n };
+}
+function drawBowl(v, LS) {
+  const c = v.ctx, col = css('--lda'), cw = v.pw / LS.NX, ch = v.ph / LS.NY; c.save(); c.fillStyle = col;
+  for (let j = 0; j < LS.NY; j++) for (let i = 0; i < LS.NX; i++) {
+    const t = (LS.L[j * LS.NX + i] - LS.lo) / (LS.hi - LS.lo), band = Math.floor(t * 13);
+    c.globalAlpha = .58 * (1 - band / 13) + .03 + (band % 2 ? .04 : 0);
+    c.fillRect(v.pad.l + i * cw, v.pad.t + j * ch, cw + .6, ch + .6);
+  }
+  c.restore();
+}
+const LAND = landscape(HS, false);
+let landV = null;
+function syncLine() {
+  $('#fit-b').value = LINE.b; $('#fit-m').value = LINE.m;
+  $('#fit-b-o').textContent = fmt(LINE.b, 1); $('#fit-m-o').textContent = fmt(LINE.m, 2);
+  drawFit(); drawLoss(); runMSE();
+}
+function drawFit() {
+  const v = frame($('#fit-cv'), FX, FY), C = COL(), c = v.ctx; axes(v, 'hours studied', 'exam score'); clip(v);
+  HS.forEach(p => {
+    const yh = LINE.b + LINE.m * p[0];
+    if (LINE.show === 'squares') {
+      const s = Math.abs(v.Y(yh) - v.Y(p[1])), top = Math.min(v.Y(yh), v.Y(p[1])), px = v.X(p[0]);
+      c.save(); c.fillStyle = C.miss; c.globalAlpha = .13; c.fillRect(px, top, s, s); c.globalAlpha = .7; c.strokeStyle = C.miss; c.lineWidth = 1; c.strokeRect(px + .5, top + .5, s, s); c.restore();
+    } else seg(v, p[0], p[1], p[0], yh, C.miss, 2, null, .85);
+  });
+  if (LINE.best) curve(v, x => HSfit.b + HSfit.m * x, C.best, 2, [7, 5]);
+  curve(v, x => LINE.b + LINE.m * x, C.you, 2.8);
+  HS.forEach(p => dot(v, p[0], p[1], C.pt, 5));
+  c.restore();
+  const S = sse(HS, LINE.b, LINE.m), M = S / HS.length, ratio = M / bestMSE;
+  $('#fit-mse').innerHTML = tip(fmt(M, 1), `MSE = SSE ÷ n\n= ${fmt(S, 1)} ÷ ${HS.length}\n= ${fmt(M, 2)}`);
+  $('#fit-best').innerHTML = tip(fmt(bestMSE, 1), `the least-squares line\nŷ = ${fmt(HSfit.b, 2)} + ${fmt(HSfit.m, 3)}x\nhas the smallest MSE of all lines`);
+  $('#fit-bar').style.width = clamp(100 / ratio, 2, 100) + '%';
+  $('#fit-verdict').textContent = ratio < 1.03 ? 'You found it: your line is within 3% of the best possible. That is least squares, done by hand.' : ratio < 1.5 ? `Close: your error is ${fmt(ratio, 2)}× the best. Fine-tune the slope, then the intercept.` : `Your line's error is ${fmt(ratio, 1)}× the best possible. Watch the squares shrink as you improve.`;
+}
+function drawLoss() {
+  const C = COL();
+  { const v = frame($('#loss-cv'), FX, FY); axes(v, 'hours studied', 'exam score'); clip(v);
+    HS.forEach(p => seg(v, p[0], p[1], p[0], LINE.b + LINE.m * p[0], C.miss, 2, null, .85));
+    curve(v, x => LINE.b + LINE.m * x, C.you, 2.8); HS.forEach(p => dot(v, p[0], p[1], C.pt, 4.5)); v.ctx.restore(); }
+  const v = landV = frame($('#land-cv'), LAND.bl, LAND.ml); drawBowl(v, LAND); axes(v, 'w₀  intercept', 'w₁  slope');
+  clip(v); star(v, LAND.fc.b, LAND.fc.m, C.miss, 9);
+  const c = v.ctx; c.beginPath(); c.arc(v.X(LINE.b), v.Y(LINE.m), 7, 0, 7); c.fillStyle = C.you; c.fill(); c.strokeStyle = C.surf; c.lineWidth = 2; c.stroke(); c.restore();
+  const M = sse(HS, LINE.b, LINE.m) / HS.length;
+  $('#land-say').innerHTML = `You are at w₀ = ${fmt(LINE.b, 1)}, w₁ = ${fmt(LINE.m, 2)} &rarr; MSE ${fmt(M, 1)}. The bottom of the bowl is w₀ = ${fmt(HSfit.b, 1)}, w₁ = ${fmt(HSfit.m, 2)} &rarr; MSE ${fmt(bestMSE, 1)}. Notice the bowl is a long, tilted valley: raise the slope and you must lower the intercept to stay low.`;
+}
+function runMSE() {
+  const rows = HS.slice(0, 3).map(p => { const yh = LINE.b + LINE.m * p[0], r = p[1] - yh; return tip(`(${fmt(p[1])} − ${fmt(yh)})²`, `student at x = ${p[0]} h\nreal y = ${fmt(p[1])}\nline: ${fmt(LINE.b, 1)} + ${fmt(LINE.m, 2)} × ${p[0]} = ${fmt(yh, 2)}\nmiss = ${fmt(r, 2)}, squared = ${fmt(r * r, 2)}`); });
+  const S = sse(HS, LINE.b, LINE.m);
+  $('#run-mse').innerHTML = `<b>Running example</b> (your current line): MSE = (1/${HS.length}) × [ ${rows.join(' + ')} + … 9 more ] = ${tip(fmt(S, 1), 'the sum of all 12 squared misses')} ÷ ${HS.length} = <b>${fmt(S / HS.length, 1)}</b>`;
+}
+$('#fit-b').addEventListener('input', e => { LINE.b = +e.target.value; syncLine(); });
+$('#fit-m').addEventListener('input', e => { LINE.m = +e.target.value; syncLine(); });
+seg1('[data-fshow]', 'data-fshow', k => { LINE.show = k; drawFit(); });
+$('#fit-reveal').addEventListener('click', e => { LINE.best = !LINE.best; e.target.setAttribute('aria-pressed', LINE.best); e.target.textContent = LINE.best ? 'Hide best line' : 'Show best line'; drawFit(); });
+$('#fit-snap').addEventListener('click', () => { LINE.b = +HSfit.b.toFixed(1); LINE.m = +HSfit.m.toFixed(2); syncLine(); });
+{
+  const cv = $('#land-cv'); let down = false;
+  const set = e => { if (!landV) return; const [px, py] = evPos(cv, e); LINE.b = +clamp(landV.iX(px), 0, 90).toFixed(1); LINE.m = +clamp(landV.iY(py), -2, 10).toFixed(2); syncLine(); };
+  cv.addEventListener('pointerdown', e => { down = true; cv.setPointerCapture(e.pointerId); set(e); e.preventDefault(); });
+  cv.addEventListener('pointermove', e => { if (down) set(e); });
+  cv.addEventListener('pointerup', () => { down = false; }); cv.addEventListener('pointercancel', () => { down = false; });
+  cv.style.cursor = 'crosshair';
+}
+fig($('#fit-cv'), drawFit); fig($('#loss-cv'), drawLoss); fig($('#land-cv'), drawLoss);
+
+/* ---------- outlier test ---------- */
+const OUT = { on: false, pts: HS.map(p => p.slice()), o: [9.2, 40], v: null };
+function outPts() { return OUT.on ? [...OUT.pts, OUT.o] : OUT.pts; }
+function drawOut() {
+  const v = OUT.v = frame($('#out-cv'), FX, FY), C = COL(); axes(v, 'hours studied', 'exam score'); clip(v);
+  const P = outPts(), a = ls1(P), b = l1fit(P);
+  curve(v, x => a.b + a.m * x, C.best, 2.8); curve(v, x => b.b + b.m * x, C.you, 2.6, [8, 5]);
+  OUT.pts.forEach(p => dot(v, p[0], p[1], C.pt, 4.5));
+  if (OUT.on) { dot(v, OUT.o[0], OUT.o[1], C.miss, 6.5); const c = v.ctx; c.beginPath(); c.arc(v.X(OUT.o[0]), v.Y(OUT.o[1]), 12, 0, 7); c.strokeStyle = C.miss; c.lineWidth = 1.5; c.setLineDash([3, 3]); c.stroke(); c.setLineDash([]); }
+  v.ctx.restore();
+  const a0 = ls1(OUT.pts), b0 = l1fit(OUT.pts);
+  $('#out-ls').textContent = fmt(a.m, 2); $('#out-l1').textContent = fmt(b.m, 2);
+  $('#out-say').innerHTML = OUT.on
+    ? `One bad point moved the squared-error slope from <b>${fmt(a0.m, 2)}</b> to <b>${fmt(a.m, 2)}</b>; the absolute-error slope went from ${fmt(b0.m, 2)} to ${fmt(b.m, 2)}. <b>Drag the red outlier</b> further away and watch only the blue line chase it.`
+    : 'Without outliers both lines nearly agree. Now add one.';
+}
+$('#out-toggle').addEventListener('click', e => { OUT.on = !OUT.on; e.target.setAttribute('aria-pressed', OUT.on); e.target.textContent = OUT.on ? 'Remove the outlier' : 'Add an outlier'; drawOut(); });
+draggable($('#out-cv'), () => OUT.v, () => OUT.on ? [OUT.o] : [], drawOut);
+fig($('#out-cv'), drawOut);
+
+/* ---------- by hand: five students ---------- */
+const HAND = { x: [1, 2, 3, 4, 5], y: [52, 55, 61, 64, 68] };
+{
+  const tb = $('#hand tbody');
+  tb.innerHTML = HAND.x.map((x, i) => `<tr><td class="num">${x}</td><td><input type="number" class="num" data-hy="${i}" value="${HAND.y[i]}" step="1" aria-label="score for x = ${x}"></td><td class="num" data-c="dx"></td><td class="num" data-c="dy"></td><td class="num" data-c="pr"></td><td class="num" data-c="sq"></td></tr>`).join('');
+  $$('[data-hy]').forEach(inp => inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (isFinite(v)) { HAND.y[+inp.dataset.hy] = v; drawSolve(); } }));
+}
+function drawSolve() {
+  const n = 5, xs = HAND.x, ys = HAND.y, mx = xs.reduce((a, b) => a + b) / n, my = ys.reduce((a, b) => a + b) / n;
+  let sxy = 0, sxx = 0;
+  $$('#hand tbody tr').forEach((tr, i) => {
+    const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx * dy; sxx += dx * dx;
+    tr.querySelector('[data-c=dx]').innerHTML = tip(fmt(dx, 1), `${xs[i]} − x̄ = ${xs[i]} − ${fmt(mx, 2)}`);
+    tr.querySelector('[data-c=dy]').innerHTML = tip(fmt(dy, 1), `${fmt(ys[i], 1)} − ȳ = ${fmt(ys[i], 1)} − ${fmt(my, 2)}`);
+    tr.querySelector('[data-c=pr]').innerHTML = tip(fmt(dx * dy, 1), `(${fmt(dx, 1)}) × (${fmt(dy, 1)})`);
+    tr.querySelector('[data-c=sq]').innerHTML = tip(fmt(dx * dx, 1), `(${fmt(dx, 1)})²`);
+  });
+  const w1 = sxx ? sxy / sxx : 0, w0 = my - w1 * mx;
+  const sx = xs.reduce((a, b) => a + b), sy = ys.reduce((a, b) => a + b), sxx2 = xs.reduce((a, b) => a + b * b, 0), sxyr = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  $('#hand tfoot').innerHTML = `<tr><th>x̄ = ${tip(fmt(mx, 1), `(${xs.join(' + ')}) ÷ 5`)}</th><th>ȳ = ${tip(fmt(my, 1), `(${ys.map(v => fmt(v, 1)).join(' + ')}) ÷ 5\n= ${fmt(sy, 1)} ÷ 5`)}</th><th class="num">Σ = 0</th><th class="num">Σ = 0</th><th class="num">Σ = ${tip(fmt(sxy, 1), 'add the column above')}</th><th class="num">Σ = ${tip(fmt(sxx, 1), 'add the column above')}</th></tr>`;
+  $('#run-slope').innerHTML = `<b>Running example</b>: w₁ = ${tip(fmt(sxy, 1), 'Σ(x−x̄)(y−ȳ): the 5th column total')} ÷ ${tip(fmt(sxx, 1), 'Σ(x−x̄)²: the last column total')} = <b>${fmt(w1, 2)}</b> marks per hour; w₀ = ${tip(fmt(my, 1), 'ȳ, the average score')} − ${fmt(w1, 2)} × ${tip(fmt(mx, 1), 'x̄, the average hours')} = <b>${fmt(w0, 2)}</b>. So ŷ = ${fmt(w0, 2)} + ${fmt(w1, 2)}x.`;
+  const det = 5 * sxx2 - sx * sx;
+  $('#run-normal').innerHTML = `<b>Running example</b>: XᵀX = ${tip(`[[5, ${sx}], [${sx}, ${sxx2}]]`, `[[n, Σx], [Σx, Σx²]]\nΣx = ${xs.join('+')} = ${sx}\nΣx² = ${xs.map(x => x * x).join('+')} = ${sxx2}`)}, Xᵀy = ${tip(`[${fmt(sy, 1)}, ${fmt(sxyr, 1)}]`, `[Σy, Σxy]\nΣxy = ${xs.map((x, i) => `${x}×${fmt(ys[i], 0)}`).join(' + ')}`)}; det(XᵀX) = ${tip(fmt(det, 0), `5 × ${sxx2} − ${sx}² = ${det}`)} &rarr; w = (XᵀX)⁻¹Xᵀy = [<b>${fmt(w0, 2)}</b>, <b>${fmt(w1, 2)}</b>] &mdash; the same answer.`;
+  $('#how-normal').innerHTML = `<p><b>1. Build X.</b> One row per student: a 1 (multiplies the intercept) and the hours. X = [${xs.map(x => `[1, ${x}]`).join(', ')}], y = [${ys.map(v => fmt(v, 0)).join(', ')}].</p><p><b>2. XᵀX</b> multiplies each column with each column: top-left = 1·1 summed = n = 5; off-diagonal = Σx = ${sx}; bottom-right = Σx² = ${sxx2}.</p><p><b>3. Xᵀy</b> multiplies each column with y: Σy = ${fmt(sy, 1)} and Σxy = ${fmt(sxyr, 1)}.</p><p><b>4. Invert the 2×2:</b> (XᵀX)⁻¹ = (1/${fmt(det, 0)}) × [[${sxx2}, −${sx}], [−${sx}, 5]].</p><p><b>5. Multiply:</b> w₀ = (${sxx2}×${fmt(sy, 1)} − ${sx}×${fmt(sxyr, 1)}) ÷ ${fmt(det, 0)} = ${fmt(w0, 2)}; w₁ = (−${sx}×${fmt(sy, 1)} + 5×${fmt(sxyr, 1)}) ÷ ${fmt(det, 0)} = ${fmt(w1, 2)}.</p>`;
+  // plot
+  const ylo = Math.min(...ys, w0 + w1 * 0.5) - 6, yhi = Math.max(...ys, w0 + w1 * 5.5) + 6;
+  const v = frame($('#solve-cv'), [0.5, 5.5], [ylo, yhi]), C = COL(); axes(v, 'hours', 'score', { sx: 1 }); clip(v);
+  seg(v, mx, ylo, mx, yhi, C.cC, 1.3, [4, 4]); seg(v, 0.5, my, 5.5, my, C.cC, 1.3, [4, 4]);
+  xs.forEach((x, i) => seg(v, x, ys[i], x, w0 + w1 * x, C.miss, 2, null, .85));
+  curve(v, x => w0 + w1 * x, C.best, 2.8); xs.forEach((x, i) => dot(v, x, ys[i], C.pt, 6));
+  dot(v, mx, my, C.cC, 6); v.ctx.fillStyle = C.cC; v.ctx.font = '12px ' + css('--f-mono'); v.ctx.fillText('(x̄, ȳ)', v.X(mx) + 9, v.Y(my) - 9);
+  v.ctx.restore();
+}
+fig($('#solve-cv'), drawSolve);
+
+/* ---------- gradient descent ---------- */
+const GD = { center: false, lrI: 45, b: 0, m: 0, path: [], losses: [], it: 0, timer: 0, state: 'ready', g: [0, 0] };
+let GLS = landscape(HS, false), gdV = null;
+const gdLR = () => Math.pow(10, -3.3 + GD.lrI / 100 * 2.6);
+const gdLoss = () => sse(GLS.Pc, GD.b, GD.m) / GLS.n;
+function gdReset(b0, m0) {
+  gdStop(); GD.b = b0 != null ? b0 : GLS.fc.b - 28; GD.m = m0 != null ? m0 : GLS.fc.m + 4.2;
+  GD.path = [[GD.b, GD.m]]; GD.losses = [gdLoss()]; GD.it = 0; GD.state = 'ready'; GD.g = [0, 0]; drawGD();
+}
+function gdStep() {
+  if (GD.state === 'diverged' || GD.state === 'converged') return false;
+  const P = GLS.Pc, n = GLS.n; let g0 = 0, g1 = 0;
+  for (const p of P) { const e = GD.b + GD.m * p[0] - p[1]; g0 += e; g1 += e * p[0]; }
+  g0 *= 2 / n; g1 *= 2 / n; GD.g = [g0, g1];
+  const lr = gdLR(); GD.b -= lr * g0; GD.m -= lr * g1; GD.it++;
+  const L = gdLoss(); GD.losses.push(L); if (GD.path.length < 4000) GD.path.push([GD.b, GD.m]);
+  if (!isFinite(L) || L > 1e7) { GD.state = 'diverged'; gdStop(); return false; }
+  if (Math.hypot(g0, g1) < 2e-3) { GD.state = 'converged'; gdStop(); return false; }
+  if (GD.it >= 3000) { GD.state = 'slow'; gdStop(); return false; }
+  GD.state = 'running'; return true;
+}
+function gdStop() { clearInterval(GD.timer); GD.timer = 0; $('#gd-run').textContent = 'Run'; }
+function drawGD() {
+  const C = COL();
+  { const v = gdV = frame($('#gd-land'), GLS.bl, GLS.ml); drawBowl(v, GLS); axes(v, GD.center ? 'w₀ (score at x̄)' : 'w₀  intercept', 'w₁  slope'); clip(v);
+    star(v, GLS.fc.b, GLS.fc.m, C.miss, 9);
+    const c = v.ctx; c.save(); c.strokeStyle = C.you; c.lineWidth = 1.8; c.beginPath();
+    GD.path.forEach((p, i) => { const px = clamp(v.X(p[0]), -5000, 5000), py = clamp(v.Y(p[1]), -5000, 5000); i ? c.lineTo(px, py) : c.moveTo(px, py); }); c.stroke();
+    c.fillStyle = C.you; GD.path.forEach((p, i) => { if (i % Math.max(1, Math.floor(GD.path.length / 60)) === 0) { c.beginPath(); c.arc(v.X(p[0]), v.Y(p[1]), 2.4, 0, 7); c.fill(); } });
+    c.restore(); dot(v, GD.b, GD.m, C.you, 6.5); v.ctx.restore(); }
+  { const v = frame($('#gd-data'), FX, FY); axes(v, 'hours studied', 'exam score'); clip(v);
+    const mx = GLS.mx; curve(v, x => GD.b + GD.m * (x - mx), C.you, 2.8); HS.forEach(p => dot(v, p[0], p[1], C.pt, 4.5)); v.ctx.restore(); }
+  { const N = Math.max(60, GD.losses.length - 1), ls = GD.losses.map(l => Math.log10(Math.max(1e-3, Math.min(1e8, l))));
+    const lo = Math.min(Math.log10(bestMSE) - .3, ...ls), hi = Math.max(lo + 1, ...ls) + .1;
+    const v = frame($('#gd-chart'), [0, N], [lo, hi], { b: 26, l: 52 }); axes(v, 'iteration', 'MSE', { ny: 3, fy: y => (Math.pow(10, y) >= 100 ? fmt(Math.pow(10, y), 0) : fmt(Math.pow(10, y), 1)) }); clip(v);
+    seg(v, 0, Math.log10(bestMSE), N, Math.log10(bestMSE), C.miss, 1.2, [5, 4]);
+    const c = v.ctx; c.strokeStyle = C.you; c.lineWidth = 2; c.beginPath(); ls.forEach((l, i) => { i ? c.lineTo(v.X(i), v.Y(l)) : c.moveTo(v.X(i), v.Y(l)); }); c.stroke(); c.restore(); }
+  const L = GD.losses[GD.losses.length - 1], gn = Math.hypot(GD.g[0], GD.g[1]);
+  $('#gd-lr-o').textContent = gdLR() < 0.01 ? gdLR().toFixed(4) : gdLR().toFixed(3);
+  $('#gd-status').innerHTML = `iteration ${GD.it} · MSE ${isFinite(L) && L < 1e7 ? fmt(L, 2) : 'exploded'} · |gradient| ${fmt(gn, 3)}`;
+  const say = {
+    ready: 'Press Run (or Step) to roll the ball downhill. Click the bowl to start somewhere else.',
+    running: 'Rolling…',
+    converged: `Converged in <b>${GD.it}</b> steps: the ground is flat (gradient ≈ 0), we are at the bottom &mdash; the same line the formula gives.`,
+    diverged: `<b>Diverged.</b> The learning rate is too big: every step overshoots the valley and lands higher up the other side, so the error explodes. Lower η.`,
+    slow: `Still not at the bottom after 3000 steps. The learning rate is tiny or the valley is long and thin${GD.center ? '' : ' &mdash; try <b>Centred</b> x'}.`
+  }[GD.state];
+  $('#gd-say').innerHTML = say;
+  const lr = gdLR();
+  $('#run-gd').innerHTML = GD.it ? `<b>Last step</b> (η = ${lr.toPrecision(2)}): ∂MSE/∂w₀ = ${tip(fmt(GD.g[0], 3), '(2/n) Σ (ŷᵢ − yᵢ)\nover the 12 students, at the previous weights')} &rarr; w₀ = ${fmt(GD.b, 3)}; &nbsp; ∂MSE/∂w₁ = ${tip(fmt(GD.g[1], 3), `(2/n) Σ (ŷᵢ − yᵢ) · xᵢ\n${GD.center ? 'x is centred: xᵢ − x̄' : 'x is raw hours'}`)} &rarr; w₁ = ${fmt(GD.m, 3)}.` : '<b>Running example</b>: press Step once below and this line shows the exact gradient and update.';
+}
+$('#gd-lr').addEventListener('input', e => { GD.lrI = +e.target.value; if (GD.state === 'diverged' || GD.state === 'converged' || GD.state === 'slow') { const p = GD.path[0]; gdReset(p[0], p[1]); } else drawGD(); });
+$('#gd-step').addEventListener('click', () => { gdStep(); drawGD(); });
+$('#gd-reset').addEventListener('click', () => gdReset());
+$('#gd-run').addEventListener('click', () => {
+  if (GD.timer) { gdStop(); return; }
+  if (GD.state === 'diverged' || GD.state === 'converged' || GD.state === 'slow') { const p = GD.path[0]; gdReset(p[0], p[1]); }
+  $('#gd-run').textContent = 'Pause';
+  GD.timer = setInterval(() => { for (let k = 0; k < 3; k++) if (!gdStep()) break; drawGD(); }, 45);
+});
+seg1('[data-gdc]', 'data-gdc', k => { GD.center = k === '1'; GLS = landscape(HS, GD.center); gdReset(); });
+{
+  const cv = $('#gd-land'); cv.style.cursor = 'crosshair';
+  cv.addEventListener('click', e => { if (!gdV) return; const [px, py] = evPos(cv, e); gdReset(gdV.iX(px), gdV.iY(py)); });
+}
+fig($('#gd-land'), drawGD); fig($('#gd-data'), drawGD); fig($('#gd-chart'), drawGD);
+
+/* ---------- R² and residuals ---------- */
+const SC = { kind: 'line' };
+function scData(kind) {
+  const r = mulberry32(5), P = [];
+  for (let i = 0; i < 40; i++) {
+    const x = 0.3 + 9.4 * i / 39 + (r() - .5) * .2, e = gaussOf(r);
+    const y = kind === 'curve' ? 14 + 0.85 * x * x + 3.5 * e : kind === 'fan' ? 20 + 5 * x + (0.4 + 1.15 * x) * e : 20 + 5 * x + 4 * e;
+    P.push([x, y]);
+  }
+  if (kind === 'outlier') P[34] = [8.6, 16];
+  return P;
+}
+const SC_SAY = {
+  line: 'Residuals form a shapeless band around zero &mdash; exactly what a correct straight-line model leaves behind.',
+  curve: 'The residuals <b>smile</b>: positive at both ends, negative in the middle. R² is still high, but the residual plot shows the shape is wrong. Fix: add an x² feature (next section).',
+  fan: 'The residuals <b>fan out</b> as ŷ grows: the noise is not constant. The line is right on average, but any error bar from it would lie. Fix: model log(y), or weight the points.',
+  outlier: 'One point sits far from the band and pulls the line toward it. Investigate it: data-entry error, or the most interesting patient in the study? Squared error gives it a huge vote.'
+};
+function drawScore() {
+  const P = scData(SC.kind), f = ls1(P), C = COL(), ys = P.map(p => p[1]);
+  const ylo = Math.min(...ys) - 6, yhi = Math.max(...ys) + 6;
+  { const v = frame($('#sc-cv'), [0, 10], [ylo, yhi]); axes(v, 'x', 'y'); clip(v);
+    P.forEach(p => seg(v, p[0], p[1], p[0], f.b + f.m * p[0], C.miss, 1.6, null, .7));
+    curve(v, x => f.b + f.m * x, C.best, 2.6); P.forEach(p => dot(v, p[0], p[1], C.pt, 4)); v.ctx.restore(); }
+  const R = P.map(p => [f.b + f.m * p[0], p[1] - (f.b + f.m * p[0])]), rm = Math.max(...R.map(q => Math.abs(q[1]))) * 1.2;
+  const yh = R.map(q => q[0]), xlo = Math.min(...yh) - 3, xhi = Math.max(...yh) + 3;
+  { const v = frame($('#sc-res'), [xlo, xhi], [-rm, rm]); axes(v, 'prediction ŷ', 'residual y − ŷ'); clip(v);
+    seg(v, xlo, 0, xhi, 0, C.ink, 1.4, [5, 4]); R.forEach(q => dot(v, q[0], q[1], C.miss, 4)); v.ctx.restore(); }
+  const S = sse(P, f.b, f.m), T = f.syy, R2 = 1 - S / T;
+  $('#sc-sse').style.width = clamp(S / T * 100, 0.5, 100) + '%';
+  $('#sc-bar-l').textContent = `R² = ${fmt(R2, 3)}  ·  ${fmt(R2 * 100, 1)}% of the variation explained`;
+  $('#sc-say').innerHTML = SC_SAY[SC.kind];
+  $('#run-r2').innerHTML = `<b>Running example</b> (${SC.kind === 'line' ? 'straight trend' : SC.kind === 'curve' ? 'curved truth' : SC.kind === 'fan' ? 'fanning noise' : 'one outlier'}): SSE = ${tip(fmt(S, 0), 'Σ (y − ŷ)² over 40 points:\nthe red sticks, squared')}, SST = ${tip(fmt(T, 0), `Σ (y − ȳ)², with ȳ = ${fmt(f.my, 2)}:\nthe error of always guessing the average`)} &rarr; R² = 1 − ${fmt(S, 0)} ÷ ${fmt(T, 0)} = <b>${fmt(R2, 3)}</b>`;
+}
+seg1('[data-sc]', 'data-sc', k => { SC.kind = k; drawScore(); });
+fig($('#sc-cv'), drawScore); fig($('#sc-res'), drawScore);
+
+/* ---------- polynomial features ---------- */
+const PO = (() => {
+  const r = mulberry32(21), tr = [], te = [];
+  for (let i = 0; i < 15; i++) { const x = (i + .5) / 15 + (r() - .5) * .04; tr.push([x, Math.sin(2 * Math.PI * x) + .25 * gaussOf(r)]); }
+  for (let i = 0; i < 80; i++) { const x = r(); te.push([x, Math.sin(2 * Math.PI * x) + .25 * gaussOf(r)]); }
+  return { tr, te, d: 3, showTest: true };
+})();
+const phi = (x, d) => { const u = 2 * x - 1, r = [1]; for (let k = 1; k <= d; k++) r.push(r[k - 1] * u); return r; };
+const peval = (w, x) => { const f = phi(x, w.length - 1); let s = 0; for (let k = 0; k < w.length; k++) s += w[k] * f[k]; return s; };
+const rmse = (P, w) => Math.sqrt(P.reduce((a, p) => a + (p[1] - peval(w, p[0])) ** 2, 0) / P.length);
+function ridgeFit(P, d, lam) {
+  const n = P.length, k = d + 1, A = Array.from({ length: k }, () => new Array(k).fill(0)), b = new Array(k).fill(0);
+  for (const p of P) { const f = phi(p[0], d); for (let i = 0; i < k; i++) { b[i] += f[i] * p[1] / n; for (let j = 0; j < k; j++) A[i][j] += f[i] * f[j] / n; } }
+  for (let i = 1; i < k; i++) A[i][i] += lam + 1e-13;
+  return solve(A, b);
+}
+const PO_CURVE = Array.from({ length: 12 }, (_, i) => { const w = ridgeFit(PO.tr, i + 1, 0); return [rmse(PO.tr, w), rmse(PO.te, w)]; });
+function drawPoly() {
+  const C = COL(), w = ridgeFit(PO.tr, PO.d, 0);
+  { const v = frame($('#poly-cv'), [0, 1], [-1.9, 1.9]); axes(v, 'x', 'y'); clip(v);
+    curve(v, x => Math.sin(2 * Math.PI * x), C.muted, 1.6, [6, 5]);
+    if (PO.showTest) PO.te.forEach(p => dot(v, p[0], p[1], C.you, 3, true));
+    curve(v, x => peval(w, x), C.best, 2.8); PO.tr.forEach(p => dot(v, p[0], p[1], C.pt, 5.5)); v.ctx.restore(); }
+  { const lo = 0, hi = Math.min(2.2, Math.max(...PO_CURVE.map(q => q[1])) * 1.08);
+    const v = frame($('#poly-chart'), [0.5, 12.5], [lo, hi], { b: 26 }); axes(v, 'degree', 'RMSE', { sx: 1, ny: 3 }); clip(v);
+    const c = v.ctx; [[0, C.pt], [1, C.miss]].forEach(([k, col]) => { c.strokeStyle = col; c.lineWidth = 2.2; c.beginPath(); PO_CURVE.forEach((q, i) => { const y = Math.min(q[k], hi * 1.5); i ? c.lineTo(v.X(i + 1), v.Y(y)) : c.moveTo(v.X(i + 1), v.Y(y)); }); c.stroke(); PO_CURVE.forEach((q, i) => dot(v, i + 1, Math.min(q[k], hi * 1.5), col, 3)); });
+    seg(v, PO.d, lo, PO.d, hi, C.ink, 1.2, [4, 4]); c.restore(); }
+  const a = rmse(PO.tr, w), b = rmse(PO.te, w);
+  $('#poly-d-o').textContent = PO.d;
+  $('#poly-tr').innerHTML = tip(fmt(a, 3), `√( Σ (y − ŷ)² ÷ 15 ) over the training points`);
+  $('#poly-te').innerHTML = tip(fmt(b, 3), `√( Σ (y − ŷ)² ÷ 80 ) over the unseen test points\n(the noise alone gives about 0.25)`);
+  $('#poly-say').innerHTML = PO.d <= 2 ? `<b>Underfitting.</b> A degree-${PO.d} curve cannot follow the wave: both errors are high. This is bias.` : PO.d <= 6 ? `<b>Sweet spot.</b> The curve follows the wave, not the noise: test error is near the noise floor (≈0.25).` : PO.d <= 9 ? `<b>Starting to overfit.</b> Training error keeps falling, but the curve begins to wiggle between points.` : `<b>Overfitting.</b> With ${PO.d + 1} weights for 15 points, the curve threads the noise and swings wildly in the gaps &mdash; test error explodes. This is variance.`;
+}
+$('#poly-d').addEventListener('input', e => { PO.d = +e.target.value; drawPoly(); });
+$('#poly-test').addEventListener('click', e => { PO.showTest = !PO.showTest; e.target.setAttribute('aria-pressed', PO.showTest); e.target.textContent = PO.showTest ? 'Hide test points' : 'Show test points'; $('#poly-test-leg').style.opacity = PO.showTest ? 1 : .35; drawPoly(); });
+fig($('#poly-cv'), drawPoly); fig($('#poly-chart'), drawPoly);
+
+/* ---------- ridge & lasso on degree 12 ---------- */
+const RG = { method: 'ridge', lI: 0, d: 12, wl: null };
+const rgLam = () => RG.lI === 0 ? 0 : Math.pow(10, -7 + (RG.lI - 1) / 99 * 7);
+function lassoFit(P, d, lam, w0) {
+  const n = P.length, k = d + 1, F = P.map(p => phi(p[0], d)), y = P.map(p => p[1]);
+  const z = new Array(k).fill(0); for (const f of F) for (let j = 0; j < k; j++) z[j] += f[j] * f[j] / n;
+  const w = w0 ? w0.slice() : new Array(k).fill(0), r = y.map((v, i) => v - F[i].reduce((a, f, j) => a + f * w[j], 0));
+  for (let sweep = 0; sweep < 6000; sweep++) {
+    let dmax = 0;
+    for (let j = 0; j < k; j++) {
+      let rho = 0; for (let i = 0; i < n; i++) rho += F[i][j] * (r[i] + F[i][j] * w[j]); rho /= n;
+      const nw = j === 0 ? rho / z[j] : Math.sign(rho) * Math.max(0, Math.abs(rho) - lam) / z[j];
+      const dw = nw - w[j]; if (dw) { for (let i = 0; i < n; i++) r[i] -= F[i][j] * dw; w[j] = nw; dmax = Math.max(dmax, Math.abs(dw)); }
+    }
+    if (dmax < 1e-9) break;
+  }
+  return w;
+}
+function rgWeights() {
+  const lam = rgLam();
+  if (RG.method === 'ridge') return ridgeFit(PO.tr, RG.d, lam);
+  RG.wl = lassoFit(PO.tr, RG.d, Math.max(lam, 1e-7), RG.wl); return RG.wl;
+}
+const RG_MAXW = Math.max(...ridgeFit(PO.tr, 12, 0).slice(1).map(Math.abs));
+function drawReg() {
+  const C = COL(), w = rgWeights(), lam = rgLam(), col = RG.method === 'ridge' ? C.best : C.you;
+  { const v = frame($('#reg-cv'), [0, 1], [-1.9, 1.9]); axes(v, 'x', 'y'); clip(v);
+    curve(v, x => Math.sin(2 * Math.PI * x), C.muted, 1.6, [6, 5]); PO.te.forEach(p => dot(v, p[0], p[1], C.you, 2.6, true));
+    curve(v, x => peval(w, x), col, 2.8); PO.tr.forEach(p => dot(v, p[0], p[1], C.pt, 5)); v.ctx.restore(); }
+  { const v = frame($('#reg-coef'), [0.4, 12.6], [-1.08, 1.08], { l: 18, b: 26 }), c = v.ctx; axes(v, '', '', { sx: 1, sy: 1, fy: () => '' });
+    const s = x => Math.sign(x) * Math.log10(1 + Math.abs(x)) / Math.log10(1 + RG_MAXW);
+    seg(v, 0.4, 0, 12.6, 0, C.ink, 1);
+    for (let j = 1; j <= 12; j++) { const h = s(w[j]), x0 = v.X(j - .32), x1 = v.X(j + .32), y0 = v.Y(0), y1 = v.Y(h);
+      if (Math.abs(w[j]) < 1e-9) { c.strokeStyle = C.muted; c.lineWidth = 1.2; c.strokeRect(x0 + .5, y0 - 3.5, x1 - x0, 7); }
+      else { c.fillStyle = col; c.globalAlpha = .85; c.fillRect(x0, Math.min(y0, y1), x1 - x0, Math.abs(y1 - y0)); c.globalAlpha = 1; } }
+    c.fillStyle = C.muted; c.font = '11px ' + css('--f-mono'); c.textAlign = 'left'; c.fillText(`|w| up to ${fmt(RG_MAXW, 0)} when λ = 0`, v.pad.l + 4, v.pad.t + 11); }
+  const zeros = w.slice(1).filter(x => Math.abs(x) < 1e-9).length, big = Math.max(...w.slice(1).map(Math.abs));
+  const a = rmse(PO.tr, w), b = rmse(PO.te, w);
+  $('#reg-l-o').textContent = lam === 0 ? '0' : lam < 1e-3 ? lam.toExponential(1) : lam.toPrecision(2);
+  $('#reg-tr').textContent = fmt(a, 3); $('#reg-te').innerHTML = tip(fmt(b, 3), 'RMSE on the 80 unseen test points');
+  $('#reg-zero').textContent = `${zeros} / 12`; $('#reg-big').textContent = big >= 100 ? fmt(big, 0) : fmt(big, 2);
+  const tag = RG.method === 'ridge' ? 'Ridge' : 'Lasso';
+  $('#reg-say').innerHTML = lam === 0 ? `<b>No leash.</b> Weights up to ${fmt(big, 0)} cancel each other to thread all 15 points: overfit, test RMSE ${fmt(b, 2)}. Pull λ up.`
+    : b < 0.33 ? `<b>${tag}, sweet spot.</b> Weights tamed to ${big >= 100 ? fmt(big, 0) : fmt(big, 2)}${RG.method === 'lasso' ? `, and ${zeros} of 12 are exactly zero` : ''}; the curve follows the wave. Same 13 features, no overfitting.`
+    : a > 0.45 ? `<b>Leash too tight.</b> The weights are crushed and the curve flattens towards the average: underfit. Ease λ down.`
+    : `${tag} at λ = ${lam.toPrecision(2)}: train ${fmt(a, 2)}, test ${fmt(b, 2)}. Keep sliding to find where test error is lowest.`;
+}
+seg1('[data-rg]', 'data-rg', k => { RG.method = k; RG.wl = null; drawReg(); });
+$('#reg-l').addEventListener('input', e => { RG.lI = +e.target.value; drawReg(); });
+$('#reg-best').addEventListener('click', () => {
+  let best = 0, bv = Infinity, wl = null;
+  for (let i = 0; i <= 100; i += 2) { RG.lI = i; const lam = rgLam(); const w = RG.method === 'ridge' ? ridgeFit(PO.tr, 12, lam) : (wl = lassoFit(PO.tr, 12, Math.max(lam, 1e-7), wl)); const e = rmse(PO.te, w); if (e < bv) { bv = e; best = i; } }
+  RG.lI = best; RG.wl = null; $('#reg-l').value = best; drawReg();
+  $('#reg-say').innerHTML += ' <span class="note">(Found by peeking at the test set &mdash; fine for a demo; in real work choose λ by cross-validation on training data only.)</span>';
+});
+fig($('#reg-cv'), drawReg); fig($('#reg-coef'), drawReg);
+
+/* ---------- the geometry of L1 vs L2 ---------- */
+// w* and A chosen so the diamond's corner (t, 0) is the exact lasso answer for every t < 1.61
+const GEO = { kind: 'lasso', t: 1.2, ws: [2.0, 0.3], A: [[1.0, 0.3], [0.3, 1.2]] };
+const geoQ = (w1, w2) => { const a = w1 - GEO.ws[0], b = w2 - GEO.ws[1]; return GEO.A[0][0] * a * a + 2 * GEO.A[0][1] * a * b + GEO.A[1][1] * b * b; };
+function geoSolve() {
+  const t = GEO.t, inside = GEO.kind === 'ridge' ? Math.hypot(...GEO.ws) <= t : Math.abs(GEO.ws[0]) + Math.abs(GEO.ws[1]) <= t;
+  if (inside) return GEO.ws.slice();
+  let best = null, bq = Infinity;
+  for (let i = 0; i < 7200; i++) { const a = i / 7200 * 2 * Math.PI; let p;
+    if (GEO.kind === 'ridge') p = [t * Math.cos(a), t * Math.sin(a)];
+    else { const c = Math.cos(a), s = Math.sin(a), k = t / (Math.abs(c) + Math.abs(s)); p = [k * c, k * s]; }
+    const q = geoQ(p[0], p[1]); if (q < bq) { bq = q; best = p; } }
+  // snap to a diamond corner when the optimum sits on one (sampling precision)
+  if (GEO.kind === 'lasso') [[t, 0], [0, t], [-t, 0], [0, -t]].forEach(cn => { if (geoQ(cn[0], cn[1]) <= bq + 1e-9) { bq = geoQ(cn[0], cn[1]); best = cn; } });
+  return best;
+}
+function drawGeo() {
+  const C = COL(), v = frame($('#geo-cv'), [-3, 3.4], [-2.4, 2.8], { l: 36 }, true), c = v.ctx; axes(v, 'w₁', 'w₂', { sx: 1, sy: 1 }); clip(v);
+  // loss heat
+  const N = 70, cw = v.pw / N, chh = v.ph / Math.round(N * v.ph / v.pw), NY = Math.round(N * v.ph / v.pw);
+  let qs = [], lo = Infinity, hi = -Infinity;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < N; i++) { const q = Math.log(1e-3 + geoQ(v.iX(v.pad.l + (i + .5) * cw), v.iY(v.pad.t + (j + .5) * chh))); qs.push(q); lo = Math.min(lo, q); hi = Math.max(hi, q); }
+  c.save(); c.fillStyle = C.miss;
+  for (let j = 0; j < NY; j++) for (let i = 0; i < N; i++) { const t = (qs[j * N + i] - lo) / (hi - lo), band = Math.floor(t * 12); c.globalAlpha = .30 * (1 - band / 12) + .02 + (band % 2 ? .03 : 0); c.fillRect(v.pad.l + i * cw, v.pad.t + j * chh, cw + .6, chh + .6); }
+  c.restore();
+  seg(v, -10, 0, 10, 0, C.muted, 1); seg(v, 0, -10, 0, 10, C.muted, 1);
+  const t = GEO.t; c.save(); c.beginPath();
+  if (GEO.kind === 'ridge') c.arc(v.X(0), v.Y(0), v.X(t) - v.X(0), 0, 7); else { c.moveTo(v.X(t), v.Y(0)); c.lineTo(v.X(0), v.Y(t)); c.lineTo(v.X(-t), v.Y(0)); c.lineTo(v.X(0), v.Y(-t)); c.closePath(); }
+  c.fillStyle = C.cC; c.globalAlpha = .18; c.fill(); c.globalAlpha = 1; c.strokeStyle = C.cC; c.lineWidth = 2; c.stroke(); c.restore();
+  const s = geoSolve(), qv = geoQ(s[0], s[1]);
+  // the contour through the solution: eigen-decompose A
+  const a = GEO.A[0][0], b = GEO.A[0][1], d = GEO.A[1][1], tr = a + d, det = a * d - b * b, l1 = tr / 2 + Math.sqrt(tr * tr / 4 - det), l2 = tr / 2 - Math.sqrt(tr * tr / 4 - det);
+  const th = Math.atan2(l1 - a, b), e1 = [Math.cos(th), Math.sin(th)], e2 = [-Math.sin(th), Math.cos(th)];
+  if (qv > 1e-9) { c.save(); c.strokeStyle = C.miss; c.lineWidth = 2; c.beginPath();
+    for (let i = 0; i <= 120; i++) { const u = i / 120 * 2 * Math.PI, p = Math.sqrt(qv / l1) * Math.cos(u), q = Math.sqrt(qv / l2) * Math.sin(u); const x = GEO.ws[0] + p * e1[0] + q * e2[0], y = GEO.ws[1] + p * e1[1] + q * e2[1]; i ? c.lineTo(v.X(x), v.Y(y)) : c.moveTo(v.X(x), v.Y(y)); }
+    c.stroke(); c.restore(); }
+  star(v, GEO.ws[0], GEO.ws[1], C.miss, 9); dot(v, s[0], s[1], C.ink, 6.5);
+  c.restore();
+  const zero = Math.abs(s[0]) < 1e-6 || Math.abs(s[1]) < 1e-6;
+  $('#geo-t-o').textContent = fmt(t, 2);
+  $('#geo-w').innerHTML = `solution w = (${fmt(s[0], 2)}, ${fmt(s[1], 2)})`;
+  $('#geo-say').innerHTML = (GEO.kind === 'lasso' ? Math.abs(GEO.ws[0]) + Math.abs(GEO.ws[1]) : Math.hypot(...GEO.ws)) <= t ? 'The budget is big enough to reach the star: no shrinkage at all.'
+    : zero ? `The red contour first touches the region at a <b>corner</b>: w₂ is exactly <b>0</b>. That is lasso selecting a feature.`
+    : GEO.kind === 'ridge' ? 'The contour touches the smooth circle off the axes: both weights shrink, neither becomes zero. Ridge never selects.' : 'Here the contour touches an edge, not a corner: both weights survive. Shrink the budget a little.';
+}
+seg1('[data-geo]', 'data-geo', k => { GEO.kind = k; drawGeo(); });
+$('#geo-t').addEventListener('input', e => { GEO.t = +e.target.value; drawGeo(); });
+fig($('#geo-cv'), drawGeo);
+
+/* ---------- project: diabetes ---------- */
+const DB = {"feats":["age","sex","bmi","bp","s1","s2","s3","s4","s5","s6"],"X":[[59.0,2.0,32.1,101.0,157.0,93.2,38.0,4.0,4.8598,87.0],[48.0,1.0,21.6,87.0,183.0,103.2,70.0,3.0,3.8918,69.0],[72.0,2.0,30.5,93.0,156.0,93.6,41.0,4.0,4.6728,85.0],[24.0,1.0,25.3,84.0,198.0,131.4,40.0,5.0,4.8903,89.0],[50.0,1.0,23.0,101.0,192.0,125.4,52.0,4.0,4.2905,80.0],[23.0,1.0,22.6,89.0,139.0,64.8,61.0,2.0,4.1897,68.0],[36.0,2.0,22.0,90.0,160.0,99.6,50.0,3.0,3.9512,82.0],[66.0,2.0,26.2,114.0,255.0,185.0,56.0,4.55,4.2485,92.0],[60.0,2.0,32.1,83.0,179.0,119.4,42.0,4.0,4.4773,94.0],[29.0,1.0,30.0,85.0,180.0,93.4,43.0,4.0,5.3845,88.0],[22.0,1.0,18.6,97.0,114.0,57.6,46.0,2.0,3.9512,83.0],[56.0,2.0,28.0,85.0,184.0,144.8,32.0,6.0,3.5835,77.0],[53.0,1.0,23.7,92.0,186.0,109.2,62.0,3.0,4.3041,81.0],[50.0,2.0,26.2,97.0,186.0,105.4,49.0,4.0,5.0626,88.0],[61.0,1.0,24.0,91.0,202.0,115.4,72.0,3.0,4.2905,73.0],[34.0,2.0,24.7,118.0,254.0,184.2,39.0,7.0,5.037,81.0],[47.0,1.0,30.3,109.0,207.0,100.2,70.0,3.0,5.2149,98.0],[68.0,2.0,27.5,111.0,214.0,147.0,39.0,5.0,4.9416,91.0],[38.0,1.0,25.4,84.0,162.0,103.0,42.0,4.0,4.4427,87.0],[41.0,1.0,24.7,83.0,187.0,108.2,60.0,3.0,4.5433,78.0],[35.0,1.0,21.1,82.0,156.0,87.8,50.0,3.0,4.5109,95.0],[25.0,2.0,24.3,95.0,162.0,98.6,54.0,3.0,3.8501,87.0],[25.0,1.0,26.0,92.0,187.0,120.4,56.0,3.0,3.9703,88.0],[61.0,2.0,32.0,103.67,210.0,85.2,35.0,6.0,6.107,124.0],[31.0,1.0,29.7,88.0,167.0,103.4,48.0,4.0,4.3567,78.0],[30.0,2.0,25.2,83.0,178.0,118.4,34.0,5.0,4.852,83.0],[19.0,1.0,19.2,87.0,124.0,54.0,57.0,2.0,4.1744,90.0],[42.0,1.0,31.9,83.0,158.0,87.6,53.0,3.0,4.4659,101.0],[63.0,1.0,24.4,73.0,160.0,91.4,48.0,3.0,4.6347,78.0],[67.0,2.0,25.8,113.0,158.0,54.2,64.0,2.0,5.2933,104.0],[32.0,1.0,30.5,89.0,182.0,110.6,56.0,3.0,4.3438,89.0],[42.0,1.0,20.3,71.0,161.0,81.2,66.0,2.0,4.2341,81.0],[58.0,2.0,38.0,103.0,150.0,107.2,22.0,7.0,4.6444,98.0],[57.0,1.0,21.7,94.0,157.0,58.0,82.0,2.0,4.4427,92.0],[53.0,1.0,20.5,78.0,147.0,84.2,52.0,3.0,3.989,75.0],[62.0,2.0,23.5,80.33,225.0,112.8,86.0,2.62,4.8752,96.0],[52.0,1.0,28.5,110.0,195.0,97.2,60.0,3.0,5.2417,85.0],[46.0,1.0,27.4,78.0,171.0,88.0,58.0,3.0,4.8283,90.0],[48.0,2.0,33.0,123.0,253.0,163.6,44.0,6.0,5.425,97.0],[48.0,2.0,27.7,73.0,191.0,119.4,46.0,4.0,4.852,92.0],[50.0,2.0,25.6,101.0,229.0,162.2,43.0,5.0,4.7791,114.0],[21.0,1.0,20.1,63.0,135.0,69.0,54.0,3.0,4.0943,89.0],[32.0,2.0,25.4,90.33,153.0,100.4,34.0,4.5,4.5326,83.0],[54.0,1.0,24.2,74.0,204.0,109.0,82.0,2.0,4.1744,109.0],[61.0,2.0,32.7,97.0,177.0,118.4,29.0,6.0,4.9972,87.0],[56.0,2.0,23.1,104.0,181.0,116.4,47.0,4.0,4.4773,79.0],[33.0,1.0,25.3,85.0,155.0,85.0,51.0,3.0,4.5539,70.0],[27.0,1.0,19.6,78.0,128.0,68.0,43.0,3.0,4.4427,71.0],[67.0,2.0,22.5,98.0,191.0,119.2,61.0,3.0,3.989,86.0],[37.0,2.0,27.7,93.0,180.0,119.4,30.0,6.0,5.0304,88.0],[58.0,1.0,25.7,99.0,157.0,91.6,49.0,3.0,4.4067,93.0],[65.0,2.0,27.9,103.0,159.0,96.8,42.0,4.0,4.6151,86.0],[34.0,1.0,25.5,93.0,218.0,144.0,57.0,4.0,4.4427,88.0],[46.0,1.0,24.9,115.0,198.0,129.6,54.0,4.0,4.2767,103.0],[35.0,1.0,28.7,97.0,204.0,126.8,64.0,3.0,4.1897,93.0],[37.0,1.0,21.8,84.0,184.0,101.0,73.0,3.0,3.912,93.0],[37.0,1.0,30.2,87.0,166.0,96.0,40.0,4.15,5.0106,87.0],[41.0,1.0,20.5,80.0,124.0,48.8,64.0,2.0,4.0254,75.0],[60.0,1.0,20.4,105.0,198.0,78.4,99.0,2.0,4.6347,79.0],[66.0,2.0,24.0,98.0,236.0,146.4,58.0,4.0,5.0626,96.0],[29.0,1.0,26.0,83.0,141.0,65.2,64.0,2.0,4.0775,83.0],[37.0,2.0,26.8,79.0,157.0,98.0,28.0,6.0,5.0434,96.0],[41.0,2.0,25.7,83.0,181.0,106.6,66.0,3.0,3.7377,85.0],[39.0,1.0,22.9,77.0,204.0,143.2,46.0,4.0,4.3041,74.0],[67.0,2.0,24.0,83.0,143.0,77.2,49.0,3.0,4.4308,94.0],[36.0,2.0,24.1,112.0,193.0,125.0,35.0,6.0,5.1059,95.0],[46.0,2.0,24.7,85.0,174.0,123.2,30.0,6.0,4.6444,96.0],[60.0,2.0,25.0,89.67,185.0,120.8,46.0,4.02,4.5109,92.0],[59.0,2.0,23.6,83.0,165.0,100.0,47.0,4.0,4.4998,92.0],[53.0,1.0,22.1,93.0,134.0,76.2,46.0,3.0,4.0775,96.0],[48.0,1.0,19.9,91.0,189.0,109.6,69.0,3.0,3.9512,101.0],[48.0,1.0,29.5,131.0,207.0,132.2,47.0,4.0,4.9345,106.0],[66.0,2.0,26.0,91.0,264.0,146.6,65.0,4.0,5.5683,87.0],[52.0,2.0,24.5,94.0,217.0,149.4,48.0,5.0,4.585,89.0],[52.0,2.0,26.6,111.0,209.0,126.4,61.0,3.0,4.6821,109.0],[46.0,2.0,23.5,87.0,181.0,114.8,44.0,4.0,4.7095,98.0],[40.0,2.0,29.0,115.0,97.0,47.2,35.0,2.77,4.3041,95.0],[22.0,1.0,23.0,73.0,161.0,97.8,54.0,3.0,3.8286,91.0],[50.0,1.0,21.0,88.0,140.0,71.8,35.0,4.0,5.112,71.0],[20.0,1.0,22.9,87.0,191.0,128.2,53.0,4.0,3.8918,85.0],[68.0,1.0,27.5,107.0,241.0,149.6,64.0,4.0,4.92,90.0],[52.0,2.0,24.3,86.0,197.0,133.6,44.0,5.0,4.5747,91.0],[44.0,1.0,23.1,87.0,213.0,126.4,77.0,3.0,3.8712,72.0],[38.0,1.0,27.3,81.0,146.0,81.6,47.0,3.0,4.4659,81.0],[49.0,1.0,22.7,65.33,168.0,96.2,62.0,2.71,3.8918,60.0],[61.0,1.0,33.0,95.0,182.0,114.8,54.0,3.0,4.1897,74.0],[29.0,2.0,19.4,83.0,152.0,105.8,39.0,4.0,3.5835,83.0],[61.0,1.0,25.8,98.0,235.0,125.8,76.0,3.0,5.112,82.0],[34.0,2.0,22.6,75.0,166.0,91.8,60.0,3.0,4.2627,108.0],[36.0,1.0,21.9,89.0,189.0,105.2,68.0,3.0,4.3694,96.0],[52.0,1.0,24.0,83.0,167.0,86.6,71.0,2.0,3.8501,94.0],[61.0,1.0,31.2,79.0,235.0,156.8,47.0,5.0,5.0499,96.0],[43.0,1.0,26.8,123.0,193.0,102.2,67.0,3.0,4.7791,94.0],[35.0,1.0,20.4,65.0,187.0,105.6,67.0,2.79,4.2767,78.0],[27.0,1.0,24.8,91.0,189.0,106.8,69.0,3.0,4.1897,69.0],[29.0,1.0,21.0,71.0,156.0,97.0,38.0,4.0,4.654,90.0],[64.0,2.0,27.3,109.0,186.0,107.6,38.0,5.0,5.3083,99.0],[41.0,1.0,34.6,87.33,205.0,142.6,41.0,5.0,4.6728,110.0],[49.0,2.0,25.9,91.0,178.0,106.6,52.0,3.0,4.5747,75.0],[48.0,1.0,20.4,98.0,209.0,139.4,46.0,5.0,4.7707,78.0],[53.0,1.0,28.0,88.0,233.0,143.8,58.0,4.0,5.0499,91.0],[53.0,2.0,22.2,113.0,197.0,115.2,67.0,3.0,4.3041,100.0],[23.0,1.0,29.0,90.0,216.0,131.4,65.0,3.0,4.585,91.0],[65.0,2.0,30.2,98.0,219.0,160.6,40.0,5.0,4.5218,84.0],[41.0,1.0,32.4,94.0,171.0,104.4,56.0,3.0,3.9703,76.0],[55.0,2.0,23.4,83.0,166.0,101.6,46.0,4.0,4.5218,96.0],[22.0,1.0,19.3,82.0,156.0,93.2,52.0,3.0,3.989,71.0],[56.0,1.0,31.0,78.67,187.0,141.4,34.0,5.5,4.0604,90.0],[54.0,2.0,30.6,103.33,144.0,79.8,30.0,4.8,5.1417,101.0],[59.0,2.0,25.5,95.33,190.0,139.4,35.0,5.43,4.3567,117.0],[60.0,2.0,23.4,88.0,153.0,89.8,58.0,3.0,3.2581,95.0],[54.0,1.0,26.8,87.0,206.0,122.0,68.0,3.0,4.382,80.0],[25.0,1.0,28.3,87.0,193.0,128.0,49.0,4.0,4.382,92.0],[54.0,2.0,27.7,113.0,200.0,128.4,37.0,5.0,5.1533,113.0],[55.0,1.0,36.6,113.0,199.0,94.4,43.0,4.63,5.7301,97.0],[40.0,2.0,26.5,93.0,236.0,147.0,37.0,7.0,5.5607,92.0],[62.0,2.0,31.8,115.0,199.0,128.6,44.0,5.0,4.8828,98.0],[65.0,1.0,24.4,120.0,222.0,135.6,37.0,6.0,5.5094,124.0],[33.0,2.0,25.4,102.0,206.0,141.0,39.0,5.0,4.8675,105.0],[53.0,1.0,22.0,94.0,175.0,88.0,59.0,3.0,4.9416,98.0],[35.0,1.0,26.8,98.0,162.0,103.6,45.0,4.0,4.2047,86.0],[66.0,1.0,28.0,101.0,195.0,129.2,40.0,5.0,4.8598,94.0],[62.0,2.0,33.9,101.0,221.0,156.4,35.0,6.0,4.9972,103.0],[50.0,2.0,29.6,94.33,300.0,242.4,33.0,9.09,4.8122,109.0],[47.0,1.0,28.6,97.0,164.0,90.6,56.0,3.0,4.4659,88.0],[47.0,2.0,25.6,94.0,165.0,74.8,40.0,4.0,5.5255,93.0],[24.0,1.0,20.7,87.0,149.0,80.6,61.0,2.0,3.6109,78.0],[58.0,2.0,26.2,91.0,217.0,124.2,71.0,3.0,4.6913,68.0],[34.0,1.0,20.6,87.0,185.0,112.2,58.0,3.0,4.3041,74.0],[51.0,1.0,27.9,96.0,196.0,122.2,42.0,5.0,5.0689,120.0],[31.0,2.0,35.3,125.0,187.0,112.4,48.0,4.0,4.8903,109.0],[22.0,1.0,19.9,75.0,175.0,108.6,54.0,3.0,4.1271,72.0],[53.0,2.0,24.4,92.0,214.0,146.0,50.0,4.0,4.4998,97.0],[37.0,2.0,21.4,83.0,128.0,69.6,49.0,3.0,3.8501,84.0],[28.0,1.0,30.4,85.0,198.0,115.6,67.0,3.0,4.3438,80.0],[47.0,1.0,31.6,84.0,154.0,88.0,30.0,5.1,5.1985,105.0],[23.0,1.0,18.8,78.0,145.0,72.0,63.0,2.0,3.912,86.0],[50.0,1.0,31.0,123.0,178.0,105.0,48.0,4.0,4.8283,88.0],[58.0,2.0,36.7,117.0,166.0,93.8,44.0,4.0,4.9488,109.0],[55.0,1.0,32.1,110.0,164.0,84.2,42.0,4.0,5.2417,90.0],[60.0,2.0,27.7,107.0,167.0,114.6,38.0,4.0,4.2767,95.0],[41.0,1.0,30.8,81.0,214.0,152.0,28.0,7.6,5.1358,123.0],[60.0,2.0,27.5,106.0,229.0,143.8,51.0,4.0,5.1417,91.0],[40.0,1.0,26.9,92.0,203.0,119.8,70.0,3.0,4.1897,81.0],[57.0,2.0,30.7,90.0,204.0,147.8,34.0,6.0,4.7095,93.0],[37.0,1.0,38.3,113.0,165.0,94.6,53.0,3.0,4.4659,79.0],[40.0,2.0,31.9,95.0,198.0,135.6,38.0,5.0,4.804,93.0],[33.0,1.0,35.0,89.0,200.0,130.4,42.0,4.76,4.9273,101.0],[32.0,2.0,27.8,89.0,216.0,146.2,55.0,4.0,4.3041,91.0],[35.0,2.0,25.9,81.0,174.0,102.4,31.0,6.0,5.3132,82.0],[55.0,1.0,32.9,102.0,164.0,106.2,41.0,4.0,4.4308,89.0],[49.0,1.0,26.0,93.0,183.0,100.2,64.0,3.0,4.5433,88.0],[39.0,2.0,26.3,115.0,218.0,158.2,32.0,7.0,4.9345,109.0],[60.0,2.0,22.3,113.0,186.0,125.8,46.0,4.0,4.2627,94.0],[67.0,2.0,28.3,93.0,204.0,132.2,49.0,4.0,4.7362,92.0],[41.0,2.0,32.0,109.0,251.0,170.6,49.0,5.0,5.0562,103.0],[44.0,1.0,25.4,95.0,162.0,92.6,53.0,3.0,4.4067,83.0],[48.0,2.0,23.3,89.33,212.0,142.8,46.0,4.61,4.7536,98.0],[45.0,1.0,20.3,74.33,190.0,126.2,49.0,3.88,4.3041,79.0],[47.0,1.0,30.4,120.0,199.0,120.0,46.0,4.0,5.1059,87.0],[46.0,1.0,20.6,73.0,172.0,107.0,51.0,3.0,4.2485,80.0],[36.0,2.0,32.3,115.0,286.0,199.4,39.0,7.0,5.4723,112.0],[34.0,1.0,29.2,73.0,172.0,108.2,49.0,4.0,4.3041,91.0],[53.0,2.0,33.1,117.0,183.0,119.0,48.0,4.0,4.382,106.0],[61.0,1.0,24.6,101.0,209.0,106.8,77.0,3.0,4.8363,88.0],[37.0,1.0,20.2,81.0,162.0,87.8,63.0,3.0,4.0254,88.0],[33.0,2.0,20.8,84.0,125.0,70.2,46.0,3.0,3.7842,66.0],[68.0,1.0,32.8,105.67,205.0,116.4,40.0,5.13,5.4931,117.0],[49.0,2.0,31.9,94.0,234.0,155.8,34.0,7.0,5.3982,122.0],[48.0,1.0,23.9,109.0,232.0,105.2,37.0,6.0,6.107,96.0],[55.0,2.0,24.5,84.0,179.0,105.8,66.0,3.0,3.5835,87.0],[43.0,1.0,22.1,66.0,134.0,77.2,45.0,3.0,4.0775,80.0],[60.0,2.0,33.0,97.0,217.0,125.6,45.0,5.0,5.4467,112.0],[31.0,2.0,19.0,93.0,137.0,73.0,47.0,3.0,4.4427,78.0],[53.0,2.0,27.3,82.0,119.0,55.0,39.0,3.0,4.8283,93.0],[67.0,1.0,22.8,87.0,166.0,98.6,52.0,3.0,4.3438,92.0],[61.0,2.0,28.2,106.0,204.0,132.0,52.0,4.0,4.6052,96.0],[62.0,1.0,28.9,87.33,206.0,127.2,33.0,6.24,5.4337,99.0],[60.0,1.0,25.6,87.0,207.0,125.8,69.0,3.0,4.1109,84.0],[42.0,1.0,24.9,91.0,204.0,141.8,38.0,5.0,4.7958,89.0],[38.0,2.0,26.8,105.0,181.0,119.2,37.0,5.0,4.8203,91.0],[62.0,1.0,22.4,79.0,222.0,147.4,59.0,4.0,4.3567,76.0],[61.0,2.0,26.9,111.0,236.0,172.4,39.0,6.0,4.8122,89.0],[61.0,2.0,23.1,113.0,186.0,114.4,47.0,4.0,4.8122,105.0],[53.0,1.0,28.6,88.0,171.0,98.8,41.0,4.0,5.0499,99.0],[28.0,2.0,24.7,97.0,175.0,99.6,32.0,5.0,5.3799,87.0],[26.0,2.0,30.3,89.0,218.0,152.2,31.0,7.0,5.1591,82.0],[30.0,1.0,21.3,87.0,134.0,63.0,63.0,2.0,3.6889,66.0],[50.0,1.0,26.1,109.0,243.0,160.6,62.0,4.0,4.625,89.0],[48.0,1.0,20.2,95.0,187.0,117.4,53.0,4.0,4.4188,85.0],[51.0,1.0,25.2,103.0,176.0,112.2,37.0,5.0,4.8978,90.0],[47.0,2.0,22.5,82.0,131.0,66.8,41.0,3.0,4.7536,89.0],[64.0,2.0,23.5,97.0,203.0,129.0,59.0,3.0,4.3175,77.0],[51.0,2.0,25.9,76.0,240.0,169.0,39.0,6.0,5.0752,96.0],[30.0,1.0,20.9,104.0,152.0,83.8,47.0,3.0,4.6634,97.0],[56.0,2.0,28.7,99.0,208.0,146.4,39.0,5.0,4.7274,97.0],[42.0,1.0,22.1,85.0,213.0,138.6,60.0,4.0,4.2767,94.0],[62.0,2.0,26.7,115.0,183.0,124.0,35.0,5.0,4.7875,100.0],[34.0,1.0,31.4,87.0,149.0,93.8,46.0,3.0,3.8286,77.0],[60.0,1.0,22.2,104.67,221.0,105.4,60.0,3.68,5.6276,93.0],[64.0,1.0,21.0,92.33,227.0,146.8,65.0,3.49,4.3307,102.0],[39.0,2.0,21.2,90.0,182.0,110.4,60.0,3.0,4.0604,98.0],[71.0,2.0,26.5,105.0,281.0,173.6,55.0,5.0,5.5683,84.0],[48.0,2.0,29.2,110.0,218.0,151.6,39.0,6.0,4.92,98.0],[79.0,2.0,27.0,103.0,169.0,110.8,37.0,5.0,4.6634,110.0],[40.0,1.0,30.7,99.0,177.0,85.4,50.0,4.0,5.3375,85.0],[49.0,2.0,28.8,92.0,207.0,140.0,44.0,5.0,4.7449,92.0],[51.0,1.0,30.6,103.0,198.0,106.6,57.0,3.0,5.1475,100.0],[57.0,1.0,30.1,117.0,202.0,139.6,42.0,5.0,4.625,120.0],[59.0,2.0,24.7,114.0,152.0,104.8,29.0,5.0,4.5109,88.0],[51.0,1.0,27.7,99.0,229.0,145.6,69.0,3.0,4.2767,77.0],[74.0,1.0,29.8,101.0,171.0,104.8,50.0,3.0,4.3944,86.0],[67.0,1.0,26.7,105.0,225.0,135.4,69.0,3.0,4.6347,96.0],[49.0,1.0,19.8,88.0,188.0,114.8,57.0,3.0,4.3944,93.0],[57.0,1.0,23.3,88.0,155.0,63.6,78.0,2.0,4.2047,78.0],[56.0,2.0,35.1,123.0,164.0,95.0,38.0,4.0,5.0434,117.0],[52.0,2.0,29.7,109.0,228.0,162.8,31.0,8.0,5.1417,103.0],[69.0,1.0,29.3,124.0,223.0,139.0,54.0,4.0,5.0106,102.0],[37.0,1.0,20.3,83.0,185.0,124.6,38.0,5.0,4.7185,88.0],[24.0,1.0,22.5,89.0,141.0,68.0,52.0,3.0,4.654,84.0],[55.0,2.0,22.7,93.0,154.0,94.2,53.0,3.0,3.5264,75.0],[36.0,1.0,22.8,87.0,178.0,116.0,41.0,4.0,4.654,82.0],[42.0,2.0,24.0,107.0,150.0,85.0,44.0,3.0,4.654,96.0],[21.0,1.0,24.2,76.0,147.0,77.0,53.0,3.0,4.4427,79.0],[41.0,1.0,20.2,62.0,153.0,89.0,50.0,3.0,4.2485,89.0],[57.0,2.0,29.4,109.0,160.0,87.6,31.0,5.0,5.3327,92.0],[20.0,2.0,22.1,87.0,171.0,99.6,58.0,3.0,4.2047,78.0],[67.0,2.0,23.6,111.33,189.0,105.4,70.0,2.7,4.2195,93.0],[34.0,1.0,25.2,77.0,189.0,120.6,53.0,4.0,4.3438,79.0],[41.0,2.0,24.9,86.0,192.0,115.0,61.0,3.0,4.382,94.0],[38.0,2.0,33.0,78.0,301.0,215.0,50.0,6.02,5.193,108.0],[51.0,1.0,23.5,101.0,195.0,121.0,51.0,4.0,4.7449,94.0],[52.0,2.0,26.4,91.33,218.0,152.0,39.0,5.59,4.9053,99.0],[67.0,1.0,29.8,80.0,172.0,93.4,63.0,3.0,4.3567,82.0],[61.0,1.0,30.0,108.0,194.0,100.0,52.0,3.73,5.3471,105.0],[67.0,2.0,25.0,111.67,146.0,93.4,33.0,4.42,4.585,103.0],[56.0,1.0,27.0,105.0,247.0,160.6,54.0,5.0,5.0876,94.0],[64.0,1.0,20.0,74.67,189.0,114.8,62.0,3.05,4.1109,91.0],[58.0,2.0,25.5,112.0,163.0,110.6,29.0,6.0,4.7622,86.0],[55.0,1.0,28.2,91.0,250.0,140.2,67.0,4.0,5.366,103.0],[62.0,2.0,33.3,114.0,182.0,114.0,38.0,5.0,5.0106,96.0],[57.0,2.0,25.6,96.0,200.0,133.0,52.0,3.85,4.3175,105.0],[20.0,2.0,24.2,88.0,126.0,72.2,45.0,3.0,3.7842,74.0],[53.0,2.0,22.1,98.0,165.0,105.2,47.0,4.0,4.1589,81.0],[32.0,2.0,31.4,89.0,153.0,84.2,56.0,3.0,4.1589,90.0],[41.0,1.0,23.1,86.0,148.0,78.0,58.0,3.0,4.0943,60.0],[60.0,1.0,23.4,76.67,247.0,148.0,65.0,3.8,5.1358,77.0],[26.0,1.0,18.8,83.0,191.0,103.6,69.0,3.0,4.5218,69.0],[37.0,1.0,30.8,112.0,282.0,197.2,43.0,7.0,5.3423,101.0],[45.0,1.0,32.0,110.0,224.0,134.2,45.0,5.0,5.4116,93.0],[67.0,1.0,31.6,116.0,179.0,90.4,41.0,4.0,5.4723,100.0],[34.0,2.0,35.5,120.0,233.0,146.6,34.0,7.0,5.5683,101.0],[50.0,1.0,31.9,78.33,207.0,149.2,38.0,5.45,4.5951,84.0],[71.0,1.0,29.5,97.0,227.0,151.6,45.0,5.0,5.0239,108.0],[57.0,2.0,31.6,117.0,225.0,107.6,40.0,6.0,5.9584,113.0],[49.0,1.0,20.3,93.0,184.0,103.0,61.0,3.0,4.6052,93.0],[35.0,1.0,41.3,81.0,168.0,102.8,37.0,5.0,4.9488,94.0],[41.0,2.0,21.2,102.0,184.0,100.4,64.0,3.0,4.585,79.0],[70.0,2.0,24.1,82.33,194.0,149.2,31.0,6.26,4.2341,105.0],[52.0,1.0,23.0,107.0,179.0,123.7,42.5,4.21,4.1589,93.0],[60.0,1.0,25.6,78.0,195.0,95.4,91.0,2.0,3.7612,87.0],[62.0,1.0,22.5,125.0,215.0,99.0,98.0,2.0,4.4998,95.0],[44.0,2.0,38.2,123.0,201.0,126.6,44.0,5.0,5.0239,92.0],[28.0,2.0,19.2,81.0,155.0,94.6,51.0,3.0,3.8501,87.0],[58.0,2.0,29.0,85.0,156.0,109.2,36.0,4.0,3.989,86.0],[39.0,2.0,24.0,89.67,190.0,113.6,52.0,3.65,4.804,101.0],[34.0,2.0,20.6,98.0,183.0,92.0,83.0,2.0,3.6889,92.0],[65.0,1.0,26.3,70.0,244.0,166.2,51.0,5.0,4.8978,98.0],[66.0,2.0,34.6,115.0,204.0,139.4,36.0,6.0,4.9628,109.0],[51.0,1.0,23.4,87.0,220.0,108.8,93.0,2.0,4.5109,82.0],[50.0,2.0,29.2,119.0,162.0,85.2,54.0,3.0,4.7362,95.0],[59.0,2.0,27.2,107.0,158.0,102.0,39.0,4.0,4.4427,93.0],[52.0,1.0,27.0,78.33,134.0,73.0,44.0,3.05,4.4427,69.0],[69.0,2.0,24.5,108.0,243.0,136.4,40.0,6.0,5.8081,100.0],[53.0,1.0,24.1,105.0,184.0,113.4,46.0,4.0,4.8122,95.0],[47.0,2.0,25.3,98.0,173.0,105.6,44.0,4.0,4.7622,108.0],[52.0,1.0,28.8,113.0,280.0,174.0,67.0,4.0,5.273,86.0],[39.0,1.0,20.9,95.0,150.0,65.6,68.0,2.0,4.4067,95.0],[67.0,2.0,23.0,70.0,184.0,128.0,35.0,5.0,4.654,99.0],[59.0,2.0,24.1,96.0,170.0,98.6,54.0,3.0,4.4659,85.0],[51.0,2.0,28.1,106.0,202.0,122.2,55.0,4.0,4.8203,87.0],[23.0,2.0,18.0,78.0,171.0,96.0,48.0,4.0,4.9053,92.0],[68.0,1.0,25.9,93.0,253.0,181.2,53.0,5.0,4.5433,98.0],[44.0,1.0,21.5,85.0,157.0,92.2,55.0,3.0,3.8918,84.0],[60.0,2.0,24.3,103.0,141.0,86.6,33.0,4.0,4.6728,78.0],[52.0,1.0,24.5,90.0,198.0,129.0,29.0,7.0,5.2983,86.0],[38.0,1.0,21.3,72.0,165.0,60.2,88.0,2.0,4.4308,90.0],[61.0,1.0,25.8,90.0,280.0,195.4,55.0,5.0,4.9972,90.0],[68.0,2.0,24.8,101.0,221.0,151.4,60.0,4.0,3.8712,87.0],[28.0,2.0,31.5,83.0,228.0,149.4,38.0,6.0,5.3132,83.0],[65.0,2.0,33.5,102.0,190.0,126.2,35.0,5.0,4.9698,102.0],[69.0,1.0,28.1,113.0,234.0,142.8,52.0,4.0,5.2781,77.0],[51.0,1.0,24.3,85.33,153.0,71.6,71.0,2.15,3.9512,82.0],[29.0,1.0,35.0,98.33,204.0,142.6,50.0,4.08,4.0431,91.0],[55.0,2.0,23.5,93.0,177.0,126.8,41.0,4.0,3.8286,83.0],[34.0,2.0,30.0,83.0,185.0,107.2,53.0,3.0,4.8203,92.0],[67.0,1.0,20.7,83.0,170.0,99.8,59.0,3.0,4.0254,77.0],[49.0,1.0,25.6,76.0,161.0,99.8,51.0,3.0,3.9318,78.0],[55.0,2.0,22.9,81.0,123.0,67.2,41.0,3.0,4.3041,88.0],[59.0,2.0,25.1,90.0,163.0,101.4,46.0,4.0,4.3567,91.0],[53.0,1.0,33.2,82.67,186.0,106.8,46.0,4.04,5.112,102.0],[48.0,2.0,24.1,110.0,209.0,134.6,58.0,4.0,4.4067,100.0],[52.0,1.0,29.5,104.33,211.0,132.8,49.0,4.31,4.9836,98.0],[69.0,1.0,29.6,122.0,231.0,128.4,56.0,4.0,5.451,86.0],[60.0,2.0,22.8,110.0,245.0,189.8,39.0,6.0,4.3944,88.0],[46.0,2.0,22.7,83.0,183.0,125.8,32.0,6.0,4.8363,75.0],[51.0,2.0,26.2,101.0,161.0,99.6,48.0,3.0,4.2047,88.0],[67.0,2.0,23.5,96.0,207.0,138.2,42.0,5.0,4.8978,111.0],[49.0,1.0,22.1,85.0,136.0,63.4,62.0,2.19,3.9703,72.0],[46.0,2.0,26.5,94.0,247.0,160.2,59.0,4.0,4.9345,111.0],[47.0,1.0,32.4,105.0,188.0,125.0,46.0,4.09,4.4427,99.0],[75.0,1.0,30.1,78.0,222.0,154.2,44.0,5.05,4.7791,97.0],[28.0,1.0,24.2,93.0,174.0,106.4,54.0,3.0,4.2195,84.0],[65.0,2.0,31.3,110.0,213.0,128.0,47.0,5.0,5.247,91.0],[42.0,1.0,30.1,91.0,182.0,114.8,49.0,4.0,4.5109,82.0],[51.0,1.0,24.5,79.0,212.0,128.6,65.0,3.0,4.5218,91.0],[53.0,2.0,27.7,95.0,190.0,101.8,41.0,5.0,5.4638,101.0],[54.0,1.0,23.2,110.67,238.0,162.8,48.0,4.96,4.9127,108.0],[73.0,1.0,27.0,102.0,211.0,121.0,67.0,3.0,4.7449,99.0],[54.0,1.0,26.8,108.0,176.0,80.6,67.0,3.0,4.9558,106.0],[42.0,1.0,29.2,93.0,249.0,174.2,45.0,6.0,5.0039,92.0],[75.0,1.0,31.2,117.67,229.0,138.8,29.0,7.9,5.7236,106.0],[55.0,2.0,32.1,112.67,207.0,92.4,25.0,8.28,6.1048,111.0],[68.0,2.0,25.7,109.0,233.0,112.6,35.0,7.0,6.0568,105.0],[57.0,1.0,26.9,98.0,246.0,165.2,38.0,7.0,5.366,96.0],[48.0,1.0,31.4,75.33,242.0,151.6,38.0,6.37,5.5683,103.0],[61.0,2.0,25.6,85.0,184.0,116.2,39.0,5.0,4.9698,98.0],[69.0,1.0,37.0,103.0,207.0,131.4,55.0,4.0,4.6347,90.0],[38.0,1.0,32.6,77.0,168.0,100.6,47.0,4.0,4.625,96.0],[45.0,2.0,21.2,94.0,169.0,96.8,55.0,3.0,4.4543,102.0],[51.0,2.0,29.2,107.0,187.0,139.0,32.0,6.0,4.382,95.0],[71.0,2.0,24.0,84.0,138.0,85.8,39.0,4.0,4.1897,90.0],[57.0,1.0,36.1,117.0,181.0,108.2,34.0,5.0,5.2679,100.0],[56.0,2.0,25.8,103.0,177.0,114.4,34.0,5.0,4.9628,99.0],[32.0,2.0,22.0,88.0,137.0,78.6,48.0,3.0,3.9512,78.0],[50.0,1.0,21.9,91.0,190.0,111.2,67.0,3.0,4.0775,77.0],[43.0,1.0,34.3,84.0,256.0,172.6,33.0,8.0,5.5294,104.0],[54.0,2.0,25.2,115.0,181.0,120.0,39.0,5.0,4.7005,92.0],[31.0,1.0,23.3,85.0,190.0,130.8,43.0,4.0,4.3944,77.0],[56.0,1.0,25.7,80.0,244.0,151.6,59.0,4.0,5.118,95.0],[44.0,1.0,25.1,133.0,182.0,113.0,55.0,3.0,4.2485,84.0],[57.0,2.0,31.9,111.0,173.0,116.2,41.0,4.0,4.3694,87.0],[64.0,2.0,28.4,111.0,184.0,127.0,41.0,4.0,4.382,97.0],[43.0,1.0,28.1,121.0,192.0,121.0,60.0,3.0,4.0073,93.0],[19.0,1.0,25.3,83.0,225.0,156.6,46.0,5.0,4.7185,84.0],[71.0,2.0,26.1,85.0,220.0,152.4,47.0,5.0,4.6347,91.0],[50.0,2.0,28.0,104.0,282.0,196.8,44.0,6.0,5.3279,95.0],[59.0,2.0,23.6,73.0,180.0,107.4,51.0,4.0,4.6821,84.0],[57.0,1.0,24.5,93.0,186.0,96.6,71.0,3.0,4.5218,91.0],[49.0,2.0,21.0,82.0,119.0,85.4,23.0,5.0,3.9703,74.0],[41.0,2.0,32.0,126.0,198.0,104.2,49.0,4.0,5.4116,124.0],[25.0,2.0,22.6,85.0,130.0,71.0,48.0,3.0,4.0073,81.0],[52.0,2.0,19.7,81.0,152.0,53.4,82.0,2.0,4.4188,82.0],[34.0,1.0,21.2,84.0,254.0,113.4,52.0,5.0,6.0936,92.0],[42.0,2.0,30.6,101.0,269.0,172.2,50.0,5.0,5.4553,106.0],[28.0,2.0,25.5,99.0,162.0,101.6,46.0,4.0,4.2767,94.0],[47.0,2.0,23.3,90.0,195.0,125.8,54.0,4.0,4.3307,73.0],[32.0,2.0,31.0,100.0,177.0,96.2,45.0,4.0,5.1874,77.0],[43.0,1.0,18.5,87.0,163.0,93.6,61.0,2.67,3.7377,80.0],[59.0,2.0,26.9,104.0,194.0,126.6,43.0,5.0,4.804,106.0],[53.0,1.0,28.3,101.0,179.0,107.0,48.0,4.0,4.7875,101.0],[60.0,1.0,25.7,103.0,158.0,84.6,64.0,2.0,3.8501,97.0],[54.0,2.0,36.1,115.0,163.0,98.4,43.0,4.0,4.6821,101.0],[35.0,2.0,24.1,94.67,155.0,97.4,32.0,4.84,4.852,94.0],[49.0,2.0,25.8,89.0,182.0,118.6,39.0,5.0,4.804,115.0],[58.0,1.0,22.8,91.0,196.0,118.8,48.0,4.0,4.9836,115.0],[36.0,2.0,39.1,90.0,219.0,135.8,38.0,6.0,5.4205,103.0],[46.0,2.0,42.2,99.0,211.0,137.0,44.0,5.0,5.0106,99.0],[44.0,2.0,26.6,99.0,205.0,109.0,43.0,5.0,5.5797,111.0],[46.0,1.0,29.9,83.0,171.0,113.0,38.0,4.5,4.585,98.0],[54.0,1.0,21.0,78.0,188.0,107.4,70.0,3.0,3.9703,73.0],[63.0,2.0,25.5,109.0,226.0,103.2,46.0,5.0,5.9506,87.0],[41.0,2.0,24.2,90.0,199.0,123.6,57.0,4.0,4.5218,86.0],[28.0,1.0,25.4,93.0,141.0,79.0,49.0,3.0,4.1744,91.0],[19.0,1.0,23.2,75.0,143.0,70.4,52.0,3.0,4.6347,72.0],[61.0,2.0,26.1,126.0,215.0,129.8,57.0,4.0,4.9488,96.0],[48.0,1.0,32.7,93.0,276.0,198.6,43.0,6.42,5.1475,91.0],[54.0,2.0,27.3,100.0,200.0,144.0,33.0,6.0,4.7449,76.0],[53.0,2.0,26.6,93.0,185.0,122.4,36.0,5.0,4.8903,82.0],[48.0,1.0,22.8,101.0,110.0,41.6,56.0,2.0,4.1271,97.0],[53.0,1.0,28.8,111.67,145.0,87.2,46.0,3.15,4.0775,85.0],[29.0,2.0,18.1,73.0,158.0,99.0,41.0,4.0,4.4998,78.0],[62.0,1.0,32.0,88.0,172.0,69.0,38.0,4.0,5.7838,100.0],[50.0,2.0,23.7,92.0,166.0,97.0,52.0,3.0,4.4427,93.0],[58.0,2.0,23.6,96.0,257.0,171.0,59.0,4.0,4.9053,82.0],[55.0,2.0,24.6,109.0,143.0,76.4,51.0,3.0,4.3567,88.0],[54.0,1.0,22.6,90.0,183.0,104.2,64.0,3.0,4.3041,92.0],[36.0,1.0,27.8,73.0,153.0,104.4,42.0,4.0,3.4965,73.0],[63.0,2.0,24.1,111.0,184.0,112.2,44.0,4.0,4.9345,82.0],[47.0,2.0,26.5,70.0,181.0,104.8,63.0,3.0,4.1897,70.0],[51.0,2.0,32.8,112.0,202.0,100.6,37.0,5.0,5.7746,109.0],[42.0,1.0,19.9,76.0,146.0,83.2,55.0,3.0,3.6636,79.0],[37.0,2.0,23.6,94.0,205.0,138.8,53.0,4.0,4.1897,107.0],[28.0,1.0,22.1,82.0,168.0,100.6,54.0,3.0,4.2047,86.0],[58.0,1.0,28.1,111.0,198.0,80.6,31.0,6.0,6.0684,93.0],[32.0,1.0,26.5,86.0,184.0,101.6,53.0,4.0,4.9904,78.0],[25.0,2.0,23.5,88.0,143.0,80.8,55.0,3.0,3.5835,83.0],[63.0,1.0,26.0,85.67,155.0,78.2,46.0,3.37,5.037,97.0],[52.0,1.0,27.8,85.0,219.0,136.0,49.0,4.0,5.1358,75.0],[65.0,2.0,28.5,109.0,201.0,123.0,46.0,4.0,5.0752,96.0],[42.0,1.0,30.6,121.0,176.0,92.8,69.0,3.0,4.2627,89.0],[53.0,1.0,22.2,78.0,164.0,81.0,70.0,2.0,4.1744,101.0],[79.0,2.0,23.3,88.0,186.0,128.4,33.0,6.0,4.8122,102.0],[43.0,1.0,35.4,93.0,185.0,100.2,44.0,4.0,5.3181,101.0],[44.0,1.0,31.4,115.0,165.0,97.6,52.0,3.0,4.3438,89.0],[62.0,2.0,37.8,119.0,113.0,51.0,31.0,4.0,5.0434,84.0],[33.0,1.0,18.9,70.0,162.0,91.8,59.0,3.0,4.0254,58.0],[56.0,1.0,35.0,79.33,195.0,140.8,42.0,4.64,4.1109,96.0],[66.0,1.0,21.7,126.0,212.0,127.8,45.0,4.71,5.2781,101.0],[34.0,2.0,25.3,111.0,230.0,162.0,39.0,6.0,4.9767,90.0],[46.0,2.0,23.8,97.0,224.0,139.2,42.0,5.0,5.366,81.0],[50.0,1.0,31.8,82.0,136.0,69.2,55.0,2.0,4.0775,85.0],[69.0,1.0,34.3,113.0,200.0,123.8,54.0,4.0,4.7095,112.0],[34.0,1.0,26.3,87.0,197.0,120.0,63.0,3.0,4.2485,96.0],[71.0,2.0,27.0,93.33,269.0,190.2,41.0,6.56,5.2417,93.0],[47.0,1.0,27.2,80.0,208.0,145.6,38.0,6.0,4.804,92.0],[41.0,1.0,33.8,123.33,187.0,127.0,45.0,4.16,4.3175,100.0],[34.0,1.0,33.0,73.0,178.0,114.6,51.0,3.49,4.1271,92.0],[51.0,1.0,24.1,87.0,261.0,175.6,69.0,4.0,4.4067,93.0],[43.0,1.0,21.3,79.0,141.0,78.8,53.0,3.0,3.8286,90.0],[55.0,1.0,23.0,94.67,190.0,137.6,38.0,5.0,4.2767,106.0],[59.0,2.0,27.9,101.0,218.0,144.2,38.0,6.0,5.1874,95.0],[27.0,2.0,33.6,110.0,246.0,156.6,57.0,4.0,5.0876,89.0],[51.0,2.0,22.7,103.0,217.0,162.4,30.0,7.0,4.8122,80.0],[49.0,2.0,27.4,89.0,177.0,113.0,37.0,5.0,4.9053,97.0],[27.0,1.0,22.6,71.0,116.0,43.4,56.0,2.0,4.4188,79.0],[57.0,2.0,23.2,107.33,231.0,159.4,41.0,5.63,5.0304,112.0],[39.0,2.0,26.9,93.0,136.0,75.4,48.0,3.0,4.1431,99.0],[62.0,2.0,34.6,120.0,215.0,129.2,43.0,5.0,5.366,123.0],[37.0,1.0,23.3,88.0,223.0,142.0,65.0,3.4,4.3567,82.0],[46.0,1.0,21.1,80.0,205.0,144.4,42.0,5.0,4.5326,87.0],[68.0,2.0,23.5,101.0,162.0,85.4,59.0,3.0,4.4773,91.0],[51.0,1.0,31.5,93.0,231.0,144.0,49.0,4.7,5.2523,117.0],[41.0,1.0,20.8,86.0,223.0,128.2,83.0,3.0,4.0775,89.0],[53.0,1.0,26.5,97.0,193.0,122.4,58.0,3.0,4.1431,99.0],[45.0,1.0,24.2,83.0,177.0,118.4,45.0,4.0,4.2195,82.0],[33.0,1.0,19.5,80.0,171.0,85.4,75.0,2.0,3.9703,80.0],[60.0,2.0,28.2,112.0,185.0,113.8,42.0,4.0,4.9836,93.0],[47.0,2.0,24.9,75.0,225.0,166.0,42.0,5.0,4.4427,102.0],[60.0,2.0,24.9,99.67,162.0,106.6,43.0,3.77,4.1271,95.0],[36.0,1.0,30.0,95.0,201.0,125.2,42.0,4.79,5.1299,85.0],[36.0,1.0,19.6,71.0,250.0,133.2,97.0,3.0,4.5951,92.0]],"y":[151,75,141,206,135,97,138,63,110,310,101,69,179,185,118,171,166,144,97,168,68,49,68,245,184,202,137,85,131,283,129,59,341,87,65,102,265,276,252,90,100,55,61,92,259,53,190,142,75,142,155,225,59,104,182,128,52,37,170,170,61,144,52,128,71,163,150,97,160,178,48,270,202,111,85,42,170,200,252,113,143,51,52,210,65,141,55,134,42,111,98,164,48,96,90,162,150,279,92,83,128,102,302,198,95,53,134,144,232,81,104,59,246,297,258,229,275,281,179,200,200,173,180,84,121,161,99,109,115,268,274,158,107,83,103,272,85,280,336,281,118,317,235,60,174,259,178,128,96,126,288,88,292,71,197,186,25,84,96,195,53,217,172,131,214,59,70,220,268,152,47,74,295,101,151,127,237,225,81,151,107,64,138,185,265,101,137,143,141,79,292,178,91,116,86,122,72,129,142,90,158,39,196,222,277,99,196,202,155,77,191,70,73,49,65,263,248,296,214,185,78,93,252,150,77,208,77,108,160,53,220,154,259,90,246,124,67,72,257,262,275,177,71,47,187,125,78,51,258,215,303,243,91,150,310,153,346,63,89,50,39,103,308,116,145,74,45,115,264,87,202,127,182,241,66,94,283,64,102,200,265,94,230,181,156,233,60,219,80,68,332,248,84,200,55,85,89,31,129,83,275,65,198,236,253,124,44,172,114,142,109,180,144,163,147,97,220,190,109,191,122,230,242,248,249,192,131,237,78,135,244,199,270,164,72,96,306,91,214,95,216,263,178,113,200,139,139,88,148,88,243,71,77,109,272,60,54,221,90,311,281,182,321,58,262,206,233,242,123,167,63,197,71,168,140,217,121,235,245,40,52,104,132,88,69,219,72,201,110,51,277,63,118,69,273,258,43,198,242,232,175,93,168,275,293,281,72,140,189,181,209,136,261,113,131,174,257,55,84,42,146,212,233,91,111,152,120,67,310,94,183,66,173,72,49,64,48,178,104,132,220,57],"train":[1,2,3,4,6,7,8,10,12,13,14,16,18,20,21,23,26,27,28,29,32,34,35,36,37,38,40,41,43,44,47,48,49,50,51,52,53,54,58,59,60,61,62,63,64,65,67,68,69,71,74,80,81,83,85,86,87,88,89,91,92,95,96,97,98,99,100,102,103,105,106,107,108,109,110,111,112,114,115,118,119,120,121,122,123,124,125,127,128,129,130,133,134,135,136,138,139,141,142,143,144,145,146,147,149,150,151,152,156,158,159,160,161,162,163,164,165,166,167,168,169,170,171,174,175,177,178,179,180,182,183,184,186,187,188,189,190,191,192,193,194,195,197,198,200,201,202,204,205,206,207,208,210,212,213,214,215,216,217,219,220,221,222,223,224,225,226,228,229,230,231,232,233,234,235,236,238,240,241,242,243,246,247,248,249,250,251,252,253,254,256,257,258,259,260,261,262,263,264,265,266,267,269,270,271,272,273,274,275,276,277,279,280,282,283,288,289,290,292,293,294,295,297,298,299,300,301,302,303,304,305,306,308,309,310,312,313,314,315,316,317,318,319,322,323,324,325,326,327,328,330,331,334,335,336,337,338,339,340,342,343,344,345,346,347,348,350,351,352,353,355,356,357,359,361,362,363,364,365,366,368,371,372,373,375,376,377,378,379,381,382,383,384,385,387,389,392,393,394,396,397,398,400,401,403,404,405,406,408,410,412,413,414,415,416,417,419,420,421,424,425,426,428,430,431,432,434,435,438,439,441]};
+const FN = ['Age', 'Sex', 'BMI', 'Blood pressure', 'Total cholesterol (s1)', 'LDL (s2)', 'HDL (s3)', 'Chol / HDL (s4)', 'Log triglycerides (s5)', 'Blood sugar (s6)'];
+const FS = ['age', 'sex', 'bmi', 'bp', 's1', 's2', 's3', 's4', 's5', 's6'];
+const trSet = new Set(DB.train), TR = [], TE = [];
+DB.y.forEach((_, i) => (trSet.has(i) ? TR : TE).push(i));
+const MU = [], SD = [];
+for (let j = 0; j < 10; j++) { const v = TR.map(i => DB.X[i][j]), m = v.reduce((a, b) => a + b) / v.length; MU.push(m); SD.push(Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / v.length)); }
+const Z = DB.X.map(r => r.map((v, j) => (v - MU[j]) / SD[j]));
+const YBAR = TR.reduce((a, i) => a + DB.y[i], 0) / TR.length;
+function pjFit(cols, lam) {
+  const k = cols.length; if (!k) return [];
+  if (!lam) {
+    const A = Array.from({ length: k }, () => new Array(k).fill(0)), b = new Array(k).fill(0);
+    for (const i of TR) { const yc = DB.y[i] - YBAR; for (let a = 0; a < k; a++) { b[a] += Z[i][cols[a]] * yc; for (let c = 0; c < k; c++) A[a][c] += Z[i][cols[a]] * Z[i][cols[c]]; } }
+    return solve(A, b);
+  }
+  const n = TR.length, w = new Array(k).fill(0), r = TR.map(i => DB.y[i] - YBAR);
+  for (let sweep = 0; sweep < 5000; sweep++) { let dmax = 0;
+    for (let a = 0; a < k; a++) { const j = cols[a]; let rho = 0; TR.forEach((i, t) => { rho += Z[i][j] * (r[t] + Z[i][j] * w[a]); }); rho /= n;
+      const nw = Math.sign(rho) * Math.max(0, Math.abs(rho) - lam), dw = nw - w[a]; if (dw) { TR.forEach((i, t) => { r[t] -= Z[i][j] * dw; }); w[a] = nw; dmax = Math.max(dmax, Math.abs(dw)); } }
+    if (dmax < 1e-8) break; }
+  return w;
+}
+const pjPred = (cols, w, i) => YBAR + cols.reduce((a, j, t) => a + w[t] * Z[i][j], 0);
+function pjGrade(cols, w) {
+  const ym = TE.reduce((a, i) => a + DB.y[i], 0) / TE.length; let sse_ = 0, sst = 0, sae = 0;
+  TE.forEach(i => { const e = DB.y[i] - pjPred(cols, w, i); sse_ += e * e; sae += Math.abs(e); sst += (DB.y[i] - ym) ** 2; });
+  return { r2: 1 - sse_ / sst, rmse: Math.sqrt(sse_ / TE.length), mae: sae / TE.length, sse: sse_, sst };
+}
+const PJ = { cols: [2, 3, 8], lam: 0 };
+const REF = { one: pjGrade([2], pjFit([2], 0)), three: pjGrade([2, 3, 8], pjFit([2, 3, 8], 0)), all: pjGrade([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], pjFit([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 0)) };
+$('#pj-feats').innerHTML = FN.map((n, j) => `<button type="button" data-f="${j}" aria-pressed="false">${n}</button>`).join('');
+function drawPJ() {
+  const cols = PJ.cols.slice().sort((a, b) => a - b), w = pjFit(cols, PJ.lam), g = cols.length ? pjGrade(cols, w) : null, C = COL();
+  $$('#pj-feats button').forEach(b => b.setAttribute('aria-pressed', cols.includes(+b.dataset.f) ? 'true' : 'false'));
+  const v = frame($('#pj-cv'), [0, 360], [0, 360]); axes(v, 'actual progression', 'forecast'); clip(v);
+  seg(v, 0, 0, 360, 360, C.ink, 1.3, [6, 5]);
+  if (cols.length) TE.forEach(i => dot(v, DB.y[i], pjPred(cols, w, i), C.pt, 3.8)); v.ctx.restore();
+  const used = w.filter(x => Math.abs(x) > 1e-9).length;
+  $('#pj-r2').innerHTML = g ? tip(fmt(g.r2, 3), `1 − SSE ÷ SST on the 111 test patients\n= 1 − ${fmt(g.sse, 0)} ÷ ${fmt(g.sst, 0)}`) : '—';
+  $('#pj-rmse').innerHTML = g ? tip(fmt(g.rmse, 1), `√(SSE ÷ 111): a typical miss,\nin progression points (scale 25–346)`) : '—';
+  $('#pj-mae').innerHTML = g ? tip(fmt(g.mae, 1), 'average |actual − forecast|\nover the 111 test patients') : '—';
+  $('#pj-k').textContent = `${used} / 10`;
+  $('#pj-l-o').textContent = fmt(PJ.lam, 1);
+  const mx = Math.max(1, ...w.map(Math.abs));
+  $('#pj-coef').innerHTML = cols.length ? cols.map((j, t) => ({ j, w: w[t] })).sort((a, b) => Math.abs(b.w) - Math.abs(a.w)).map(o => {
+    const z = Math.abs(o.w) < 1e-9, pct = Math.abs(o.w) / mx * 50;
+    return `<div class="cf${z ? ' zero' : ''}"><span>${FN[o.j]}</span><span class="cf-track"><i style="${o.w >= 0 ? `left:50%;width:${pct}%` : `left:${50 - pct}%;width:${pct}%`};background:${o.w >= 0 ? 'var(--qda)' : 'var(--lda)'}"></i></span><span class="num">${z ? 'dropped' : tip((o.w > 0 ? '+' : '') + fmt(o.w, 1), `+1 SD of ${FN[o.j]} (SD = ${fmt(SD[o.j], 2)})\nchanges the forecast by ${fmt(o.w, 2)} points,\nholding the other features fixed`)}</span></div>`;
+  }).join('') : '<p class="note">Pick at least one feature.</p>';
+  const allOn = cols.length === 10;
+  $('#pj-say').innerHTML = !g ? '' : allOn && !PJ.lam ? `All ten measurements: test R² ${fmt(g.r2, 3)} &mdash; <b>worse</b> than three well-chosen ones (${fmt(REF.three.r2, 3)}). The six blood tests overlap heavily; with only 331 training patients, their extra weights add noise. Now raise lasso λ and watch it drop the redundant ones.`
+    : allOn ? `Lasso at λ = ${fmt(PJ.lam, 1)} kept ${used} of 10 features and scores test R² ${fmt(g.r2, 3)} (plain least squares on all ten: ${fmt(REF.all.r2, 3)}). Automatic feature selection.`
+    : `With ${cols.length === 1 ? 'one feature' : cols.length + ' features'}, the model explains ${fmt(g.r2 * 100, 0)}% of the variation in unseen patients' progression; a typical forecast misses by ${fmt(g.rmse, 0)} points. (BMI alone: ${fmt(REF.one.r2, 3)} · all ten: ${fmt(REF.all.r2, 3)}.)`;
+}
+$('#pj-feats').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const j = +b.dataset.f; PJ.cols = PJ.cols.includes(j) ? PJ.cols.filter(x => x !== j) : [...PJ.cols, j]; drawPJ(); drawPath(); });
+$$('[data-pj]').forEach(b => b.addEventListener('click', () => { PJ.cols = b.dataset.pj === 'all' ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : b.dataset.pj.split(',').map(Number); drawPJ(); drawPath(); }));
+$('#pj-l').addEventListener('input', e => { PJ.lam = +e.target.value; drawPJ(); drawPath(); });
+fig($('#pj-cv'), drawPJ);
+
+// lasso path over all ten features
+const PATH = (() => { const ls = [], ws = []; for (let i = 0; i <= 70; i++) { const lam = Math.pow(10, Math.log10(46) - i / 70 * (Math.log10(46) - Math.log10(0.05))); ls.push(lam); ws.push(pjFit([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], lam)); } return { ls, ws }; })();
+const ENTRY = (() => { const o = []; PATH.ws.forEach(w => w.forEach((x, j) => { if (Math.abs(x) > 1e-9 && !o.includes(j)) o.push(j); })); return o; })();
+function drawPath() {
+  const C = COL(), all = PATH.ws.flat(), lo = Math.min(...all) * 1.1, hi = Math.max(...all) * 1.1;
+  const X0 = Math.log10(46), X1 = Math.log10(0.05);
+  const v = frame($('#pj-path'), [0, 1], [lo, hi], { r: 150, b: 28 }); axes(v, '← strong penalty    λ    weak penalty →', 'weight', { sx: 0.25, fx: x => { const l = Math.pow(10, X0 + x * (X1 - X0)); return l >= 1 ? fmt(l, 0) : fmt(l, 2); } });
+  const c = v.ctx, pal = { 2: C.miss, 8: C.you, 3: C.pt, 6: C.best };
+  clip(v); seg(v, 0, 0, 1, 0, C.ink, 1);
+  for (let j = 0; j < 10; j++) { c.strokeStyle = pal[j] || C.muted; c.lineWidth = pal[j] ? 2.4 : 1.2; c.globalAlpha = pal[j] ? 1 : .7; c.beginPath(); PATH.ws.forEach((w, i) => { const x = i / 70; i ? c.lineTo(v.X(x), v.Y(w[j])) : c.moveTo(v.X(x), v.Y(w[j])); }); c.stroke(); }
+  c.globalAlpha = 1;
+  if (PJ.lam > 0) { const x = (Math.log10(Math.max(0.05, PJ.lam)) - X0) / (X1 - X0); seg(v, x, lo, x, hi, C.ink, 1.3, [4, 4]); }
+  c.restore();
+  // labels at the right edge
+  c.save(); c.font = '11px ' + css('--f-mono'); c.textBaseline = 'middle';
+  const last = PATH.ws[PATH.ws.length - 1], ys = [];
+  [...Array(10).keys()].sort((a, b) => last[b] - last[a]).forEach(j => { let y = v.Y(last[j]); ys.forEach(p => { if (Math.abs(p - y) < 12) y = p + 12; }); ys.push(y); c.fillStyle = pal[j] || C.muted; c.fillText(FN[j].replace(/ \(.*\)/, '') + (j >= 4 ? ' ' + FS[j] : ''), v.w - v.pad.r + 6, y); });
+  c.restore();
+  $('#pj-path-cap').innerHTML = `Order of entry as λ relaxes: <b>${ENTRY.map(j => FS[j]).join(' → ')}</b>. ${PJ.lam > 0 ? `The dashed line is your λ = ${fmt(PJ.lam, 1)} (it applies to the all-ten model).` : 'Raise the λ slider above to place a marker.'}`;
+}
+fig($('#pj-path'), drawPath);
+
+// one patient, explained (three-feature model)
+const PT = { cols: [2, 3, 8], v: { 2: 26.4, 3: 94, 8: 4.64 } };
+const PT_W = pjFit(PT.cols, 0);
+const PT_CFG = { 2: [18, 42, 0.1, 'BMI', 'kg/m²'], 3: [62, 133, 1, 'Blood pressure', 'mmHg'], 8: [3.26, 6.11, 0.01, 'Log triglycerides (s5)', ''] };
+$('#pt-sliders').innerHTML = '<div class="grp"><h4>Patient measurements</h4>' + PT.cols.map(j => { const [a, b, s, n, u] = PT_CFG[j]; return `<div class="ctrl"><div class="top"><label for="pt-${j}">${n}${u ? ' (' + u + ')' : ''}</label><output id="pt-${j}-o"></output></div><input type="range" id="pt-${j}" min="${a}" max="${b}" step="${s}" value="${PT.v[j]}"></div>`; }).join('') + '<p class="note">Defaults are close to the average patient. Try BMI 35 with high triglycerides.</p></div>';
+function drawPT() {
+  let pred = YBAR; const parts = PT.cols.map((j, t) => { const c = PT_W[t] * (PT.v[j] - MU[j]) / SD[j]; pred += c; return { j, c, t }; });
+  PT.cols.forEach(j => { $(`#pt-${j}-o`).textContent = PT_CFG[j][2] < 1 ? (+PT.v[j]).toFixed(PT_CFG[j][2] < 0.1 ? 2 : 1) : PT.v[j]; });
+  $('#pt-base').innerHTML = tip(fmt(YBAR, 0), 'mean progression of the\n331 training patients');
+  $('#pt-pred').innerHTML = tip(fmt(pred, 0), `${fmt(YBAR, 1)} ${parts.map(p => (p.c >= 0 ? '+ ' : '− ') + fmt(Math.abs(p.c), 1)).join(' ')}`);
+  const mx = Math.max(25, ...parts.map(p => Math.abs(p.c)));
+  $('#pt-contrib').innerHTML = parts.map(p => `<div class="cf"><span>${PT_CFG[p.j][3]}</span><span class="cf-track"><i style="${p.c >= 0 ? `left:50%;width:${Math.abs(p.c) / mx * 50}%` : `left:${50 - Math.abs(p.c) / mx * 50}%;width:${Math.abs(p.c) / mx * 50}%`};background:${p.c >= 0 ? 'var(--qda)' : 'var(--lda)'}"></i></span><span class="num">${tip((p.c >= 0 ? '+' : '−') + fmt(Math.abs(p.c), 1), `w × (value − mean) ÷ SD\n= ${fmt(PT_W[p.t], 2)} × (${fmt(PT.v[p.j], 2)} − ${fmt(MU[p.j], 2)}) ÷ ${fmt(SD[p.j], 2)}`)}</span></div>`).join('')
+    + '<p class="note" style="margin-top:6px"><span style="color:var(--qda)">Red</span> pushes the forecast up, <span style="color:var(--lda)">blue</span> pulls it down. Forecast = average + the three contributions.</p>';
+}
+PT.cols.forEach(j => $(`#pt-${j}`).addEventListener('input', e => { PT.v[j] = +e.target.value; drawPT(); }));
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+syncLine(); gdReset(); drawPT();
+window.__lrDebug = { HS, HSfit, ls1, l1fit, ridgeFit, lassoFit, rmse, PO, PO_CURVE, pjFit, pjGrade, REF, ENTRY, FS, GD, gdStep, gdReset, LINE, GEO, geoSolve, RG };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
