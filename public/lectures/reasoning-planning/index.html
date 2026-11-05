@@ -1,0 +1,1656 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on reasoning and planning for AI agents: a greedy walker that loops for ever, breadth-first search, Dijkstra and A* over (station, line) states, task decomposition of a multi-stop errand, a transparent ReAct agent with real tools, plan-and-execute with re-planning when a step fails, and Reflexion-style retries with memory, all running live on the real London Underground network with numbers checked against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Reasoning &amp; Planning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.qsel { width: 100%; max-width: 100%; font: inherit; font-size: 0.86rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); margin-bottom: 8px; }
+.qsel:focus-visible { outline: 2px solid var(--qda); outline-offset: 1px; }
+.seg.seg-wrap { flex-wrap: wrap; }
+.seg.seg-wrap button { flex: 1 1 auto; }
+#hero-cv, #pj-cv { cursor: crosshair; touch-action: manipulation; }
+#hero-cap { min-height: 3.2em; }
+ol.legs { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: 0.86rem; }
+ol.legs li { display: flex; gap: 8px; align-items: baseline; }
+ol.legs .sw { flex: none; width: 14px; height: 6px; border-radius: 3px; display: inline-block; transform: translateY(-2px); }
+ol.legs .chg { color: var(--muted); font-size: 0.8rem; padding-left: 22px; }
+ol.rtrace { list-style: none; margin: 18px 0 0; padding: 0; max-width: 900px; border-top: 1px solid var(--line); counter-reset: rt; }
+ol.rtrace li { display: grid; grid-template-columns: 7.4em 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; line-height: 1.5; }
+ol.rtrace li .rk { font-family: var(--f-mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; padding-top: 2px; }
+ol.rtrace li.k-T .rk { color: var(--lda); }
+ol.rtrace li.k-A .rk { color: var(--cB); }
+ol.rtrace li.k-O .rk { color: var(--cA); }
+ol.rtrace li.k-F .rk { color: var(--ink); }
+ol.rtrace li.k-A .tx { font-family: var(--f-mono); font-size: 0.82rem; overflow-wrap: anywhere; }
+ol.rtrace li.k-O.bad .rk, ol.rtrace li.k-O.bad .tx { color: var(--qda); }
+ol.rtrace li.k-F .tx { font-weight: 600; }
+ol.rtrace li.verdict { grid-template-columns: 1fr; color: var(--qda); font-weight: 600; }
+ol.rtrace li.verdict.good { color: var(--cA); }
+ol.rtrace li.wait { grid-template-columns: 1fr; color: var(--muted); font-style: italic; }
+table.trace td { white-space: normal; font-size: 0.84rem; vertical-align: top; }
+table.trace td:first-child { white-space: nowrap; font-family: var(--f-mono); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; }
+table.trace tr.k-T td:first-child { color: var(--lda); }
+table.trace tr.k-A td:first-child { color: var(--cB); }
+table.trace tr.k-O td:first-child { color: var(--cA); }
+table.trace tr.k-A td:last-child { font-family: var(--f-mono); font-size: 0.78rem; overflow-wrap: anywhere; }
+table.trace tr.bad td { color: var(--qda); }
+#pj-trace { max-height: none; }
+.two > .tbl-wrap { max-height: 460px; overflow: auto; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race tr.ref td { color: var(--muted); }
+table.race td:first-child { white-space: normal; min-width: 150px; }
+.answer { border: 1px solid var(--line); border-left: 4px solid var(--cA); border-radius: 8px; background: var(--surface); padding: 12px 16px; font-size: 0.93rem; color: var(--ink); line-height: 1.55; }
+.answer.no { border-left-color: var(--qda); }
+.answer .big { font-family: var(--f-display); font-size: 1.15rem; display: block; margin: 2px 0 4px; }
+.answer .src { font-size: 0.84rem; color: var(--muted); display: block; margin-top: 4px; }
+.pj-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; max-width: 980px; }
+.plan-tree { max-width: 900px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 12px 16px; font-size: 0.88rem; line-height: 1.55; }
+.plan-tree .goal { font-family: var(--f-display); font-size: 1.05rem; font-weight: 600; }
+.plan-tree ol { margin: 6px 0 0; padding-left: 1.4em; }
+.plan-tree ol ol { margin: 2px 0 4px; padding-left: 1.1em; list-style: none; color: var(--muted); font-size: 0.84rem; }
+.plan-tree .sw { width: 12px; height: 5px; border-radius: 3px; display: inline-block; margin-right: 6px; transform: translateY(-2px); }
+#rf-tbl td { min-width: 120px; }
+@media (max-width: 760px) { .pj-form { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { ol.rtrace li { grid-template-columns: 1fr; gap: 2px; } .pj-form { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .lab .plot.ar-16x10, .two .plot.ar-16x10 { aspect-ratio: 1 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Reasoning &amp; Planning <span>&middot; think, act, look, think again</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Thinking ahead</a>
+      <a href="#bfs">BFS</a>
+      <a href="#dijkstra">Dijkstra</a>
+      <a href="#astar">A*</a>
+      <a href="#decompose">Decomposition</a>
+      <a href="#react">ReAct</a>
+      <a href="#replan">Re-planning</a>
+      <a href="#reflect">Reflection</a>
+      <a href="#project">Journey-agent project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">AI agents · chapter 5.3 · reasoning &amp; planning</div>
+      <h1>Reasoning &amp; Planning</h1>
+      <div class="sub">Look before you leap, then keep looking</div>
+      <p class="lead">An agent that only reacts takes whichever step looks best right now. An agent that <em>reasons</em> imagines the consequences of a step before taking it; an agent that <em>plans</em> searches many possible futures for a good one, then keeps checking the world as it goes, and changes course when the world disagrees. This chapter builds all of that on one real problem: getting around the London Underground, 302 stations joined by 406 track segments. <strong>Tap any two stations on the map</strong>: an A* search spreads out from the first, and the plan appears the moment the search reaches the second.</p>
+      <dl class="facts">
+        <div><dt>The problem</dt><dd>Find a good route through a real network of 302 stations and 13 lines</dd></div>
+        <div><dt>The planners</dt><dd>Breadth-first search, Dijkstra and A*, run live in your browser</dd></div>
+        <div><dt>The agent</dt><dd>Think, act, observe; re-plan when a step fails; remember the lesson</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Map of the London Underground; tap a start and a destination to plan a route"></canvas></div>
+      <div class="chips" id="hero-chips" style="margin-top:10px"></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--qda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Acting without thinking ahead</a></li>
+    <li><a href="#bfs"><i>02</i>Breadth-first search</a></li>
+    <li><a href="#dijkstra"><i>03</i>Dijkstra: the quickest plan</a></li>
+    <li><a href="#astar"><i>04</i>A*: search with a sense of direction</a></li>
+    <li><a href="#decompose"><i>05</i>Task decomposition</a></li>
+    <li><a href="#react"><i>06</i>ReAct: think, act, observe</a></li>
+    <li><a href="#replan"><i>07</i>Plan, execute, re-plan</a></li>
+    <li><a href="#reflect"><i>08</i>Reflection and retry</a></li>
+    <li><a href="#project"><i>09</i>A Tube journey agent</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Acting without thinking ahead</h2>
+    <div class="prose">
+      <p>Picture an agent that must get from Belsize Park to Finchley Road, 1.2 km apart as the crow flies. The simplest policy is <em class="term">greedy</em>: from wherever you are, step to the neighbouring station that is closest to the goal. It sounds sensible and fails at once: the closest neighbour is Hampstead, the closest neighbour of Hampstead is Belsize Park again, and the agent rocks between the two for ever. The two stations are close on the ground but on different lines, and the only way between them runs through central London, away from the goal.</p>
+      <p>Reasoning, in its most basic form, is <b>imagining before acting</b>: try out sequences of steps in your head, judge where each would leave you, and only then commit to the first step of the best one. Here the walker imagines every route of up to <i>d</i> stops. That is the same trade every reasoning model makes: more thinking (more imagined futures) for better actions. <strong>Raise the lookahead d</strong> and watch both the outcome and the bill.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} a_t &= \text{first step of } p^\star \\ p^\star &= \arg\min_{p \,\in\, \mathcal{P}_d(s_t)} \big\lVert \operatorname{end}(p) - g \big\rVert \\ \big|\mathcal{P}_d(s_t)\big| &\approx b + b^2 + \dots + b^d \end{aligned} \]</div><div class="read"><b>Read it as:</b> at station s<sub>t</sub> the agent lists every route p of up to d stops that never revisits a station (the set <i>P</i><sub>d</sub>), scores each by the straight-line distance from where it ends to the goal g, and takes the first step a<sub>t</sub> of the best one, p<sup>&lowast;</sup>; then it thinks again from the new station. With about b ways onward from each station, the number of imagined routes grows like b<sup>d</sup>: lookahead gets expensive quickly.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The action is the first step of the imagined route whose end is nearest the goal; the number of imagined routes grows like b to the d.&rdquo;</em></div><div class="eq-run" id="run-wy"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="wy-cv" aria-label="The walker's route on the map"></canvas></div><figcaption><span style="color:var(--qda)">&#9644;</span> the walker&rsquo;s route (numbered stops; a ring marks where it starts repeating itself) &nbsp; <span style="color:var(--muted)">- - -</span> the shortest route by riding time, for comparison. Faint lines: the rest of the network in its line colours.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <span class="mini-h">Journey</span>
+        <div class="chips" role="group" aria-label="Journey" id="wy-j"></div>
+        <div class="ctrl"><div class="top"><label for="wy-d">Lookahead d (stops)</label><output id="wy-d-o"></output></div><input type="range" id="wy-d" min="1" max="8" step="1" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="wy-out"></div><div class="k">outcome</div></div><div class="stat"><div class="v" id="wy-ex"></div><div class="k">routes imagined, in total</div></div><div class="stat"><div class="v" id="wy-st"></div><div class="k">stops ridden</div></div><div class="stat"><div class="v" id="wy-min"></div><div class="k">minutes riding (best possible)</div></div></div>
+        <p class="note" id="wy-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BFS -->
+<section class="chap" id="bfs">
+  <div class="wrap">
+    <div class="tag">Planner 1 &middot; systematic search</div>
+    <h2>Breadth-first search: the fewest stops</h2>
+    <div class="prose"><p>The greedy walker failed because it trusted a hunch (straight-line distance) and never looked back. <em class="term">Search</em> replaces the hunch with bookkeeping. Treat the network as a <b>graph</b>: stations are nodes, track segments are edges, and a plan is a path. <em class="term">Breadth-first search</em> (BFS) explores in rings: first every station one stop away, then every station two stops away, and so on, never visiting a station twice. The first ring that contains the goal tells you the fewest possible stops, and following each station back to the one it was reached from gives the route. BFS is complete (if a route exists, it finds one) and touches each station and segment at most once. <strong>Drag the slider to grow the rings</strong> one layer at a time.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} L_0 &= \{s\} \\ L_{k+1} &= \big\{\, v \notin L_0 \cup \dots \cup L_k \;: \\ &\qquad\;\; (u, v) \in E,\; u \in L_k \,\big\} \end{aligned} \]</div><div class="read"><b>Read it as:</b> layer L<sub>0</sub> is the start s. The next layer is every station that is joined by a segment to some station of the current layer and has not been reached before. A station in layer k is exactly k stops from the start, and the whole search costs time proportional to the number of stations plus the number of segments.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Layer k plus one is every new station next to a station in layer k.&rdquo;</em></div><div class="eq-run" id="run-bf"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="bf-cv" aria-label="Breadth-first layers spreading from the start station"></canvas></div><figcaption>Stations shaded by layer, darkest nearest the start; the ring around the newest layer is the search frontier. <span style="color:var(--ink)">&#9644;</span> the fewest-stops route, once the goal is reached &nbsp; <span style="color:var(--muted)">- - -</span> the quickest route by riding time.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <label class="mini-h" for="bf-a">From</label><select id="bf-a" class="qsel stn" data-def="Bond Street"></select>
+        <label class="mini-h" for="bf-b">To</label><select id="bf-b" class="qsel stn" data-def="Park Royal"></select>
+        <div class="ctrl"><div class="top"><label for="bf-k">Layers explored</label><output id="bf-k-o"></output></div><input type="range" id="bf-k" min="0" max="20" step="1" value="13"></div>
+        <div class="stats"><div class="stat"><div class="v" id="bf-n"></div><div class="k">stations reached</div></div><div class="stat"><div class="v" id="bf-h"></div><div class="k">fewest stops</div></div><div class="stat"><div class="v" id="bf-m"></div><div class="k">riding minutes on that route</div></div><div class="stat"><div class="v" id="bf-q"></div><div class="k">quickest route: minutes (stops)</div></div></div>
+        <p class="note" id="bf-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- DIJKSTRA -->
+<section class="chap" id="dijkstra">
+  <div class="wrap">
+    <div class="tag">Planner 2 &middot; cheapest first</div>
+    <h2>Dijkstra: the quickest plan</h2>
+    <div class="prose"><p>Stops are the wrong thing to count: the Metropolitan line&rsquo;s run from Finchley Road to Wembley Park takes 7 minutes without a stop, while a hop in Zone 1 often takes one or two. And changing trains costs a walk and a wait. So plan over <em class="term">states</em> that remember which line you are on, (station, line) pairs, 413 of them on this network, with two kinds of move: <b>ride</b> one segment (its timetable minutes) or <b>change line</b> at the same station (a penalty of P minutes). <em class="term">Dijkstra&rsquo;s algorithm</em> (1959) grows a set of settled states, always settling next the unsettled state with the smallest cost so far. Because every move costs at least zero, a state&rsquo;s cost is final when it is settled, and the first time a state at the goal station is settled, its cost is the quickest journey. <strong>Raise the change penalty P</strong> and watch the plan trade riding time for fewer changes.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} g(v) &\leftarrow \min\big(g(v),\; g(u) + c(u, v)\big) \\ c(u, v) &= \begin{cases} t_{uv} & \text{ride a segment} \\ P & \text{change line} \end{cases} \end{aligned} \]</div><div class="read"><b>Read it as:</b> g(v) is the cheapest known cost of reaching state v. When state u is settled, each move out of it offers v a new price, g(u) plus the move&rsquo;s cost c(u, v): the segment&rsquo;s minutes t<sub>uv</sub> for a ride, or the penalty P for a change. If the offer is cheaper, it replaces g(v). The cost of a plan is its riding minutes plus P for every change.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The cost of v becomes the smaller of its old cost and the cost of u plus the cost of the move from u to v.&rdquo;</em></div><div class="eq-run" id="run-dj"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="dj-cv" aria-label="The quickest route for the chosen change penalty"></canvas></div><figcaption>The plan in its line colours, with the stations where it changes ringed. Small grey dots: stations whose states Dijkstra settled before it reached the goal.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <label class="mini-h" for="dj-a">From</label><select id="dj-a" class="qsel stn" data-def="Angel"></select>
+        <label class="mini-h" for="dj-b">To</label><select id="dj-b" class="qsel stn" data-def="Chiswick Park"></select>
+        <div class="ctrl"><div class="top"><label for="dj-p">Change penalty P (minutes)</label><output id="dj-p-o"></output></div><input type="range" id="dj-p" min="0" max="15" step="1" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="dj-c"></div><div class="k">plan cost, minutes</div></div><div class="stat"><div class="v" id="dj-r"></div><div class="k">riding minutes</div></div><div class="stat"><div class="v" id="dj-x"></div><div class="k">changes of line</div></div><div class="stat"><div class="v" id="dj-s"></div><div class="k">states settled (of 413)</div></div></div>
+        <ol class="legs" id="dj-legs"></ol>
+        <p class="note" id="dj-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ASTAR -->
+<section class="chap" id="astar">
+  <div class="wrap">
+    <div class="tag">Planner 3 &middot; informed search</div>
+    <h2>A*: search with a sense of direction</h2>
+    <div class="prose"><p>Dijkstra spreads out evenly in every direction, so a trip from Brixton to Wembley Park also explores Upminster. <em class="term">A*</em> (Hart, Nilsson and Raphael, 1968) puts the greedy walker&rsquo;s hunch back, but safely: it settles states in order of <b>f = g + h</b>, the cost so far plus an estimate h of the cost still to come. If h never overestimates (it is <em class="term">admissible</em>), A* still returns the quickest plan, and it skips states that cannot be on it. Here h is the straight-line distance to the goal divided by the fastest speed anywhere on the network, 76.6 km/h (Epping to Theydon Bois, 2.55 km in 2 minutes), so no real journey can beat it. Multiplying h by a weight w &gt; 1 (<em class="term">weighted A*</em>) makes the search bolder: fewer states, but the plan may cost up to w times the best. <strong>Slide w from 0 (Dijkstra) through 1 (A*) to 4</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} f(n) &= g(n) + w\, h(n) \\ h(n) &= \frac{\lVert x_n - x_{\text{goal}} \rVert}{v_{\max}} \\ &\le \text{true cost to go} \end{aligned} \]</div><div class="read"><b>Read it as:</b> f(n) is the priority of state n: what it cost to get there, g(n), plus w times the estimate h(n) of what remains, the crow-flies distance from the station&rsquo;s position x<sub>n</sub> to the goal&rsquo;s, divided by the network&rsquo;s top speed. Because no train is faster than v<sub>max</sub>, h never exceeds the true remaining cost; with w = 1 the first plan found is optimal, with w = 0 A* is exactly Dijkstra.</div><div class="eq-say"><b>Say it</b><em>&ldquo;f of n is g of n plus w times h of n; h is the straight-line distance over the top speed.&rdquo;</em></div><div class="eq-run" id="run-as"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="as-cv" aria-label="States expanded by A* compared with Dijkstra"></canvas></div><figcaption><span style="color:var(--cB)">&#9679;</span> stations A* expanded at this w &nbsp; <span style="color:var(--muted)">&#9675;</span> expanded only by Dijkstra (w = 0) &nbsp; <span style="color:var(--ink)">&#9644;</span> the plan A* returns &nbsp; <span style="color:var(--muted)">- - -</span> the optimal plan, where it differs.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <label class="mini-h" for="as-a">From</label><select id="as-a" class="qsel stn" data-def="Brixton"></select>
+        <label class="mini-h" for="as-b">To</label><select id="as-b" class="qsel stn" data-def="Wembley Park"></select>
+        <div class="ctrl"><div class="top"><label for="as-w">Heuristic weight w</label><output id="as-w-o"></output></div><input type="range" id="as-w" min="0" max="4" step="0.25" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="as-e"></div><div class="k">states expanded (Dijkstra)</div></div><div class="stat"><div class="v" id="as-c"></div><div class="k">plan cost (optimal), minutes</div></div><div class="stat"><div class="v" id="as-g"></div><div class="k">over 2,000 random trips: mean states expanded</div></div><div class="stat"><div class="v" id="as-sub"></div><div class="k">of those trips, plans worse than optimal</div></div></div>
+        <p class="note" id="as-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- DECOMPOSE -->
+<section class="chap" id="decompose">
+  <div class="wrap">
+    <div class="tag">Breaking a goal down</div>
+    <h2>Task decomposition: errands into legs</h2>
+    <div class="prose"><p>Real tasks are rarely one search. &ldquo;Visit the museums, the Tower, Camden Market and Greenwich today, then go home&rdquo; is a goal that an agent first breaks into <em class="term">sub-goals</em> (the stops), then decides their order, then plans each leg with a search like the ones above. That is <em class="term">hierarchical</em> planning, and it is how LLM agents are usually prompted to work (&ldquo;first list the steps, then do each one&rdquo;; Wei et al., 2022; Wang et al., 2023). The top level is where the big wins and the big costs are: with n stops there are n! orders, so 5 stops give 120 tours and 10 stops 3.6 million. <strong>Pick the stops</strong> and compare the order you listed, the &ldquo;nearest next&rdquo; habit, and the best of every order.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{cost}(\pi) &= \sum_{i=0}^{n-1} D\big(s_{\pi(i)},\, s_{\pi(i+1)}\big) \\ &\quad \big[\, + D(s_{\pi(n)}, s_0) \,\big] \\ \#\text{orders} &= n! \end{aligned} \]</div><div class="read"><b>Read it as:</b> s<sub>0</sub> is home and s<sub>1</sub> &hellip; s<sub>n</sub> the stops; an order &pi; visits them as s<sub>&pi;(1)</sub>, s<sub>&pi;(2)</sub>, &hellip; with &pi;(0) = 0 for home. D(a, b) is the quickest journey between two places (Dijkstra, with a 5-minute change penalty), so the low level is solved once per pair of places and the high level is a search over orders. The bracket is added when the tour returns home.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The cost of an order is the sum of the quickest journeys between consecutive stops; there are n factorial orders.&rdquo;</em></div><div class="eq-run" id="run-dc"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="dc-cv" aria-label="The errand tour on the map"></canvas></div><figcaption>&#9733; home; numbered rings: the stops in the order of the chosen plan, each leg drawn in its line colours.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <label class="mini-h" for="dc-h">Home</label><select id="dc-h" class="qsel stn" data-def="Waterloo"></select>
+        <span class="mini-h">Stops (in the order you list them, up to 7)</span>
+        <div class="chips" id="dc-chips"></div>
+        <div class="seg" role="group" aria-label="Which order"><button type="button" data-dco="listed">As listed</button><button type="button" data-dco="greedy">Nearest next</button><button type="button" data-dco="best" aria-pressed="true">Best of all</button></div>
+        <div class="seg" role="group" aria-label="Return home"><button type="button" data-dcr="1" aria-pressed="true">Return home</button><button type="button" data-dcr="0">End at last stop</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="dc-l"></div><div class="k">as listed, minutes</div></div><div class="stat"><div class="v" id="dc-g"></div><div class="k">nearest next</div></div><div class="stat"><div class="v" id="dc-b"></div><div class="k">best of all orders</div></div><div class="stat"><div class="v" id="dc-n"></div><div class="k">orders checked</div></div></div>
+        <p class="note" id="dc-say"></p>
+      </div></div>
+    </div>
+    <div class="plan-tree block" id="dc-tree"></div>
+  </div>
+</section>
+
+<!-- REACT -->
+<section class="chap" id="react">
+  <div class="wrap">
+    <div class="tag">Reasoning with tools</div>
+    <h2>ReAct: think, act, observe</h2>
+    <div class="prose"><p>Everything so far planned from a map the agent already held. A language model&rsquo;s &ldquo;map&rdquo; is what it absorbed in training, and the world has moved on since: today, say, the Victoria line is suspended through central London. <em class="term">ReAct</em> (Yao et al., 2023) interleaves <b>reasoning</b> with <b>acting</b>: the model writes a thought, chooses an action (a tool call), reads the observation the tool returns, and repeats, so each thought is grounded in what it has just seen. In the paper, reasoning alone (chain of thought) often hallucinated facts, acting alone lost track of what it was doing, and the interleaved loop hallucinated less than the first and clearly beat the second on interactive tasks in simulated worlds (ALFWorld, WebShop). The agent below is <b>transparent</b>: its thoughts come from a few hand-written rules standing in for the model, but its tools are real: <span class="mono">status()</span> reads today&rsquo;s closures, <span class="mono">plan_route()</span> runs the A* search above, and <span class="mono">ride()</span> moves through the network as it is today. <strong>Step through it, then switch to &ldquo;Reason only&rdquo;</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} c_t &= \big(x,\; \tau_1, a_1, o_1,\; \dots, \\ &\qquad\; \tau_{t-1}, a_{t-1}, o_{t-1}\big) \\ (\tau_t, a_t) &\sim \pi(\,\cdot \mid c_t) \\ o_t &= \text{env}(a_t) \end{aligned} \]</div><div class="read"><b>Read it as:</b> x is the task, &tau; a thought, a an action and o the observation it produced. At turn t the model sees the whole context c<sub>t</sub> (the task and every earlier thought, action and observation) and produces the next thought and action; the environment, not the model, produces the observation. Each turn adds to c, so long tasks fill the context window: one reason the next chapter is about memory.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The context is the task plus every thought, action and observation so far; the policy picks the next thought and action from it; the world returns the observation.&rdquo;</em></div><div class="eq-run" id="run-ra"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="ra-cv" aria-label="The agent's journey and today's closures"></canvas></div><figcaption><span style="color:var(--qda)">&#10005;</span> closed segments (announced on the status board) &nbsp; <span style="color:var(--qda)">&#9679;</span> an unannounced signal failure, once discovered &nbsp; coloured: the route travelled so far &nbsp; <span style="color:var(--muted)">- - -</span> the plan from memory.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Agent"><button type="button" data-ram="react" aria-pressed="true">ReAct</button><button type="button" data-ram="reason">Reason only</button></div>
+        <span class="mini-h">Journey</span>
+        <div class="chips" role="group" aria-label="Journey" id="ra-j"></div>
+        <label class="mini-h" for="ra-sc">Today&rsquo;s disruption (invented)</label><select id="ra-sc" class="qsel"></select>
+        <div class="seg" role="group" aria-label="Signal failure"><button type="button" data-ras="0">No surprises</button><button type="button" data-ras="1" aria-pressed="true">Plus a signal failure</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="ra-step">Next step</button><button type="button" class="btn" id="ra-all">Run to the end</button><button type="button" class="btn" id="ra-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ra-t"></div><div class="k">model turns (thoughts)</div></div><div class="stat"><div class="v" id="ra-a"></div><div class="k">tool calls</div></div><div class="stat"><div class="v" id="ra-w"></div><div class="k">words in the context</div></div><div class="stat"><div class="v" id="ra-o"></div><div class="k">outcome</div></div></div>
+        <p class="note" id="ra-say"></p>
+      </div></div>
+    </div>
+    <ol class="rtrace block" id="ra-trace" aria-live="polite"></ol>
+  </div>
+</section>
+
+<!-- REPLAN -->
+<section class="chap" id="replan">
+  <div class="wrap">
+    <div class="tag">When a step fails</div>
+    <h2>Plan, execute, re-plan</h2>
+    <div class="prose"><p>ReAct thinks before every action. That is flexible but expensive: each thought is a model call, with the whole growing context as input. The <em class="term">plan-and-execute</em> pattern (Wang et al., 2023; Xu et al., 2023) separates the two: a planner writes the whole plan once, a cheap executor carries it out step by step, and the planner is called again only when a step fails. Which is better depends on how often the world surprises you. Below, each segment of the network is closed independently with probability p, and nobody announces it: an agent finds out only when it reaches the platform. Three agents make the same 300 random journeys. <strong>Raise p</strong>, and step through single journeys to see each agent&rsquo;s choices.</p></div>
+    <div class="eq"><div class="m">\[ \begin{gathered} \Pr[\text{plan survives}] = (1 - p)^{L} \\ \text{calls} \approx \begin{cases} 1 & \text{plan once} \\ 1 + F & \text{re-plan} \\ L & \text{every stop} \end{cases} \end{gathered} \]</div><div class="read"><b>Read it as:</b> if each of the L segments of a plan is closed with probability p, independently, the whole plan works only if every one is open. F is the number of failures met on the way; when re-planning, each costs one more call to the planner. An agent that thinks again at every station pays one call per segment it rides, whether or not anything has changed.</div><div class="eq-say"><b>Say it</b><em>&ldquo;A plan of L steps survives with probability one minus p, to the power L.&rdquo;</em></div><div class="eq-run" id="run-rp"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="rp-cv" aria-label="One journey with hidden closures"></canvas></div><figcaption id="rp-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="rp-p">Chance a segment is closed, p</label><output id="rp-p-o"></output></div><input type="range" id="rp-p" min="0" max="0.12" step="0.01" value="0.03"></div>
+        <span class="mini-h">Agent shown on the map</span><div class="chips" role="group" aria-label="Agent shown on the map"><button type="button" data-rps="once" aria-pressed="false">Plan once</button><button type="button" data-rps="replan" aria-pressed="true">Re-plan on failure</button><button type="button" data-rps="every" aria-pressed="false">Think every stop</button></div>
+        <div class="btns"><button type="button" class="btn" id="rp-prev">&larr; Previous journey</button><button type="button" class="btn" id="rp-next">Next journey &rarr;</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="rp-ok"></div><div class="k">this journey: outcome</div></div><div class="stat"><div class="v" id="rp-c"></div><div class="k">this journey: model calls</div></div></div>
+        <p class="note" id="rp-say"></p>
+      </div></div>
+    </div>
+    <div class="tbl-wrap block"><table class="hand race" id="rp-board"></table></div>
+  </div>
+</section>
+
+<!-- REFLECT -->
+<section class="chap" id="reflect">
+  <div class="wrap">
+    <div class="tag">Trying again, wiser</div>
+    <h2>Reflection: learning from a failed attempt</h2>
+    <div class="prose"><p>Some agents cannot recover in the middle of a task: a failed step ends the attempt, and all they can do is try again. Retrying blindly helps only if the next attempt is different. <em class="term">Reflexion</em> (Shinn et al., 2023) adds a step between attempts: the agent looks at what went wrong, writes a short lesson in plain words (&ldquo;the Central line is not running between Bank and St. Paul&rsquo;s; avoid it&rdquo;), and keeps the lessons in a memory that goes into the prompt of the next attempt. No weights change; the agent improves by <b>remembering its own feedback</b>. Here the closures stay put from one attempt to the next, and the planner is noisy, like a model sampling at a temperature T: each attempt, every segment&rsquo;s time is multiplied by a random factor between 1 and 1 + T. <strong>Set T to 0</strong> and see why blind retries are only worth something when attempts differ.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} P_k &= 1 - (1 - q)^{k} \\ M_{k+1} &= M_k \cup \{\ell_k\} \end{aligned} \]</div><div class="read"><b>Read it as:</b> if every attempt succeeded independently with probability q, the chance P<sub>k</sub> of at least one success in k attempts would be one minus the chance that all k fail. Real retries are not independent: the same agent makes the same mistake again. Reflection breaks the pattern: after failed attempt k, the lesson &#8467;<sub>k</sub> is added to the memory M, and every later plan must respect all the lessons so far.</div><div class="eq-say"><b>Say it</b><em>&ldquo;With independent tries, P-k, the chance of success within k tries, is one minus one-minus-q to the k; with reflection the memory grows by one lesson per failure.&rdquo;</em></div><div class="eq-run" id="run-rf"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="rf-cv" aria-label="Share of journeys solved within k attempts"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> reflect and retry &nbsp; <span style="color:var(--cB)">&#9644;</span> retry without memory &nbsp; <span style="color:var(--muted)">- - -</span> what independent retries would give, 1 &minus; (1 &minus; q)<sup>k</sup>. Every possible journey of 300 random ones, with segments closed at p = 0.03.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="rf-t">Planner temperature T</label><output id="rf-t-o"></output></div><input type="range" id="rf-t" min="0" max="1.5" step="0.1" value="0.3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="rf-1"></div><div class="k">solved at the first try</div></div><div class="stat"><div class="v" id="rf-m"></div><div class="k">within 3 tries, with reflection</div></div><div class="stat"><div class="v" id="rf-n"></div><div class="k">within 3 tries, without memory</div></div><div class="stat"><div class="v" id="rf-avg"></div><div class="k">mean tries to solve, with reflection</div></div></div>
+        <p class="note" id="rf-say"></p>
+      </div></div>
+    </div>
+    <h3>One journey, attempt by attempt</h3>
+    <div class="btns block"><button type="button" class="btn" id="rf-prev">&larr; Previous journey</button><button type="button" class="btn" id="rf-next">Next journey &rarr;</button><div class="seg" role="group" aria-label="Agent in the table"><button type="button" data-rfk="mem" aria-pressed="true">With reflection</button><button type="button" data-rfk="none">Without memory</button></div></div>
+    <div class="tbl-wrap block"><table class="hand trace" id="rf-tbl"></table></div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: a journey-planning agent for the London Underground</h2>
+    <div class="prose">
+      <p>Every lab on this page runs on a real network: the station and track tables behind Wikimedia Commons&rsquo; <em>London Underground geographic maps</em> (station positions from public-domain GPS data), with a running time in whole minutes for each segment, as packaged in Nicola Greco&rsquo;s open <span class="mono">tubemaps</span> dataset (2014). It covers <strong>302 stations, 406 segments and 13 lines</strong>: the Underground, the Docklands Light Railway and the old East London line, as the network stood in the mid-2000s, before the Overground, Heathrow Terminal 5 and the Elizabeth line. Two misspelt station names in the source (&ldquo;Picadilly Circus&rdquo;, &ldquo;Harrow &amp; Wealdston&rdquo;) are corrected; nothing else is changed. Running times are the dataset&rsquo;s, not today&rsquo;s timetable, and changes of line are a flat penalty rather than real walking times. The disruptions are invented.</p>
+      <p>The agent puts the chapter together: it checks the status board (ReAct), plans with A* over (station, line) states, executes leg by leg, and re-plans when a segment it meets turns out to be closed.</p>
+    </div>
+
+    <h3>1 &middot; Send the agent on a journey</h3>
+    <div class="pj-form block">
+      <div><label class="mini-h" for="pj-a">From</label><select id="pj-a" class="qsel stn" data-def="Oxford Circus"></select></div>
+      <div><label class="mini-h" for="pj-b">To</label><select id="pj-b" class="qsel stn" data-def="Stratford"></select></div>
+      <div><label class="mini-h" for="pj-sc">Disruption (invented)</label><select id="pj-sc" class="qsel"></select></div>
+      <div><div class="ctrl"><div class="top"><label for="pj-p">Change penalty P</label><output id="pj-p-o"></output></div><input type="range" id="pj-p" min="0" max="10" step="1" value="5"></div></div>
+    </div>
+    <div class="btns block"><div class="seg" role="group" aria-label="Signal failure"><button type="button" data-pjs="0">No surprises</button><button type="button" data-pjs="1" aria-pressed="true">Plus a signal failure</button></div><button type="button" class="btn primary" id="pj-go">Run the agent</button></div>
+    <div class="answer block" id="pj-ans" style="max-width:860px"></div>
+    <div class="two block">
+      <figure><div class="plot ar-16x10"><canvas id="pj-cv" aria-label="The agent's journey"></canvas></div><figcaption>Coloured: the route the agent travelled &nbsp; <span style="color:var(--muted)">- - -</span> its first plan &nbsp; <span style="color:var(--qda)">&#10005;</span> closures &nbsp; <span style="color:var(--qda)">&#9679;</span> the signal failure it met.</figcaption></figure>
+      <div class="tbl-wrap"><table class="hand trace" id="pj-trace"></table></div>
+    </div>
+
+    <h3>2 &middot; The scoreboard</h3>
+    <div class="btns block"><button type="button" class="btn primary" id="pj-eval">Recompute everything</button><span class="note" id="pj-prog" style="align-self:center"></span></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-board"></table></div>
+    <p class="note block" style="max-width:72ch" id="pj-say"></p>
+
+    <h3>The same numbers in Python</h3>
+<pre class="code"><code>import json, heapq, math, itertools
+import numpy as np
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import dijkstra, shortest_path
+
+D = json.load(open("rp-data.json", encoding="utf8"))
+ST, ED = D["st"], D["ed"]; NS, NE = len(ST), len(ED)
+lines = [set() for _ in ST]
+for a, b, l, t in ED: lines[a].add(l); lines[b].add(l)
+sSt, sLn, stS = [], [], []                        # states = (station, line) pairs
+for i in range(NS):
+    m = {}
+    for l in sorted(lines[i]): m[l] = len(sSt); sSt.append(i); sLn.append(l)
+    stS.append(m)
+sAdj = [[] for _ in sSt]
+for e, (a, b, l, t) in enumerate(ED):
+    u, v = stS[a][l], stS[b][l]; sAdj[u].append((v, t, e)); sAdj[v].append((u, t, e))
+for L in sAdj: L.sort(key=lambda x: (x[0], x[2]))
+def dist(i, j):                                 # the same float operations as the page
+    dx = ST[i][1] - ST[j][1]; dy = ST[i][2] - ST[j][2]; return math.sqrt(dx * dx + dy * dy)
+VMAX = max(dist(a, b) / t for a, b, l, t in ED); HK = 1 / VMAX
+starts_at = lambda u, line, P: [(s, 0 if line is None or l == line else P) for l, s in sorted(stS[u].items())]
+
+def search(starts, goal, P, w=0.0, avoid=None, noise=None):
+    """A* over (station, line) states; w = 0 is Dijkstra. Ties broken by state id."""
+    S = len(sSt); g = [math.inf] * S; par = [-1] * S; pe = [-2] * S; done = [False] * S; H = []
+    h = (lambda s: w * (dist(sSt[s], goal) * HK)) if w else (lambda s: 0)
+    for s, g0 in starts:
+        if g0 &lt; g[s]: g[s] = g0; pe[s] = -1; heapq.heappush(H, (g0 + h(s), s))
+    exp, end = 0, -1
+    while H:
+        _, u = heapq.heappop(H)
+        if done[u]: continue
+        done[u] = True; exp += 1
+        if sSt[u] == goal: end = u; break
+        for v, t, e in sAdj[u]:
+            if avoid is not None and avoid[e]: continue
+            gv = g[u] + (t * noise[e] if noise is not None else t)
+            if gv &lt; g[v]: g[v] = gv; par[v] = u; pe[v] = e; heapq.heappush(H, (gv + h(v), v))
+        for l, v in sorted(stS[sSt[u]].items()):
+            if v != u and g[u] + P &lt; g[v]: g[v] = g[u] + P; par[v] = u; pe[v] = -1; heapq.heappush(H, (g[v] + h(v), v))
+    if end &lt; 0: return dict(cost=math.inf, path=[], edges=[], exp=exp, g0=0)
+    path, edges, s = [], [], end
+    while s &gt;= 0: path.append(s); edges.append(pe[s]); s = par[s]
+    path.reverse(); edges.reverse()
+    return dict(cost=g[end], path=path, edges=edges[1:], exp=exp, g0=g[path[0]])
+plan = lambda a, b, P, w=0.0, avoid=None: search(starts_at(a, None, P), b, P, w, avoid)
+
+def execute(r, closed, P):
+    m = r["g0"]
+    for k, e in enumerate(r["edges"]):
+        if e &gt;= 0 and closed[e]: return dict(ok=False, at=r["path"][k], e=e, min=m)
+        m += P if e &lt; 0 else ED[e][3]
+    return dict(ok=True, at=r["path"][-1], min=m)
+
+def run_strategy(kind, a, b, closed, P):
+    known = [0] * NE; calls = mins = fails = 0; starts = starts_at(a, None, P)
+    if kind == "once":
+        x = execute(search(starts, b, P), closed, P); return dict(ok=x["ok"], min=x["min"], calls=1, gave_up=False)
+    for _ in range(400):
+        u = sSt[next(s for s, g0 in starts if g0 == 0)]
+        if kind == "every":                         # read the departure boards at this station
+            for s in stS[u].values():
+                for _, _, e in sAdj[s]:
+                    if closed[e]: known[e] = 1
+        calls += 1; r = search(starts, b, P, avoid=known)
+        if r["cost"] == math.inf: return dict(ok=False, min=mins, calls=calls, gave_up=True)
+        if kind == "replan":
+            x = execute(r, closed, P); mins += x["min"]
+            if x["ok"]: return dict(ok=True, min=mins, calls=calls, gave_up=False)
+            fails += 1; known[x["e"]] = 1; starts = starts_at(sSt[x["at"]], sLn[x["at"]], P)
+        else:                                       # every: one ride, then think again
+            mins += r["g0"]; k = 0
+            while r["edges"][k] &lt; 0: mins += P; k += 1
+            e = r["edges"][k]
+            if closed[e]: fails += 1; known[e] = 1; continue
+            mins += ED[e][3]; s = r["path"][k + 1]
+            if sSt[s] == b: return dict(ok=True, min=mins, calls=calls, gave_up=False)
+            starts = starts_at(sSt[s], sLn[s], P)
+
+def mulberry32(a):                                  # the page's random numbers, bit for bit
+    st = [a &amp; 0xFFFFFFFF]
+    def r():
+        st[0] = (st[0] + 0x6D2B79F5) &amp; 0xFFFFFFFF; t = st[0]
+        t = ((t ^ (t &gt;&gt; 15)) * (1 | t)) &amp; 0xFFFFFFFF
+        t = ((t + (((t ^ (t &gt;&gt; 7)) * (61 | t)) &amp; 0xFFFFFFFF)) &amp; 0xFFFFFFFF) ^ t
+        return ((t ^ (t &gt;&gt; 14)) &amp; 0xFFFFFFFF) / 4294967296
+    return r
+def draw_task(r, p):
+    a = math.floor(r() * NS); b = math.floor(r() * NS)
+    while b == a: b = math.floor(r() * NS)
+    return a, b, [1 if r() &lt; p else 0 for _ in range(NE)]
+
+P = 5
+# 1. every pair of stations: scipy on the station graph (P = 0) against our search over states
+W = {}
+for a, b, l, t in ED: W[(a, b)] = min(t, W.get((a, b), 99)); W[(b, a)] = W[(a, b)]
+A = coo_matrix(([t for t in W.values()], ([k[0] for k in W], [k[1] for k in W])), shape=(NS, NS)).tocsr()
+T0 = dijkstra(A, directed=True); hops = shortest_path(A, unweighted=True)
+off = ~np.eye(NS, dtype=bool)
+print(f"stations {NS}, segments {NE}, states {len(sSt)}, v_max {VMAX * 60:.4f} km/h")
+print(f"P = 0 (scipy): mean quickest {T0[off].mean():.4f} min, longest {T0.max():.0f} min; mean fewest stops {hops[off].mean():.4f}, most {hops.max():.0f}")
+def all_from(a, P):
+    g = [math.inf] * len(sSt); H = [(0, s) for s, _ in starts_at(a, None, P)]; done = [False] * len(sSt)
+    for _, s in H: g[s] = 0
+    heapq.heapify(H)
+    while H:
+        _, u = heapq.heappop(H)
+        if done[u]: continue
+        done[u] = True
+        for v, t, e in sAdj[u]:
+            if g[u] + t &lt; g[v]: g[v] = g[u] + t; heapq.heappush(H, (g[v], v))
+        for v in stS[sSt[u]].values():
+            if v != u and g[u] + P &lt; g[v]: g[v] = g[u] + P; heapq.heappush(H, (g[v], v))
+    best = [math.inf] * NS
+    for s in range(len(sSt)): best[sSt[s]] = min(best[sSt[s]], g[s])
+    return best
+T5 = np.array([all_from(a, P) for a in range(NS)]); T0s = np.array([all_from(a, 0) for a in range(NS)])
+i, j = np.unravel_index(T5.argmax(), T5.shape)
+print(f"P = 0 (our search) equals scipy for every pair: {np.array_equal(T0s, T0)}")
+print(f"P = 5: mean quickest {T5[off].mean():.4f} min; longest {T5.max():.0f} min, {ST[i][0]} to {ST[j][0]}")
+
+# 2. Dijkstra against A* on 2,000 random trips
+r = mulberry32(7); pairs = []
+for _ in range(2000):
+    a = math.floor(r() * NS); b = math.floor(r() * NS)
+    while b == a: b = math.floor(r() * NS)
+    pairs.append((a, b))
+for w in (0, 1, 2):
+    res = [(plan(a, b, P, w), plan(a, b, P)) for a, b in pairs]
+    print(f"w = {w}: mean states expanded {np.mean([x['exp'] for x, _ in res]):.4f}, worse than optimal {sum(x['cost'] &gt; y['cost'] + 1e-9 for x, y in res)}")
+
+# 3. a worked example and the errand
+sid = lambda n: next(k for k, s in enumerate(ST) if s[0] == n)
+print(f"Brixton to Wembley Park: optimal {plan(sid('Brixton'), sid('Wembley Park'), P)['cost']:.0f} min, weighted A* (w = 2) {plan(sid('Brixton'), sid('Wembley Park'), P, 2)['cost']:.0f} min")
+stops = [sid(n) for n in ("Baker Street", "Tower Hill", "South Kensington", "Camden Town", "Cutty Sark")]; home = sid("Waterloo")
+Mx = [[all_from(x, P)[y] for y in [home] + stops] for x in [home] + stops]
+tour = lambda o: sum(Mx[u][v] for u, v in zip((0,) + tuple(i + 1 for i in o), tuple(i + 1 for i in o) + (0,)))
+best = min(itertools.permutations(range(5)), key=tour)
+print(f"errand: as listed {tour(range(5)):.0f} min, best {tour(best):.0f} min, order {[ST[stops[i]][0] for i in best]}")
+
+# 4. three agents on the same 300 journeys, segments closed with p = 0.03
+r = mulberry32(2026); rows = {k: [] for k in ("once", "replan", "every")}; oracle = []
+for _ in range(300):
+    a, b, closed = draw_task(r, 0.03); oracle.append(search(starts_at(a, None, P), b, P, avoid=closed)["cost"])
+    for k in rows: rows[k].append(run_strategy(k, a, b, closed, P))
+feas = np.isfinite(oracle)
+print(f"p = 0.03: {feas.sum()} of 300 journeys possible")
+for k, R in rows.items():
+    ok = [x["ok"] for x in R]; extra = [x["min"] - o for x, o in zip(R, oracle) if x["ok"]]
+    print(f"  {k:6s}: reached {sum(ok)}, said 'no route' correctly {sum(x['gave_up'] for x, f in zip(R, feas) if not f)}, extra {np.mean(extra):.4f} min, calls {np.mean([x['calls'] for x in R]):.4f}")
+
+# 5. retries with and without reflection, temperature 0.3, up to 8 attempts
+r = mulberry32(11); solved = {"none": [], "mem": []}
+for _ in range(300):
+    a, b, closed = draw_task(r, 0.03); noise = [[1 + 0.3 * r() for _ in range(NE)] for _ in range(8)]
+    if search(starts_at(a, None, P), b, P, avoid=closed)["cost"] == math.inf: continue
+    for kind in solved:
+        memo = [0] * NE; s = 0
+        for k in range(8):
+            x = execute(search(starts_at(a, None, P), b, P, avoid=memo if kind == "mem" else None, noise=noise[k]), closed, P)
+            if x["ok"]: s = k + 1; break
+            if kind == "mem": memo[x["e"]] = 1
+        solved[kind].append(s)
+for kind, s in solved.items():
+    s = np.array(s); print(f"  {kind:4s}: solved within k = 1..8 tries: {' '.join(f'{np.mean((s &gt; 0) &amp; (s &lt;= k)):.4f}' for k in range(1, 9))}")</code></pre>
+<pre class="code out"><code>stations 302, segments 406, states 413, v_max 76.6414 km/h
+P = 0 (scipy): mean quickest 33.5148 min, longest 108 min; mean fewest stops 14.0985, most 38
+P = 0 (our search) equals scipy for every pair: True
+P = 5: mean quickest 41.1073 min; longest 120 min, Chesham to Upminster
+w = 0: mean states expanded 220.2355, worse than optimal 0
+w = 1: mean states expanded 162.5220, worse than optimal 0
+w = 2: mean states expanded 104.1195, worse than optimal 10
+Brixton to Wembley Park: optimal 38 min, weighted A* (w = 2) 40 min
+errand: as listed 143 min, best 130 min, order ['Camden Town', 'Baker Street', 'South Kensington', 'Tower Hill', 'Cutty Sark']
+p = 0.03: 257 of 300 journeys possible
+  once  : reached 178, said 'no route' correctly 0, extra 0.0000 min, calls 1.0000
+  replan: reached 257, said 'no route' correctly 43, extra 3.9339 min, calls 1.5467
+  every : reached 257, said 'no route' correctly 43, extra 3.4903 min, calls 16.3300
+  none: solved within k = 1..8 tries: 0.6728 0.6838 0.6912 0.6949 0.6949 0.6949 0.6949 0.6985
+  mem : solved within k = 1..8 tries: 0.6728 0.9118 0.9779 0.9963 0.9963 1.0000 1.0000 1.0000</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Reasoning is imagining before acting: a greedy step that looks good now can trap an agent for ever, and looking further ahead costs about b<sup>d</sup> imagined futures.</li>
+      <li>Planning is search over states: BFS finds the fewest steps, Dijkstra the cheapest plan, and A* the cheapest plan faster, as long as its estimate of the cost to go never overestimates.</li>
+      <li>Decompose big goals: choose the order of sub-goals at the top level (n! orders, so search or heuristics), and solve each leg with an ordinary planner.</li>
+      <li>ReAct grounds each thought in a fresh observation; reasoning from memory alone is fluent, confident and can be wrong about today&rsquo;s world.</li>
+      <li>Plan once and re-plan on failure to save model calls; think at every step only when every step brings news; and keep lessons from failures so the next attempt is not a repeat of the last.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why does the greedy walker from Belsize Park need a lookahead of 8 stops before it ever reaches Finchley Road?</summary><p>Every route of fewer than 8 stops that it can imagine ends further from Finchley Road than Hampstead does, so each step it takes heads to Hampstead, and from Hampstead back. Only when the lookahead is long enough to contain the goal itself (8 stops, via King&rsquo;s Cross and Baker Street) does an imagined route score better. A hunch that ignores the shape of the network is not a plan.</p></details>
+      <details class="q"><summary>BFS and Dijkstra both find &ldquo;shortest&rdquo; routes. When do they disagree, and why?</summary><p>BFS minimises the number of stops; Dijkstra minimises total cost (riding minutes plus change penalties). They disagree whenever a route with more stops is quicker, for example several short central hops against a few long suburban ones. On a graph where every move costs the same, Dijkstra settles states in the same order as BFS.</p></details>
+      <details class="q"><summary>Why must A*&rsquo;s heuristic divide the distance by the network&rsquo;s fastest speed, not its average speed?</summary><p>To be admissible it must never overestimate the remaining cost. Dividing by the average speed would overestimate on fast stretches (an express run out to Epping), and A* could then settle the goal before finding a quicker route. Dividing by the maximum speed guarantees an underestimate, at the price of a weaker hint and less pruning.</p></details>
+      <details class="q"><summary>A plan has 20 steps and each fails independently with probability 0.05. How likely is it to run without a hitch, and what does that suggest?</summary><p>(1 &minus; 0.05)<sup>20</sup> &asymp; 0.36, so about two plans in three meet at least one failure. Long plans in an uncertain world need monitoring and re-planning (or shorter horizons), not just a good initial plan.</p></details>
+      <details class="q"><summary>With temperature 0, retrying without memory never helps. Why does reflection still help?</summary><p>At temperature 0 the planner is deterministic, so every retry produces the identical plan and fails at the identical place. Reflection changes the input of the next attempt (the lesson &ldquo;avoid this segment&rdquo; goes into memory), so the next plan is different, even though the planner itself has not changed.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../agent-memory/">Next chapter: Memory for Agents &rarr;</a>
+      <a class="btn" href="../tool-use/">&larr; Previous: Tool Use &amp; Function Calling</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Russell, S. &amp; Norvig, P. (2021). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed. Pearson, ch. 3 (search) and ch. 11 (planning).</li>
+      <li>Dijkstra, E. W. (1959). A note on two problems in connexion with graphs. <em>Numerische Mathematik</em> 1: 269&ndash;271.</li>
+      <li>Hart, P. E., Nilsson, N. J. &amp; Raphael, B. (1968). A formal basis for the heuristic determination of minimum cost paths. <em>IEEE Transactions on Systems Science and Cybernetics</em> 4(2): 100&ndash;107.</li>
+      <li>Pohl, I. (1970). Heuristic search viewed as path finding in a graph. <em>Artificial Intelligence</em> 1(3&ndash;4): 193&ndash;204 (weighted A*).</li>
+      <li>Wei, J. et al. (2022). Chain-of-thought prompting elicits reasoning in large language models. <em>Advances in Neural Information Processing Systems</em> 35.</li>
+      <li>Yao, S. et al. (2023). ReAct: synergizing reasoning and acting in language models. <em>Proc. ICLR 2023</em>.</li>
+      <li>Wang, L. et al. (2023). Plan-and-solve prompting: improving zero-shot chain-of-thought reasoning by large language models. <em>Proc. ACL 2023</em>.</li>
+      <li>Xu, B. et al. (2023). ReWOO: decoupling reasoning from observations for efficient augmented language models. arXiv:2305.18323.</li>
+      <li>Shinn, N. et al. (2023). Reflexion: language agents with verbal reinforcement learning. <em>Advances in Neural Information Processing Systems</em> 36.</li>
+      <li>Yao, S. et al. (2023). Tree of thoughts: deliberate problem solving with large language models. <em>Advances in Neural Information Processing Systems</em> 36.</li>
+      <li>Wikimedia Commons. London Underground geographic maps/CSV (station and line tables); Greco, N. (2014). <em>tubemaps</em>: London stations, lines and connections with running times, github.com/nicola/tubemaps.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated. Network data from Wikimedia Commons and the tubemaps dataset; all disruptions are invented.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- planning core: the network, search, agents (mirrored line for line by rp-ref.py) ---------- */
+const RPC = (function () {
+  let ST, LN, ED, NS, NE, sSt, sLn, sAdj, stStates, nb, VMAX, HK;
+  function rng32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function dist(i, j) { const dx = ST[i][1] - ST[j][1], dy = ST[i][2] - ST[j][2]; return Math.sqrt(dx * dx + dy * dy); }
+  function init(D) {
+    ST = D.st; LN = D.ln; ED = D.ed; NS = ST.length; NE = ED.length;
+    // states = (station, line) pairs, ordered by station then line
+    const lines = ST.map(() => new Set()); ED.forEach(([a, b, l]) => { lines[a].add(l); lines[b].add(l); });
+    sSt = []; sLn = []; stStates = [];
+    for (let i = 0; i < NS; i++) { const ls = [...lines[i]].sort((p, q) => p - q), m = {}; ls.forEach(l => { m[l] = sSt.length; sSt.push(i); sLn.push(l); }); stStates.push(m); }
+    sAdj = sSt.map(() => []);
+    ED.forEach(([a, b, l, t], e) => { const u = stStates[a][l], v = stStates[b][l]; sAdj[u].push([v, t, e]); sAdj[v].push([u, t, e]); });
+    sAdj.forEach(L => L.sort((p, q) => p[0] - q[0] || p[2] - q[2]));
+    nb = ST.map(() => new Map());
+    ED.forEach(([a, b, l, t]) => { nb[a].set(b, Math.min(t, nb[a].get(b) ?? 1e9)); nb[b].set(a, Math.min(t, nb[b].get(a) ?? 1e9)); });
+    nb = nb.map(m => [...m.entries()].sort((p, q) => p[0] - q[0]));
+    VMAX = 0; ED.forEach(([a, b, , t]) => { VMAX = Math.max(VMAX, dist(a, b) / t); });
+    HK = 1 / VMAX;
+  }
+  /* binary heap keyed on (f, id) */
+  function less(a, b) { return a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]); }
+  function hpush(H, x) { H.push(x); let i = H.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (less(H[i], H[p])) { [H[i], H[p]] = [H[p], H[i]]; i = p; } else break; } }
+  function hpop(H) { const top = H[0], last = H.pop(); if (H.length) { H[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < H.length && less(H[l], H[m])) m = l; if (r < H.length && less(H[r], H[m])) m = r; if (m === i) break; [H[i], H[m]] = [H[m], H[i]]; i = m; } } return top; }
+  const startsAt = (u, line, P) => Object.entries(stStates[u]).map(([l, s]) => [s, line == null || +l === line ? 0 : P]);
+  /* A* over (station, line) states.  o: { starts: [[state, g0]], goal, w (0 = Dijkstra), P, avoid (Uint8Array|null), noise (Float64Array|null), trace } */
+  function search(o) {
+    const S = sSt.length, g = new Float64Array(S).fill(Infinity), par = new Int32Array(S).fill(-1), pe = new Int32Array(S).fill(-2), done = new Uint8Array(S);
+    const w = o.w || 0, P = o.P || 0, goal = o.goal, H = [], order = o.trace ? [] : null;
+    const h = s => w ? w * (dist(sSt[s], goal) * HK) : 0;
+    for (const [s, g0] of o.starts) if (g0 < g[s]) { g[s] = g0; pe[s] = -1; hpush(H, [g0 + h(s), s]); }
+    let exp = 0, end = -1;
+    while (H.length) {
+      const [, u] = hpop(H); if (done[u]) continue; done[u] = 1; exp++; if (order) order.push(u);
+      if (sSt[u] === goal) { end = u; break; }
+      for (const [v, t, e] of sAdj[u]) {
+        if (o.avoid && o.avoid[e]) continue;
+        const gv = g[u] + (o.noise ? t * o.noise[e] : t);
+        if (gv < g[v]) { g[v] = gv; par[v] = u; pe[v] = e; hpush(H, [gv + h(v), v]); }
+      }
+      const m = stStates[sSt[u]];
+      for (const l in m) { const v = m[l]; if (v === u) continue; const gv = g[u] + P; if (gv < g[v]) { g[v] = gv; par[v] = u; pe[v] = -1; hpush(H, [gv + h(v), v]); } }
+    }
+    if (end < 0) return { cost: Infinity, path: [], edges: [], exp, order, g0: 0 };
+    const path = [], edges = []; for (let s = end; s >= 0; s = par[s]) { path.push(s); edges.push(pe[s]); }
+    path.reverse(); edges.reverse(); edges.shift(); // edges[k] links path[k] -> path[k+1] (-1 = change of line)
+    return { cost: g[end], path, edges, exp, order, g0: g[path[0]] }; // g0 > 0: the search began by changing line
+  }
+  const plan = (a, b, P, avoid, w) => search({ starts: startsAt(a, null, P), goal: b, w: w || 0, P, avoid: avoid || null });
+  /* true travelled minutes of a path (no noise) */
+  function pathMinutes(r, P) { let m = r.g0 || 0; r.edges.forEach(e => { m += e < 0 ? P : ED[e][3]; }); return m; }
+  function legs(r) {
+    const L = []; r.edges.forEach((e, k) => { if (e < 0) return; const a = sSt[r.path[k]], b = sSt[r.path[k + 1]], l = ED[e][2];
+      const last = L[L.length - 1]; if (last && last.line === l && last.to === a) { last.to = b; last.stops++; last.min += ED[e][3]; last.ed.push(e); } else L.push({ line: l, from: a, to: b, stops: 1, min: ED[e][3], ed: [e] }); });
+    return L;
+  }
+  /* full Dijkstra from a station: best minutes to every station */
+  function allFrom(a, P, avoid) {
+    const S = sSt.length, g = new Float64Array(S).fill(Infinity), done = new Uint8Array(S), H = [];
+    for (const [s, g0] of startsAt(a, null, P)) { g[s] = g0; hpush(H, [g0, s]); }
+    while (H.length) { const [, u] = hpop(H); if (done[u]) continue; done[u] = 1;
+      for (const [v, t, e] of sAdj[u]) { if (avoid && avoid[e]) continue; const gv = g[u] + t; if (gv < g[v]) { g[v] = gv; hpush(H, [gv, v]); } }
+      const m = stStates[sSt[u]]; for (const l in m) { const v = m[l]; if (v !== u && g[u] + P < g[v]) { g[v] = g[u] + P; hpush(H, [g[v], v]); } } }
+    const best = new Float64Array(NS).fill(Infinity); for (let s = 0; s < S; s++) if (g[s] < best[sSt[s]]) best[sSt[s]] = g[s];
+    return best;
+  }
+  /* breadth-first search on stations: fewest stops */
+  function bfs(a) {
+    const d = new Int32Array(NS).fill(-1), par = new Int32Array(NS).fill(-1), layers = [[a]]; d[a] = 0;
+    while (layers[layers.length - 1].length) { const nx = []; for (const u of layers[layers.length - 1]) for (const [v] of nb[u]) if (d[v] < 0) { d[v] = d[u] + 1; par[v] = u; nx.push(v); } layers.push(nx); }
+    layers.pop(); return { d, par, layers };
+  }
+  /* a walker that looks d stops ahead and heads for the end-point closest (as the crow flies) to the goal */
+  function walk(a, goal, depth, maxSteps) {
+    const route = [a], seen = new Set([a]), steps = []; let u = a, examined = 0, outcome = 'cap';
+    for (let step = 0; step < (maxSteps || 80); step++) {
+      if (u === goal) { outcome = 'goal'; break; }
+      let best = null, ex0 = examined; const p = [u], on = new Set([u]);
+      const dfs = () => { const x = p[p.length - 1];
+        if (p.length > 1) { examined++; const sc = dist(x, goal), L = p.length - 1;
+          if (!best || sc < best.sc - 1e-12 || (Math.abs(sc - best.sc) <= 1e-12 && L < best.L)) best = { sc, L, first: p[1], end: x }; }
+        if (p.length - 1 < depth && x !== goal) for (const [y] of nb[x]) if (!on.has(y)) { on.add(y); p.push(y); dfs(); p.pop(); on.delete(y); } };
+      dfs(); steps.push({ from: u, ex: examined - ex0, end: best.end, sc: best.sc, L: best.L }); u = best.first; route.push(u);
+      if (seen.has(u) && u !== goal) { outcome = 'loop'; break; } seen.add(u);
+    }
+    if (u === goal) outcome = 'goal';
+    let min = 0; for (let k = 1; k < route.length; k++) min += nb[route[k - 1]].find(q => q[0] === route[k])[1];
+    return { route, outcome, examined, min, steps };
+  }
+  /* executing a plan in a world where some segments are closed */
+  function execute(r, closed, P) {
+    let min = r.g0 || 0; for (let k = 0; k < r.edges.length; k++) { const e = r.edges[k]; if (e >= 0 && closed[e]) return { ok: false, at: r.path[k], e, min, k }; min += e < 0 ? P : ED[e][3]; }
+    return { ok: true, at: r.path[r.path.length - 1], min };
+  }
+  /* the three strategies of section 7.  closed: Uint8Array of segments closed today */
+  function runStrategy(kind, a, b, closed, P) {
+    const known = new Uint8Array(NE), trail = [], hits = []; let calls = 0, min = 0, starts = startsAt(a, null, P), fails = 0;
+    const ridden = (r, x) => r.edges.slice(0, x.ok ? r.edges.length : x.k).forEach(e => { if (e >= 0) trail.push(e); });
+    if (kind === 'once') { calls = 1; const r = search({ starts, goal: b, P, avoid: null }); const x = execute(r, closed, P); ridden(r, x); if (!x.ok) hits.push(x.e); return { ok: x.ok, min: x.min, calls, fails: x.ok ? 0 : 1, stop: sSt[x.at], gaveUp: false, trail, hits }; }
+    for (let guard = 0; guard < 400; guard++) {
+      if (kind === 'every') { const u = sSt[starts.find(s => s[1] === 0)[0]]; for (const [, , e] of [].concat(...Object.values(stStates[u]).map(s => sAdj[s]))) if (closed[e]) known[e] = 1; }
+      calls++; const r = search({ starts, goal: b, P, avoid: known });
+      if (!isFinite(r.cost)) return { ok: false, min, calls, fails, stop: sSt[starts.find(s => s[1] === 0)[0]], gaveUp: true, trail, hits };
+      if (kind === 'replan') {
+        const x = execute(r, closed, P); min += x.min; ridden(r, x);
+        if (x.ok) return { ok: true, min, calls, fails, stop: b, gaveUp: false, trail, hits };
+        fails++; hits.push(x.e); known[x.e] = 1; starts = startsAt(sSt[x.at], sLn[x.at], P);
+      } else { // every: take one ride (plus any change before it), then think again
+        min += r.g0; let k = 0; while (r.edges[k] < 0) { min += P; k++; }
+        const e = r.edges[k]; if (closed[e]) { fails++; hits.push(e); known[e] = 1; continue; }
+        min += ED[e][3]; trail.push(e); const s = r.path[k + 1]; if (sSt[s] === b) return { ok: true, min, calls, fails, stop: b, gaveUp: false, trail, hits };
+        starts = startsAt(sSt[s], sLn[s], P);
+      }
+    }
+    return { ok: false, min, calls, fails, stop: -1, gaveUp: true, trail, hits };
+  }
+  function drawTask(r, p) { const a = Math.floor(r() * NS); let b = Math.floor(r() * NS); while (b === a) b = Math.floor(r() * NS); const closed = new Uint8Array(NE); for (let e = 0; e < NE; e++) closed[e] = r() < p ? 1 : 0; return { a, b, closed }; }
+  function mcReplan(p, n, seed, P) {
+    const r = rng32(seed), res = { once: [], replan: [], every: [], oracle: [], tasks: [] };
+    for (let t = 0; t < n; t++) {
+      const T = drawTask(r, p); res.tasks.push(T);
+      res.oracle.push(search({ starts: startsAt(T.a, null, P), goal: T.b, P, avoid: T.closed }).cost);
+      for (const k of ['once', 'replan', 'every']) res[k].push(runStrategy(k, T.a, T.b, T.closed, P));
+    }
+    return res;
+  }
+  /* Reflexion-style retries: a failed step ends the trial; with memory, the agent avoids what failed before */
+  function mcReflect(p, temp, n, kMax, seed, P) {
+    const r = rng32(seed), out = { mem: [], none: [], impossible: 0, tasks: [], rec: [] };
+    for (let t = 0; t < n; t++) {
+      const T = drawTask(r, p), noise = []; for (let k = 0; k < kMax; k++) { const z = new Float64Array(NE); for (let e = 0; e < NE; e++) z[e] = 1 + temp * r(); noise.push(z); }
+      const feas = isFinite(search({ starts: startsAt(T.a, null, P), goal: T.b, P, avoid: T.closed }).cost);
+      if (!feas) { out.impossible++; continue; }
+      out.tasks.push(T); const rec = { none: [], mem: [] }; out.rec.push(rec);
+      for (const kind of ['none', 'mem']) {
+        const memo = new Uint8Array(NE); let solved = 0;
+        for (let k = 0; k < kMax; k++) {
+          const R = search({ starts: startsAt(T.a, null, P), goal: T.b, P, avoid: kind === 'mem' ? memo : null, noise: noise[k] });
+          const x = execute(R, T.closed, P); rec[kind].push({ R, x, lessons: kind === 'mem' ? [...memo.keys()].filter(e => memo[e]) : [] });
+          if (x.ok) { solved = k + 1; break; }
+          if (kind === 'mem') memo[x.e] = 1;
+        }
+        out[kind].push(solved);
+      }
+    }
+    return out;
+  }
+  /* exhaustive errand ordering (itertools.permutations order) */
+  function perms(n) { const out = [], p = [], used = new Array(n).fill(false); const rec = () => { if (p.length === n) { out.push(p.slice()); return; } for (let i = 0; i < n; i++) if (!used[i]) { used[i] = true; p.push(i); rec(); p.pop(); used[i] = false; } }; rec(); return out; }
+  function errand(home, stops, P, ret) {
+    const pts = [home].concat(stops), M = pts.map(s => { const b = allFrom(s, P, null); return pts.map(t => b[t]); });
+    const cost = ord => { let c = 0, cur = 0; ord.forEach(i => { c += M[cur][i + 1]; cur = i + 1; }); if (ret) c += M[cur][0]; return c; };
+    const all = perms(stops.length); let best = null;
+    all.forEach(o => { const c = cost(o); if (!best || c < best.c) best = { o, c }; });
+    const listed = stops.map((_, i) => i), greedy = []; let cur = 0; const left = new Set(listed);
+    while (left.size) { let bi = -1; left.forEach(i => { if (bi < 0 || M[cur][i + 1] < M[cur][bi + 1]) bi = i; }); greedy.push(bi); left.delete(bi); cur = bi + 1; }
+    return { M, pts, n: all.length, best, listed: { o: listed, c: cost(listed) }, greedy: { o: greedy, c: cost(greedy) } };
+  }
+  /* a line's segments between two stations on it */
+  function lineRun(l, a, b) {
+    const prev = new Map([[a, -1]]), q = [a];
+    while (q.length) { const u = q.shift(); if (u === b) break; ED.forEach(([x, y, ll], e) => { if (ll !== l) return; const v = x === u ? y : y === u ? x : -1; if (v >= 0 && !prev.has(v)) { prev.set(v, e); q.push(v); } }); }
+    const es = []; let u = b; while (u !== a) { const e = prev.get(u); if (e == null) return []; es.push(e); u = ED[e][0] === u ? ED[e][1] : ED[e][0]; }
+    return es.reverse();
+  }
+  /* a transparent ReAct-style journey agent (rules stand in for the language model; the tools are real) */
+  const lineLabel = l => LN[l][0] === 'Docklands Light Railway' ? 'DLR' : LN[l][0] + ' line';
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  const legsText = r => legs(r).map(L => lineLabel(L.line) + ' ' + ST[L.from][0] + ' → ' + ST[L.to][0] + ' (' + plural(L.stops, 'stop') + ')').join(', then ');
+  function react(o) {
+    const { a, b, P, ann, runs, sig, mode } = o, steps = [], T = t => steps.push({ k: 'T', t }), A = t => steps.push({ k: 'A', t }), O = (t, x) => steps.push(Object.assign({ k: 'O', t }, x || {})), F = t => steps.push({ k: 'F', t });
+    const A_ = ST[a][0], B_ = ST[b][0], nAnn = ann.reduce((s, v) => s + v, 0);
+    if (mode === 'reason') {
+      const r = plan(a, b, P);
+      T('I know the Tube map. From memory, the quickest way from ' + A_ + ' to ' + B_ + ' is the ' + legsText(r) + ', about ' + r.cost + ' min.');
+      F('Take the ' + legsText(r) + '. Journey time about ' + r.cost + ' min.');
+      const bad = r.edges.filter(e => e >= 0 && ann[e]);
+      return { steps, turns: 1, tools: 0, min: r.cost, ok: !bad.length, bad, plans: [r], trail: r.edges.filter(e => e >= 0), hits: [], sigE: -1 };
+    }
+    T('I need the quickest route from ' + A_ + ' to ' + B_ + '. Lines are sometimes disrupted, so I will check the status board before I plan.');
+    A('status()');
+    O(runs.length ? runs.map(u => lineLabel(u.line) + ': no service between ' + ST[u.from][0] + ' and ' + ST[u.to][0] + ' (' + plural(u.n, 'segment') + ').').join(' ') + ' Good service on all other lines.' : 'Good service on all lines.');
+    const known = ann.slice(); let nKnown = nAnn;
+    T(nAnn ? plural(nAnn, 'segment') + (nAnn === 1 ? ' is' : ' are') + ' closed. I will plan around ' + (nAnn === 1 ? 'it' : 'them') + ', counting ' + P + ' min for each change of line.' : 'Nothing to avoid. I will plan the quickest route, counting ' + P + ' min for each change of line.');
+    A('plan_route("' + A_ + '", "' + B_ + '", avoid = ' + plural(nKnown, 'segment') + ', change = ' + P + ' min)');
+    let r = search({ starts: startsAt(a, null, P), goal: b, P, avoid: known }), plans = [r], trail = [], hits = [], el = 0, changes = 0;
+    if (!isFinite(r.cost)) { O('No route exists with those segments closed.'); F('There is no way from ' + A_ + ' to ' + B_ + ' on the network today. I recommend another mode of transport.'); return { steps, turns: 3, tools: 2, min: Infinity, ok: false, gaveUp: true, plans, trail, hits, sigE: -1 }; }
+    O(r.cost + ' min: the ' + legsText(r) + '.', { plan: 0 });
+    const rides = r.edges.filter(e => e >= 0), sigE = sig && rides.length ? rides[Math.floor((rides.length - 1) / 2)] : -1;
+    let first = true;
+    for (let guard = 0; guard < 50; guard++) {
+      const Ls = legs(r); let broke = false; el += r.g0 || 0; if (r.g0) changes++;
+      for (let i = 0; i < Ls.length && !broke; i++) {
+        const L = Ls[i]; if (i > 0) { el += P; changes++; }
+        T((i > 0 || r.g0 ? 'Change to the ' + lineLabel(L.line) + '. ' : '') + 'Leg ' + (i + 1) + ' of ' + Ls.length + ': ' + lineLabel(L.line) + ' from ' + ST[L.from][0] + ' to ' + ST[L.to][0] + '.');
+        A('ride("' + LN[L.line][0] + '", "' + ST[L.from][0] + '", "' + ST[L.to][0] + '")');
+        let cur = L.from, n = 0;
+        for (const e of L.ed) {
+          const nx = ED[e][0] === cur ? ED[e][1] : ED[e][0];
+          if (e === sigE) {
+            broke = true; hits.push(e);
+            O('Signal failure: no ' + lineLabel(L.line) + ' trains between ' + ST[cur][0] + ' and ' + ST[nx][0] + '. Stopped at ' + ST[cur][0] + (n ? ' after ' + plural(n, 'stop') : '') + '; ' + el + ' min so far.', { fail: e, tl: trail.length, at: cur });
+            known[e] = 1; nKnown++;
+            T('My plan is broken between ' + ST[cur][0] + ' and ' + ST[nx][0] + '. I will add that segment to the avoid list and re-plan from ' + ST[cur][0] + '.');
+            A('plan_route("' + ST[cur][0] + '", "' + B_ + '", avoid = ' + plural(nKnown, 'segment') + ', change = ' + P + ' min)');
+            r = search({ starts: startsAt(cur, L.line, P), goal: b, P, avoid: known }); plans.push(r);
+            if (!isFinite(r.cost)) { O('No route exists from here.'); F('I am stuck at ' + ST[cur][0] + ': no route to ' + B_ + ' remains.'); return { steps, turns: steps.filter(s => s.k === 'T').length, tools: steps.filter(s => s.k === 'A').length, min: el, ok: false, gaveUp: true, plans, trail, hits, sigE }; }
+            O(r.cost + ' min from here: ' + (r.g0 ? 'change, then ' : '') + 'the ' + legsText(r) + '.', { plan: plans.length - 1 });
+            break;
+          }
+          trail.push(e); el += ED[e][3]; n++; cur = nx;
+        }
+        if (!broke) O('Arrived at ' + ST[L.to][0] + ' after ' + plural(L.stops, 'stop') + '; ' + el + ' min so far.', { tl: trail.length, at: L.to });
+      }
+      if (!broke) break;
+    }
+    F('Arrived at ' + B_ + ' after ' + el + ' min, with ' + plural(changes, 'change') + ' of line.');
+    return { steps, turns: steps.filter(s => s.k === 'T').length, tools: steps.filter(s => s.k === 'A').length, min: el, ok: true, plans, trail, hits, sigE, changes };
+  }
+  const sid = name => ST.findIndex(s => s[0] === name);
+  return { init, rng32, dist, search, plan, pathMinutes, legs, allFrom, bfs, walk, execute, runStrategy, mcReplan, mcReflect, errand, perms, lineRun, sid, startsAt, react, lineLabel, legsText,
+    get ST() { return ST; }, get LN() { return LN; }, get ED() { return ED; }, get NS() { return NS; }, get NE() { return NE; }, get sSt() { return sSt; }, get sLn() { return sLn; }, get stStates() { return stStates; }, get nb() { return nb; }, get VMAX() { return VMAX; }, get HK() { return HK; } };
+})();
+
+
+const RP = {"st":[["Acton Town",-10.541,-0.511,3],["Aldgate",3.62,0.767,1],["Aldgate East",3.82,0.89,1],["All Saints",7.945,0.367,2],["Alperton",-11.897,3.703,4],["Amersham",-33.165,18.481,10],["Angel",1.523,2.758,1],["Archway",-0.519,6.438,2.5],["Arnos Grove",-0.367,12.12,4],["Arsenal",1.516,5.693,2],["Baker Street",-2.028,1.69,1],["Balham",-1.709,-7.15,3],["Bank",2.713,0.656,1],["Barbican",2.069,1.446,1],["Barking",14.451,3.58,4],["Barkingside",14.984,8.695,5],["Barons Court",-5.959,-1.879,2],["Bayswater",-4.159,0.523,1],["Beckton",13.087,0.823,3],["Beckton Park",12.651,0.145,3],["Becontree",17.635,3.658,5],["Belsize Park",-2.519,4.781,2],["Bermondsey",4.436,-1.056,2],["Bethnal Green",5.045,2.179,2],["Blackfriars",1.709,0.511,1],["Blackhorse Road",5.959,8.818,3],["Blackwall",8.388,0.056,2],["Bond Street",-1.495,0.756,1],["Borough",2.319,-0.701,1],["Boston Manor",-13.648,-1.312,4],["Bounds Green",0.242,11.086,3.5],["Bow Church",7.405,2.213,2],["Bow Road",7.135,2.168,2],["Brent Cross",-5.938,7.695,3],["Brixton",0.92,-4.97,2],["Bromley-By-Bow",8.021,1.935,2.5],["Buckhurst Hill",12.105,13.254,5],["Burnt Oak",-9.433,10.608,4],["Caledonian Road",0.623,4.526,2],["Camden Town",-1.024,3.536,2],["Canada Water",5.371,-1.023,2],["Canary Wharf",7.398,-0.256,2],["Canning Town",9.412,0.812,3],["Cannon Street",2.588,0.434,1],["Canons Park",-11.551,11.164,5],["Chalfont & Latimer",-29.981,17.847,9],["Chalk Farm",-1.799,4.081,2],["Chancery Lane",1.156,1.234,1],["Charing Cross",0.215,0.067,1],["Chesham",-33.442,21.994,10],["Chigwell",14.07,12.265,5],["Chiswick Park",-9.689,-1.423,3],["Chorleywood",-27.026,16.335,8],["Clapham Common",-0.734,-5.07,2],["Clapham North",-0.145,-4.726,2],["Clapham South",-1.398,-6.082,2.5],["Cockfosters",-1.509,16.045,5],["Colindale",-8.471,9.796,4],["Colliers Wood",-3.46,-9.941,3],["Covent Garden",0.242,0.612,1],["Crossharbour & London Arena",7.848,-1.301,2],["Croxley",-21.69,15.523,7],["Custom House",10.755,0.234,3],["Cutty Sark",8.181,-2.747,2.5],["Cyprus",13.274,0.122,3],["Dagenham East",20.299,4.103,5],["Dagenham Heathway",19.012,3.814,5],["Debden",14.645,15.356,6],["Deptford Bridge",7.35,-3.714,2.5],["Devons Road",7.648,1.657,2],["Dollis Hill",-7.675,4.959,3],["Ealing Broadway",-12.036,0.867,3],["Ealing Common",-11.101,0.3,3],["Earl's Court",-4.81,-1.712,1.5],["East Acton",-8.277,1.045,2],["East Finchley",-2.575,8.896,3],["East Ham",12.43,3.558,3.5],["East India",8.7,0.211,2.5],["East Putney",-5.772,-5.426,2.5],["Eastcote",-18.631,7.684,5],["Edgware",-10.188,11.82,5],["Edgware Road (B)",-2.775,1.39,1],["Edgware Road (C)",-2.921,1.434,1],["Elephant & Castle",1.917,-1.457,1.5],["Elm Park",22.528,4.692,6],["Elverson Road",7.641,-4.237,2.5],["Embankment",0.381,0,1],["Epping",16.728,20.716,6],["Euston",-0.408,2.313,1],["Euston Square",-0.561,2.068,1],["Fairlop",15.157,9.852,5],["Farringdon",1.557,1.434,1],["Finchley Central",-4.526,10.43,4],["Finchley Road",-3.633,4.426,2],["Finsbury Park",1.474,6.316,2],["Fulham Broadway",-4.651,-3.002,2],["Gallions Reach",13.8,0.245,3],["Gants Hill",13.434,7.684,4],["Gloucester Road",-3.813,-1.434,1],["Golders Green",-4.589,7.228,3],["Goldhawk Road",-6.845,-0.623,2],["Goodge Street",-0.478,1.457,1],["Grange Hill",15.233,11.764,5],["Great Portland Street",-1.114,1.824,1],["Green Park",-1.038,-0.078,1],["Greenford",-15.074,3.881,4],["Greenwich",7.814,-3.258,2.5],["Gunnersbury",-10.215,-1.768,3],["Hainault",15.302,10.63,5],["Hammersmith",-6.734,-1.534,2],["Hampstead",-3.474,5.493,2.5],["Hanger Lane",-11.454,2.535,3],["Harlesden",-8.976,3.202,3],["Harrow & Wealdstone",-14.347,9.463,5],["Harrow-on-the-Hill",-14.451,7.995,5],["Hatton Cross",-20.41,-4.503,5.5],["Heathrow Terminal 4",-22.133,-5.293,6],["Heathrow Terminals 1, 2 & 3",-22.465,-4.014,6],["Hendon Central",-6.789,8.395,3.5],["Heron Quays",7.357,-0.456,2],["High Barnet",-4.602,15.89,5],["High Street Kensington",-4.478,-0.723,1],["Highbury & Islington",1.647,4.292,2],["Highgate",-1.246,7.817,3],["Hillingdon",-22.292,5.159,6],["Holborn",0.54,1.112,1],["Holland Park",-5.412,0.011,2],["Holloway Road",1.01,5.026,2],["Hornchurch",23.96,5.171,6],["Hounslow Central",-16.52,-4.014,4],["Hounslow East",-15.821,-3.792,4],["Hounslow West",-17.835,-3.781,5],["Hyde Park Corner",-1.723,-0.523,1],["Ickenham",-21.752,6.06,6],["Island Gardens",8.146,-2.257,2],["Kennington",1.557,-2.113,2],["Kensal Green",-6.727,2.557,2],["Kensington (Olympia)",-5.731,-1.012,2],["Kentish Town",-0.858,4.815,2],["Kenton",-13.039,8.251,4],["Kew Gardens",-10.88,-3.38,3.5],["Kilburn",-5.322,4.414,2],["Kilburn Park",-4.575,3.08,2],["King's Cross St. Pancras",0.277,2.602,1],["Kingsbury",-10.437,8.584,4],["Knightsbridge",-2.277,-0.656,1],["Ladbroke Grove",-5.737,1.09,2],["Lambeth North",1.128,-0.923,1],["Lancaster Gate",-3.308,0.5,1],["Latimer Road",-6.187,0.723,2],["Leicester Square",-0.021,0.434,1],["Lewisham",7.862,-4.637,2.5],["Leyton",8.478,5.471,3],["Leytonstone",9.419,6.772,3.5],["Limehouse",6.104,0.545,2],["Liverpool Street",3.149,1.156,1],["London Bridge",2.865,-0.245,1],["Loughton",12.707,14.878,6],["Maida Vale",-3.986,2.513,2],["Manor House",2.215,7.094,2.5],["Mansion House",2.339,0.534,1],["Marble Arch",-2.132,0.689,1],["Marylebone",-2.443,1.679,1],["Mile End",6.547,1.946,2],["Mill Hill East",-5.71,11.208,4],["Monument",2.872,0.378,1],["Moor Park",-21.053,13.566,6.5],["Moorgate",2.713,1.245,1],["Morden",-4.637,-11.698,4],["Mornington Crescent",-0.754,2.98,2],["Mudchute",7.841,-1.913,2],["Neasden",-8.478,5.204,3],["New Cross",6.582,-3.414,2],["New Cross Gate",6.063,-3.525,2],["Newbury Park",15.067,7.584,4],["North Acton",-9.129,1.812,2.5],["North Ealing",-11.136,1.123,3],["North Greenwich",9.115,-0.767,2.5],["North Harrow",-16.25,8.584,5],["North Wembley",-12.153,6.082,4],["Northfields",-12.901,-0.878,3],["Northolt",-16.673,4.548,5],["Northwick Park",-13.191,7.895,4],["Northwood",-20.5,11.531,6],["Northwood Hills",-19.476,10.341,6],["Notting Hill Gate",-4.769,0.222,1.5],["Oakwood",-0.277,15.59,5],["Old Street",2.803,2.102,1],["Osterley",-15.531,-2.902,4],["Oval",1.024,-2.835,2],["Oxford Circus",-0.948,0.845,1],["Paddington",-3.301,0.89,1],["Park Royal",-10.817,2.179,3],["Parsons Green",-5.073,-3.569,2],["Perivale",-13.524,3.247,4],["Piccadilly Circus",-0.443,0.267,1],["Pimlico",-0.388,-2.013,1],["Pinner",-17.489,9.474,5],["Plaistow",10.035,2.658,3],["Poplar",7.648,0.033,2],["Preston Road",-11.599,7.183,4],["Prince Regent",11.17,0.211,3],["Pudding Mill Lane",7.883,2.991,2.5],["Putney Bridge",-5.613,-4.359,2],["Queen's Park",-5.322,2.969,2],["Queensbury",-10.956,9.652,4],["Queensway",-4.146,0.367,1],["Ravenscourt Park",-7.482,-1.468,2],["Rayners Lane",-16.859,7.55,5],["Redbridge",11.987,7.661,4],["Regent's Park",-1.301,1.779,1],["Richmond",-12.008,-4.904,4],["Rickmansworth",-23.912,14.789,7],["Roding Valley",11.883,12.198,5],["Rotherhithe",5.211,-0.712,2],["Royal Albert",12.063,0.111,3],["Royal Oak",-4.166,1.29,2],["Royal Victoria",10.098,0.189,3],["Ruislip",-20.313,7.128,6],["Ruislip Gardens",-19.552,5.916,5],["Ruislip Manor",-19.704,7.317,6],["Russell Square",0.235,1.735,1],["Seven Sisters",3.661,8.317,3],["Shadwell",4.969,0.478,2],["Shepherd's Bush (C)",-6.291,-0.311,2],["Shepherd's Bush (H)",-6.831,-0.178,2],["Shoreditch",3.945,1.701,2],["Sloane Square",-1.986,-1.668,1],["Snaresbrook",10.34,8.162,4],["South Ealing",-12.416,-0.701,3],["South Harrow",-15.524,6.36,5],["South Kensington",-3.184,-1.479,1],["South Kenton",-12.478,6.972,4],["South Quay",7.523,-0.745,2],["South Ruislip",-18.756,5.504,5],["South Wimbledon",-4.436,-10.23,3.5],["South Woodford",10.748,9.374,4],["Southfields",-5.454,-6.894,3],["Southgate",-0.014,13.877,4],["Southwark",1.564,-0.712,1],["St. James's Park",-0.394,-0.89,1],["St. John's Wood",-3.197,3.036,2],["St. Paul's",2.111,0.801,1],["Stamford Brook",-8.174,-1.379,2],["Stanmore",-12.112,12.454,5],["Stepney Green",5.592,1.635,2],["Stockwell",0.332,-3.903,2],["Stonebridge Park",-10.25,4.059,3],["Stratford",8.554,3.803,3],["Sudbury Hill",-14.451,5.504,4],["Sudbury Town",-12.998,4.815,4],["Surrey Quays",5.537,-1.568,2],["Swiss Cottage",-3.184,3.981,2],["Temple",0.948,0.411,1],["Theydon Bois",15.994,18.269,6],["Tooting Bec",-2.215,-7.928,3],["Tooting Broadway",-2.782,-8.884,3],["Tottenham Court Road",-0.221,1.012,1],["Tottenham Hale",4.734,8.985,3],["Totteridge & Whetstone",-3.55,13.655,4],["Tower Gateway",3.703,0.356,1],["Tower Hill",3.544,0.267,1],["Tufnell Park",-0.664,5.482,2],["Turnham Green",-8.783,-1.368,2.5],["Turnpike Lane",1.73,9.229,3],["Upminster",26.216,5.738,6],["Upminster Bridge",25.061,5.649,6],["Upney",15.863,3.458,4],["Upton Park",11.219,3.091,3],["Uxbridge",-24.279,4.325,6],["Vauxhall",0.173,-2.368,1.5],["Victoria",-1.17,-1.212,1],["Walthamstow Central",7.495,8.406,3],["Wanstead",10.838,7.795,4],["Wapping",4.983,-0.345,2],["Warren Street",-0.734,1.924,1],["Warwick Avenue",-3.855,1.79,2],["Waterloo",0.934,-0.423,1],["Watford",-20.064,16.668,8],["Wembley Central",-11.662,4.948,4],["Wembley Park",-10.499,6.238,4],["West Acton",-10.596,1.179,3],["West Brompton",-4.672,-2.246,2],["West Finchley",-4.187,11.353,4],["West Ham",9.233,2.368,3],["West Hampstead",-4.346,4.392,2],["West Harrow",-15.607,8.017,5],["West India Quay",7.44,-0.044,2],["West Kensington",-5.447,-1.857,2],["West Ruislip",-21.441,6.916,6],["Westbourne Park",-5.073,1.512,2],["Westferry",7.011,0.256,2],["Westminster",0.166,-0.712,1],["White City",-6.651,0.511,2],["Whitechapel",4.609,1.334,2],["Willesden Green",-6.485,4.648,2.5],["Willesden Junction",-8.305,2.802,3],["Wimbledon",-5.44,-9.563,3],["Wimbledon Park",-4.942,-8.128,3],["Wood Green",1.253,10.019,3],["Woodford",11.205,11.075,4],["Woodside Park",-4,12.287,4]],"ln":[["Bakerloo","#B36305"],["Central","#E32017"],["Circle","#FFD300"],["District","#00782A"],["East London","#EE7C0E"],["Hammersmith & City","#F3A9BB"],["Jubilee","#A0A5A9"],["Metropolitan","#9B0056"],["Northern","#000000"],["Piccadilly","#003688"],["Victoria","#0098D4"],["Waterloo & City","#95CDBA"],["Docklands Light Railway","#00A4A7"]],"ed":[[10,162,0,1],[10,210,0,2],[48,86,0,1],[48,195,0,2],[81,162,0,2],[81,191,0,3],[83,147,0,3],[86,277,0,2],[112,247,0,2],[112,296,0,2],[113,139,0,2],[136,204,0,3],[136,296,0,3],[139,232,0,2],[142,158,0,2],[142,204,0,2],[147,277,0,1],[158,276,0,1],[179,232,0,2],[179,279,0,2],[190,195,0,2],[190,210,0,2],[191,276,0,2],[247,279,0,3],[12,155,1,2],[12,242,1,2],[15,90,1,2],[15,174,1,2],[23,155,1,3],[23,163,1,2],[27,161,1,1],[27,190,1,1],[36,157,1,3],[36,300,1,3],[47,125,1,1],[47,242,1,2],[50,102,1,2],[50,213,1,2],[67,157,1,2],[67,254,1,3],[71,281,1,3],[74,175,1,2],[74,293,1,3],[87,254,1,2],[90,108,1,2],[97,174,1,3],[97,209,1,2],[102,108,1,3],[105,181,1,2],[105,194,1,2],[111,175,1,3],[111,194,1,2],[125,257,1,2],[126,185,1,2],[126,224,1,1],[148,161,1,3],[148,206,1,1],[152,153,1,3],[152,248,1,2],[153,228,1,2],[153,273,1,2],[163,248,1,4],[175,281,1,2],[181,234,1,3],[185,206,1,2],[190,257,1,2],[209,273,1,2],[213,300,1,3],[219,234,1,1],[219,289,1,3],[224,293,1,3],[228,236,1,2],[236,300,1,2],[1,155,2,2],[1,261,2,4],[10,82,2,3],[10,103,2,3],[13,91,2,1],[13,167,2,2],[17,185,2,2],[17,191,2,2],[24,160,2,1],[24,253,2,2],[43,160,2,1],[43,165,2,2],[82,191,2,3],[86,253,2,2],[86,292,2,2],[89,103,2,2],[89,143,2,2],[91,143,2,4],[98,121,2,4],[98,231,2,1],[121,185,2,3],[155,167,2,2],[165,261,2,2],[227,231,2,2],[227,271,2,2],[240,271,2,2],[240,292,2,2],[0,51,3,2],[0,72,3,2],[2,261,3,2],[2,294,3,2],[14,76,3,4],[14,267,3,2],[16,109,3,1],[16,288,3,2],[17,185,3,2],[17,191,3,2],[20,66,3,3],[20,267,3,2],[24,160,3,1],[24,253,3,2],[32,35,3,2],[32,163,3,1],[35,284,3,2],[43,160,3,1],[43,165,3,2],[51,263,3,2],[65,66,3,4],[65,84,3,3],[71,72,3,4],[73,98,3,3],[73,121,3,3],[73,137,3,2],[73,282,3,2],[73,288,3,1],[76,268,3,2],[78,203,3,2],[78,237,3,2],[82,191,3,3],[84,128,3,2],[86,253,3,2],[86,292,3,2],[95,193,3,2],[95,282,3,1],[98,231,3,1],[107,140,3,3],[107,263,3,3],[109,207,3,2],[121,185,3,3],[128,266,3,2],[140,211,3,3],[163,245,3,2],[165,261,3,2],[193,203,3,3],[198,268,3,2],[198,284,3,2],[207,243,3,2],[227,231,3,2],[227,271,3,2],[237,298,3,3],[240,271,3,2],[240,292,3,2],[243,263,3,1],[245,294,3,3],[265,266,3,3],[297,298,3,3],[40,214,4,1],[40,251,4,2],[172,251,4,4],[173,251,4,4],[214,274,4,1],[223,274,4,1],[223,294,4,2],[226,294,4,2],[2,155,5,4],[2,294,5,2],[10,82,5,3],[10,103,5,3],[13,91,5,1],[13,167,5,2],[14,76,5,4],[32,35,5,2],[32,163,5,1],[35,284,5,2],[76,268,5,2],[82,191,5,4],[89,103,5,2],[89,143,5,2],[91,143,5,4],[100,109,5,2],[100,225,5,1],[146,149,5,1],[146,290,5,2],[149,225,5,2],[155,167,5,2],[163,245,5,2],[191,216,5,1],[198,268,5,2],[198,284,5,2],[216,290,5,2],[245,294,5,3],[10,27,6,2],[10,241,6,4],[22,40,6,2],[22,156,6,3],[27,104,6,2],[40,41,6,3],[41,177,6,3],[42,177,6,3],[42,284,6,3],[44,205,6,2],[44,244,6,2],[70,171,6,2],[70,295,6,2],[93,252,6,2],[93,285,6,1],[104,292,6,3],[141,285,6,2],[141,295,6,2],[144,205,6,2],[144,280,6,4],[156,239,6,2],[171,280,6,4],[239,277,6,1],[241,252,6,1],[248,284,6,3],[277,292,6,2],[1,155,7,2],[5,45,7,4],[10,93,7,6],[10,103,7,3],[13,91,7,1],[13,167,7,2],[45,49,7,8],[45,52,7,4],[52,212,7,4],[61,166,7,4],[61,278,7,3],[79,208,7,2],[79,220,7,2],[89,103,7,2],[89,143,7,2],[91,143,7,4],[93,280,7,7],[114,178,7,3],[114,182,7,2],[114,286,7,2],[124,133,7,2],[124,269,7,3],[133,218,7,3],[155,167,7,2],[166,183,7,3],[166,212,7,4],[178,197,7,3],[182,200,7,2],[183,184,7,2],[184,197,7,2],[200,280,7,3],[208,286,7,3],[218,220,7,2],[6,143,8,2],[6,187,8,3],[7,123,8,3],[7,262,8,2],[11,55,8,2],[11,255,8,1],[12,156,8,2],[12,167,8,3],[21,46,8,2],[21,110,8,2],[28,83,8,1],[28,156,8,2],[33,99,8,3],[33,118,8,2],[37,57,8,2],[37,80,8,3],[39,46,8,2],[39,88,8,3],[39,138,8,2],[39,169,8,1],[48,86,8,1],[48,150,8,2],[53,54,8,2],[53,55,8,2],[54,246,8,1],[57,118,8,3],[58,235,8,2],[58,256,8,2],[75,92,8,4],[75,123,8,2],[83,135,8,2],[86,277,8,2],[88,143,8,2],[88,169,8,2],[88,275,8,1],[92,164,8,3],[92,283,8,2],[99,110,8,4],[101,257,8,1],[101,275,8,2],[120,259,8,3],[135,189,8,2],[135,277,8,3],[138,262,8,2],[150,257,8,1],[167,187,8,1],[168,235,8,4],[189,246,8,3],[255,256,8,2],[259,301,8,3],[283,301,8,1],[0,72,9,2],[0,229,9,4],[0,263,9,3],[4,192,9,3],[4,250,9,2],[8,30,9,3],[8,238,9,3],[9,94,9,2],[9,127,9,1],[16,73,9,3],[16,109,9,2],[29,180,9,2],[29,188,9,3],[30,299,9,2],[38,127,9,2],[38,143,9,5],[56,186,9,4],[59,125,9,1],[59,150,9,1],[72,176,9,3],[73,98,9,2],[79,208,9,2],[79,220,9,2],[94,159,9,2],[98,231,9,1],[104,132,9,2],[104,195,9,1],[109,263,9,2],[115,116,9,3],[115,117,9,3],[115,131,9,4],[116,117,9,5],[124,133,9,2],[124,269,9,3],[125,221,9,2],[129,130,9,2],[129,131,9,2],[130,188,9,2],[132,145,9,2],[133,218,9,3],[143,221,9,2],[145,231,9,3],[150,195,9,2],[159,264,9,3],[176,192,9,2],[180,229,9,1],[186,238,9,3],[208,230,9,3],[218,220,9,2],[230,249,9,2],[249,250,9,3],[264,299,9,2],[25,258,10,2],[25,272,10,2],[34,246,10,2],[88,143,10,2],[88,275,10,1],[94,122,10,2],[94,222,10,4],[104,190,10,2],[104,271,10,2],[122,143,10,4],[190,275,10,2],[196,270,10,1],[196,271,10,3],[222,258,10,3],[246,270,10,3],[12,277,11,4],[3,69,12,2],[3,199,12,2],[12,223,12,2],[18,96,12,2],[19,64,12,2],[19,215,12,2],[26,77,12,2],[26,199,12,2],[31,69,12,2],[31,202,12,2],[41,119,12,2],[41,287,12,2],[42,77,12,2],[42,217,12,2],[60,170,12,2],[60,233,12,2],[62,201,12,2],[62,217,12,2],[63,106,12,2],[63,134,12,2],[64,96,12,2],[68,85,12,2],[68,106,12,2],[85,151,12,2],[119,233,12,2],[134,170,12,2],[154,223,12,2],[154,291,12,2],[199,287,12,2],[199,291,12,2],[201,215,12,2],[202,248,12,2],[223,260,12,2],[287,291,12,2]]};
+const PY = {"v":"76.6414","m0":"33.5148","x0":"108","mh":"14.0985","xh":"38","scipyEqual":"True","m5":"41.1073","x5":"120","e0":"220.2355","e1":"162.5220; 0","e2":"104.1195; 10","bw":"38 / 40","err":"143 / 130","feas":"257","once":"178","replan":"257; 3.9339; 1.5467","every":"257; 3.4903; 16.3300","none":"0.6728 / 0.6912 / 0.6985","mem":"0.6728 / 0.9779 / 1.0000"};
+RPC.init(RP);
+const ST = RPC.ST, LN = RPC.LN, ED = RPC.ED, NS = RPC.NS, NE = RPC.NE, NSTATE = RPC.sSt.length, VMAX = RPC.VMAX;
+const P0 = 5;
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), ink: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const nf = n => Math.round(n).toLocaleString('en-GB');
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const sum = a => a.reduce((s, v) => s + v, 0);
+const mean = a => a.length ? sum(a) / a.length : NaN;
+const nm = i => ST[i][0];
+const en = i => esc(nm(i));
+const sid = n => { const i = RPC.sid(n); if (i < 0) throw new Error('no station ' + n); return i; };
+const LL = RPC.lineLabel;
+const plural = (n, w, ws) => nf(n) + ' ' + (n === 1 ? w : (ws || w + 's'));
+const lineCol = l => LN[l][1] === '#000000' ? css('--ink') : LN[l][1];
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ride = r => r.edges.filter(e => e >= 0);
+const words = s => s.split(/\s+/).filter(Boolean).length;
+const pathStations = r => [...new Set(r.path.map(s => RPC.sSt[s]))];
+const edgeName = e => `${nm(ED[e][0])} and ${nm(ED[e][1])}`;
+const fact = n => n <= 1 ? 1 : n * fact(n - 1);
+const lineIx = n => LN.findIndex(l => l[0] === n);
+const swatch = l => `<span class="sw" style="background:${LN[l][1] === '#000000' ? 'var(--ink)' : LN[l][1]}"></span>`;
+
+/* ---------- station pickers ---------- */
+const byName = ST.map((s, i) => i).sort((p, q) => nm(p).localeCompare(nm(q), 'en'));
+$$('select.stn').forEach(s => { s.innerHTML = byName.map(i => `<option value="${i}">${en(i)}</option>`).join(''); s.value = String(sid(s.dataset.def)); });
+const selV = k => +$('#' + k).value;
+
+/* ---------- map drawing ---------- */
+function mapFrame(cv, ids, minSpan) {
+  const pts = ids && ids.length ? ids : ST.map((_, i) => i), ms = minSpan || 3;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  pts.forEach(i => { x0 = Math.min(x0, ST[i][1]); x1 = Math.max(x1, ST[i][1]); y0 = Math.min(y0, ST[i][2]); y1 = Math.max(y1, ST[i][2]); });
+  const m = Math.max(x1 - x0, y1 - y0, ms) * 0.07 + 0.3, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const hx = Math.max(x1 - x0, ms) / 2 + m, hy = Math.max(y1 - y0, ms * 0.6) / 2 + m;
+  return frame(cv, [cx - hx, cx + hx], [cy - hy, cy + hy], { l: 6, r: 6, t: 6, b: 6 }, true);
+}
+function segPx(v, e) { const a = ED[e][0], b = ED[e][1]; return [v.X(ST[a][1]), v.Y(ST[a][2]), v.X(ST[b][1]), v.Y(ST[b][2])]; }
+function drawNet(v, o) {
+  o = o || {}; const c = v.ctx, C = C0(); c.save(); c.lineCap = 'round'; c.globalAlpha = o.alpha == null ? 0.3 : o.alpha; c.lineWidth = o.lw || 1.7;
+  ED.forEach((ed, e) => { const [x1, y1, x2, y2] = segPx(v, e); c.strokeStyle = lineCol(ed[2]); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); });
+  c.globalAlpha = o.dots == null ? 0.5 : o.dots; c.fillStyle = C.muted; const r = o.r || 1.6;
+  ST.forEach(s => { c.beginPath(); c.arc(v.X(s[1]), v.Y(s[2]), r, 0, 7); c.fill(); }); c.restore();
+}
+function drawEdges(v, es, o) {
+  o = o || {}; const c = v.ctx, lw = o.lw || 4.5; c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+  const one = e => { const [x1, y1, x2, y2] = segPx(v, e); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); };
+  if (!o.dash && o.halo !== false) { c.strokeStyle = css('--surface'); c.lineWidth = lw + 3; es.forEach(one); }
+  if (o.dash) c.setLineDash(o.dash); if (o.alpha != null) c.globalAlpha = o.alpha; c.lineWidth = lw;
+  es.forEach(e => { c.strokeStyle = o.col || lineCol(ED[e][2]); one(e); }); c.restore();
+}
+function drawPoly(v, ids, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 3; c.lineJoin = 'round'; c.lineCap = 'round'; if (dash) c.setLineDash(dash); c.beginPath(); ids.forEach((i, k) => k ? c.lineTo(v.X(ST[i][1]), v.Y(ST[i][2])) : c.moveTo(v.X(ST[i][1]), v.Y(ST[i][2]))); c.stroke(); c.restore(); }
+const sDot = (v, i, col, r, hollow) => dot(v, ST[i][1], ST[i][2], col, r, hollow);
+const sStar = (v, i, col, r) => star(v, ST[i][1], ST[i][2], col, r || 9);
+function sTag(v, i, text, col, up, optional) {
+  const c = v.ctx; c.save(); c.font = '600 11.5px ' + css('--f-body'); const x = v.X(ST[i][1]), y = v.Y(ST[i][2]), w = c.measureText(text).width;
+  const T = v.tags || (v.tags = []), cands = [];
+  for (const dy of up ? [-11, 11] : [11, -11]) for (const side of [1, -1]) { let tx = side > 0 ? x + 9 : x - 9 - w; if (tx + w + 4 > v.w - 2) tx = x - 9 - w; tx = Math.max(3, tx); cands.push([tx, clamp(y + dy, 9, v.h - 9)]); }
+  const hit = ([tx, ty]) => T.some(r => tx < r[0] + r[2] + 4 && tx + w + 4 > r[0] && Math.abs(ty - r[1]) < 15);
+  let pick = cands.find(p => !hit(p)); if (!pick) { if (optional) { c.restore(); return; } pick = cands[0]; }
+  const [tx, ty] = pick; T.push([tx, ty, w]);
+  c.globalAlpha = 0.85; c.fillStyle = css('--surface'); c.fillRect(tx - 3, ty - 8, w + 6, 16); c.globalAlpha = 1; c.fillStyle = col; c.textBaseline = 'middle'; c.fillText(text, tx, ty); c.restore();
+}
+function cross(v, e, col, s) { const [x1, y1, x2, y2] = segPx(v, e), x = (x1 + x2) / 2, y = (y1 + y2) / 2, c = v.ctx; s = s || 3.6; c.save(); c.strokeStyle = col; c.lineWidth = 2.2; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - s, y - s); c.lineTo(x + s, y + s); c.moveTo(x + s, y - s); c.lineTo(x - s, y + s); c.stroke(); c.restore(); }
+function midDot(v, e, col, r) { const [x1, y1, x2, y2] = segPx(v, e), c = v.ctx; c.save(); c.beginPath(); c.arc((x1 + x2) / 2, (y1 + y2) / 2, r || 6, 0, 7); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.5; c.stroke(); c.restore(); }
+function waiting(cv, msg) { const v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx; c.font = '13px ' + css('--f-body'); c.fillStyle = css('--muted'); c.textAlign = 'center'; c.fillText(msg || 'Simulating…', v.w / 2, v.h / 2); }
+function legList(r, P) {
+  const L = RPC.legs(r); if (!L.length) return '<li>Already there.</li>';
+  return (r.g0 ? `<li class="chg">change of line, +${P} min</li>` : '') + L.map((l, k) => (k ? `<li class="chg">change, +${P} min</li>` : '') + `<li>${swatch(l.line)}<span>${esc(LL(l.line))} ${en(l.from)} &rarr; ${en(l.to)} &middot; ${plural(l.stops, 'stop')} &middot; ${l.min} min</span></li>`).join('');
+}
+
+/* ---------- hero ---------- */
+const HP = [['Brixton', 'Wembley Park'], ['Belsize Park', 'Finchley Road'], ['Heathrow Terminal 4', 'Stratford'], ['Angel', 'Chiswick Park'], ['Morden', 'Walthamstow Central']];
+const HERO = { a: sid(HP[0][0]), b: sid(HP[0][1]), pick: 0, r: null, d: null, f: 1, raf: 0, v: null };
+$('#hero-chips').innerHTML = HP.map((p, i) => `<button type="button" data-hp="${i}" aria-pressed="${i ? 'false' : 'true'}">${esc(p[0])} &rarr; ${esc(p[1])}</button>`).join('');
+function heroRun() {
+  HERO.r = RPC.search({ starts: RPC.startsAt(HERO.a, null, P0), goal: HERO.b, w: 1, P: P0, trace: true });
+  HERO.d = RPC.plan(HERO.a, HERO.b, P0); HERO.pick = 0; cancelAnimationFrame(HERO.raf);
+  if (reduceMotion) { HERO.f = 1; drawHero(); heroCap(); return; }
+  const t = performance.now(); HERO.f = 0; heroCap();
+  const tick = now => { HERO.f = Math.min(1, (now - t) / 1200); drawHero(); if (HERO.f < 1) HERO.raf = requestAnimationFrame(tick); else heroCap(); };
+  HERO.raf = requestAnimationFrame(tick);
+}
+function drawHero() {
+  const cv = $('#hero-cv'), C = C0(), v = mapFrame(cv, null), c = v.ctx; HERO.v = v;
+  drawNet(v, { alpha: 0.6, lw: 1.5, dots: 0.35, r: 1.2 });
+  const r = HERO.r;
+  if (r && HERO.pick === 0) {
+    const n = Math.round(r.order.length * HERO.f), seen = new Set();
+    c.save(); c.fillStyle = C.b; c.globalAlpha = 0.5;
+    for (let k = 0; k < n; k++) { const s = RPC.sSt[r.order[k]]; if (seen.has(s)) continue; seen.add(s); c.beginPath(); c.arc(v.X(ST[s][1]), v.Y(ST[s][2]), 3.3, 0, 7); c.fill(); }
+    c.restore();
+    if (HERO.f >= 1) drawEdges(v, ride(r), { lw: 4 });
+  }
+  sDot(v, HERO.a, C.ink, 5.5); sTag(v, HERO.a, nm(HERO.a), C.ink, true);
+  if (HERO.pick === 0) { sStar(v, HERO.b, C.bad, 9); sTag(v, HERO.b, nm(HERO.b), C.ink); }
+}
+function heroCap() {
+  const cap = $('#hero-cap');
+  if (HERO.pick === 1) { cap.innerHTML = `Start: <b>${en(HERO.a)}</b>. Now tap the destination.`; return; }
+  if (HERO.f < 1) { cap.innerHTML = `A* is searching outwards from <b>${en(HERO.a)}</b>&hellip;`; return; }
+  const r = HERO.r, d = HERO.d, L = RPC.legs(r), ch = Math.max(0, L.length - 1);
+  cap.innerHTML = `<b>${en(HERO.a)} &rarr; ${en(HERO.b)}</b>: ${tip(r.cost + ' min', `riding ${r.cost - P0 * ch} min + ${ch} change${ch === 1 ? '' : 's'} × ${P0} min`)} by ${L.map(l => 'the ' + esc(LL(l.line))).join(', then ')}. A* expanded ${tip(r.exp + ' states', `states are (station, line) pairs; ${NSTATE} in all\npriority f = g + h, h = crow-flies km ÷ ${fmt(VMAX, 3)} km/min`)}; Dijkstra, with no sense of direction, would expand ${tip(String(d.exp), 'the same search with h = 0')}. Tap any station to start a new journey.`;
+}
+$('#hero-cv').addEventListener('click', e => {
+  const cv = $('#hero-cv'), v = HERO.v; if (!v) return; const [px, py] = evPos(cv, e); let bi = -1, bd = 22 * 22;
+  ST.forEach((s, i) => { const dx = v.X(s[1]) - px, dy = v.Y(s[2]) - py, dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; bi = i; } });
+  if (bi < 0) return; $$('#hero-chips button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  if (HERO.pick === 0) { HERO.a = bi; HERO.pick = 1; cancelAnimationFrame(HERO.raf); HERO.f = 1; drawHero(); heroCap(); }
+  else if (bi !== HERO.a) { HERO.b = bi; heroRun(); }
+});
+seg1('#hero-chips button', 'data-hp', k => { HERO.a = sid(HP[+k][0]); HERO.b = sid(HP[+k][1]); heroRun(); });
+fig($('#hero-cv'), drawHero);
+
+/* ---------- 1. greedy lookahead ---------- */
+const WYJ = [['Belsize Park', 'Finchley Road'], ['Baker Street', 'Hampstead'], ['Archway', 'Wood Green'], ['Euston', 'Hammersmith']];
+const WY = { j: 0, d: 1, cache: {} };
+$('#wy-j').innerHTML = WYJ.map((p, i) => `<button type="button" data-wyj="${i}" aria-pressed="${i ? 'false' : 'true'}">${esc(p[0])} &rarr; ${esc(p[1])}</button>`).join('');
+function wyAll(j) { if (!WY.cache[j]) { const a = sid(WYJ[j][0]), b = sid(WYJ[j][1]); WY.cache[j] = { a, b, W: [1, 2, 3, 4, 5, 6, 7, 8].map(d => RPC.walk(a, b, d, 80)), best: RPC.plan(a, b, 0) }; } return WY.cache[j]; }
+function cycleOf(route) { const last = route[route.length - 1], k = route.indexOf(last); return route.slice(k); }
+function updWY() {
+  const J = wyAll(WY.j), d = WY.d, w = J.W[d - 1], best = J.best, s0 = w.steps[0], A = en(J.a), B = en(J.b), need = J.W.findIndex(x => x.outcome === 'goal') + 1;
+  $('#wy-d-o').textContent = d;
+  $('#wy-out').innerHTML = w.outcome === 'goal' ? 'reached' : w.outcome === 'loop' ? 'loops' : 'gave up';
+  $('#wy-ex').innerHTML = tip(nf(w.examined), w.steps.slice(0, 10).map((s, k) => `step ${k + 1}, at ${nm(s.from)}: ${nf(s.ex)} routes`).join('\n') + (w.steps.length > 10 ? `\n… ${w.steps.length} steps in all` : '') + (w.outcome === 'loop' ? '\n(then the same steps again, for ever)' : ''));
+  $('#wy-st').innerHTML = w.outcome === 'goal' ? String(w.route.length - 1) : '&infin;';
+  $('#wy-min').innerHTML = (w.outcome === 'goal' ? tip(String(w.min), 'sum of the segment times along the walk') : '&infin;') + ` (${tip(String(best.cost), 'Dijkstra on riding time alone: the quickest possible')})`;
+  $('#run-wy').innerHTML = `<b>Running example</b>: at ${A} with d = ${d}, the walker imagines |<i>P</i><sub>${d}</sub>| = ${tip(nf(s0.ex), `every route of 1 to ${d} stops from ${nm(J.a)} that never revisits a station`)} routes. The best ends at ${en(s0.end)}, ${tip(fmt(s0.sc, 2) + ' km', 'straight-line distance from its end to ' + nm(J.b))} from ${B}, so a<sub>1</sub> = &ldquo;ride to ${en(w.route[1])}&rdquo;.`;
+  if (w.outcome === 'loop') {
+    const cy = cycleOf(w.route), two = cy.length === 3;
+    $('#wy-say').innerHTML = `With d = ${d}, the walker ${two ? `shuttles between ${en(cy[0])} and ${en(cy[1])}` : `goes round ${cy.map(en).join(' &rarr; ')}`} and repeats for ever: each step is the best one it can see from where it stands, yet together they go nowhere. It has imagined ${nf(w.examined)} routes and is no closer to ${B}. ${need ? `A lookahead of ${need} stops is the first that escapes.` : 'No lookahead up to 8 stops escapes.'}`;
+  } else if (w.outcome === 'goal') {
+    const prev = d > 1 && J.W[d - 2].outcome !== 'goal';
+    $('#wy-say').innerHTML = `With d = ${d} the walker reaches ${B} in ${plural(w.route.length - 1, 'stop')}, after imagining ${nf(w.examined)} routes${prev ? ` (at d = ${d - 1} it was still stuck)` : ''}. Its walk takes ${w.min} min of riding; the quickest route takes ${best.cost}. ${w.min === best.cost ? 'Here the two agree.' : 'Looking ahead found <i>a</i> way, not the best one: the walker scores routes by where they end, not by what they cost. Search that keeps track of cost comes next.'}`;
+  } else $('#wy-say').innerHTML = `The walker used up its 80 moves without arriving.`;
+}
+function drawWY() {
+  const cv = $('#wy-cv'), C = C0(), J = wyAll(WY.j), w = J.W[WY.d - 1], bs = pathStations(J.best);
+  const v = mapFrame(cv, [...new Set(w.route.concat(bs))], 3), c = v.ctx; drawNet(v, { alpha: 0.35, lw: 2.2, r: 2 });
+  drawEdges(v, ride(J.best), { col: C.muted, dash: [6, 5], lw: 2.2 });
+  drawPoly(v, w.route, C.bad, 3.4);
+  const first = new Map(); w.route.forEach((i, k) => { if (!first.has(i)) first.set(i, k); });
+  c.save(); c.font = '600 10.5px ' + css('--f-mono'); c.textBaseline = 'bottom';
+  first.forEach((k, i) => { if (!k) return; sDot(v, i, C.bad, 4); if (k <= 14) { c.fillStyle = C.bad; c.fillText(String(k), v.X(ST[i][1]) + 5, v.Y(ST[i][2]) - 4); } });
+  c.restore();
+  if (w.outcome === 'loop') sDot(v, w.route[w.route.length - 1], C.bad, 10, true);
+  sDot(v, J.a, C.ink, 6); sTag(v, J.a, nm(J.a), C.ink); sStar(v, J.b, C.a, 9); sTag(v, J.b, nm(J.b), C.ink, true);
+}
+$('#wy-d').addEventListener('input', e => { WY.d = +e.target.value; updWY(); drawWY(); });
+seg1('#wy-j button', 'data-wyj', k => { WY.j = +k; updWY(); drawWY(); });
+fig($('#wy-cv'), drawWY);
+
+/* ---------- 2. BFS ---------- */
+const BF = { a: -1 };
+function updBF(resetK) {
+  const a = selV('bf-a'), b = selV('bf-b');
+  if (BF.a !== a) BF.B = RPC.bfs(a);
+  BF.a = a; BF.b = b; const B = BF.B, gl = B.d[b], sl = $('#bf-k'); sl.max = String(B.layers.length - 1); if (resetK) sl.value = String(gl);
+  const K = BF.k = Math.min(+sl.value, B.layers.length - 1); BF.q = RPC.plan(a, b, 0);
+  const p = [b]; let u = b; while (u !== a) { u = B.par[u]; p.push(u); } p.reverse(); BF.path = p;
+  BF.pm = sum(p.slice(1).map((x, k) => RPC.nb[p[k]].find(q => q[0] === x)[1]));
+  const sizes = B.layers.slice(0, K + 1).map(L => L.length), n = sum(sizes), found = K >= gl, qs = ride(BF.q).length;
+  $('#bf-k-o').textContent = K;
+  $('#bf-n').innerHTML = tip(nf(n), `layer sizes ${sizes.join(' + ')}`) + ` <span style="font-size:.6em;color:var(--muted)">of ${NS}</span>`;
+  $('#bf-h').innerHTML = found ? tip(String(gl), `${nm(b)} first appears in layer ${gl}`) : '?';
+  $('#bf-m').innerHTML = found ? tip(String(BF.pm), p.slice(1).map((x, k) => RPC.nb[p[k]].find(q => q[0] === x)[1]).join(' + ') + ' min') : '?';
+  $('#bf-q').innerHTML = `${tip(String(BF.q.cost), 'Dijkstra on riding time, no change penalty')} (${qs})`;
+  const Lk = B.layers[K], show = Lk.slice(0, 4).map(en).join(', ');
+  $('#run-bf').innerHTML = `<b>Running example</b>: L<sub>${K}</sub> = {${show}${Lk.length > 4 ? `, &hellip;` : ''}} holds ${plural(Lk.length, 'station')}; together L<sub>0</sub> &hellip; L<sub>${K}</sub> hold ${tip(nf(n), sizes.join(' + '))} of the ${NS}.${found ? ` ${en(b)} is in L<sub>${gl}</sub>, so no route has fewer than ${plural(gl, 'stop')}.` : ''}`;
+  if (a === b) { $('#bf-say').innerHTML = 'Start and goal are the same station: pick two different ones.'; return; }
+  $('#bf-say').innerHTML = !found ? `After ${plural(K, 'layer')} BFS has reached ${nf(n)} of ${NS} stations, each by the fewest possible stops, but ${en(b)} is not among them yet: it is ${plural(gl - K, 'more layer')} away. Keep growing the rings.`
+    : BF.pm > BF.q.cost ? `${en(b)} turns up in layer ${gl}, so the fewest-stops route has ${gl} stops, and it takes ${BF.pm} min. The quickest route has ${plural(qs, 'stop')}${qs > gl ? ' (more!)' : ''} yet takes only ${BF.q.cost} min. BFS treats every segment as equal; on a real network they are not. The next planner counts minutes.`
+    : `${en(b)} turns up in layer ${gl}: the fewest-stops route has ${gl} stops and takes ${BF.pm} min, ${BF.pm === BF.q.cost ? 'as quick as any route' : 'close to the quickest'}. Try Bond Street to Park Royal to see the two disagree.`;
+}
+function drawBF() {
+  const cv = $('#bf-cv'), C = C0(), B = BF.B, K = BF.k, gl = B.d[BF.b], ids = [].concat(...B.layers.slice(0, K + 1), [BF.b]);
+  const v = mapFrame(cv, ids, 4), c = v.ctx; drawNet(v, { alpha: 0.3, lw: 1.8 });
+  B.layers.slice(0, K + 1).forEach((L, k) => { c.save(); c.globalAlpha = 0.95 - 0.7 * k / Math.max(1, K); L.forEach(i => { c.beginPath(); c.arc(v.X(ST[i][1]), v.Y(ST[i][2]), 3.6, 0, 7); c.fillStyle = C.b; c.fill(); }); c.restore(); });
+  if (K > 0) B.layers[K].forEach(i => sDot(v, i, C.ink, 5.5, true));
+  if (K >= gl) { drawEdges(v, ride(BF.q), { col: C.muted, dash: [6, 5], lw: 2.2 }); drawPoly(v, BF.path, C.ink, 3.4); }
+  sDot(v, BF.a, C.ink, 6); sTag(v, BF.a, nm(BF.a), C.ink); sStar(v, BF.b, C.bad, 9); sTag(v, BF.b, nm(BF.b), C.ink, true);
+}
+$('#bf-k').addEventListener('input', () => { updBF(false); drawBF(); });
+['bf-a', 'bf-b'].forEach(k => $('#' + k).addEventListener('change', () => { updBF(true); drawBF(); }));
+fig($('#bf-cv'), drawBF);
+
+/* ---------- 3. Dijkstra ---------- */
+const DJ = { shapes: {} };
+function djShapes(a, b) {
+  const key = a + ':' + b; if (DJ.shapes[key]) return DJ.shapes[key];
+  const out = []; for (let P = 0; P <= 15; P++) { const r = RPC.plan(a, b, P), L = RPC.legs(r), ch = Math.max(0, L.length - 1) + (r.g0 ? 1 : 0), s = L.map(l => l.line + ':' + l.from + ':' + l.to).join('|');
+    const last = out[out.length - 1]; if (last && last.s === s) last.p1 = P; else out.push({ s, p0: P, p1: P, ch, ride: sum(L.map(l => l.min)) }); }
+  return (DJ.shapes[key] = out);
+}
+function updDJ() {
+  const a = selV('dj-a'), b = selV('dj-b'), P = +$('#dj-p').value;
+  const r = RPC.search({ starts: RPC.startsAt(a, null, P), goal: b, P, w: 0, trace: true }), L = RPC.legs(r), ch = Math.max(0, L.length - 1), rd = sum(L.map(l => l.min));
+  Object.assign(DJ, { a, b, P, r, L });
+  $('#dj-p-o').textContent = P;
+  $('#dj-c').innerHTML = tip(String(r.cost), `${rd} riding + ${ch} × ${P}`); $('#dj-r').textContent = rd; $('#dj-x').textContent = ch;
+  $('#dj-s').innerHTML = tip(String(r.exp), 'states popped from the priority queue and settled, including the goal');
+  $('#dj-legs').innerHTML = legList(r, P);
+  $('#run-dj').innerHTML = a === b ? '' : `<b>Running example</b>: cost = ${L.map(l => l.min).join(' + ')} (riding) + ${ch} &times; ${P} (changes) = ${tip('<b>' + r.cost + ' min</b>', 'the g of the first goal state Dijkstra settled')}.`;
+  if (a === b) { $('#dj-say').innerHTML = 'Start and goal are the same station: pick two different ones.'; return; }
+  const sh = djShapes(a, b), rng = x => x.p0 === x.p1 ? `P = ${x.p0}` : `P = ${x.p0}&ndash;${x.p1}`;
+  $('#dj-say').innerHTML = `With P = ${P} the quickest plan rides for ${rd} min and changes line ${plural(ch, 'time')}. ` + (sh.length > 1 ? `Across P = 0 to 15 the plan takes ${sh.length} different shapes: ${sh.map(x => `${rng(x)}: ${plural(x.ch, 'change')}, ${x.ride} min riding`).join('; ')}. A higher penalty buys fewer changes with more time on the train; the plan switches exactly when the change it saves is worth more than the extra riding.` : `This plan stays the same for every P from 0 to 15: no alternative with fewer changes is quick enough to win.`);
+}
+function drawDJ() {
+  const cv = $('#dj-cv'), C = C0(), r = DJ.r, ids = pathStations(r).concat([DJ.a, DJ.b]), v = mapFrame(cv, ids, 4), c = v.ctx;
+  drawNet(v, { alpha: 0.3, lw: 1.8 });
+  const set = new Set(r.order.map(s => RPC.sSt[s])); c.save(); c.globalAlpha = 0.55; c.fillStyle = C.muted; set.forEach(i => { c.beginPath(); c.arc(v.X(ST[i][1]), v.Y(ST[i][2]), 2.8, 0, 7); c.fill(); }); c.restore();
+  drawEdges(v, ride(r), { lw: 5 });
+  DJ.L.slice(1).forEach(l => sDot(v, l.from, C.ink, 7, true));
+  sDot(v, DJ.a, C.ink, 6); sTag(v, DJ.a, nm(DJ.a), C.ink); sStar(v, DJ.b, C.bad, 9); sTag(v, DJ.b, nm(DJ.b), C.ink, true);
+  DJ.L.slice(1).forEach(l => sTag(v, l.from, nm(l.from), C.muted, true, true));
+}
+$('#dj-p').addEventListener('input', () => { updDJ(); drawDJ(); });
+['dj-a', 'dj-b'].forEach(k => $('#' + k).addEventListener('change', () => { updDJ(); drawDJ(); }));
+fig($('#dj-cv'), drawDJ);
+
+/* ---------- 4. A* ---------- */
+const AS = { cache: {} };
+function asSample(w) {
+  if (!AS.pairs) { const r = RPC.rng32(7); AS.pairs = []; for (let k = 0; k < 2000; k++) { const a = Math.floor(r() * NS); let b = Math.floor(r() * NS); while (b === a) b = Math.floor(r() * NS); AS.pairs.push([a, b]); } AS.opt = AS.pairs.map(([a, b]) => RPC.plan(a, b, P0).cost); }
+  const k = fmt(w, 2);
+  if (!AS.cache[k]) { let e = 0, s = 0; AS.pairs.forEach(([a, b], i) => { const r = RPC.plan(a, b, P0, null, w); e += r.exp; if (r.cost > AS.opt[i] + 1e-9) s++; }); AS.cache[k] = { e: e / AS.pairs.length, s }; }
+  return AS.cache[k];
+}
+function updAS() {
+  const a = selV('as-a'), b = selV('as-b'), w = +$('#as-w').value;
+  const r = RPC.search({ starts: RPC.startsAt(a, null, P0), goal: b, P: P0, w, trace: true }), d = RPC.search({ starts: RPC.startsAt(a, null, P0), goal: b, P: P0, w: 0, trace: true });
+  Object.assign(AS, { a, b, w, r, d }); const smp = asSample(w), s0 = asSample(0), hk = RPC.dist(a, b), h = hk / VMAX;
+  $('#as-w-o').textContent = fmt(w, 2);
+  $('#as-e').innerHTML = `${tip(String(r.exp), 'states popped and settled by A* at this w')} (${d.exp})`;
+  $('#as-c').innerHTML = `${tip(String(r.cost), RPC.legs(r).map(l => LL(l.line)).join(' → '))} (${d.cost})`;
+  $('#as-g').innerHTML = `${tip(fmt(smp.e, 1), `mean over the same 2,000 random trips (seeded)\nDijkstra: ${fmt(s0.e, 1)}`)} (${fmt(s0.e, 1)})`;
+  $('#as-sub').innerHTML = tip(nf(smp.s), 'trips whose plan costs more than the optimal one') + ` <span style="font-size:.6em;color:var(--muted)">of 2,000</span>`;
+  $('#run-as').innerHTML = a === b ? '' : `<b>Running example</b>: h(${en(a)}) = ${tip(fmt(hk, 2) + ' km', 'straight-line distance between the two stations')} &divide; ${fmt(VMAX, 3)} km/min = ${fmt(h, 1)} min, so f = 0 + ${fmt(w, 2)} &times; ${fmt(h, 1)} = ${fmt(w * h, 1)} at the start. The quickest plan actually costs ${d.cost} min, so h underestimates by ${fmt(d.cost - h, 1)} min, as an admissible heuristic must.`;
+  if (a === b) { $('#as-say').innerHTML = 'Start and goal are the same station: pick two different ones.'; return; }
+  const save = 1 - r.exp / d.exp;
+  $('#as-say').innerHTML = w === 0 ? `w = 0 switches the hunch off: this is Dijkstra, expanding ${d.exp} states in rings of equal cost, in every direction. Raise w to 1.`
+    : w <= 1 ? `With w = ${fmt(w, 2)} the search expands ${r.exp} states instead of ${d.exp} (${pct(save, 0)} fewer) and still returns the optimal ${r.cost}-minute plan, as admissibility guarantees. The saving is modest because the top speed is high: the estimate is safe but cautious. Over 2,000 random trips the average falls from ${fmt(s0.e, 1)} to ${fmt(smp.e, 1)} states, with no plan worse than optimal.`
+    : `With w = ${fmt(w, 2)} the search is bolder: ${r.exp} states instead of ${d.exp}. ${r.cost > d.cost ? `Its plan costs ${r.cost} min, ${pct(r.cost / d.cost - 1, 0)} more than the optimal ${d.cost}, within the guarantee of at most w &times; optimal = ${fmt(w * d.cost, 1)}.` : `Its plan is still the optimal ${r.cost} min here, but only cost &le; w &times; optimal = ${fmt(w * d.cost, 1)} min is guaranteed.`} Over 2,000 random trips it expands ${fmt(smp.e, 1)} states on average and returns a worse-than-optimal plan for ${nf(smp.s)} of them. Trading a little quality for a lot less search is the same bargain an LLM agent strikes when it thinks less.`;
+}
+function drawAS() {
+  const cv = $('#as-cv'), C = C0(), dset = new Set(AS.d.order.map(s => RPC.sSt[s])), aset = new Set(AS.r.order.map(s => RPC.sSt[s]));
+  const v = mapFrame(cv, [...dset].concat([AS.a, AS.b]), 4), c = v.ctx; drawNet(v, { alpha: 0.28, lw: 1.7 });
+  dset.forEach(i => { if (!aset.has(i)) sDot(v, i, C.muted, 3.2, true); });
+  c.save(); c.globalAlpha = 0.8; aset.forEach(i => { c.beginPath(); c.arc(v.X(ST[i][1]), v.Y(ST[i][2]), 3.6, 0, 7); c.fillStyle = C.b; c.fill(); }); c.restore();
+  if (AS.r.cost > AS.d.cost) drawEdges(v, ride(AS.d), { col: C.muted, dash: [6, 5], lw: 2.4 });
+  drawPoly(v, pathStations(AS.r), C.ink, 3.4);
+  sDot(v, AS.a, C.ink, 6); sTag(v, AS.a, nm(AS.a), C.ink); sStar(v, AS.b, C.bad, 9); sTag(v, AS.b, nm(AS.b), C.ink, true);
+}
+$('#as-w').addEventListener('input', () => { updAS(); drawAS(); });
+['as-a', 'as-b'].forEach(k => $('#' + k).addEventListener('change', () => { updAS(); drawAS(); }));
+fig($('#as-cv'), drawAS);
+
+/* ---------- 5. decomposition ---------- */
+const LM = [['Baker Street', 'Sherlock Holmes Museum'], ['Tower Hill', 'the Tower'], ['South Kensington', 'the museums'], ['Camden Town', 'Camden Market'], ['Cutty Sark', 'Greenwich'], ['Westminster', 'Parliament'], ['Covent Garden', 'the market'], ['Hampstead', 'the Heath'], ['Wimbledon', 'the tennis'], ['Richmond', 'the park'], ['Stratford', 'Olympic Park'], ["King's Cross St. Pancras", 'the Eurostar']].map(([s, w]) => ({ s: sid(s), w }));
+const DC = { stops: [0, 1, 2, 3, 4], ord: 'best', ret: true, msg: '' };
+function dcChips() { $('#dc-chips').innerHTML = LM.map((m, k) => { const p = DC.stops.indexOf(k); return `<button type="button" data-lm="${k}" aria-pressed="${p >= 0}">${p >= 0 ? `<b>${p + 1}</b> ` : ''}${esc(m.w)} <span style="color:var(--muted)">(${en(m.s)})</span></button>`; }).join(''); }
+$('#dc-chips').addEventListener('click', e => { const bt = e.target.closest('button[data-lm]'); if (!bt) return; const k = +bt.dataset.lm, p = DC.stops.indexOf(k); DC.msg = '';
+  if (p >= 0) { if (DC.stops.length > 1) DC.stops.splice(p, 1); else DC.msg = 'Keep at least one stop. '; } else if (DC.stops.length < 7) DC.stops.push(k); else DC.msg = 'Seven stops is the limit here (5,040 orders). ';
+  dcChips(); updDC(); drawDC(); });
+function updDC() {
+  const home = selV('dc-h'), stops = DC.stops.map(k => LM[k].s), E = RPC.errand(home, stops, P0, DC.ret), o = E[DC.ord].o, n = stops.length;
+  const seq = [home].concat(o.map(i => stops[i])); if (DC.ret) seq.push(home);
+  const legs = seq.slice(1).map((q, k) => ({ from: seq[k], to: q, r: RPC.plan(seq[k], q, P0), D: E.M[k === 0 ? 0 : o[k - 1] + 1][k < o.length ? o[k] + 1 : 0] }));
+  Object.assign(DC, { home, E, seq, legs });
+  $('#dc-l').textContent = E.listed.c; $('#dc-g').textContent = E.greedy.c; $('#dc-b').innerHTML = tip(String(E.best.c), 'the cheapest of all ' + nf(E.n) + ' orders');
+  $('#dc-n').innerHTML = tip(nf(E.n), `${n}! = ${[...Array(n)].map((_, i) => n - i).join(' × ')}`);
+  $('#run-dc').innerHTML = `<b>Running example</b> (${DC.ord === 'best' ? 'the best order' : DC.ord === 'greedy' ? 'nearest next' : 'as listed'}): cost(&pi;) = ${legs.map(l => l.D).join(' + ')} = ${tip('<b>' + sum(legs.map(l => l.D)) + ' min</b>', `each term is D(a, b), the quickest journey between consecutive places\nfrom a table filled by ${n + 1} Dijkstra runs`)}.`;
+  const L = E.listed.c, G = E.greedy.c, Bc = E.best.c;
+  $('#dc-say').innerHTML = DC.msg + `Of the ${nf(E.n)} possible orders, the best takes ${Bc} min${DC.ret ? ' there and back' : ''}. The order you listed takes ${L}${L === Bc ? ', which happens to be the best' : ` (${L - Bc} min more)`}, and always going to the nearest unvisited stop next takes ${G}${G === Bc ? ', also optimal here' : ` (${G - Bc} min more than the best)`}. The low level needed only ${n + 1} Dijkstra runs, one from home and one from each stop, to fill a ${n + 1} &times; ${n + 1} table of leg times; the top level then checked every order against that table. That stays cheap only while n is small: 10 stops would be 3,628,800 orders, and real planners switch to heuristics.`;
+  const place = s => { const m = LM.find(x => x.s === s); return m ? `${en(s)} (${esc(m.w)})` : en(s); };
+  $('#dc-tree').innerHTML = `<div class="goal">Goal: visit ${n === 1 ? place(stops[0]) : 'all ' + n + ' places'} from ${en(home)}${DC.ret ? ' and come back' : ''}</div><ol>${legs.map((l, k) => `<li>${k === legs.length - 1 && DC.ret ? 'Return home to ' + en(home) : 'Go to ' + place(l.to)}: ${l.D} min<ol>${l.from === l.to ? '<li>already there</li>' : RPC.legs(l.r).map(x => `<li>${swatch(x.line)}${esc(LL(x.line))} ${en(x.from)} &rarr; ${en(x.to)} (${x.min} min)</li>`).join('')}</ol></li>`).join('')}</ol>`;
+}
+function drawDC() {
+  const cv = $('#dc-cv'), C = C0(), v = mapFrame(cv, [].concat(...DC.legs.map(l => pathStations(l.r)), DC.seq), 4), c = v.ctx; drawNet(v, { alpha: 0.3, lw: 1.8 });
+  DC.legs.forEach(l => drawEdges(v, ride(l.r), { lw: 4 }));
+  sStar(v, DC.home, C.bad, 10); sTag(v, DC.home, nm(DC.home), C.ink);
+  DC.seq.forEach((s, k) => { if (k === 0 || (DC.ret && k === DC.seq.length - 1)) return; sDot(v, s, C.surf, 8); sDot(v, s, C.ink, 8, true); c.save(); c.font = '600 10px ' + css('--f-mono'); c.fillStyle = C.ink; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(k), v.X(ST[s][1]), v.Y(ST[s][2]) + 0.5); c.restore(); sTag(v, s, nm(s), C.ink, true); });
+}
+seg1('[data-dco]', 'data-dco', k => { DC.ord = k; updDC(); drawDC(); });
+seg1('[data-dcr]', 'data-dcr', k => { DC.ret = k === '1'; updDC(); drawDC(); });
+$('#dc-h').addEventListener('change', () => { updDC(); drawDC(); });
+dcChips();
+fig($('#dc-cv'), drawDC);
+
+/* ---------- 6. ReAct ---------- */
+const SCN = [
+  ['Good service on all lines', []],
+  ["Victoria line suspended between Stockwell and King's Cross St. Pancras", [['Victoria', 'Stockwell', "King's Cross St. Pancras"]]],
+  ['Central line closed between Liverpool Street and Notting Hill Gate', [['Central', 'Liverpool Street', 'Notting Hill Gate']]],
+  ['Jubilee line closed between Waterloo and Canary Wharf', [['Jubilee', 'Waterloo', 'Canary Wharf']]],
+  ["Piccadilly line closed between King's Cross St. Pancras and Hammersmith", [['Piccadilly', "King's Cross St. Pancras", 'Hammersmith']]],
+  ['Northern line (Charing Cross branch) closed between Camden Town and Kennington', [['Northern', 'Camden Town', 'Kennington']]],
+  ['Victoria and Central lines both closed through the centre', [['Victoria', 'Stockwell', "King's Cross St. Pancras"], ['Central', 'Liverpool Street', 'Notting Hill Gate']]]
+];
+function scen(k) { const runs = SCN[k][1].map(([l, x, y]) => { const es = RPC.lineRun(lineIx(l), sid(x), sid(y)); return { line: lineIx(l), from: sid(x), to: sid(y), n: es.length, es }; }); const ann = new Uint8Array(NE); runs.forEach(u => u.es.forEach(e => { ann[e] = 1; })); return { runs, ann }; }
+['#ra-sc', '#pj-sc'].forEach(s => { $(s).innerHTML = SCN.map((x, i) => `<option value="${i}">${esc(x[0])}</option>`).join(''); });
+$('#pj-sc').value = '2';
+const RAJ = [['Brixton', "King's Cross St. Pancras", 1], ['Oxford Circus', 'Stratford', 2], ['Westminster', 'Canary Wharf', 3], ['Bank', "Shepherd's Bush (C)", 6]];
+$('#ra-j').innerHTML = RAJ.map((p, i) => `<button type="button" data-raj="${i}" aria-pressed="${i ? 'false' : 'true'}">${esc(p[0])} &rarr; ${esc(p[1])}</button>`).join('');
+$('#ra-sc').value = String(RAJ[0][2]);
+const RA = { j: 0, mode: 'react', sig: 1, shown: 0 };
+const KIND = { T: 'Thought', A: 'Action', O: 'Observation', F: 'Answer' };
+function raRun() { const J = RAJ[RA.j], a = sid(J[0]), b = sid(J[1]), S = scen(+$('#ra-sc').value); Object.assign(RA, { a, b, S, res: RPC.react({ a, b, P: P0, ann: S.ann, runs: S.runs, sig: RA.sig, mode: RA.mode }), mem: RPC.plan(a, b, P0) }); RA.shown = RA.res.steps.length; RA.task = `Get a traveller from ${nm(a)} to ${nm(b)} as quickly as possible, today.`; }
+function oracleOf(a, b, ann, sigE, P) { const all = ann.slice(); if (sigE >= 0) all[sigE] = 1; return RPC.search({ starts: RPC.startsAt(a, null, P), goal: b, P, avoid: all }).cost; }
+function traceStats(res, shown, task) { const st = res.steps.slice(0, shown); return { T: st.filter(s => s.k === 'T').length, A: st.filter(s => s.k === 'A').length, O: st.filter(s => s.k === 'O').length, W: words(task) + sum(st.map(s => words(s.t))), st, done: shown >= res.steps.length }; }
+function updRA() {
+  const res = RA.res, s = traceStats(res, RA.shown, RA.task), memBad = ride(RA.mem).filter(e => RA.S.ann[e]);
+  $('#ra-trace').innerHTML = `<li class="k-F"><span class="rk">Task</span><span class="tx">${esc(RA.task)}</span></li>` + s.st.map(x => `<li class="k-${x.k}${x.fail != null ? ' bad' : ''}"><span class="rk">${KIND[x.k]}</span><span class="tx">${esc(x.t)}</span></li>`).join('')
+    + (!s.done ? `<li class="wait">Press &ldquo;Next step&rdquo; to see the agent&rsquo;s next move.</li>` : RA.mode === 'reason' ? `<li class="verdict${res.ok ? ' good' : ''}">Checked against today&rsquo;s network: ${res.ok ? 'the remembered route is open, so this answer happens to be right.' : `the remembered route runs through ${plural(res.bad.length, 'closed segment')} (${esc(edgeName(res.bad[0]))}${res.bad.length > 1 ? ', &hellip;' : ''}). A traveller who followed it would be stranded.`}</li>` : '');
+  $('#ra-t').textContent = s.T; $('#ra-a').textContent = s.A;
+  $('#ra-w').innerHTML = tip(nf(s.W), `task ${words(RA.task)} + thoughts ${sum(s.st.filter(x => x.k === 'T').map(x => words(x.t)))} + actions ${sum(s.st.filter(x => x.k === 'A').map(x => words(x.t)))} + observations ${sum(s.st.filter(x => x.k === 'O').map(x => words(x.t)))}${s.st.some(x => x.k === 'F') ? ' + answer ' + words(s.st.find(x => x.k === 'F').t) : ''} words`);
+  $('#ra-o').innerHTML = !s.done ? 'under way' : RA.mode === 'reason' ? (res.ok ? 'route open' : 'route blocked') : res.ok ? `arrived, ${tip(res.min + ' min', 'riding minutes + 5 min per change, including the detour')}` : 'no route left';
+  $('#run-ra').innerHTML = `<b>Running example</b>: c<sub>${s.T + 1}</sub> = (x, ${plural(s.T, 'thought')}, ${plural(s.A, 'action')}, ${plural(s.O, 'observation')}) = ${tip(nf(s.W) + ' words', 'everything the model must read before its next turn')} of context, before the model writes its next thought.`;
+  const nAnn = sum(RA.S.ann);
+  if (!s.done) { const last = s.st[s.st.length - 1]; $('#ra-say').innerHTML = !last ? 'The agent has read the task and nothing else yet. Press &ldquo;Next step&rdquo;.' : last.k === 'T' ? 'The model has written a thought. Its next output will be an action: a call to one of its tools.' : last.k === 'A' ? 'The agent has asked for a tool. The next line comes from the world, not from the model.' : 'The tool has answered. The model reads the observation and writes its next thought.'; return; }
+  if (RA.mode === 'reason') { $('#ra-say').innerHTML = `Reasoning alone is one fluent model turn and no tool calls: cheap, quick and confident. ${res.ok ? 'Today it happens to be right, because the disruption does not touch the route it remembers.' : `But the route it remembers runs through ${plural(res.bad.length, 'closed segment')} on the ${esc(LL(ED[res.bad[0]][2]))}, so the answer would strand the traveller.`} ${RA.sig ? 'It never travels, so it never meets the signal failure either, and it cannot learn anything after answering. ' : ''}This is the failure ReAct was designed against: facts recalled from training, stated as if they were current.`; return; }
+  const orc = oracleOf(RA.a, RA.b, RA.S.ann, res.sigE, P0), fail = res.steps.find(x => x.fail != null);
+  $('#ra-say').innerHTML = !res.ok ? `The agent checked, planned and set off, but no route to ${en(RA.b)} remains, and it says so instead of inventing one.` : `The agent made ${plural(res.turns, 'model turn')} and ${plural(res.tools, 'tool call')}. Checking the status board first ${!nAnn ? 'cost one call and showed good service' : memBad.length ? `kept its route clear of all ${nAnn} closed segments; the route it remembered would have run through ${memBad.length} of them` : 'confirmed that the closures do not touch its remembered route'}. ${fail ? `The signal failure, which no board announced, was found only by riding into it, and cost one re-plan at ${en(fail.at)}.` : 'Nothing surprised it on the way.'} It arrived after ${res.min} min; an all-knowing planner, told every closure in advance, would take ${orc} min${orc === res.min ? ' too' : ''}. The price of grounding: the context grew to ${nf(s.W)} words.`;
+}
+function drawRA() {
+  const cv = $('#ra-cv'), C = C0(), res = RA.res, s = traceStats(res, RA.shown, RA.task), ids = [RA.a, RA.b].concat(pathStations(RA.mem), ...res.plans.map(pathStations));
+  const v = mapFrame(cv, ids, 4); drawNet(v, { alpha: 0.3, lw: 1.8 });
+  ED.forEach((_, e) => { if (RA.S.ann[e]) cross(v, e, C.bad); });
+  drawEdges(v, ride(RA.mem), { col: C.muted, dash: [6, 5], lw: 2.2 });
+  if (RA.mode === 'react') {
+    const tl = Math.max(0, ...s.st.filter(x => x.tl != null).map(x => x.tl)); drawEdges(v, res.trail.slice(0, tl), { lw: 5 });
+    s.st.filter(x => x.fail != null).forEach(x => midDot(v, x.fail, C.bad, 6));
+    const at = [...s.st].reverse().find(x => x.at != null); if (at && !s.done) sDot(v, at.at, C.ink, 9, true);
+  }
+  sDot(v, RA.a, C.ink, 6); sTag(v, RA.a, nm(RA.a), C.ink); sStar(v, RA.b, C.a, 9); sTag(v, RA.b, nm(RA.b), C.ink, true);
+}
+function raAll() { raRun(); updRA(); drawRA(); }
+seg1('[data-ram]', 'data-ram', k => { RA.mode = k; raAll(); });
+seg1('[data-ras]', 'data-ras', k => { RA.sig = +k; raAll(); });
+seg1('#ra-j button', 'data-raj', k => { RA.j = +k; $('#ra-sc').value = String(RAJ[RA.j][2]); raAll(); });
+$('#ra-sc').addEventListener('change', raAll);
+$('#ra-step').addEventListener('click', () => { RA.shown = Math.min(RA.res.steps.length, RA.shown + 1); updRA(); drawRA(); });
+$('#ra-all').addEventListener('click', () => { RA.shown = RA.res.steps.length; updRA(); drawRA(); });
+$('#ra-reset').addEventListener('click', () => { RA.shown = 0; updRA(); drawRA(); });
+fig($('#ra-cv'), () => RA.res && drawRA());
+
+/* ---------- 7. plan, execute, re-plan ---------- */
+const RX = { p: 0.03, kind: 'replan', i: -1, cache: {} };
+const KN = { once: 'Plan once, never re-plan', replan: 'Plan, re-plan on failure', every: 'Think again at every station' };
+function rpMC(p) { const k = fmt(p, 2); if (!RX.cache[k]) { const R = RPC.mcReplan(Math.round(p * 100) / 100, 300, 2026, P0); R.sum = rpSum(R, Math.round(p * 100) / 100); RX.cache[k] = R; } return RX.cache[k]; }
+function rpSum(R, p) {
+  const feas = R.oracle.map(isFinite), o = { feas: feas.filter(Boolean).length, n: R.oracle.length };
+  ['once', 'replan', 'every'].forEach(k => { const S = R[k], ex = []; let ok = 0, hon = 0; S.forEach((s, i) => { if (s.ok) { ok++; ex.push(s.min - R.oracle[i]); } if (!feas[i] && s.gaveUp) hon++; }); o[k] = { ok, hon, ex: mean(ex), calls: mean(S.map(s => s.calls)), fails: mean(S.map(s => s.fails)) }; });
+  R.L = R.tasks.map(T => ride(RPC.plan(T.a, T.b, P0)).length); o.surv = mean(R.L.map(L => Math.pow(1 - p, L))); return o;
+}
+function updRP() {
+  const p = RX.p, R = rpMC(p), o = R.sum;
+  if (RX.i < 0) RX.i = Math.max(0, R.tasks.findIndex((T, i) => !R.once[i].ok && isFinite(R.oracle[i]) && R.replan[i].fails >= 1));
+  const i = RX.i, T = R.tasks[i], L = R.L[i];
+  $('#rp-p-o').textContent = fmt(p, 2);
+  const cell = (k, f) => f(o[k]);
+  $('#rp-board').innerHTML = `<thead><tr><th>Agent</th><th>Reached the goal</th><th>Said &ldquo;no route&rdquo; when none existed</th><th>Extra minutes vs all-knowing</th><th>Model calls per journey</th></tr></thead><tbody>`
+    + ['once', 'replan', 'every'].map(k => `<tr${k === 'replan' ? ' class="win"' : ''}><td>${KN[k]}</td><td>${cell(k, x => tip(`${x.ok} / ${o.n}`, `${o.feas} of the ${o.n} journeys are possible at all`))}</td><td>${cell(k, x => `${x.hon} / ${o.n - o.feas}`)}</td><td>${cell(k, x => tip(isFinite(x.ex) ? '+' + fmt(x.ex, 2) : '&ndash;', 'mean over the journeys this agent completed of\n(its minutes − the all-knowing planner’s minutes)'))}</td><td>${cell(k, x => tip(fmt(x.calls, 2), `mean planner calls; ${fmt(x.fails, 2)} failures met per journey`))}</td></tr>`).join('')
+    + `<tr class="ref"><td>All-knowing planner (told every closure)</td><td>${o.feas} / ${o.n}</td><td>${o.n - o.feas} / ${o.n - o.feas}</td><td>0</td><td>&ndash;</td></tr></tbody>`;
+  const sv = Math.pow(1 - p, L);
+  $('#run-rp').innerHTML = `<b>Running example</b>: journey ${i + 1}&rsquo;s first plan has L = ${L} segments, so it survives with probability (1 &minus; ${fmt(p, 2)})<sup>${L}</sup> = ${fmt(sv, 3)}. Averaged over all 300 first plans, the formula predicts ${tip(pct(o.surv), 'mean of (1 − p)^L over the 300 first plans')} will run without a hitch; in the simulation ${tip(`${o.once.ok} of 300 = ${pct(o.once.ok / 300)}`, 'plans that met no closed segment')} did. The two differ only by the luck of the draw.`;
+  const s = R[RX.kind][i], desc = x => x.ok ? `arrived in ${x.min} min after ${plural(x.fails, 'failure')} and ${plural(x.calls, 'call')}` : x.gaveUp ? `correctly reported that no route was left (${plural(x.calls, 'call')})` : `was stranded at ${en(x.stop)}`;
+  $('#rp-cap').innerHTML = `Journey ${i + 1} of 300: <b>${en(T.a)} &rarr; ${en(T.b)}</b>. ${sum(T.closed)} of the 406 segments are closed today (<span style="color:var(--qda)">&#10005;</span>), unannounced. <span style="color:var(--muted)">- - -</span> the first plan; coloured: what &ldquo;${KN[RX.kind].toLowerCase()}&rdquo; actually rode; <span style="color:var(--qda)">&#9679;</span> closures it ran into.`;
+  $('#rp-ok').innerHTML = s.ok ? `arrived, ${s.min} min` : s.gaveUp ? 'no route' : 'stranded'; $('#rp-c').textContent = s.calls;
+  const orc = R.oracle[i];
+  let gen = p === 0 ? `At p = 0 nothing ever fails, so all three agents ride the same plans; the ${fmt(o.every.calls, 1)} calls per journey of thinking at every station buy nothing.`
+    : `Over all 300 journeys, planning once reached only ${o.once.ok}. Re-planning on failure reached ${o.replan.ok === o.feas ? 'every one of the ' + o.feas + ' possible journeys' : o.replan.ok + ' of the ' + o.feas + ' possible journeys'} with ${fmt(o.replan.calls, 2)} calls each. Thinking at every station ${o.every.ok === o.replan.ok ? 'reached the same journeys' : 'reached ' + o.every.ok}${o.every.ex < o.replan.ex - 0.05 ? `, ${fmt(o.replan.ex - o.every.ex, 2)} min quicker on average because it reads the departure boards at every station it passes,` : ''} but made ${fmt(o.every.calls, 1)} calls each, about ${fmt(o.every.calls / o.replan.calls, 0)} times as many. Plan-and-execute buys almost the same journeys for a fraction of the thinking.`;
+  $('#rp-say').innerHTML = `On this journey: planning once ${R.once[i].ok ? 'got through' : `was stopped at ${en(R.once[i].stop)}`}; re-planning on failure ${desc(R.replan[i])}; thinking at every station ${desc(R.every[i])}. The all-knowing planner: ${isFinite(orc) ? orc + ' min' : 'no route exists'}. ` + gen;
+}
+function drawRP() {
+  const cv = $('#rp-cv'), R = RX.cache[fmt(RX.p, 2)]; if (!R) return waiting(cv, 'Simulating 300 journeys…');
+  const C = C0(), T = R.tasks[RX.i], s = R[RX.kind][RX.i], first = RPC.plan(T.a, T.b, P0), ids = [T.a, T.b].concat(pathStations(first), ...s.trail.map(e => [ED[e][0], ED[e][1]]));
+  const v = mapFrame(cv, ids, 4); drawNet(v, { alpha: 0.3, lw: 1.8 });
+  ED.forEach((_, e) => { if (T.closed[e]) cross(v, e, C.bad, 3.2); });
+  drawEdges(v, ride(first), { col: C.muted, dash: [6, 5], lw: 2.2 });
+  drawEdges(v, s.trail, { lw: 5 }); s.hits.forEach(e => midDot(v, e, C.bad, 6));
+  sDot(v, T.a, C.ink, 6); sTag(v, T.a, nm(T.a), C.ink); sStar(v, T.b, C.a, 9); sTag(v, T.b, nm(T.b), C.ink, true);
+  if (!s.ok && s.stop >= 0) sDot(v, s.stop, C.bad, 9, true);
+}
+$('#rp-p').addEventListener('input', e => { $('#rp-p-o').textContent = fmt(+e.target.value, 2); });
+$('#rp-p').addEventListener('change', e => { RX.p = +e.target.value; waiting($('#rp-cv')); setTimeout(() => { updRP(); drawRP(); }, 20); });
+seg1('[data-rps]', 'data-rps', k => { RX.kind = k; updRP(); drawRP(); });
+$('#rp-prev').addEventListener('click', () => { RX.i = (RX.i + 299) % 300; updRP(); drawRP(); });
+$('#rp-next').addEventListener('click', () => { RX.i = (RX.i + 1) % 300; updRP(); drawRP(); });
+fig($('#rp-cv'), drawRP);
+
+/* ---------- 8. reflection ---------- */
+const RF = { T: 0.3, i: -1, kind: 'mem', cache: {} };
+function rfMC(T) { const k = fmt(T, 1); if (!RF.cache[k]) RF.cache[k] = RPC.mcReflect(0.03, Math.round(T * 10) / 10, 300, 8, 11, P0); return RF.cache[k]; }
+const within = (arr, k) => arr.filter(s => s && s <= k).length / arr.length;
+function updRF() {
+  const T = RF.T, o = rfMC(T), N = o.tasks.length, q = within(o.none, 1), m3 = within(o.mem, 3), n3 = within(o.none, 3), m8 = within(o.mem, 8), n8 = within(o.none, 8), ind3 = 1 - Math.pow(1 - q, 3), ind8 = 1 - Math.pow(1 - q, 8);
+  if (RF.i < 0) RF.i = Math.max(0, o.mem.findIndex(s => s >= 3));
+  $('#rf-t-o').textContent = fmt(T, 1);
+  $('#rf-1').innerHTML = tip(pct(q), `${o.none.filter(s => s === 1).length} of the ${N} possible journeys\n(${o.impossible} of the 300 had no route at all and are left out)`);
+  $('#rf-m').innerHTML = tip(pct(m3), `${o.mem.filter(s => s && s <= 3).length} of ${N}`); $('#rf-n').innerHTML = tip(pct(n3), `${o.none.filter(s => s && s <= 3).length} of ${N}`);
+  const solved = o.mem.filter(s => s); $('#rf-avg').innerHTML = tip(fmt(mean(solved), 2), `over the ${solved.length} journeys solved within 8 tries`);
+  $('#run-rf').innerHTML = `<b>Running example</b>: q = ${fmt(q, 3)} at the first try, so independent tries would give 1 &minus; (1 &minus; ${fmt(q, 3)})<sup>3</sup> = ${tip(fmt(ind3, 3), 'the formula, for k = 3')} within three. Retrying without memory actually reaches ${tip(fmt(n3, 3), 'measured on the same journeys and closures')}; with reflection, ${fmt(m3, 3)}.`;
+  $('#rf-say').innerHTML = T === 0 ? `At T = 0 the planner is deterministic: every retry without memory is the same plan, so it fails in the same place, and the ${pct(q)} solved at the first try is still ${pct(n8)} after eight. Reflection climbs to ${pct(m3)} within three tries and ${pct(m8)} within eight: the lesson changes the next plan even though the planner has not changed at all.`
+    : `At T = ${fmt(T, 1)} retries differ ${T <= 0.5 ? 'a little' : 'more'}, so blind retrying creeps from ${pct(q)} to ${pct(n8)} after eight tries, ${n8 < ind8 - 0.05 ? `far below the ${pct(ind8)} that independent tries would give: attempts by the same agent tend to fail in the same way` : `close to the ${pct(ind8)} of independent tries: at this temperature the attempts really are quite different, and each is a worse plan`}. With reflection, ${pct(m3)} are solved within three tries and ${pct(m8)} within eight, ${fmt(mean(solved), 2)} tries on average: each failure removes one trap for good.`;
+  updRFtbl(); drawRF();
+}
+function updRFtbl() {
+  const o = rfMC(RF.T), N = o.tasks.length, i = RF.i, T = o.tasks[i], rows = o.rec[i][RF.kind], lesson = e => `&ldquo;${esc(LL(ED[e][2]))}: no trains between ${esc(edgeName(e))}; avoid.&rdquo;`;
+  $('#rf-tbl').innerHTML = `<caption style="caption-side:top;text-align:left;padding:4px 0 8px;color:var(--muted);font-size:.88rem">Journey ${i + 1} of the ${N} possible: <b style="color:var(--ink)">${en(T.a)} &rarr; ${en(T.b)}</b>, with ${sum(T.closed)} segments closed (the same on every attempt) at T = ${fmt(RF.T, 1)}.</caption><thead><tr><th>Attempt</th><th>Plan</th><th>Outcome</th><th>Memory for the next attempt</th></tr></thead><tbody>`
+    + rows.map((x, k) => `<tr${x.x.ok ? ' class="win"' : ''}><td>${k + 1}</td><td>${RPC.pathMinutes(x.R, P0)} min: ${RPC.legs(x.R).map(l => `${esc(LL(l.line))} to ${en(l.to)}`).join(', ')}</td><td>${x.x.ok ? `&#10003; arrived in ${x.x.min} min` : `&#10005; blocked between ${esc(edgeName(x.x.e))} (${esc(LL(ED[x.x.e][2]))})`}</td><td>${x.x.ok ? '&ndash;' : RF.kind === 'mem' ? x.lessons.concat([x.x.e]).map(lesson).join('<br>') : 'nothing kept'}</td></tr>`).join('')
+    + (rows.length && !rows[rows.length - 1].x.ok ? `<tr><td colspan="4">Gave up after 8 attempts.</td></tr>` : '') + '</tbody>';
+}
+function drawRF() {
+  const cv = $('#rf-cv'), o = RF.cache[fmt(RF.T, 1)]; if (!o) return waiting(cv);
+  const C = C0(), v = frame(cv, [0.6, 8.4], [0, 1.02], { l: 46, b: 30 }); axes(v, 'attempts k', 'solved within k', { sx: 1, sy: 0.2, fx: x => fmt(x, 0), fy: y => pct(y, 0) }); clip(v);
+  const q = within(o.none, 1); curve(v, k => 1 - Math.pow(1 - q, k), C.muted, 1.8, [6, 5]);
+  [['none', C.b], ['mem', C.a]].forEach(([k, col]) => { const ys = [1, 2, 3, 4, 5, 6, 7, 8].map(j => within(o[k], j)), c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = 3; c.beginPath(); ys.forEach((y, j) => j ? c.lineTo(v.X(j + 1), v.Y(y)) : c.moveTo(v.X(1), v.Y(y))); c.stroke(); c.restore(); ys.forEach((y, j) => dot(v, j + 1, y, col, 4)); });
+  v.ctx.restore();
+}
+$('#rf-t').addEventListener('input', e => { RF.T = +e.target.value; updRF(); });
+seg1('[data-rfk]', 'data-rfk', k => { RF.kind = k; updRFtbl(); });
+$('#rf-prev').addEventListener('click', () => { const N = rfMC(RF.T).tasks.length; RF.i = (RF.i + N - 1) % N; updRFtbl(); });
+$('#rf-next').addEventListener('click', () => { const N = rfMC(RF.T).tasks.length; RF.i = (RF.i + 1) % N; updRFtbl(); });
+fig($('#rf-cv'), drawRF);
+
+/* ---------- project ---------- */
+const PJ = { sig: 1, res: null };
+function pjGo() {
+  const a = selV('pj-a'), b = selV('pj-b'), P = +$('#pj-p').value, S = scen(+$('#pj-sc').value); $('#pj-p-o').textContent = P;
+  if (a === b) { $('#pj-ans').innerHTML = '<b>Pick two different stations.</b>'; $('#pj-ans').className = 'answer no block'; return; }
+  const res = RPC.react({ a, b, P, ann: S.ann, runs: S.runs, sig: PJ.sig, mode: 'react' }), mem = RPC.plan(a, b, P), task = `Get a traveller from ${nm(a)} to ${nm(b)} as quickly as possible, today.`;
+  const orc = oracleOf(a, b, S.ann, res.sigE, P), st = traceStats(res, res.steps.length, task), memBad = ride(mem).filter(e => S.ann[e] || e === res.sigE);
+  Object.assign(PJ, { a, b, P, S, res, mem });
+  $('#pj-ans').className = 'answer block' + (res.ok ? '' : ' no');
+  $('#pj-ans').innerHTML = `<span class="mini-h">The agent&rsquo;s final answer</span><span class="big">${esc(res.steps[res.steps.length - 1].t)}</span><span class="src">${plural(res.turns, 'model turn')} and ${plural(res.tools, 'tool call')}; the context grew to ${nf(st.W)} words. An all-knowing planner, told every closure in advance, would take ${isFinite(orc) ? orc + ' min' : 'no route'}. Answering from memory alone, the agent would have said ${mem.cost} min${memBad.length ? `, by a route through ${plural(memBad.length, 'closed segment')}` : ', and that route happens to be open'}.</span>`;
+  $('#pj-trace').innerHTML = `<thead><tr><th>Step</th><th>Content</th></tr></thead><tbody><tr class="k-F"><td>Task</td><td>${esc(task)}</td></tr>` + res.steps.map(x => `<tr class="k-${x.k}${x.fail != null ? ' bad' : ''}"><td>${KIND[x.k]}</td><td>${esc(x.t)}</td></tr>`).join('') + '</tbody>';
+  drawPJ();
+}
+function drawPJ() {
+  const cv = $('#pj-cv'); if (!PJ.res) return; const C = C0(), res = PJ.res, ids = [PJ.a, PJ.b].concat(...res.plans.map(pathStations), pathStations(PJ.mem));
+  const v = mapFrame(cv, ids, 4); drawNet(v, { alpha: 0.3, lw: 1.8 });
+  ED.forEach((_, e) => { if (PJ.S.ann[e]) cross(v, e, C.bad); });
+  if (res.plans[0] && isFinite(res.plans[0].cost)) drawEdges(v, ride(res.plans[0]), { col: C.muted, dash: [6, 5], lw: 2.2 });
+  drawEdges(v, res.trail, { lw: 5 }); res.hits.forEach(e => midDot(v, e, C.bad, 6));
+  sDot(v, PJ.a, C.ink, 6); sTag(v, PJ.a, nm(PJ.a), C.ink); sStar(v, PJ.b, C.a, 9); sTag(v, PJ.b, nm(PJ.b), C.ink, true);
+}
+$('#pj-go').addEventListener('click', pjGo);
+seg1('[data-pjs]', 'data-pjs', k => { PJ.sig = +k; pjGo(); });
+['pj-a', 'pj-b', 'pj-sc'].forEach(k => $('#' + k).addEventListener('change', pjGo));
+$('#pj-p').addEventListener('input', pjGo);
+fig($('#pj-cv'), drawPJ);
+
+function scoreboard() {
+  const t = performance.now(), out = {};
+  out.v = VMAX * 60;
+  const T0 = [], T5 = [], H = []; for (let a = 0; a < NS; a++) { T0.push(RPC.allFrom(a, 0, null)); T5.push(RPC.allFrom(a, P0, null)); H.push(RPC.bfs(a).d); }
+  const offs = f => { const v = []; for (let a = 0; a < NS; a++) for (let b = 0; b < NS; b++) if (a !== b) v.push(f(a, b)); return v; };
+  const t0 = offs((a, b) => T0[a][b]), t5 = offs((a, b) => T5[a][b]), hp = offs((a, b) => H[a][b]);
+  const mx = a => a.reduce((m, x) => x > m ? x : m, -Infinity);
+  out.m0 = mean(t0); out.x0 = mx(t0); out.mh = mean(hp); out.xh = mx(hp); out.m5 = mean(t5); out.x5 = mx(t5);
+  let bi = 0, bj = 1; for (let a = 0; a < NS; a++) for (let b = 0; b < NS; b++) if (T5[a][b] > T5[bi][bj]) { bi = a; bj = b; } out.pair = [bi, bj];
+  out.w = [0, 1, 2].map(w => asSample(w));
+  const bx = sid('Brixton'), wp = sid('Wembley Park'); out.bw = [RPC.plan(bx, wp, P0).cost, RPC.plan(bx, wp, P0, null, 2).cost];
+  const E = RPC.errand(sid('Waterloo'), [0, 1, 2, 3, 4].map(k => LM[k].s), P0, true); out.err = [E.listed.c, E.best.c, E.best.o.map(i => nm(LM[i].s))];
+  out.rp = rpMC(0.03).sum; out.rf = rfMC(0.3); out.ms = performance.now() - t; return out;
+}
+function pjEval() {
+  $('#pj-eval').disabled = true; $('#pj-prog').textContent = 'Computing…';
+  setTimeout(() => {
+    const S = scoreboard(), py = PY || {}, n4 = x => fmt(x, 4);
+    const rows = [
+      ['Top speed v<sub>max</sub> (km/h)', n4(S.v), py.v],
+      ['Quickest journey, P = 0: mean over all 90,902 pairs (min)', n4(S.m0), py.m0],
+      ['Quickest journey, P = 0: longest (min)', fmt(S.x0, 0), py.x0],
+      ['Fewest stops: mean over all pairs', n4(S.mh), py.mh],
+      ['Fewest stops: most', fmt(S.xh, 0), py.xh],
+      ['Quickest journey, P = 5: mean (min)', n4(S.m5), py.m5],
+      [`Quickest journey, P = 5: longest (min), ${en(S.pair[0])} to ${en(S.pair[1])}`, fmt(S.x5, 0), py.x5],
+      ['2,000 random trips: mean states expanded, Dijkstra', n4(S.w[0].e), py.e0],
+      ['&hellip; A* (w = 1); plans worse than optimal', `${n4(S.w[1].e)}; ${S.w[1].s}`, py.e1],
+      ['&hellip; weighted A* (w = 2); plans worse than optimal', `${n4(S.w[2].e)}; ${S.w[2].s}`, py.e2],
+      ['Brixton to Wembley Park: optimal / weighted A*, w = 2 (min)', `${S.bw[0]} / ${S.bw[1]}`, py.bw],
+      ['Errand from Waterloo, 5 stops and back: as listed / best (min)', `${S.err[0]} / ${S.err[1]}`, py.err],
+      ['300 journeys, p = 0.03: possible at all', String(S.rp.feas), py.feas],
+      ['&hellip; plan once: reached', String(S.rp.once.ok), py.once],
+      ['&hellip; re-plan on failure: reached; extra min; calls', `${S.rp.replan.ok}; ${n4(S.rp.replan.ex)}; ${n4(S.rp.replan.calls)}`, py.replan],
+      ['&hellip; think at every station: reached; extra min; calls', `${S.rp.every.ok}; ${n4(S.rp.every.ex)}; ${n4(S.rp.every.calls)}`, py.every],
+      ['Retries at T = 0.3: solved within 1 / 3 / 8, no memory', [1, 3, 8].map(k => n4(within(S.rf.none, k))).join(' / '), py.none],
+      ['&hellip; with reflection', [1, 3, 8].map(k => n4(within(S.rf.mem, k))).join(' / '), py.mem]
+    ];
+    const same = r => r[2] != null && String(r[2]) === r[1].replace(/<[^>]+>/g, '');
+    $('#pj-board').innerHTML = `<thead><tr><th>Quantity</th><th>This page</th><th>Python reference</th></tr></thead><tbody>` + rows.map(r => `<tr${same(r) ? ' class="win"' : ''}><td>${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2] == null ? '(run rp-ref.py)' : esc(r[2]) + (same(r) ? ' &#10003;' : '')}</td></tr>`).join('') + '</tbody>';
+    const nSame = rows.filter(same).length;
+    $('#pj-prog').textContent = `Computed in ${fmt(S.ms, 0)} ms (some results reused from the labs above).`;
+    $('#pj-say').innerHTML = `${PY ? `${nSame} of ${rows.length} numbers match the Python reference exactly (ticked rows). ` : ''}Over every ordered pair of the 302 stations, the quickest journey with a 5-minute change penalty averages ${fmt(S.m5, 1)} min and the longest, ${en(S.pair[0])} to ${en(S.pair[1])}, takes ${fmt(S.x5, 0)}. A* with an admissible heuristic expands ${pct(1 - S.w[1].e / S.w[0].e, 0)} fewer states than Dijkstra and never returns a worse plan; doubling the heuristic (w = 2) cuts the average to ${fmt(S.w[2].e, 1)} states at the price of ${S.w[2].s} slightly worse plans in 2,000. In the uncertain world of section 7, re-planning on failure reaches ${S.rp.replan.ok === S.rp.feas ? 'all ' + S.rp.feas : S.rp.replan.ok + ' of the ' + S.rp.feas} possible journeys with ${fmt(S.rp.replan.calls, 2)} model calls each, against ${fmt(S.rp.every.calls, 1)} for thinking at every station; and with reflection, ${pct(within(S.rf.mem, 3), 0)} of journeys are solved within three attempts, against ${pct(within(S.rf.none, 3), 0)} for blind retries.`;
+    $('#pj-eval').disabled = false;
+  }, 30);
+}
+$('#pj-eval').addEventListener('click', pjEval);
+$('#pj-honest').innerHTML = `The browser and Python share nothing but the data file: the page&rsquo;s planner is JavaScript, the reference is a separate Python program written to make the same choices (the same priority order, the same tie-breaking by state number, the same random numbers via a bit-for-bit port of the page&rsquo;s generator). The all-pairs times are also checked against SciPy&rsquo;s own Dijkstra. Honest caveats: the agent&rsquo;s &ldquo;thoughts&rdquo; are templates filled in by rules, not a language model, so it shows the <em>shape</em> of ReAct, plan-and-execute and Reflexion, not how well a real model follows it; closures are independent coin flips per segment, while real disruptions close whole stretches of a line; and the network and running times are a dataset from the 2000s, not today&rsquo;s timetable.`;
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+updWY(); updBF(true); updDJ(); updAS(); updDC(); raRun(); updRA();
+redrawAll();
+heroRun();
+setTimeout(() => { updRP(); drawRP(); updRF(); pjGo(); pjEval(); }, 40);
+window.__rpDebug = { RPC, RX, RF, AS, DC, RA, PJ, scoreboard, rpMC, rfMC };
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

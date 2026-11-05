@@ -1,0 +1,1402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on multi-agent AI systems: the Condorcet jury theorem, why correlated agents hit a ceiling, orchestrator-worker task graphs and their critical path, Amdahl's law and the universal scalability law, debate dynamics, critique loops, hand-offs that lose facts, and the n(n-1)/2 cost of everyone talking to everyone, ending with 39 real annotators voting on 108 bird photos, where majority voting stalls at 76% and Dawid-Skene EM reaches 89% without an answer key, verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Multi-Agent Systems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.heroplot { aspect-ratio: 1.25 / 1; cursor: pointer; }
+.dagplot { aspect-ratio: 2 / 1; cursor: pointer; }
+.ganttplot { aspect-ratio: 2.4 / 1; }
+.matplot { aspect-ratio: 2.5 / 1; cursor: crosshair; }
+pre.prompt { max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-size: 0.8rem; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+#hero-cap { margin-top: 8px; }
+@media (max-width: 560px) {
+  .heroplot { aspect-ratio: 1 / 1; }
+  .dagplot { aspect-ratio: 0.9 / 1; }
+  .ganttplot { aspect-ratio: 1.5 / 1; }
+  .matplot { aspect-ratio: 1.3 / 1; }
+  .crplot { aspect-ratio: 0.72 / 1; }
+  #pj-stats { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+@media (max-width: 560px) { .eq .m { font-size: 0.92rem; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Multi-Agent Systems <span>&middot; many minds, one answer</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Jury theorem</a>
+      <a href="#correlated">Correlation</a>
+      <a href="#orchestrator">Orchestrator</a>
+      <a href="#scaling">Scaling</a>
+      <a href="#debate">Debate</a>
+      <a href="#critique">Critique</a>
+      <a href="#handoff">Hand-offs</a>
+      <a href="#topology">Topologies</a>
+      <a href="#project">Crowd project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">AI agents · chapter 5.5 · multi-agent systems</div>
+      <h1>Multi-Agent Systems</h1>
+      <div class="sub">When several agents beat one, and when they only cost more</div>
+      <p class="lead">Give one hard job to a team of agents and three things can happen: they catch each other&rsquo;s mistakes, they finish sooner by working in parallel, or they spend a fortune talking to each other and agree on the wrong answer. Which one you get is not luck; it follows from a few pieces of maths this chapter builds. It starts with real people. In the figure, 39 human annotators each looked at the same 108 photos of two very similar blue birds and answered yes or no. One by one they are mediocre. Do they become wise as a crowd? <strong>Tap the figure</strong> to step through the photos, then swap the real crowd for independent stand-ins of exactly the same skill.</p>
+      <dl class="facts">
+        <div><dt>The promise</dt><dd>Independent agents that are right more often than not become reliable by voting (Condorcet, 1785)</dd></div>
+        <div><dt>The catch</dt><dd>Agents that share blind spots, a serial orchestrator, and n(n&minus;1)/2 conversations</dd></div>
+        <div><dt>The patterns</dt><dd>Orchestrator and workers, debate, critique, hand-offs</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10 heroplot"><canvas id="hero-cv" aria-label="A ring of 39 annotators voting on one photo; a strip of 108 photos below"></canvas></div>
+      <div class="btns" style="margin-top:10px">
+        <div class="seg" role="group" aria-label="Which crowd"><button type="button" data-hm="real" aria-pressed="true">The real crowd</button><button type="button" data-hm="ind">Independent stand-ins</button></div>
+        <button type="button" class="btn" id="hero-next">Next photo</button><button type="button" class="btn primary" id="hero-play">Play all 108</button>
+      </div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--qda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Many minds: the jury theorem</a></li>
+    <li><a href="#correlated"><i>02</i>When agents think alike</a></li>
+    <li><a href="#orchestrator"><i>03</i>Orchestrator and workers</a></li>
+    <li><a href="#scaling"><i>04</i>Amdahl and the cost of syncing</a></li>
+    <li><a href="#debate"><i>05</i>Debate: changing minds</a></li>
+    <li><a href="#critique"><i>06</i>Critique: a checker in the loop</a></li>
+    <li><a href="#handoff"><i>07</i>Hand-offs: passing the baton</a></li>
+    <li><a href="#topology"><i>08</i>Who talks to whom</a></li>
+    <li><a href="#project"><i>09</i>39 annotators, one verdict</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Many minds: the jury theorem</h2>
+    <div class="prose">
+      <p>In 1785 the Marquis de Condorcet asked when a jury is more reliable than a single juror. His answer is the oldest argument for multi-agent systems. Suppose each of n agents answers a yes/no question and is right with probability p, independently of the others, and the team goes with the majority. If p is above one half, the chance that the majority is right climbs towards certainty as n grows. LLM practice rediscovered this as <em class="term">self-consistency</em> (Wang et al., 2023): sample several answers from a model and keep the most common one. Li et al. (2024) found that simply adding more sampled &ldquo;agents&rdquo; and voting keeps improving accuracy on many benchmarks, up to a point.</p>
+      <p>The bars on the left show how many of the n agents are right, a binomial distribution; the green bars are the outcomes where the majority wins. <strong>Move p and n</strong>, and try p below one half.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} P_{\text{maj}}(n, p) &= \sum_{k=(n+1)/2}^{n} \binom{n}{k}\, p^{k} (1-p)^{\,n-k} \end{aligned} \]</div><div class="read"><b>Read it as:</b> k is how many of the n agents are right. Each agent is right with probability p, independently, so k follows a binomial distribution: there are C(n, k) ways to choose which k are right, each with probability p<sup>k</sup>(1 &minus; p)<sup>n&minus;k</sup>. The majority is right when k is more than half of n; add up those cases. The sum needs n odd; with an even n a tie is possible, and the labs settle ties with a fair coin.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The chance the majority is right is the sum, from k equals n-plus-one over two up to n, of n choose k times p to the k times one minus p to the n minus k.&rdquo;</em></div><div class="eq-run" id="run-wy"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-3x1"><canvas id="wy-pmf" aria-label="Binomial distribution of the number of agents who are right"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> majority right &nbsp; <span style="color:var(--qda)">&#9644;</span> majority wrong &nbsp; <span style="color:var(--muted)">&#9644;</span> tie. The dashed line is n/2.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="wy-cv" aria-label="Majority accuracy against the number of agents"></canvas></div><figcaption><span style="color:var(--lda)">&#9644;</span> your p &nbsp; <span style="color:var(--muted)">&#9644;</span> p = 0.45, 0.55, 0.6, 0.8 and 0.9 for comparison &nbsp; <span style="color:var(--muted)">- -</span> one agent alone. The ring is your n.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="wy-p">Each agent right, p</label><output id="wy-p-o"></output></div><input type="range" id="wy-p" min="0.3" max="0.95" step="0.01" value="0.7"></div>
+        <div class="ctrl"><div class="top"><label for="wy-n">Agents voting, n</label><output id="wy-n-o"></output></div><input type="range" id="wy-n" min="1" max="51" step="2" value="5"></div>
+        <div class="stats"><div class="stat"><div class="v" id="wy-maj"></div><div class="k">majority right</div></div><div class="stat"><div class="v" id="wy-one"></div><div class="k">one agent right</div></div><div class="stat"><div class="v" id="wy-gain"></div><div class="k">gain from voting</div></div><div class="stat"><div class="v" id="wy-need"></div><div class="k">agents needed for 95%</div></div></div>
+        <p class="note" id="wy-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CORRELATED -->
+<section class="chap" id="correlated">
+  <div class="wrap">
+    <div class="tag">The catch</div>
+    <h2>When agents think alike</h2>
+    <div class="prose"><p>The hero figure broke the theorem: 39 annotators averaging 64% should, if independent, be right 97% of the time by majority. They manage 76%. The missing ingredient is <b>correlation</b>. Some questions are simply hard, and on a hard question most agents fail <i>together</i>. A simple, standard way to model this: give each question its own chance &theta; that an agent gets it right, drawn from a Beta distribution with mean p, and let the agents be independent only once &theta; is fixed. The spread of &theta; sets the correlation &rho; between any two agents&rsquo; correctness (Ladha, 1992, studied the jury theorem with correlated votes). Five copies of one LLM given the same prompt are a high-&rho; jury: they share training data, habits and blind spots. <strong>Raise &rho; and watch the ceiling come down</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \theta_q &\sim \text{Beta}(\alpha, \beta) \\ \alpha &= p\,(1/\rho - 1) \\ \beta &= (1-p)(1/\rho - 1) \\ \lim_{n\to\infty} P_{\text{maj}} &= P\big(\theta > \tfrac12\big) \\ &= 1 - I_{1/2}(\alpha, \beta) \end{aligned} \]</div><div class="read"><b>Read it as:</b> question q has its own difficulty &theta;<sub>q</sub>, the chance that any one agent gets it right. Across questions &theta; averages p, and two agents&rsquo; correctness has correlation &rho; = 1/(&alpha; + &beta; + 1). Votes then follow a <i>beta-binomial</i> distribution. With infinitely many agents the majority is right exactly on the questions where &theta; &gt; &frac12;, so that share is a ceiling no team size can break; I is the regularised incomplete beta function.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Theta is Beta alpha beta; in the limit the majority is right with the probability that theta exceeds one half.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ n_{\text{eff}} = \frac{n}{1 + (n-1)\,\rho} \;\xrightarrow{\;n\to\infty\;}\; \frac{1}{\rho} \]</div><div class="read"><b>Read it as:</b> the share of a correlated panel that votes right varies as much as the share of a smaller panel of n<sub>eff</sub> independent agents would. Survey statisticians call 1 + (n &minus; 1)&rho; the <i>design effect</i> (Kish, 1965). However many correlated agents you add, they are never worth more than 1/&rho; independent ones.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The effective number of agents is n over one plus n minus one times rho, which tends to one over rho.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-co" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="co-cv" aria-label="Majority accuracy against n for independent and correlated agents"></canvas></div><figcaption><span style="color:var(--lda)">&#9644;</span> correlated agents (beta-binomial) &nbsp; <span style="color:var(--cB)">- -</span> independent agents with the same p &nbsp; <span style="color:var(--qda)">&middot;&middot;&middot;</span> the ceiling P(&theta; &gt; &frac12;).</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="co-beta" aria-label="Distribution of question difficulty theta"></canvas></div><figcaption>How difficulty varies between questions. Questions right of the dashed line are ones most agents get right; on those left of it, more agents only make the wrong majority surer.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="co-p">Average accuracy p</label><output id="co-p-o"></output></div><input type="range" id="co-p" min="0.4" max="0.95" step="0.01" value="0.64"></div>
+        <div class="ctrl"><div class="top"><label for="co-r">Correlation &rho;</label><output id="co-r-o"></output></div><input type="range" id="co-r" min="0" max="0.6" step="0.01" value="0.11"></div>
+        <div class="ctrl"><div class="top"><label for="co-n">Agents voting, n</label><output id="co-n-o"></output></div><input type="range" id="co-n" min="1" max="61" step="2" value="39"></div>
+        <div class="stats"><div class="stat"><div class="v" id="co-maj"></div><div class="k">majority right, correlated</div></div><div class="stat"><div class="v" id="co-ind"></div><div class="k">if independent</div></div><div class="stat"><div class="v" id="co-ceil"></div><div class="k">ceiling, n &rarr; &infin;</div></div><div class="stat"><div class="v" id="co-neff"></div><div class="k">worth this many independent agents</div></div></div>
+        <p class="note" id="co-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ORCHESTRATOR -->
+<section class="chap" id="orchestrator">
+  <div class="wrap">
+    <div class="tag">Pattern 1</div>
+    <h2>Orchestrator and workers</h2>
+    <div class="prose"><p>Voting uses many agents for the <i>same</i> job. The other big reason for a team is to split one job into parts. In the <em class="term">orchestrator&ndash;workers</em> pattern (Schluntz &amp; Zhang, 2024), a lead agent plans the job as a graph of sub-tasks, briefs worker agents to do them, and merges what comes back; Anthropic&rsquo;s research system works this way, with a lead agent that sends sub-agents to search in parallel. Below is such a plan for &ldquo;Should I put a heat pump in my old house?&rdquo;: eight searches, four analyses, two sections of writing, a critique and an answer. The durations are illustrative seconds of agent time. A greedy scheduler hands each free agent the ready job with the longest chain still behind it. Two quantities decide everything: the total <b>work</b>, and the <b>critical path</b> (red), the longest chain of jobs that must run one after another. <strong>Add agents, then click a job to make it three times slower</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} T_W &\ge \max\!\big(T_\infty,\; T_O + \tfrac{T_{\text{work}}}{W}\big) \\ T_W &\le \tfrac{T_{\text{work}}}{W} + T_\infty \\ S &= T_1 / T_W \end{aligned} \]</div><div class="read"><b>Read it as:</b> T<sub>W</sub> is the time to finish with W worker agents. T<sub>&infin;</sub> is the critical path: even infinitely many agents must wait for it. T<sub>work</sub> is the workers&rsquo; total job time, which W agents can at best share evenly; T<sub>O</sub> is the orchestrator&rsquo;s own planning and answering, which here comes first and last. Graham (1969) proved the right-hand bound for any greedy schedule, one that never leaves an agent idle while a job is ready. S is the speed-up over one agent doing all T<sub>1</sub> seconds itself. Both bounds assume briefing a worker is free; the slider says otherwise.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The time with W agents is at least the critical path, and at least the orchestrator's time plus the work over W; and at most the work over W plus the critical path.&rdquo;</em></div><div class="eq-run" id="run-or"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot dagplot"><canvas id="or-dag" aria-label="The task graph; click a job to slow it down"></canvas></div><figcaption>The plan, left to right. <span style="color:var(--lda)">&#9632;</span> orchestrator&rsquo;s own jobs &nbsp; <span style="color:var(--cB)">&#9632;</span> slowed by you &nbsp; <span style="color:var(--qda)">&#9644;</span> critical path. Numbers are seconds.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ganttplot"><canvas id="or-gantt" aria-label="Gantt chart of the schedule"></canvas></div><figcaption>Who does what, when. The top lane is the lead agent, the orchestrator; grey bars are it briefing a worker. The red line is the finish; with free briefing the dashed lines are the lower (dark) and upper (light) bounds.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="or-w">Worker agents, W</label><output id="or-w-o"></output></div><input type="range" id="or-w" min="1" max="8" step="1" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="or-b">Briefing time per job</label><output id="or-b-o"></output></div><input type="range" id="or-b" min="0" max="20" step="1" value="0"></div>
+        <div class="seg" role="group" aria-label="Scheduling priority"><button type="button" data-orp="cp" aria-pressed="true">Longest chain first</button><button type="button" data-orp="plan">Plan order</button></div>
+        <div class="btns"><button type="button" class="btn" id="or-reset">Undo slow jobs</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="or-T"></div><div class="k">time to answer, T<sub>W</sub></div></div><div class="stat"><div class="v" id="or-S"></div><div class="k">speed-up over one agent</div></div><div class="stat"><div class="v" id="or-span"></div><div class="k">critical path, T<sub>&infin;</sub></div></div><div class="stat"><div class="v" id="or-util"></div><div class="k">workers busy</div></div></div>
+        <p class="note" id="or-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SCALING -->
+<section class="chap" id="scaling">
+  <div class="wrap">
+    <div class="tag">Coordination costs</div>
+    <h2>Amdahl&rsquo;s law and the cost of keeping in sync</h2>
+    <div class="prose"><p>The briefing slider above showed the problem in miniature: work only the orchestrator can do does not shrink when you add workers. Gene Amdahl made the point about parallel computers in 1967: if a share &alpha; of a job is serial, no number of processors can make it more than 1/&alpha; times faster. Teams of agents have a second cost that Amdahl ignored. Agents that share a goal must keep each other up to date, and the number of pairs that could need syncing grows as N(N &minus; 1). Neil Gunther&rsquo;s <em class="term">universal scalability law</em> adds that crosstalk term, with a striking consequence: past some team size, adding agents makes the team <i>slower</i>. <strong>Set the serial share and the crosstalk, then slide N</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} S_{\text{Amdahl}}(N) &= \frac{N}{1 + \alpha (N-1)} \\ S(N) &= \frac{N}{D(N)} \\ D(N) &= 1 + \alpha (N-1) + \beta N (N-1) \\ N^* &= \sqrt{(1-\alpha)/\beta} \end{aligned} \]</div><div class="read"><b>Read it as:</b> N agents, &alpha; the serial share (planning, merging, briefing), &beta; the cost of each pair of agents keeping in sync. With &beta; = 0 this is Amdahl&rsquo;s law, which flattens towards 1/&alpha;. With &beta; &gt; 0 the N(N &minus; 1) term eventually wins, and the speed-up peaks at N* (set the derivative to zero) and then falls.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Speed-up is N over one plus alpha times N minus one plus beta times N times N minus one; it peaks at the square root of one minus alpha over beta.&rdquo;</em></div><div class="eq-run" id="run-sc"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="sc-cv" aria-label="Speed-up against the number of agents"></canvas></div><figcaption><span style="color:var(--muted)">- -</span> perfect scaling, S = N &nbsp; <span style="color:var(--cB)">- -</span> Amdahl (no crosstalk), with its limit 1/&alpha; dotted &nbsp; <span style="color:var(--lda)">&#9644;</span> universal scalability law &nbsp; <span style="color:var(--qda)">&#9679;</span> the peak.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="sc-a">Serial share &alpha;</label><output id="sc-a-o"></output></div><input type="range" id="sc-a" min="0" max="0.3" step="0.005" value="0.05"></div>
+        <div class="ctrl"><div class="top"><label for="sc-b">Crosstalk per pair &beta;</label><output id="sc-b-o"></output></div><input type="range" id="sc-b" min="0" max="0.005" step="0.0001" value="0.001"></div>
+        <div class="ctrl"><div class="top"><label for="sc-n">Agents, N</label><output id="sc-n-o"></output></div><input type="range" id="sc-n" min="1" max="64" step="1" value="16"></div>
+        <div class="stats"><div class="stat"><div class="v" id="sc-s"></div><div class="k">speed-up S(N)</div></div><div class="stat"><div class="v" id="sc-e"></div><div class="k">efficiency S/N</div></div><div class="stat"><div class="v" id="sc-pk"></div><div class="k">best team size N*</div></div><div class="stat"><div class="v" id="sc-am"></div><div class="k">Amdahl&rsquo;s limit 1/&alpha;</div></div></div>
+        <p class="note" id="sc-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- DEBATE -->
+<section class="chap" id="debate">
+  <div class="wrap">
+    <div class="tag">Pattern 2</div>
+    <h2>Debate: changing minds</h2>
+    <div class="prose"><p>Voting counts first answers. In a <em class="term">debate</em> the agents read each other&rsquo;s answers and reasons, and may change their minds over several rounds; Du et al. (2024) found this improved arithmetic and factual accuracy over a single model. Whether it helps depends on one thing: is the right answer more persuasive than the wrong one? This lab is a deliberately simple model of that. Each round, every agent reads everyone else&rsquo;s answer. A wrong agent is won over with probability a &times; (the share who are right); a right agent is talked out of it with probability b &times; (the share who are wrong). Thin lines are 60 individual debates, coloured by how they end; the black line averages 2,000. <strong>Make the truth more, then less, persuasive than error</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \mathbb{E}\big[x_{t+1} \mid x_t\big] = x_t + (a - b)\, x_t (1 - x_t) \]</div><div class="read"><b>Read it as:</b> x<sub>t</sub> is the share of agents that are right after round t. The wrong ones, a share 1 &minus; x<sub>t</sub>, switch to right with probability a&middot;x<sub>t</sub>; the right ones switch to wrong with probability b&middot;(1 &minus; x<sub>t</sub>). The net expected change is (a &minus; b)x<sub>t</sub>(1 &minus; x<sub>t</sub>): the logistic curve. If a &gt; b the truth spreads, if a &lt; b error does, and the dashed line iterates the formula (a mean-field approximation of the average).</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected share right next round is x plus a minus b times x times one minus x.&rdquo;</em></div><div class="eq-run" id="run-db"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="db-cv" aria-label="Share of agents right, round by round, in many simulated debates"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> debate ends with a right majority &nbsp; <span style="color:var(--qda)">&#9644;</span> wrong majority &nbsp; <span style="color:var(--ink)">&#9644;</span> average of 2,000 debates &nbsp; <span style="color:var(--lda)">- -</span> mean-field formula.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="db-n">Agents, n</label><output id="db-n-o"></output></div><input type="range" id="db-n" min="3" max="25" step="2" value="7"></div>
+        <div class="ctrl"><div class="top"><label for="db-p">Right at the start, p</label><output id="db-p-o"></output></div><input type="range" id="db-p" min="0.3" max="0.9" step="0.01" value="0.6"></div>
+        <div class="ctrl"><div class="top"><label for="db-a">Pull of the truth, a</label><output id="db-a-o"></output></div><input type="range" id="db-a" min="0" max="1" step="0.05" value="0.5"></div>
+        <div class="ctrl"><div class="top"><label for="db-b">Pull of the error, b</label><output id="db-b-o"></output></div><input type="range" id="db-b" min="0" max="1" step="0.05" value="0.2"></div>
+        <div class="ctrl"><div class="top"><label for="db-r">Rounds</label><output id="db-r-o"></output></div><input type="range" id="db-r" min="0" max="10" step="1" value="4"></div>
+        <div class="btns"><button type="button" class="btn" id="db-run">Run 2,000 new debates</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="db-m0"></div><div class="k">right majority, before</div></div><div class="stat"><div class="v" id="db-mr"></div><div class="k">right majority, after</div></div><div class="stat"><div class="v" id="db-un"></div><div class="k">end unanimous</div></div><div class="stat"><div class="v" id="db-msg"></div><div class="k">messages read per debate</div></div></div>
+        <p class="note" id="db-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CRITIQUE -->
+<section class="chap" id="critique">
+  <div class="wrap">
+    <div class="tag">Pattern 3</div>
+    <h2>Critique: a checker in the loop</h2>
+    <div class="prose"><p>A cheaper team than a debate is two agents with different jobs: a <b>generator</b> proposes an answer and a <b>critic</b> (or verifier) accepts it or sends it back for another try. This is the evaluator&ndash;optimiser pattern, and close to Self-Refine (Madaan et al., 2023), where the critic is the same model. The critic is itself fallible: it catches a wrong answer with probability c and, wrongly, rejects a right one with probability e. Bayes&rsquo; rule then says exactly how much the filter is worth. Each dot below is one task; a number on a dot counts the attempts it took. <strong>Make the critic sharper, then make it reject right answers more often than wrong ones</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} a &= p(1-e) \\ &\quad + (1-p)(1-c) \\ P(\text{right} \mid \text{acc.}) &= \frac{p\,(1-e)}{a} \\ P(\text{none in } R) &= (1-a)^R \\ \mathbb{E}[\text{tries}] &= \frac{1 - (1-a)^R}{a} \end{aligned} \]</div><div class="read"><b>Read it as:</b> a is the chance the critic accepts an attempt: right and not falsely rejected, or wrong and not caught. Among accepted answers, the right ones are the share p(1 &minus; e)/a, which beats p exactly when c &gt; e. The loop stops at the first acceptance or after R tries; then it either returns the last attempt anyway or hands the task to a human. Each try is assumed to be a fresh, independent attempt.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The chance of right given accepted is p times one minus e, over the acceptance rate a.&rdquo;</em></div><div class="eq-run" id="run-cr"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 crplot"><canvas id="cr-cv" aria-label="400 simulated tasks coloured by outcome"></canvas></div><figcaption>400 simulated tasks. <span style="color:var(--cA)">&#9679;</span> accepted and right &nbsp; <span style="color:var(--qda)">&#9679;</span> accepted but wrong &nbsp; faded: every try rejected, last attempt returned &nbsp; <span style="color:var(--muted)">&#9675;</span> handed to a human.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cr-p">Generator right, p</label><output id="cr-p-o"></output></div><input type="range" id="cr-p" min="0.1" max="0.95" step="0.01" value="0.7"></div>
+        <div class="ctrl"><div class="top"><label for="cr-c">Critic catches a wrong answer, c</label><output id="cr-c-o"></output></div><input type="range" id="cr-c" min="0" max="1" step="0.01" value="0.8"></div>
+        <div class="ctrl"><div class="top"><label for="cr-e">Critic rejects a right answer, e</label><output id="cr-e-o"></output></div><input type="range" id="cr-e" min="0" max="0.9" step="0.01" value="0.1"></div>
+        <div class="ctrl"><div class="top"><label for="cr-r">Tries allowed, R</label><output id="cr-r-o"></output></div><input type="range" id="cr-r" min="1" max="6" step="1" value="3"></div>
+        <div class="seg" role="group" aria-label="After R rejections"><button type="button" data-crf="last" aria-pressed="true">Return the last try</button><button type="button" data-crf="human">Hand to a human</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cr-acc"></div><div class="k">answers given that are right</div></div><div class="stat"><div class="v" id="cr-prec"></div><div class="k">tasks ending in a wrong answer</div></div><div class="stat"><div class="v" id="cr-tries"></div><div class="k">tries per task</div></div><div class="stat"><div class="v" id="cr-esc"></div><div class="k">every try rejected</div></div></div>
+        <p class="note" id="cr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- HANDOFF -->
+<section class="chap" id="handoff">
+  <div class="wrap">
+    <div class="tag">Pattern 4</div>
+    <h2>Hand-offs: passing the baton</h2>
+    <div class="prose"><p>In a <em class="term">hand-off</em> one agent passes a conversation to a specialist: triage to bookings, bookings to payments. OpenAI&rsquo;s Swarm and Agents SDK made hand-offs a first-class tool call. Every hand-off is also a place where context can be lost. If each agent passes on a free-text summary that keeps each fact with probability r, losses compound hop after hop, and the case below (an invented airline customer) is only as good as its weakest summary. The fix is the one tool calls already use (chapter 5.2): a <b>structured hand-off</b>, whose required fields are arguments checked against a schema, so a hand-off missing one is rejected and redone. <strong>Lengthen the chain, then switch to the structured hand-off</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbb{E}_{\text{free}} &= m\,r^{k} \\ P_{\text{free}}(\text{all kept}) &= r^{mk} \\ \mathbb{E}_{\text{struct}} &= m_{\text{req}} + (m - m_{\text{req}})\, r^{k} \end{aligned} \]</div><div class="read"><b>Read it as:</b> E is the expected number of facts that reach the last agent: m facts, k hand-offs, each fact survives each summary with probability r, independently. After k hops a fact survives with r<sup>k</sup>, and all m together with r<sup>mk</sup>, which collapses fast: 0.9<sup>40</sup> is about 1.5%. A schema guarantees its m<sub>req</sub> required fields; only the optional ones still erode.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Expected facts after k hand-offs are m times r to the k; all of them survive with r to the m k.&rdquo;</em></div><div class="eq-run" id="run-ho"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="ho-cv" aria-label="Which facts each agent in the chain still knows"></canvas></div><figcaption>Rows: the ten facts of the case. Columns: the caller, then each agent in the chain. <span style="color:var(--cA)">&#9632;</span> known &nbsp; <span style="color:var(--lda)">&#9632;</span> the safety-critical fact &nbsp; <span style="color:var(--qda)">&times;</span> lost at this hop.</figcaption></figure>
+        <details class="how" open><summary>The last hand-off message, as sent</summary><div><pre class="code prompt" id="ho-msg"></pre></div></details>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Hand-off style"><button type="button" data-hom="free" aria-pressed="true">Free-text summary</button><button type="button" data-hom="struct">Structured hand-off</button></div>
+        <div class="ctrl"><div class="top"><label for="ho-r">Each fact kept per summary, r</label><output id="ho-r-o"></output></div><input type="range" id="ho-r" min="0.6" max="1" step="0.01" value="0.9"></div>
+        <div class="ctrl"><div class="top"><label for="ho-k">Hand-offs, k</label><output id="ho-k-o"></output></div><input type="range" id="ho-k" min="1" max="8" step="1" value="4"></div>
+        <div class="btns"><button type="button" class="btn" id="ho-run">Re-run the chain</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ho-kept"></div><div class="k">facts that arrive, this run</div></div><div class="stat"><div class="v" id="ho-exp"></div><div class="k">expected to arrive</div></div><div class="stat"><div class="v" id="ho-all"></div><div class="k">chance nothing is lost</div></div><div class="stat"><div class="v" id="ho-crit"></div><div class="k">wheelchair fact arrives</div></div></div>
+        <p class="note" id="ho-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- TOPOLOGY -->
+<section class="chap" id="topology">
+  <div class="wrap">
+    <div class="tag">Coordination costs, counted</div>
+    <h2>Who talks to whom</h2>
+    <div class="prose"><p>The shape of a team, its <em class="term">topology</em>, sets three costs. Links: if everyone may talk to everyone there are n(n &minus; 1)/2 conversations to keep straight. Tokens: every message is read, and reading is what an LLM agent pays for; Anthropic reported that its multi-agent research system used about 15 times the tokens of a chat (2025). And hops: how many relays a fact needs to cross the team. Cemri et al. (2025), studying why multi-agent LLM systems fail, found many failures in exactly this layer: lost information, ignored messages, agents working at cross purposes. <strong>Compare the four shapes at the same n</strong>; numbers on the nodes are how many agents each one talks to.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} L_{\text{mesh}} &= \binom{n}{2} = \frac{n(n-1)}{2} \\ L_{\text{star, chain, tree}} &= n - 1 \\ \text{tokens per round} &= 2L\,m \\ \text{largest context} &= d_{\max}\, m\, R \end{aligned} \]</div><div class="read"><b>Read it as:</b> L is the number of two-way links. Each round, the two ends of every link read one message of m tokens from each other, 2L messages in all. The busiest agent, with d<sub>max</sub> links, accumulates d<sub>max</sub>&middot;m tokens of others&rsquo; messages per round, R rounds in all. A mesh is quadratic in n; a star, a chain and a tree are linear, but they differ in who is busiest and how far apart agents are.</div><div class="eq-say"><b>Say it</b><em>&ldquo;A full mesh has n choose two links, n times n minus one over two; a star, chain or tree has n minus one.&rdquo;</em></div><div class="eq-run" id="run-tp"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="tp-cv" aria-label="The team drawn as a graph"></canvas></div><figcaption><span style="color:var(--qda)">&#9679;</span> the busiest agent (hub or root). The tree gives each lead up to 3 reports.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="tp-curve" aria-label="Links against team size"></canvas></div><figcaption><span style="color:var(--qda)">&#9644;</span> full mesh, n(n &minus; 1)/2 &nbsp; <span style="color:var(--lda)">&#9644;</span> star, chain or tree, n &minus; 1. The ring is your team.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Topology"><button type="button" data-tpk="mesh" aria-pressed="true">Full mesh</button><button type="button" data-tpk="star">Star</button><button type="button" data-tpk="chain">Chain</button><button type="button" data-tpk="tree">Tree</button></div>
+        <div class="ctrl"><div class="top"><label for="tp-n">Agents, n</label><output id="tp-n-o"></output></div><input type="range" id="tp-n" min="2" max="24" step="1" value="8"></div>
+        <div class="ctrl"><div class="top"><label for="tp-m">Tokens per message, m</label><output id="tp-m-o"></output></div><input type="range" id="tp-m" min="50" max="1000" step="50" value="300"></div>
+        <div class="ctrl"><div class="top"><label for="tp-r">Rounds, R</label><output id="tp-r-o"></output></div><input type="range" id="tp-r" min="1" max="10" step="1" value="3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="tp-L"></div><div class="k">links</div></div><div class="stat"><div class="v" id="tp-tok"></div><div class="k">tokens read per round</div></div><div class="stat"><div class="v" id="tp-ctx"></div><div class="k">busiest agent&rsquo;s context</div></div><div class="stat"><div class="v" id="tp-diam"></div><div class="k">hops, farthest pair</div></div></div>
+        <p class="note" id="tp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: 39 annotators, one verdict</h2>
+    <div class="prose">
+      <p>The crowd in the hero is real. For their NeurIPS 2010 paper <i>The Multidimensional Wisdom of Crowds</i>, Peter Welinder, Steve Branson, Serge Belongie and Pietro Perona asked <strong>39 human annotators</strong> to label the same <strong>108 photos</strong>, each showing one of two blue birds that are easy to confuse, the Indigo Bunting and the Blue Grosbeak: 4,212 yes/no answers, with expert labels to check them against. They released the data with their CUBAM code (BSD 3-Clause Clear licence); this page uses the file <span class="mono">demo/bluebirds</span> from commit 1db8c09 of 18 February 2011, unchanged. Swap &ldquo;annotator&rdquo; for &ldquo;LLM agent&rdquo; and nothing in the maths changes: what matters is each member&rsquo;s accuracy and how their mistakes overlap. Everything below is computed in your browser from those 4,212 answers.</p>
+    </div>
+
+    <h3>1 &middot; Look at the votes</h3>
+    <div class="btns block"><div class="seg" role="group" aria-label="Order"><button type="button" data-pjs="sorted" aria-pressed="true">Sorted by skill and difficulty</button><button type="button" data-pjs="raw">As collected</button></div></div>
+    <figure class="block" style="max-width:980px"><div class="plot matplot"><canvas id="pj-mat" aria-label="39 by 108 grid of right and wrong answers"></canvas></div><figcaption id="pj-mcap"></figcaption></figure>
+    <div class="stats block" id="pj-stats" style="max-width:860px; grid-template-columns:repeat(4, minmax(0,1fr))"></div>
+
+    <h3>2 &middot; Do bigger panels help?</h3>
+    <div class="prose"><p>Pick n of the 39 at random and let them vote. Averaged over <i>every</i> possible panel, the chance the panel is right on a photo that k annotators got right is a hypergeometric probability, so the real curve below is exact, not sampled. Compare it with section 1 (independent annotators of the same average skill) and section 2 (the correlated model, with &rho; estimated from the data).</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \bar P_{\text{maj}}(n) &= \frac{1}{108} \sum_{j=1}^{108} \sum_{c > n/2} h_j(c) \\ h_j(c) &= \binom{k_j}{c}\binom{39 - k_j}{n - c} \Big/ \binom{39}{n} \end{aligned} \]</div><div class="read"><b>Read it as:</b> k<sub>j</sub> of the 39 annotators got photo j right. A random panel of n contains c of them with the hypergeometric probability h<sub>j</sub>(c); the panel is right when c is more than half of n. Average over the 108 photos.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Average over photos of the chance that a random panel of n contains more right annotators than wrong ones.&rdquo;</em></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pj-cv" aria-label="Majority accuracy of real panels against panel size"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> real panels, exact average &nbsp; <span style="color:var(--cB)">- -</span> independent annotators with p = 63.6% &nbsp; <span style="color:var(--lda)">&#9644;</span> beta-binomial with the fitted &rho;, and its ceiling (dotted) &nbsp; <span style="color:var(--muted)">&#9679;</span> random panels you draw.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-n">Panel size, n</label><output id="pj-n-o"></output></div><input type="range" id="pj-n" min="1" max="39" step="2" value="9"></div>
+        <div class="btns"><button type="button" class="btn primary" id="pj-draw">Draw 25 random panels</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-real"></div><div class="k">real panels</div></div><div class="stat"><div class="v" id="pj-ind"></div><div class="k">if independent</div></div><div class="stat"><div class="v" id="pj-bb"></div><div class="k">correlated model</div></div><div class="stat"><div class="v" id="pj-ne"></div><div class="k">effective panel size</div></div></div>
+        <p class="note" id="pj-psay"></p>
+      </div></div>
+    </div>
+
+    <h3>3 &middot; Learn whom to trust, without the answers</h3>
+    <div class="prose"><p>A majority vote treats a 32% annotator like an 89% one. If we knew the accuracies p<sub>i</sub>, the best rule for independent voters would weight each vote by ln(p<sub>i</sub>/(1 &minus; p<sub>i</sub>)) (Nitzan &amp; Paroush, 1982), which turns a worse-than-chance voter&rsquo;s vote around. But an orchestrator rarely has an answer key. Dawid and Skene (1979) showed how to estimate each member&rsquo;s reliability from the votes alone, by <em class="term">expectation&ndash;maximisation</em>: guess the true labels (start from the majority), score each annotator against the guess, re-weigh the votes with those scores, and repeat. Here each annotator gets two numbers, how often they say yes to a yes photo and no to a no photo, since many annotators lean towards one answer. <strong>Step through the EM iterations</strong> and watch the estimates line up with the truth they never saw.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} P(y_j = 1 \mid \mathbf v_j) &= \frac{\pi A_j}{\pi A_j + (1 - \pi) B_j} \\ A_j &= \textstyle\prod_i s_i^{v_{ij}} (1 - s_i)^{1 - v_{ij}} \\ B_j &= \textstyle\prod_i (1 - t_i)^{v_{ij}}\, t_i^{1 - v_{ij}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> v<sub>ij</sub> = 1 if annotator i said yes to photo j, and <b>v</b><sub>j</sub> holds all 39 votes on photo j. s<sub>i</sub> is i&rsquo;s chance of saying yes when the truth is yes (sensitivity), t<sub>i</sub> of saying no when it is no (specificity), &pi; the share of yes photos; A<sub>j</sub> and B<sub>j</sub> are the chances of photo j&rsquo;s votes if it were a yes or a no. This E-step is Bayes&rsquo; rule; the M-step re-estimates s, t and &pi; from these posteriors (with add-one smoothing), and the two alternate until nothing changes.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The chance photo j is a yes is pi times the product of each annotator's chance of voting as they did if it were a yes, over the same plus the same for a no.&rdquo;</em></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pj-ds" aria-label="Estimated against true accuracy for each annotator"></canvas></div><figcaption>Each dot is one annotator: true accuracy (from the expert labels) across, EM&rsquo;s estimate from the votes alone up. The dashed line is perfect agreement.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-it">EM iteration</label><output id="pj-it-o"></output></div><input type="range" id="pj-it" min="1" max="79" step="1" value="79"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-dsr"></div><div class="k">photos labelled right</div></div><div class="stat"><div class="v" id="pj-dsc"></div><div class="k">estimate vs truth, correlation</div></div><div class="stat"><div class="v" id="pj-dsl"></div><div class="k">log-likelihood</div></div></div>
+        <p class="note" id="pj-dss"></p>
+      </div></div>
+    </div>
+    <h3>The scoreboard</h3>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-board"></table></div>
+    <p class="note block" style="max-width:72ch">Two centuries of statistics in one table: a plain majority adds 12 points to the average annotator and then stalls, because the annotators share their mistakes. Weighting by skill, or learning the skills with EM, adds another 12 to 13 and matches the best single annotator, who could only have been picked out with the answer key. Independent annotators would have done better still; that line is theory, not something this crowd can reach.</p>
+
+    <h3>The same analysis in Python</h3>
+<pre class="code"><code>import json, numpy as np
+from math import comb
+from scipy.stats import binom, betabinom, hypergeom
+from scipy.special import betainc
+
+d = json.load(open("ma-data.json", encoding="utf8"))          # Welinder et al. (2010) bluebirds, from the CUBAM repo
+V = np.array([[int(c) for c in row] for row in d["V"]])        # 39 annotators x 108 photos, 1 = "yes"
+y = np.array(d["y"]); W, N = V.shape
+acc = (V == y).mean(axis=1); pbar = acc.mean()
+kc = (V == y).sum(axis=0)                                      # annotators right, per photo
+share = kc / W; v = share.var()
+rho = (v / (share.mean() * (1 - share.mean())) - 1 / W) / (1 - 1 / W)
+print(f"{W} annotators x {N} photos, {y.sum()} 'yes'; mean accuracy {pbar:.4f}, best {acc.max():.4f}, worst {acc.min():.4f}")
+print(f"rho (method of moments) {rho:.4f}; photos most annotators get wrong: {(2 * kc &lt; W).sum()}")
+
+def maj(pmf):                                                  # majority right, ties split by a fair coin
+    k = np.arange(len(pmf)); n = len(pmf) - 1
+    return pmf[2 * k &gt; n].sum() + 0.5 * pmf[2 * k == n].sum()
+a, b = pbar * (1 / rho - 1), (1 - pbar) * (1 / rho - 1)
+print(" n   real panels   independent   beta-binomial")
+curve = {}
+for n in range(1, 40, 2):
+    real = np.mean([maj(hypergeom(W, k, n).pmf(np.arange(n + 1))) for k in kc])
+    ind, bb = maj(binom(n, pbar).pmf(np.arange(n + 1))), maj(betabinom(n, a, b).pmf(np.arange(n + 1)))
+    curve[n] = (real, ind, bb)
+    if n in (1, 3, 5, 9, 15, 21, 39): print(f"{n:2d}   {real:.6f}      {ind:.6f}      {bb:.6f}")
+print(f"ceiling P(theta &gt; 1/2) = {1 - betainc(a, b, 0.5):.6f}; n_eff(39) = {39 / (1 + 38 * rho):.4f}")
+
+pb = np.array([1.0])                                           # Poisson-binomial: independent, real accuracies
+for p in acc: pb = np.convolve(pb, [1 - p, p])
+pois = maj(pb)
+mv = (2 * V.sum(axis=0) &gt; W).astype(int)
+print(f"majority of all 39: {(mv == y).sum()}/{N} = {(mv == y).mean():.4f}; if independent: {pois:.4f}")
+
+pred = np.zeros(N, int)                                        # weighted vote, cross-fitted on odd/even photos
+for h in (0, 1):
+    tr, te = np.arange(N) % 2 != h, np.arange(N) % 2 == h
+    p = ((V[:, tr] == y[tr]).sum(axis=1) + 1) / (tr.sum() + 2); w = np.log(p / (1 - p))
+    pred[te] = (w @ (2 * V[:, te] - 1) &gt; 0).astype(int)
+print(f"weighted vote (cross-fitted): {(pred == y).sum()}/{N} = {(pred == y).mean():.4f}")
+
+T = np.where(2 * V.sum(axis=0) &gt; W, 1.0, np.where(2 * V.sum(axis=0) &lt; W, 0.0, 0.5))
+for it in range(1, 1001):                                      # Dawid &amp; Skene (1979), two-coin, add-one smoothing
+    s1 = T.sum(); pi = s1 / N
+    se = (V @ T + 1) / (s1 + 2); sp = ((1 - V) @ (1 - T) + 1) / (N - s1 + 2)
+    l1 = np.log(pi) + (V * np.log(se)[:, None] + (1 - V) * np.log(1 - se)[:, None]).sum(axis=0)
+    l0 = np.log(1 - pi) + (V * np.log(1 - sp)[:, None] + (1 - V) * np.log(sp)[:, None]).sum(axis=0)
+    T2 = 1 / (1 + np.exp(l0 - l1)); delta = np.abs(T2 - T).max(); T = T2
+    if delta &lt; 1e-12: break
+ll = np.logaddexp(l1, l0).sum(); est = pi * se + (1 - pi) * sp
+print(f"Dawid-Skene: {it} iterations, {((T &gt; 0.5) == y).sum()}/{N} = {((T &gt; 0.5) == y).mean():.4f}, log-lik {ll:.4f}, "
+      f"corr(estimated, true accuracy) {np.corrcoef(est, acc)[0, 1]:.4f}")
+
+print("checks: Condorcet n=5 p=0.7", round(maj(binom(5, 0.7).pmf(range(6))), 6),
+      "| USL N=16 a=.05 b=.001", round(16 / (1 + 0.05 * 15 + 0.001 * 16 * 15), 6),
+      "| critic p=.7 c=.8 e=.1: P(right|accepted)", round(0.7 * 0.9 / (0.7 * 0.9 + 0.3 * 0.2), 6))
+json.dump({"pbar": pbar, "maj": (mv == y).mean(), "ds": ((T &gt; 0.5) == y).mean(), "wcf": (pred == y).mean(), "best": acc.max(),
+           "pois": pois, "rho": rho, "dsIt": it, "curve": {str(n): c for n, c in curve.items()}},
+          open("ma-py.json", "w"), default=float)</code></pre>
+<pre class="code out"><code>39 annotators x 108 photos, 48 'yes'; mean accuracy 0.6356, best 0.8889, worst 0.3241
+rho (method of moments) 0.1110; photos most annotators get wrong: 26
+ n   real panels   independent   beta-binomial
+ 1   0.635565      0.635565      0.635565
+ 3   0.685239      0.698365      0.680233
+ 5   0.713124      0.742002      0.704421
+ 9   0.742660      0.803006      0.730611
+15   0.760248      0.861763      0.749560
+21   0.764823      0.899994      0.759587
+39   0.759259      0.958788      0.773110
+ceiling P(theta > 1/2) = 0.792426; n_eff(39) = 7.4720
+majority of all 39: 82/108 = 0.7593; if independent: 0.9666
+weighted vote (cross-fitted): 95/108 = 0.8796
+Dawid-Skene: 79 iterations, 96/108 = 0.8889, log-lik -1894.9943, corr(estimated, true accuracy) 0.9749
+checks: Condorcet n=5 p=0.7 0.83692 | USL N=16 a=.05 b=.001 8.040201 | critic p=.7 c=.8 e=.1: P(right|accepted) 0.913043</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest">The browser&rsquo;s numbers come from a separate JavaScript implementation (exact hypergeometric and beta-binomial sums via a log-gamma function, a continued-fraction incomplete beta, and the same EM), not a translation of this listing. Every count in the scoreboard is identical to Python&rsquo;s; the panel curves agree with SciPy to within 10<sup>&minus;13</sup> at every n, and the EM converges in the same 79 iterations to the same log-likelihood. Honest caveats: 108 photos is a small test, so one photo is almost a point of accuracy; the annotators are people, not LLM agents; and the simulations in sections 3 to 8 are stylised models with illustrative numbers, there to show the shape of each trade-off, not to predict a particular system.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Voting turns many agents that are right more often than not into a reliable team, but only to the extent their mistakes are independent: n correlated agents are worth at most 1/&rho; independent ones.</li>
+      <li>Splitting a job across workers is capped by the critical path and by everything only the orchestrator can do (Amdahl); the cost of keeping every pair in sync can make big teams slower than small ones.</li>
+      <li>Debate helps only when the truth is more persuasive than error; otherwise agents talk each other into confident, unanimous mistakes.</li>
+      <li>A critic pays off exactly when it rejects wrong answers more often than right ones, and every hand-off is a place to lose facts: make required context a checked, structured argument.</li>
+      <li>Count the conversations: a full mesh has n(n &minus; 1)/2 of them; stars and hierarchies keep it linear, at the price of a busy hub and more hops.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Five copies of the same model, same prompt, each 80% accurate, vote. Why might you get far less than the 94% Condorcet promises?</summary><p>Because the copies make highly correlated mistakes: on the questions one gets wrong, the others tend to as well. The 94% assumes independence. With correlation &rho; the vote is worth about n/(1 + (n &minus; 1)&rho;) independent agents and can never beat the share of questions most copies get right. Varying the model, prompt, tools or evidence lowers &rho;.</p></details>
+      <details class="q"><summary>A plan has 600 s of worker jobs and a critical path of 150 s. Roughly how fast can 4 workers finish, and what would 20 workers buy?</summary><p>At least max(150, 600/4) = 150 s and, for a greedy schedule with free briefing, at most 600/4 + 150 = 300 s. Twenty workers cannot beat the 150 s critical path, so beyond a handful the extra agents mostly wait.</p></details>
+      <details class="q"><summary>Under the universal scalability law with &alpha; = 0.04 and &beta; = 0.002, what team size is fastest?</summary><p>N* = &radic;((1 &minus; 0.04)/0.002) = &radic;480 &asymp; 22. Past that, adding agents lowers the speed-up because the N(N &minus; 1) crosstalk term grows faster than the extra capacity.</p></details>
+      <details class="q"><summary>Your critic rejects 30% of right answers and 25% of wrong ones. Is it worth running?</summary><p>No. A critic improves the accuracy of accepted answers only if it rejects wrong answers more often than right ones (c &gt; e). Here c = 0.25 &lt; e = 0.30, so it filters slightly towards mistakes and costs extra attempts.</p></details>
+      <details class="q"><summary>How did Dawid&ndash;Skene beat the majority on the bluebird photos without ever seeing the expert labels?</summary><p>It estimated, from the agreement patterns alone, how reliable each annotator is for yes photos and for no photos, then weighed each vote by that reliability. Unreliable or biased annotators stop dragging the vote, and some below-chance annotators are even read in reverse. Majority voting counts every vote the same.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../agent-safety/">Next chapter: Agent Safety &amp; Evaluation &rarr;</a>
+      <a class="btn" href="../agent-memory/">&larr; Previous: Memory for Agents</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Condorcet, M. J. A. N. de Caritat, Marquis de (1785). <em>Essai sur l&rsquo;application de l&rsquo;analyse &agrave; la probabilit&eacute; des d&eacute;cisions rendues &agrave; la pluralit&eacute; des voix</em>. Paris: Imprimerie Royale.</li>
+      <li>Ladha, K. K. (1992). The Condorcet jury theorem, free speech, and correlated votes. <em>American Journal of Political Science</em> 36(3), 617&ndash;634.</li>
+      <li>Kish, L. (1965). <em>Survey Sampling</em>. New York: Wiley (the design effect).</li>
+      <li>Dawid, A. P. &amp; Skene, A. M. (1979). Maximum likelihood estimation of observer error-rates using the EM algorithm. <em>Journal of the Royal Statistical Society, Series C</em> 28(1), 20&ndash;28.</li>
+      <li>Nitzan, S. &amp; Paroush, J. (1982). Optimal decision rules in uncertain dichotomous choice situations. <em>International Economic Review</em> 23(2), 289&ndash;297.</li>
+      <li>Welinder, P., Branson, S., Belongie, S. &amp; Perona, P. (2010). The multidimensional wisdom of crowds. <em>Advances in Neural Information Processing Systems</em> 23. Data: github.com/welinder/cubam.</li>
+      <li>Amdahl, G. M. (1967). Validity of the single processor approach to achieving large scale computing capabilities. <em>AFIPS Spring Joint Computer Conference</em>, 483&ndash;485.</li>
+      <li>Graham, R. L. (1969). Bounds on multiprocessing timing anomalies. <em>SIAM Journal on Applied Mathematics</em> 17(2), 416&ndash;429.</li>
+      <li>Gunther, N. J. (2007). <em>Guerrilla Capacity Planning</em>. Springer (the universal scalability law).</li>
+      <li>Wang, X. et al. (2023). Self-consistency improves chain of thought reasoning in language models. <em>ICLR 2023</em>.</li>
+      <li>Li, J., Zhang, Q., Yu, Y., Fu, Q. &amp; Ye, D. (2024). More agents is all you need. <em>Transactions on Machine Learning Research</em>.</li>
+      <li>Du, Y., Li, S., Torralba, A., Tenenbaum, J. B. &amp; Mordatch, I. (2024). Improving factuality and reasoning in language models through multiagent debate. <em>ICML 2024</em>.</li>
+      <li>Madaan, A. et al. (2023). Self-Refine: iterative refinement with self-feedback. <em>NeurIPS 2023</em>.</li>
+      <li>Schluntz, E. &amp; Zhang, B. (2024). Building effective agents. Anthropic engineering blog, 19 December 2024.</li>
+      <li>Anthropic (2025). How we built our multi-agent research system. Anthropic engineering blog, June 2025.</li>
+      <li>Cemri, M. et al. (2025). Why do multi-agent LLM systems fail? arXiv:2503.13657.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated. Bluebirds data: Welinder et al. (2010), CUBAM, BSD 3-Clause Clear licence.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- multi-agent maths (shared by the labs and the project; also loaded by ma-test.mjs) ---------- */
+const MAC = (function () {
+  'use strict';
+  /* log-gamma (Lanczos, g = 7) */
+  const LC = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  function lg(x) {
+    if (x < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - lg(1 - x);
+    x -= 1; let a = LC[0]; const t = x + 7.5;
+    for (let i = 1; i < 9; i++) a += LC[i] / (x + i);
+    return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+  }
+  const lch = (n, k) => lg(n + 1) - lg(k + 1) - lg(n - k + 1);
+  const lbeta = (a, b) => lg(a) + lg(b) - lg(a + b);
+  /* binomial pmf, exact at the ends */
+  function binPmf(n, p) {
+    const out = new Array(n + 1);
+    for (let k = 0; k <= n; k++) {
+      if (p <= 0) out[k] = k === 0 ? 1 : 0; else if (p >= 1) out[k] = k === n ? 1 : 0;
+      else out[k] = Math.exp(lch(n, k) + k * Math.log(p) + (n - k) * Math.log(1 - p));
+    }
+    return out;
+  }
+  /* beta-binomial: each question has its own chance theta ~ Beta(a, b) with mean p and
+     pairwise correlation rho = 1 / (a + b + 1); votes are independent given theta. */
+  const abOf = (p, rho) => { const s = 1 / rho - 1; return [p * s, (1 - p) * s]; };
+  function bbPmf(n, p, rho) {
+    if (rho < 1e-9 || p <= 0 || p >= 1) return binPmf(n, p);
+    const [a, b] = abOf(p, rho), z = lbeta(a, b), out = new Array(n + 1);
+    for (let k = 0; k <= n; k++) out[k] = Math.exp(lch(n, k) + lbeta(k + a, n - k + b) - z);
+    return out;
+  }
+  /* majority correct; an exact tie (even n) is settled by a fair coin */
+  function majTail(pmf) { const n = pmf.length - 1; let s = 0; for (let k = 0; k <= n; k++) { if (2 * k > n) s += pmf[k]; else if (2 * k === n) s += pmf[k] / 2; } return s; }
+  const majBin = (n, p) => majTail(binPmf(n, p));
+  const majBB = (n, p, rho) => majTail(bbPmf(n, p, rho));
+  /* regularised incomplete beta I_x(a, b) (continued fraction, Numerical Recipes 6.4) */
+  function betacf(a, b, x) {
+    const FP = 1e-300, qab = a + b, qap = a + 1, qam = a - 1; let c = 1, d = 1 - qab * x / qap;
+    if (Math.abs(d) < FP) d = FP; d = 1 / d; let h = d;
+    for (let m = 1; m <= 2000; m++) {
+      const m2 = 2 * m; let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+      d = 1 + aa * d; if (Math.abs(d) < FP) d = FP; c = 1 + aa / c; if (Math.abs(c) < FP) c = FP; d = 1 / d; h *= d * c;
+      aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+      d = 1 + aa * d; if (Math.abs(d) < FP) d = FP; c = 1 + aa / c; if (Math.abs(c) < FP) c = FP; d = 1 / d;
+      const del = d * c; h *= del; if (Math.abs(del - 1) < 1e-16) break;
+    }
+    return h;
+  }
+  function betai(a, b, x) {
+    if (x <= 0) return 0; if (x >= 1) return 1;
+    const bt = Math.exp(-lbeta(a, b) + a * Math.log(x) + b * Math.log(1 - x));
+    return x < (a + 1) / (a + b + 2) ? bt * betacf(a, b, x) / a : 1 - bt * betacf(b, a, 1 - x) / b;
+  }
+  /* the ceiling: with infinitely many voters the majority is right exactly when theta > 1/2 */
+  function ceiling(p, rho) { if (rho < 1e-9) return p > 0.5 ? 1 : p < 0.5 ? 0 : 0.5; const [a, b] = abOf(p, rho); return 1 - betai(a, b, 0.5); }
+  const nEff = (n, rho) => n / (1 + (n - 1) * rho);
+  /* Poisson-binomial: independent voters with their own accuracies */
+  function poisBin(ps) { let f = [1]; for (const p of ps) { const g = new Array(f.length + 1).fill(0); for (let k = 0; k < f.length; k++) { g[k] += f[k] * (1 - p); g[k + 1] += f[k] * p; } f = g; } return f; }
+  /* exact average, over every panel of n drawn from W voters, of the chance the panel's majority is right:
+     for an item that kc voters got right the count right in a random panel is hypergeometric */
+  function hyperMaj(kc, W, n) {
+    let s = 0; const z = lch(W, n);
+    for (const k of kc) { const f = new Array(n + 1).fill(0); for (let c = Math.max(0, n - (W - k)); c <= Math.min(n, k); c++) f[c] = Math.exp(lch(k, c) + lch(W - k, n - c) - z); s += majTail(f); }
+    return s / kc.length;
+  }
+  /* method-of-moments estimate of rho from the spread of the per-item share of correct votes */
+  function iccOf(kc, W) {
+    const N = kc.length, sh = kc.map(k => k / W), m = sh.reduce((a, b) => a + b, 0) / N, v = sh.reduce((s, x) => s + (x - m) ** 2, 0) / N;
+    return { m, v, rho: (v / (m * (1 - m)) - 1 / W) / (1 - 1 / W) };
+  }
+  /* Dawid & Skene (1979), two-coin version: worker w says "yes" with probability se[w] when the truth is yes,
+     and "no" with probability sp[w] when it is no. EM from the majority vote; add-one smoothing. */
+  function dawidSkene(V, maxIt, tol) {
+    const W = V.length, N = V[0].length; maxIt = maxIt || 1000; tol = tol || 1e-12;
+    let T = new Array(N); for (let j = 0; j < N; j++) { let s = 0; for (let w = 0; w < W; w++) s += V[w][j]; T[j] = 2 * s > W ? 1 : 2 * s < W ? 0 : 0.5; }
+    const hist = []; let se, sp, pi, it = 0;
+    for (; it < maxIt; it++) {
+      let s1 = 0; for (let j = 0; j < N; j++) s1 += T[j]; const s0 = N - s1; pi = s1 / N;
+      se = V.map(r => { let a = 0; for (let j = 0; j < N; j++) a += r[j] * T[j]; return (a + 1) / (s1 + 2); });
+      sp = V.map(r => { let a = 0; for (let j = 0; j < N; j++) a += (1 - r[j]) * (1 - T[j]); return (a + 1) / (s0 + 2); });
+            let d = 0, ll = 0; const T2 = new Array(N);
+      for (let j = 0; j < N; j++) {
+        let a1 = Math.log(pi), a0 = Math.log(1 - pi);
+        for (let w = 0; w < W; w++) { const v = V[w][j]; a1 += Math.log(v ? se[w] : 1 - se[w]); a0 += Math.log(v ? 1 - sp[w] : sp[w]); }
+        const mx = Math.max(a1, a0); ll += mx + Math.log(Math.exp(a1 - mx) + Math.exp(a0 - mx));
+        T2[j] = 1 / (1 + Math.exp(a0 - a1)); d = Math.max(d, Math.abs(T2[j] - T[j]));
+      }
+      T = T2; hist.push({ T: T.slice(), ll, acc: se.map((x, w) => pi * x + (1 - pi) * sp[w]) });
+      if (d < tol) { it++; break; }
+    }
+    const acc = se.map((x, w) => pi * x + (1 - pi) * sp[w]);
+    return { T, se, sp, pi, it, hist, acc };
+  }
+  /* weighted vote, cross-fitted: accuracies estimated on one half of the items, used on the other half */
+  function weightedCF(V, y) {
+    const N = y.length, pred = new Array(N), W = new Array(2);
+    for (const h of [0, 1]) {
+      const tr = [], te = []; for (let j = 0; j < N; j++) (j % 2 === h ? te : tr).push(j);
+      const w = V.map(r => { let c = 0; for (const j of tr) c += r[j] === y[j] ? 1 : 0; const p = (c + 1) / (tr.length + 2); return Math.log(p / (1 - p)); });
+      W[h] = w; for (const j of te) { let s = 0; V.forEach((r, i) => { s += w[i] * (2 * r[j] - 1); }); pred[j] = s > 0 ? 1 : 0; }
+    }
+    return { pred, W };
+  }
+
+  /* ---------- orchestrator-worker scheduling ---------- */
+  /* G: [{ id, d (duration), deps: [ids], o (true = orchestrator's own job) }]
+     W workers; every worker job must first be briefed by the orchestrator, which takes `brief` seconds of its time.
+     prio: 'cp' = longest remaining path first, 'plan' = in the plan's order. Greedy: nobody idles while work is ready. */
+  function blevel(G) { const b = new Array(G.length).fill(0); for (let i = G.length - 1; i >= 0; i--) { let m = 0; G.forEach((t, j) => { if (t.deps.includes(i)) m = Math.max(m, b[j]); }); b[i] = G[i].d + m; } return b; }
+  function span(G) { const f = new Array(G.length).fill(0), from = new Array(G.length).fill(-1); G.forEach((t, i) => { let s = 0; t.deps.forEach(j => { if (f[j] > s) { s = f[j]; from[i] = j; } }); f[i] = s + t.d; }); let e = 0; f.forEach((x, i) => { if (x > f[e]) e = i; }); const path = []; for (let i = e; i >= 0; i = from[i]) path.unshift(i); return { T: f[e], path }; }
+  function schedule(G, W, brief, prio) {
+    const n = G.length, bl = blevel(G), st = new Array(n).fill(-1), en = new Array(n).fill(Infinity), lane = new Array(n).fill(-1), br = [];
+    const wFree = new Array(W).fill(0); let oFree = 0, t = 0, left = n, guard = 0;
+    const key = i => prio === 'cp' ? -bl[i] * 1000 + i : i;
+    const ready = (i, o) => st[i] < 0 && !!G[i].o === o && G[i].deps.every(j => en[j] <= t + 1e-9);
+    while (left > 0 && guard++ < 10000) {
+      let moved = true;
+      while (moved) {
+        moved = false;
+        if (oFree <= t + 1e-9) {
+          const oj = G.map((_, i) => i).filter(i => ready(i, true)).sort((a, b) => key(a) - key(b));
+          if (oj.length) { const i = oj[0]; st[i] = t; en[i] = t + G[i].d; lane[i] = -1; oFree = en[i]; left--; moved = true; continue; }
+          const wk = wFree.findIndex(f => f <= t + 1e-9), wj = G.map((_, i) => i).filter(i => ready(i, false)).sort((a, b) => key(a) - key(b));
+          if (wk >= 0 && wj.length) { const i = wj[0]; if (brief > 0) br.push([t, t + brief, i]); st[i] = t + brief; en[i] = st[i] + G[i].d; lane[i] = wk; wFree[wk] = en[i]; oFree = t + brief; left--; moved = true; }
+        }
+      }
+      const nxt = [oFree, ...wFree, ...en.filter(e => isFinite(e))].filter(x => x > t + 1e-9);
+      if (!nxt.length) break; t = Math.min(...nxt);
+    }
+    const T = Math.max(...en), work = G.reduce((s, x) => s + x.d, 0);
+    return { st, en, lane, br, T, work, W };
+  }
+  /* universal scalability law (Gunther): contention alpha, crosstalk beta */
+  const usl = (N, a, b) => N / (1 + a * (N - 1) + b * N * (N - 1));
+  const uslPeak = (a, b) => b > 0 ? Math.sqrt((1 - a) / b) : Infinity;
+
+  /* ---------- debate: each round every agent reads the others; a wrong agent is won over with probability
+     a * (share right), a right agent is talked out of it with probability b * (share wrong) ---------- */
+  function debate(n, p, a, b, R, M, seed) {
+    const r = mulberry32(seed), runs = [];
+    for (let m = 0; m < M; m++) {
+      let k = 0; for (let i = 0; i < n; i++) if (r() < p) k++;
+      const xs = [k];
+      for (let t = 0; t < R; t++) { const x = k / n; let k2 = 0; for (let i = 0; i < n; i++) { if (i < k) { if (r() >= b * (1 - x)) k2++; } else if (r() < a * x) k2++; } k = k2; xs.push(k); }
+      runs.push(xs);
+    }
+    return runs;
+  }
+  const meanField = (p, a, b, R) => { const xs = [p]; for (let t = 0; t < R; t++) { const x = xs[t]; xs.push(x + (a - b) * x * (1 - x)); } return xs; };
+
+  /* ---------- critique loop: generator right with p; critic rejects a wrong answer with c, a right one with e ---------- */
+  function critique(p, c, e, R) {
+    const acc = p * (1 - e), aw = (1 - p) * (1 - c), a = acc + aw, rej = 1 - a, allRej = Math.pow(rej, R);
+    const accepted = a > 0 ? 1 - allRej : 0, precision = a > 0 ? acc / a : 0, tries = a > 0 ? (1 - allRej) / a : R;
+    const lastOK = rej > 0 ? p * e / rej : 0;
+    return { a, accepted, precision, tries, allRej, lastOK, finalLast: precision * accepted + allRej * lastOK, slip: accepted * (1 - precision) };
+  }
+
+  /* ---------- topologies ---------- */
+  function topo(kind, n, b) {
+    const E = [];
+    if (kind === 'mesh') { for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) E.push([i, j]); }
+    else if (kind === 'star') { for (let i = 1; i < n; i++) E.push([0, i]); }
+    else if (kind === 'chain') { for (let i = 1; i < n; i++) E.push([i - 1, i]); }
+    else { for (let i = 1; i < n; i++) E.push([Math.floor((i - 1) / b), i]); }
+    const adj = Array.from({ length: n }, () => []); E.forEach(([i, j]) => { adj[i].push(j); adj[j].push(i); });
+    let diam = 0; for (let s = 0; s < n; s++) { const d = new Array(n).fill(-1); d[s] = 0; const q = [s]; while (q.length) { const u = q.shift(); for (const v of adj[u]) if (d[v] < 0) { d[v] = d[u] + 1; q.push(v); } } diam = Math.max(diam, ...d); }
+    const deg = adj.map(a => a.length);
+    return { E, adj, deg, maxDeg: Math.max(0, ...deg), diam, L: E.length };
+  }
+
+  return { lg, lch, binPmf, bbPmf, abOf, majTail, majBin, majBB, betai, ceiling, nEff, poisBin, hyperMaj, iccOf, dawidSkene, weightedCF, blevel, span, schedule, usl, uslPeak, debate, meanField, critique, topo };
+})();
+
+
+const MD = {"src":"welinder/cubam demo/bluebirds (commit 1db8c09, 2011-02-18)","imgs":[11573,11574,11575,11577,11578,11579,11580,11583,11585,11588,11594,11596,11600,11601,11602,11604,11612,11615,11617,11618,11619,11626,11628,11629,11630,11637,11641,11642,11644,11645,11646,11653,11655,11656,11657,11658,11661,11663,11672,11673,11680,11685,11692,11693,11694,11696,11697,11705,12382,14988,36618,36620,36621,36622,36623,36624,36627,36632,36633,36636,36638,36640,36641,36643,36644,36645,36652,36656,36657,36664,36665,36666,36673,36674,36675,36676,36678,36679,36680,36683,36691,36693,36696,36697,36701,36931,36932,36933,36934,36935,36936,36937,36939,36940,36941,36942,36943,36947,36948,36949,36952,36953,36959,36960,36961,36962,36963,36964],"workers":[39,97,175,335,866,885,896,1005,1023,1721,1722,1723,1724,1725,1726,1727,1730,1731,1733,1734,1737,1738,1740,1741,1742,1743,1750,1755,1756,1757,1758,1759,1760,1761,1762,1763,1764,1765,1766],"y":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"V":["111011111110100100101110111000000110100011011011000000000000000000001000000000000000000000000000001000000000","001001111010101000011011011111110110100011000000110001011110000001000111110100000011010101100000001100000000","111111111101110110111111111111111101111111011011111011110011100001111111110111011011100111101111011111111000","111001111110110100111101111110111111111111111011111001111111111111111110111111101011111111111111110000111111","111101111111110110111101111111110110100011011001111011111110000001001001100110101011000010011101011111111101","111010111111101111111111110011111111111110111011111111111111001111011111111111111110111111111111111111111111","111110001111111111111111111111111111111111111011010111111110000001111110001011111011101111111111111111101111","111011111111111100111111111111111111111111011011110000010010000000001000000100000000000001100000001000011000","111001110001110000110110100000100100100010010001000000000010000000000000000000000000000000000000000000000000","000000000100000100111001000000000000001000001000101110110011111100001010000111001011100100101111011010100001","100100001010111000000011100011110100001000010001100100100101010000011010011001110100011101000000011100000101","101111111111111110111111111111111110111111111111100001000111000001101001110101000110000001100010011011000000","000111011001000110100001100001100000100010001001100000000000000000000001100101111000000000000000000111100000","111111111111110110111111111111111111111111011011111111111101001101111011101111111011110111111111111111111110","101011101010001001101011001101011100011001110011000000110000000000000000000000000000000000000000000000000100","111101011111110011101011111000101000101111001011111000111010000000001000000000000010000000000100101000000000","111111111011110100111111111111111110110111011111000000110010000000000000000000000000000000000000001000010000","000001001010010100000000000000000000001000000000001000000000000001000000010000000010000000010000000000000000","000001011001010000011001001000000110000010010001100000000010000001000000000000000010000000000000001000000000","101011010111101111110111100000000000101111011111110000110010000000001000000010000100000000000000000000010000","100000100101000000000000000000001000000000100010000000010101111111111111110111110001100001001001100100101100","001001110011110100101011101111011100000001011011100001010001000001001000000101000010000000010000001010000000","000000000000000000001010100000000000000000100010001000111000001100100010100110101001100000001100110000001000","000000010011111000010011100000000100000000000100000000000110000000001000010000000010000001000000001000000000","011111101111000101111111111101110110110011011111000000000010000000000000000000000100000000000000001000000000","000101010000010000001000000000000000000000000000000001010110000001010001000100000010000000000000000010000000","111111111011110111111111111111111111110111011111011000010010000000000000000010000100010000100000110000000000","100000010000100000000000001000000000000001000000111000110010000000001000000000000000000000000000010000000000","111101101000110000100110100010000010010111010010000000000010000000000000000000000000000000000000000000000000","111011111111100110111011011001101100100111011011111000001010000000001000000000000000000000000000001000000000","101001010001010110101000000100000000000011010001000001010110000000000001100001001110001000000100010001000000","111000111011110000110011100011111100000011001010100000000010000000001000000000000000001000000000001000000000","000001011000010000001011000000001010000000000000100001000000000000001000000000000010001000000000010000000000","011001011101000100101001001001111000000001011001100001010110001101110110100011110011100101101101011110100100","111011111011110110111011000000100100111111000011000000000010000000001000000000000000000000000000001000000000","101101101000010110010100000000000000001000000000000000110000000000000000000000000000000000000000000000000000","100011110011111001110111111000110110100111010101000000000010000000001000000000001100000000100000000000000000","101010111001010100110111000100111100000011011010000000000000000000000000000000000010000000000000000000000000","110000010011110110010000000000000100000001010000100000000010000000001000000000000000001000000000011000000000"]};
+const GRAPH = [{"id":0,"n":"Plan the research","s":"Plan","d":15,"deps":[],"o":true},
+{"id":1,"n":"Search: installation costs","s":"Costs","d":40,"deps":[0]},
+{"id":2,"n":"Search: grants and rebates","s":"Grants","d":35,"deps":[0]},
+{"id":3,"n":"Search: cold-weather efficiency","s":"Efficiency","d":55,"deps":[0]},
+{"id":4,"n":"Search: noise and siting rules","s":"Noise","d":30,"deps":[0]},
+{"id":5,"n":"Search: installer reviews","s":"Reviews","d":45,"deps":[0]},
+{"id":6,"n":"Search: electricity tariffs","s":"Tariffs","d":25,"deps":[0]},
+{"id":7,"n":"Search: owners' case studies","s":"Cases","d":50,"deps":[0]},
+{"id":8,"n":"Search: planning permission","s":"Planning","d":35,"deps":[0]},
+{"id":9,"n":"Model running costs","s":"Run-cost","d":40,"deps":[1,3,6]},
+{"id":10,"n":"Check grant eligibility","s":"Eligible?","d":30,"deps":[2,8]},
+{"id":11,"n":"Shortlist installers","s":"Shortlist","d":25,"deps":[4,5]},
+{"id":12,"n":"Summarise owners' experiences","s":"Owners","d":30,"deps":[7]},
+{"id":13,"n":"Write: money section","s":"Write $","d":35,"deps":[9,10]},
+{"id":14,"n":"Write: practical section","s":"Write how","d":35,"deps":[11,12]},
+{"id":15,"n":"Critique the draft","s":"Critique","d":25,"deps":[13,14]},
+{"id":16,"n":"Final answer","s":"Answer","d":20,"deps":[15],"o":true}];
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), lda: css('--lda'), bad: css('--qda'), ink: css('--ink'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft'), bg: css('--bg') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const nf = n => Math.round(n).toLocaleString('en-GB');
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const sum = a => a.reduce((s, v) => s + v, 0);
+const narrowOf = cv => cv.getBoundingClientRect().width < 520;
+function fitText(ctx, s, w) { if (ctx.measureText(s).width <= w) return s; let lo = 0, hi = s.length; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (ctx.measureText(s.slice(0, m) + '…').width <= w) lo = m; else hi = m - 1; } return s.slice(0, lo) + '…'; }
+function rrect(c, x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function slider(id, fn, out) { const el = $('#' + id); el.addEventListener('input', () => fn(+el.value)); return el; }
+const sup = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+const pw = k => String(k).split('').map(d => sup[d]).join('');
+
+/* ---------- the real crowd: 39 annotators x 108 photos (Welinder et al. 2010) ---------- */
+const V = MD.V.map(s => [...s].map(Number)), Y = MD.y, NW = V.length, NI = Y.length;
+const ACC = V.map(r => sum(r.map((v, j) => v === Y[j] ? 1 : 0)) / NI);
+const KC = Y.map((t, j) => sum(V.map(r => r[j] === t ? 1 : 0)));
+const ICC = MAC.iccOf(KC, NW), PBAR = sum(ACC) / NW;
+const BYACC = ACC.map((_, i) => i).sort((a, b) => ACC[b] - ACC[a] || a - b);
+const IND = (() => { const r = mulberry32(2010); return V.map((_, w) => Y.map(t => r() < ACC[w] ? t : 1 - t)); })();
+const MAJ = (M, j) => { const s = sum(M.map(r => r[j])); return 2 * s > M.length ? 1 : 0; };
+const majRight = M => Y.map((t, j) => MAJ(M, j) === t);
+const RIGHT = { real: majRight(V), ind: majRight(IND) };
+const POIS39 = MAC.majTail(MAC.poisBin(ACC));
+
+/* ---------- hero ---------- */
+const HERO = { j: 0, seen: new Set([0]), mode: 'real', timer: 0 };
+function drawHero() {
+  const cv = $('#hero-cv'), C = C0(), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, w = v.w, h = v.h, narrow = w < 460;
+  const M = HERO.mode === 'real' ? V : IND, j = HERO.j, R = Math.min(w * 0.42, (h - 60) * 0.44), cx = w / 2, cy = 12 + (h - 52) / 2;
+  const yes = sum(M.map(r => r[j])), maj = 2 * yes > NW ? 1 : 0, ok = maj === Y[j];
+  // faint channels between neighbours of opinion: everyone could talk to everyone, n(n-1)/2 lines
+  c.save(); c.globalAlpha = 0.07; c.strokeStyle = C.ink; c.lineWidth = 0.6; const P = BYACC.map((wk, k) => { const a = -Math.PI / 2 + k / NW * 2 * Math.PI; return [cx + R * Math.cos(a), cy + R * Math.sin(a)]; });
+  for (let a = 0; a < NW; a++) for (let b = a + 1; b < NW; b += 3) { c.beginPath(); c.moveTo(P[a][0], P[a][1]); c.lineTo(P[b][0], P[b][1]); c.stroke(); } c.restore();
+  BYACC.forEach((wk, k) => { const right = M[wk][j] === Y[j], r0 = narrow ? 4.6 : 6.5; c.beginPath(); c.arc(P[k][0], P[k][1], r0, 0, 7); c.fillStyle = right ? C.a : C.bad; c.fill(); c.strokeStyle = C.surf; c.lineWidth = 1.2; c.stroke();
+    if (M[wk][j]) { c.beginPath(); c.arc(P[k][0], P[k][1], r0 + 3.2, 0, 7); c.strokeStyle = C.ink; c.globalAlpha = .45; c.lineWidth = 1; c.stroke(); c.globalAlpha = 1; } });
+  c.save(); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = C.muted; c.font = (narrow ? '10px ' : '11px ') + css('--f-mono');
+  c.fillText('most accurate', P[0][0], P[0][1] - (narrow ? 13 : 16));
+  c.font = (narrow ? '11px ' : '12.5px ') + css('--f-mono'); c.fillText(`photo ${j + 1} of ${NI}`, cx, cy - R * 0.42);
+  c.fillStyle = C.ink; c.font = `600 ${narrow ? 15 : 19}px ` + css('--f-body'); c.fillText(`${yes} say yes · ${NW - yes} say no`, cx, cy - R * 0.14);
+  c.font = `${narrow ? 12.5 : 15}px ` + css('--f-body'); c.fillText(`majority: ${maj ? 'yes' : 'no'} · truth: ${Y[j] ? 'yes' : 'no'}`, cx, cy + R * 0.12);
+  c.fillStyle = ok ? C.a : C.bad; c.font = `700 ${narrow ? 13 : 16}px ` + css('--f-body'); c.fillText(ok ? 'the crowd is right' : 'the crowd is wrong', cx, cy + R * 0.38); c.restore();
+  // the strip of all 108 photos
+  const sx = 10, sw = w - 20, cw = sw / NI, sy = h - 30;
+  for (let k = 0; k < NI; k++) { const seen = HERO.seen.has(k); c.fillStyle = !seen ? C.soft : RIGHT[HERO.mode][k] ? C.a : C.bad; c.globalAlpha = seen ? 0.9 : 1; c.fillRect(sx + k * cw + 0.5, sy, Math.max(1, cw - 1), 14); }
+  c.globalAlpha = 1; c.strokeStyle = C.ink; c.lineWidth = 1.5; c.strokeRect(sx + j * cw, sy - 3, cw, 20);
+  const seen = [...HERO.seen], hit = seen.filter(k => RIGHT[HERO.mode][k]).length;
+  c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textBaseline = 'bottom'; c.fillText(`majority right on ${hit} of ${seen.length} photos so far`, sx, sy - 5); c.restore();
+  const tot = sum(RIGHT[HERO.mode].map(Number));
+  $('#hero-cap').innerHTML = `${HERO.mode === 'real' ? 'The real answers' : 'Independent stand-ins: each annotator replaced by a coin with the same accuracy'}. Each dot is one annotator, coloured <span style="color:var(--cA)">&#9679;</span> right or <span style="color:var(--qda)">&#9679;</span> wrong on this photo (a ring marks a &ldquo;yes&rdquo;). The average annotator is right ${tip(pct(PBAR, 1), `mean of the 39 accuracies\nbest ${pct(ACC[BYACC[0]], 1)}, worst ${pct(ACC[BYACC[NW - 1]], 1)}`)} of the time; over all 108 photos the majority of these 39 is right on ${tip(tot + ' (' + pct(tot / NI, 1) + ')', HERO.mode === 'real' ? 'majority of the 39 real answers, photo by photo' : `one seeded draw of independent coins\nexpected value ${pct(POIS39, 1)} (Poisson-binomial)`)}. <b>Tap the figure</b> for the next photo, or switch to independent stand-ins.`;
+}
+function heroStep(k) { HERO.j = k == null ? (HERO.j + 1) % NI : k; HERO.seen.add(HERO.j); drawHero(); }
+$('#hero-cv').addEventListener('click', e => { const cv = $('#hero-cv'), r = cv.getBoundingClientRect(), [px, py] = evPos(cv, e); if (py > r.height - 36) { const k = Math.floor((px - 10) / ((r.width - 20) / NI)); if (k >= 0 && k < NI) return heroStep(k); } heroStep(); });
+$('#hero-next').addEventListener('click', () => heroStep());
+$('#hero-play').addEventListener('click', () => { clearInterval(HERO.timer); HERO.seen = new Set(); HERO.j = -1; HERO.timer = setInterval(() => { heroStep(HERO.j + 1); if (HERO.j >= NI - 1) clearInterval(HERO.timer); }, 45); });
+seg1('[data-hm]', 'data-hm', m => { HERO.mode = m; drawHero(); });
+fig($('#hero-cv'), drawHero);
+
+/* ---------- 1. the jury theorem ---------- */
+const WY = { p: 0.7, n: 5 };
+const need95 = p => { if (p <= 0.5) return null; for (let n = 1; n < 2000; n += 2) if (MAC.majBin(n, p) >= 0.95) return n; return null; };
+function drawWY() {
+  const C = C0(), { p, n } = WY, f = MAC.binPmf(n, p), P = MAC.majTail(f), m = (n + 1) / 2;
+  { const cv = $('#wy-pmf'), mx = Math.max(...f), v = frame(cv, [-0.6, n + 0.6], [0, mx * 1.15], { l: 44, b: 30 }); axes(v, 'k agents right', 'P(k)', { sx: n > 30 ? 10 : n > 12 ? 5 : 1, ny: 4 });
+    const bw = Math.max(1, (v.X(1) - v.X(0)) * 0.8); f.forEach((q, k) => { v.ctx.fillStyle = 2 * k > n ? C.a : 2 * k === n ? C.muted : C.bad; v.ctx.globalAlpha = 0.85; v.ctx.fillRect(v.X(k) - bw / 2, v.Y(q), bw, v.Y(0) - v.Y(q)); }); v.ctx.globalAlpha = 1;
+    seg(v, n / 2, 0, n / 2, mx * 1.1, C.ink, 1.2, [4, 3]); }
+  { const cv = $('#wy-cv'), v = frame(cv, [0, 52], [0, 1], { l: 44, b: 30 }); axes(v, 'agents voting, n', 'P(majority right)', { sx: 10, sy: 0.25, fy: y => pct(y, 0) }); clip(v);
+    [0.55, 0.6, 0.8, 0.9, 0.45].forEach(q => { const c = v.ctx; c.save(); c.strokeStyle = C.muted; c.globalAlpha = 0.35; c.lineWidth = 1; c.beginPath(); for (let k = 1; k <= 51; k += 2) { const y = MAC.majBin(k, q); k === 1 ? c.moveTo(v.X(k), v.Y(y)) : c.lineTo(v.X(k), v.Y(y)); } c.stroke(); c.restore(); });
+    seg(v, 0, p, 52, p, C.muted, 1.2, [5, 4]);
+    const c = v.ctx; c.save(); c.strokeStyle = C.lda; c.lineWidth = 2.6; c.beginPath(); for (let k = 1; k <= 51; k += 2) { const y = MAC.majBin(k, p); k === 1 ? c.moveTo(v.X(k), v.Y(y)) : c.lineTo(v.X(k), v.Y(y)); } c.stroke(); c.restore();
+    dot(v, n, P, C.lda, 6); dot(v, n, P, C.ink, 10, true); v.ctx.restore(); }
+  $('#wy-p-o').textContent = fmt(p, 2); $('#wy-n-o').textContent = n;
+  const terms = []; for (let k = m; k <= n; k++) terms.push(k);
+  $('#wy-maj').innerHTML = tip(pct(P, 1), `Σ over k = ${m}…${n} of C(${n},k)·${fmt(p, 2)}^k·${fmt(1 - p, 2)}^(${n}−k)`);
+  $('#wy-one').innerHTML = tip(pct(p, 1), 'one agent alone: its own accuracy p');
+  const nd = need95(p); $('#wy-need').innerHTML = nd ? tip(nf(nd), `smallest odd n with P(majority right) ≥ 95%\nP = ${pct(MAC.majBin(nd, p), 2)} at n = ${nd}`) : tip('never', 'with p ≤ 0.5 the majority never reaches 95%');
+  $('#wy-gain').innerHTML = tip((P >= p ? '+' : '−') + fmt(Math.abs(P - p) * 100, 1) + ' pts', `${pct(P, 1)} − ${pct(p, 1)}`);
+  const show = terms.length <= 4 ? terms : [terms[0], terms[1], null, terms[terms.length - 1]];
+  const tStr = k => `C(${n},${k})&middot;${fmt(p, 2)}${pw(k)}&middot;${fmt(1 - p, 2)}${pw(n - k)}`;
+  $('#run-wy').innerHTML = `<b>Running example</b> n = ${n}, p = ${fmt(p, 2)}: P = ${show.map(k => k == null ? '&hellip;' : tStr(k)).join(' + ')} = ${show.map(k => k == null ? '&hellip;' : tip(fmt(f[k], 4), `C(${n},${k}) = ${nf(Math.exp(MAC.lch(n, k)))}`)).join(' + ')} = ${tip('<b>' + fmt(P, 4) + '</b>', `${terms.length} terms, k = ${m} to ${n}`)}.`;
+  $('#wy-say').innerHTML = n === 1 ? `With a single agent the &ldquo;majority&rdquo; is just that agent: right ${pct(p, 0)} of the time. Slide n up.`
+    : p > 0.5 ? `Each agent is right only ${pct(p, 0)} of the time, yet a vote of ${n} is right ${pct(P, 1)} of the time: the green bars (a majority right) outweigh the red. Keep adding agents and the curve climbs towards 100%; ${nd ? `${nd} agents reach 95%.` : ''} ${p < 0.56 ? 'Barely better than a coin needs a very large jury.' : ''} This rests on one strong assumption: every agent errs <i>independently</i>.`
+    : p < 0.5 ? `Below one half the theorem runs backwards: with p = ${fmt(p, 2)} a vote of ${n} is right only ${pct(P, 1)} of the time, worse than one agent alone. A crowd of agents that are more often wrong than right converges, confidently, on the wrong answer.`
+    : `At p = 0.5 every agent is a coin flip, and so is the vote: ${pct(P, 1)} whatever n.`;
+}
+slider('wy-p', x => { WY.p = x; drawWY(); }); slider('wy-n', x => { WY.n = x; drawWY(); });
+fig($('#wy-pmf'), drawWY); fig($('#wy-cv'), drawWY);
+
+/* ---------- 2. correlated agents ---------- */
+const CO = { p: 0.64, r: 0.11, n: 39 };
+function drawCO() {
+  const C = C0(), { p, r, n } = CO, P = MAC.majBB(n, p, r), Pi = MAC.majBin(n, p), ceil = MAC.ceiling(p, r), ne = MAC.nEff(n, r);
+  { const cv = $('#co-cv'), v = frame(cv, [0, 62], [0.3, 1], { l: 44, b: 30 }); axes(v, 'agents voting, n', 'P(majority right)', { sx: 10, sy: 0.1, fy: y => pct(y, 0) }); clip(v);
+    const line = (fn, col, lw, dash) => { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw; if (dash) c.setLineDash(dash); c.beginPath(); for (let k = 1; k <= 61; k += 2) { const y = fn(k); k === 1 ? c.moveTo(v.X(k), v.Y(y)) : c.lineTo(v.X(k), v.Y(y)); } c.stroke(); c.restore(); };
+    line(k => MAC.majBin(k, p), C.b, 2, [6, 4]); line(k => MAC.majBB(k, p, r), C.lda, 2.8);
+    seg(v, 0, ceil, 62, ceil, C.bad, 1.4, [2, 3]);
+    v.ctx.save(); v.ctx.font = '11px ' + css('--f-mono'); v.ctx.fillStyle = C.bad; v.ctx.textAlign = 'right'; v.ctx.fillText(`ceiling ${pct(ceil, 1)}`, v.X(61), v.Y(ceil) + (ceil > 0.93 ? 13 : -5)); v.ctx.restore();
+    dot(v, n, P, C.lda, 6); dot(v, n, Pi, C.b, 5); v.ctx.restore(); }
+  { const cv = $('#co-beta'), v = frame(cv, [0, 1], [0, 1], { l: 12, r: 12, t: 10, b: 28 }), c = v.ctx; axes(v, 'θ, a question’s chance that an agent gets it right', '', { sx: 0.25, sy: 10, fx: x => fmt(x, 2), fy: () => '' });
+    if (r < 1e-9) { seg(v, p, 0, p, 0.95, C.lda, 3); }
+    else { const [a, b] = MAC.abOf(p, r), lb = MAC.lg(a) + MAC.lg(b) - MAC.lg(a + b), xs = [], ds = []; for (let i = 1; i < 400; i++) { const x = i / 400; xs.push(x); ds.push(Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log(1 - x) - lb)); }
+      const srt = ds.slice().sort((x, y) => x - y), cap = Math.min(srt[Math.floor(srt.length * 0.97)] * 1.25, srt[srt.length - 1]) || 1, Yd = d => v.Y(Math.min(1, d / cap * 0.92));
+      clip(v); [[0, 0.5, C.bad], [0.5, 1, C.a]].forEach(([lo, hi, col]) => { c.beginPath(); c.moveTo(v.X(lo), v.Y(0)); xs.forEach((x, i) => { if (x >= lo && x <= hi) c.lineTo(v.X(x), Yd(ds[i])); }); c.lineTo(v.X(hi), v.Y(0)); c.closePath(); c.fillStyle = col; c.globalAlpha = 0.28; c.fill(); c.globalAlpha = 1; });
+      c.beginPath(); xs.forEach((x, i) => i ? c.lineTo(v.X(x), Yd(ds[i])) : c.moveTo(v.X(x), Yd(ds[i]))); c.strokeStyle = C.lda; c.lineWidth = 2.2; c.stroke(); c.restore(); }
+    seg(v, 0.5, 0, 0.5, 1, C.ink, 1.2, [4, 3]);
+    c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.bad; c.textAlign = 'right'; c.fillText(`${pct(1 - ceil, 0)} of questions: most agents wrong`, v.X(0.48), v.Y(0.95)); c.fillStyle = C.a; c.textAlign = 'left'; c.fillText(`${pct(ceil, 0)}: most right`, v.X(0.52), v.Y(0.95)); c.restore(); }
+  $('#co-p-o').textContent = fmt(p, 2); $('#co-r-o').textContent = fmt(r, 2); $('#co-n-o').textContent = n;
+  const [a, b] = r > 0 ? MAC.abOf(p, r) : [Infinity, Infinity];
+  $('#co-maj').innerHTML = tip(pct(P, 1), r > 0 ? `beta-binomial, n = ${n}, α = ${fmt(a, 3)}, β = ${fmt(b, 3)}\nP(K ≥ ${Math.ceil((n + 1) / 2)}), ties split` : 'ρ = 0: the plain binomial of section 1');
+  $('#co-ind').innerHTML = tip(pct(Pi, 1), `binomial, n = ${n}, p = ${fmt(p, 2)}: section 1's formula`);
+  $('#co-ceil').innerHTML = tip(pct(ceil, 1), r > 0 ? `P(θ > ½) = 1 − I½(${fmt(a, 3)}, ${fmt(b, 3)})\nregularised incomplete beta function` : 'ρ = 0: every question has θ = p');
+  $('#co-neff').innerHTML = tip(fmt(ne, 1), `n / (1 + (n − 1)ρ) = ${n} / (1 + ${n - 1}×${fmt(r, 2)})\nlimit as n → ∞: 1/ρ = ${r > 0 ? fmt(1 / r, 1) : '∞'}`);
+  $('#run-co').innerHTML = `<b>Running example</b> p = ${fmt(p, 2)}, &rho; = ${fmt(r, 2)}, n = ${n}: n<sub>eff</sub> = ${n} / (1 + ${n - 1}&times;${fmt(r, 2)}) = ${tip('<b>' + fmt(ne, 2) + '</b>', 'agents that are worth this many independent ones, in variance')}` + (r > 0 ? `; &alpha; = ${fmt(p, 2)}(1/${fmt(r, 2)} &minus; 1) = ${fmt(a, 2)}, &beta; = ${fmt(b, 2)}; ceiling = 1 &minus; I<sub>&frac12;</sub>(${fmt(a, 2)}, ${fmt(b, 2)}) = ${tip('<b>' + pct(ceil, 1) + '</b>', 'share of questions on which most agents are right')}.` : '; with &rho; = 0 there is no ceiling below 100%.');
+  $('#co-say').innerHTML = r < 1e-9 ? `With &rho; = 0 the agents are independent and the two curves coincide: section 1 again, heading for ${p > 0.5 ? '100%' : p < 0.5 ? '0%' : '50%'}. Now <b>raise &rho;</b>.`
+    : p <= 0.5 ? `With p &le; 0.5 the vote can&rsquo;t help; correlation only changes how fast it fails.`
+    : `With &rho; = ${fmt(r, 2)}, ${n} agents are worth about ${fmt(ne, 1)} independent ones, and no number of them is worth more than 1/&rho; = ${fmt(1 / r, 1)}. The vote reaches ${pct(P, 1)} instead of the independent ${pct(Pi, 1)}, and can never pass ${pct(ceil, 1)}: on the ${pct(1 - ceil, 0)} of questions where most agents share the same blind spot (the red area), adding more of them only makes the wrong majority surer. ${r > 0.3 ? 'At this level of agreement, extra agents buy almost nothing.' : ''} Copies of one model prompted the same way behave like this; diversity (different models, prompts, tools or evidence) is what lowers &rho;.`;
+}
+slider('co-p', x => { CO.p = x; drawCO(); }); slider('co-r', x => { CO.r = x; drawCO(); }); slider('co-n', x => { CO.n = x; drawCO(); });
+fig($('#co-cv'), drawCO); fig($('#co-beta'), drawCO);
+
+/* ---------- 3. orchestrator and workers ---------- */
+const OR = { W: 3, brief: 0, prio: 'cp', slow: new Set(), boxes: [] };
+const LEVEL = (() => { const l = []; GRAPH.forEach((t, i) => { l[i] = t.deps.length ? 1 + Math.max(...t.deps.map(j => l[j])) : 0; }); return l; })();
+const NLEV = Math.max(...LEVEL) + 1;
+const gOf = () => GRAPH.map((t, i) => Object.assign({}, t, { d: OR.slow.has(i) ? t.d * 3 : t.d }));
+function drawOR() {
+  const C = C0(), G = gOf(), S = MAC.schedule(G, OR.W, OR.brief, OR.prio), sp = MAC.span(G), onCP = new Set(sp.path);
+  const TO = sum(G.filter(t => t.o).map(t => t.d)), TW = S.work - TO, lo = Math.max(sp.T, TO + TW / OR.W), hi = TW / OR.W + sp.T;
+  { const cv = $('#or-dag'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, narrow = v.w < 520, colW = v.w / NLEV, bw = Math.min(colW - (narrow ? 4 : 18), 130), bh = narrow ? 30 : 28;
+    const pos = GRAPH.map((t, i) => { const same = GRAPH.map((_, k) => k).filter(k => LEVEL[k] === LEVEL[i]), r = same.indexOf(i), gap = (v.h - 10) / same.length; return [colW * (LEVEL[i] + 0.5), 5 + gap * (r + 0.5)]; });
+    c.save(); GRAPH.forEach((t, i) => t.deps.forEach(j => { const cp = onCP.has(i) && onCP.has(j) && sp.path.indexOf(i) === sp.path.indexOf(j) + 1; c.beginPath(); c.moveTo(pos[j][0] + bw / 2, pos[j][1]); c.bezierCurveTo(pos[j][0] + bw / 2 + 18, pos[j][1], pos[i][0] - bw / 2 - 18, pos[i][1], pos[i][0] - bw / 2, pos[i][1]); c.strokeStyle = cp ? C.bad : C.line; c.lineWidth = cp ? 2.2 : 1; c.globalAlpha = cp ? 0.9 : 1; c.stroke(); c.globalAlpha = 1; })); c.restore();
+    OR.boxes = [];
+    GRAPH.forEach((t, i) => { const x = pos[i][0] - bw / 2, y = pos[i][1] - bh / 2; rrect(c, x, y, bw, bh, 6); c.fillStyle = C.surf; c.fill(); if (OR.slow.has(i) || t.o) { c.fillStyle = OR.slow.has(i) ? C.b : C.lda; c.globalAlpha = OR.slow.has(i) ? 0.3 : 0.14; c.fill(); c.globalAlpha = 1; } c.strokeStyle = onCP.has(i) ? C.bad : C.line; c.lineWidth = onCP.has(i) ? 2 : 1; c.stroke();
+      c.fillStyle = C.ink; c.font = (narrow ? '9px ' : '11px ') + css('--f-body'); c.textBaseline = 'middle'; c.textAlign = 'left'; const lab = fitText(c, t.s, bw - (narrow ? 6 : 38)); c.fillText(lab, x + (narrow ? 3 : 5), pos[i][1] - (narrow ? 7 : 0));
+      c.textAlign = narrow ? 'left' : 'right'; c.font = (narrow ? '9px ' : '10.5px ') + css('--f-mono'); c.fillStyle = OR.slow.has(i) ? C.b : C.muted; c.fillText(G[i].d + 's', narrow ? x + 3 : x + bw - 4, pos[i][1] + (narrow ? 7 : 0)); OR.boxes.push([x, y, bw, bh]); }); }
+  { const cv = $('#or-gantt'), Tm = Math.max(S.T, hi) * 1.04, v = frame(cv, [0, Tm], [0, OR.W + 1], { l: 62, b: 28, t: 8 }), c = v.ctx, lh = v.ph / (OR.W + 1); axes(v, 'seconds', '', { nx: 6, sy: 100, fy: () => '' });
+    c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillText('lead', v.pad.l - 6, v.pad.t + lh / 2); for (let k = 0; k < OR.W; k++) c.fillText('agent ' + (k + 1), v.pad.l - 6, v.pad.t + lh * (k + 1.5)); c.restore();
+    const bar = (t0, t1, row, col, lab, alpha, outline) => { const x = v.X(t0), w = Math.max(1, v.X(t1) - x), y = v.pad.t + row * lh + lh * 0.15, hh = lh * 0.7; rrect(c, x + 0.5, y, w - 1, hh, 3); c.fillStyle = col; c.globalAlpha = alpha; c.fill(); c.globalAlpha = 1; if (outline) { c.strokeStyle = C.bad; c.lineWidth = 1.6; c.stroke(); }
+      if (lab && w > 30) { c.save(); c.fillStyle = C.ink; c.font = (lh < 26 ? '9.5px ' : '10.5px ') + css('--f-body'); c.textBaseline = 'middle'; c.fillText(fitText(c, lab, w - 6), x + 4, y + hh / 2); c.restore(); } };
+    S.br.forEach(([t0, t1]) => bar(t0, t1, 0, C.muted, '', 0.45));
+    G.forEach((t, i) => bar(S.st[i], S.en[i], S.lane[i] + 1, t.o ? C.lda : OR.slow.has(i) ? C.b : C.a, t.s, t.o ? 0.35 : 0.38, onCP.has(i)));
+    if (OR.brief === 0) { seg(v, lo, 0, lo, OR.W + 1, C.ink, 1.2, [3, 3]); seg(v, hi, 0, hi, OR.W + 1, C.muted, 1, [3, 3]); }
+    seg(v, S.T, 0, S.T, OR.W + 1, C.bad, 2); }
+  const util = sum(G.filter(t => !t.o).map(t => t.d)) / (OR.W * S.T);
+  $('#or-w-o').textContent = OR.W; $('#or-b-o').textContent = OR.brief + ' s';
+  $('#or-T').innerHTML = tip(nf(S.T) + ' s', `finish time of the last job (the final answer)\ngreedy schedule, ${OR.prio === 'cp' ? 'longest remaining path first' : 'jobs in plan order'}`);
+  $('#or-S').innerHTML = tip(fmt(S.work / S.T, 2) + '×', `T₁ / T_W = ${nf(S.work)} / ${nf(S.T)}\nT₁: one agent doing every job itself, with no briefing`);
+  $('#or-span').innerHTML = tip(nf(sp.T) + ' s', sp.path.map(i => GRAPH[i].s + ' ' + G[i].d).join(' → '));
+  $('#or-util').innerHTML = tip(pct(util, 0), `agent-seconds of work ${nf(TW)} / (${OR.W} agents × ${nf(S.T)} s)`);
+  $('#run-or').innerHTML = `<b>Running example</b> T<sub>O</sub> = ${TO} s, T<sub>work</sub> = ${nf(TW)} s, T<sub>&infin;</sub> = ${nf(sp.T)} s, W = ${OR.W}: max(${nf(sp.T)}, ${TO} + ${nf(TW)}/${OR.W}) = ${tip(fmt(lo, 1), 'lower bound: no schedule can beat this')} &le; T<sub>W</sub> = ${tip('<b>' + nf(S.T) + '</b>', 'what the greedy scheduler achieved')} ${OR.brief === 0 ? '&le;' : '<span style="color:var(--qda)">vs</span>'} ${nf(TW)}/${OR.W} + ${nf(sp.T)} = ${tip(fmt(hi, 1), OR.brief === 0 ? 'upper bound for any greedy schedule (Graham)' : 'the bound assumes briefing is free; it no longer holds')}. Speed-up ${tip(fmt(S.work / S.T, 2) + '&times;', `${nf(S.work)} / ${nf(S.T)}`)}.`;
+  const cpSlow = [...OR.slow].filter(i => onCP.has(i)), offSlow = [...OR.slow].filter(i => !onCP.has(i));
+  $('#or-say').innerHTML = (OR.brief > 0 ? `Every job now costs the orchestrator ${OR.brief} s of briefing, one brief at a time: ${S.br.length} briefs, ${nf(S.br.length * OR.brief)} s of serial work (grey). ${S.work / S.T < 1 ? 'The team is now <b>slower</b> than one agent working alone.' : OR.W >= 4 ? 'Extra agents now sit waiting for instructions; the orchestrator is the bottleneck, which is Amdahl&rsquo;s law (next section).' : ''} `
+    : S.T <= sp.T + 1e-9 ? `With ${OR.W} agents the briefing finishes in ${nf(S.T)} s, exactly the critical path (red): more agents cannot help, because the chain ${sp.path.map(i => GRAPH[i].s).join(' → ')} must run one step after another. `
+    : `${OR.W} agent${OR.W > 1 ? 's' : ''} finish in ${nf(S.T)} s, a ${fmt(S.work / S.T, 2)}&times; speed-up over one agent doing all ${nf(S.work)} s itself. Agents are busy ${pct(util, 0)} of the time; the rest is waiting for inputs. `)
+    + (cpSlow.length ? `The slowed job${cpSlow.length > 1 ? 's' : ''} ${cpSlow.map(i => GRAPH[i].s).join(', ')} ${cpSlow.length > 1 ? 'are' : 'is'} on the critical path, so the whole briefing waits. ` : '') + (offSlow.length ? (() => { const Tc = MAC.schedule(GRAPH.map((t, i) => Object.assign({}, t, { d: cpSlow.includes(i) ? t.d * 3 : t.d })), OR.W, OR.brief, OR.prio).T, extra = S.T - Tc; return `Slowing ${offSlow.map(i => GRAPH[i].s).join(', ')} ${extra > 0 ? `costs ${nf(extra)} s, because with only ${OR.W} agent${OR.W > 1 ? 's' : ''} the extra work still has to fit somewhere` : extra < 0 ? `even saves ${nf(-extra)} s (a greedy schedule can do that), because ${offSlow.length > 1 ? 'they are' : 'it is'} off the critical path` : `costs nothing: ${offSlow.length > 1 ? 'they have' : 'it has'} slack`}. `; })() : '') + (!OR.slow.size ? '<b>Click a job</b> in the plan to make it three times slower, as if a tool timed out.' : '');
+}
+slider('or-w', x => { OR.W = x; drawOR(); }); slider('or-b', x => { OR.brief = x; drawOR(); });
+seg1('[data-orp]', 'data-orp', k => { OR.prio = k; drawOR(); });
+$('#or-reset').addEventListener('click', () => { OR.slow.clear(); drawOR(); });
+$('#or-dag').addEventListener('click', e => { const [px, py] = evPos($('#or-dag'), e), k = OR.boxes.findIndex(([x, y, w, h]) => px >= x && px <= x + w && py >= y && py <= y + h); if (k >= 0) { OR.slow.has(k) ? OR.slow.delete(k) : OR.slow.add(k); drawOR(); } });
+fig($('#or-dag'), drawOR); fig($('#or-gantt'), drawOR);
+
+/* ---------- 4. scaling laws ---------- */
+const SC = { a: 0.05, b: 0.001, N: 16 };
+function drawSC() {
+  const C = C0(), { a, b, N } = SC, S = MAC.usl(N, a, b), Sa = MAC.usl(N, a, 0), pk = MAC.uslPeak(a, b), pkN = isFinite(pk) ? Math.max(1, Math.min(64, Math.round(pk))) : 64;
+  let ymax = 0; for (let n = 1; n <= 64; n++) ymax = Math.max(ymax, MAC.usl(n, a, 0)); ymax = Math.min(64, Math.max(6, ymax * 1.12));
+  const cv = $('#sc-cv'), v = frame(cv, [0, 65], [0, ymax], { l: 44, b: 30 }); axes(v, 'agents, N', 'speed-up S(N)', { sx: 8, ny: 5 }); clip(v);
+  curve(v, x => x, C.muted, 1.4, [5, 4]); curve(v, x => x < 1 ? NaN : MAC.usl(x, a, 0), C.b, 2, [7, 4]); curve(v, x => x < 1 ? NaN : MAC.usl(x, a, b), C.lda, 3);
+  if (a > 0) seg(v, 0, 1 / a, 65, 1 / a, C.b, 1, [2, 3], 0.7);
+  if (isFinite(pk) && pk <= 64) { dot(v, pk, MAC.usl(pk, a, b), C.bad, 5); v.ctx.save(); v.ctx.font = '11px ' + css('--f-mono'); v.ctx.fillStyle = C.bad; v.ctx.textAlign = 'center'; v.ctx.fillText(`peak N* = ${fmt(pk, 1)}`, v.X(pk), v.Y(MAC.usl(pk, a, b)) - 10); v.ctx.restore(); }
+  dot(v, N, S, C.lda, 6); dot(v, N, S, C.ink, 10, true); v.ctx.restore();
+  $('#sc-a-o').textContent = fmt(a, 3); $('#sc-b-o').textContent = fmt(b, 4); $('#sc-n-o').textContent = N;
+  const den = 1 + a * (N - 1) + b * N * (N - 1);
+  $('#sc-s').innerHTML = tip(fmt(S, 2) + '×', `${N} / (1 + ${fmt(a, 3)}×${N - 1} + ${fmt(b, 4)}×${N}×${N - 1}) = ${N} / ${fmt(den, 3)}`);
+  $('#sc-e').innerHTML = tip(pct(S / N, 0), `S(N)/N = ${fmt(S, 2)}/${N}: the share of each agent's time that is useful`);
+  $('#sc-pk').innerHTML = isFinite(pk) ? tip(fmt(pk, 1), `√((1 − α)/β) = √(${fmt(1 - a, 3)}/${fmt(b, 4)})\nS(N*) = ${fmt(MAC.usl(pk, a, b), 2)}×`) : tip('none', 'β = 0: the curve only flattens, it never turns down');
+  $('#sc-am').innerHTML = a > 0 ? tip(fmt(1 / a, 1) + '×', `Amdahl's limit 1/α = 1/${fmt(a, 3)}, reached only with infinitely many agents and β = 0`) : tip('∞', 'α = 0: no serial part');
+  $('#run-sc').innerHTML = `<b>Running example</b> N = ${N}, &alpha; = ${fmt(a, 3)}, &beta; = ${fmt(b, 4)}: S = ${N} / (1 + ${fmt(a, 3)}&times;${N - 1} + ${fmt(b, 4)}&times;${N}&times;${N - 1}) = ${N} / ${fmt(den, 3)} = ${tip('<b>' + fmt(S, 2) + '</b>', 'speed-up over one agent')}; with no crosstalk (Amdahl) it would be ${tip(fmt(Sa, 2), `${N} / (1 + ${fmt(a, 3)}×${N - 1})`)}.`;
+  $('#sc-say').innerHTML = (b === 0 ? `With no crosstalk this is Amdahl&rsquo;s law: ${N} agents give ${fmt(S, 1)}&times;, and no number of agents can pass 1/&alpha; = ${a > 0 ? fmt(1 / a, 0) : '&infin;'}&times;, because the ${pct(a, 1)} serial share never shrinks.`
+    : N > pk ? `${N} agents are <b>past the peak</b>: the team would go faster with ${pkN} (${fmt(MAC.usl(pkN, a, b), 1)}&times;) than with ${N} (${fmt(S, 1)}&times;). Each extra agent adds a little capacity and a lot of keeping-in-sync, because the crosstalk term grows with every pair of agents.`
+    : `${N} agents give ${fmt(S, 1)}&times; (efficiency ${pct(S / N, 0)}). The curve peaks at N* = ${fmt(pk, 1)} agents and then turns <i>down</i>: past that point the pairwise cost of keeping everyone in sync outweighs the extra hands.`) + (a >= 0.2 ? ' A serial share this large (one orchestrator doing all the planning and merging) caps the team early.' : '');
+}
+slider('sc-a', x => { SC.a = x; drawSC(); }); slider('sc-b', x => { SC.b = x; drawSC(); }); slider('sc-n', x => { SC.N = x; drawSC(); });
+fig($('#sc-cv'), drawSC);
+
+/* ---------- 5. debate ---------- */
+const DB = { n: 7, p: 0.6, a: 0.5, b: 0.2, R: 4, seed: 11, M: 2000 };
+function drawDB() {
+  const C = C0(), { n, p, a, b, R } = DB, runs = MAC.debate(n, p, a, b, R, DB.M, DB.seed), mf = MAC.meanField(p, a, b, R);
+  const cv = $('#db-cv'), v = frame(cv, [-0.2, Math.max(1, R) + 0.2], [0, 1], { l: 44, b: 30 }); axes(v, 'round', 'share of agents right', { sx: 1, sy: 0.25, fy: y => pct(y, 0) }); clip(v);
+  seg(v, -1, 0.5, R + 1, 0.5, C.ink, 1, [4, 3], 0.6);
+  const c = v.ctx; runs.slice(0, 60).forEach((xs, m) => { const j = ((m * 0.6180339) % 1 - 0.5) * 0.012; c.save(); c.strokeStyle = 2 * xs[R] > n ? C.a : C.bad; c.globalAlpha = 0.28; c.lineWidth = 1.2; c.beginPath(); xs.forEach((k, t) => { const y = k / n + j; t ? c.lineTo(v.X(t), v.Y(y)) : c.moveTo(v.X(t), v.Y(y)); }); c.stroke(); c.restore(); });
+  const mean = Array.from({ length: R + 1 }, (_, t) => sum(runs.map(xs => xs[t])) / runs.length / n);
+  c.save(); c.strokeStyle = C.lda; c.setLineDash([6, 4]); c.lineWidth = 2; c.beginPath(); mf.forEach((x, t) => t ? c.lineTo(v.X(t), v.Y(x)) : c.moveTo(v.X(t), v.Y(x))); c.stroke(); c.restore();
+  c.save(); c.strokeStyle = C.ink; c.lineWidth = 3; c.beginPath(); mean.forEach((x, t) => t ? c.lineTo(v.X(t), v.Y(x)) : c.moveTo(v.X(t), v.Y(x))); c.stroke(); c.restore(); mean.forEach((x, t) => dot(v, t, x, C.ink, 3.5)); v.ctx.restore();
+  const m0 = runs.filter(xs => 2 * xs[0] > n).length / runs.length, mR = runs.filter(xs => 2 * xs[R] > n).length / runs.length, una = runs.filter(xs => xs[R] === 0 || xs[R] === n).length / runs.length, unaW = runs.filter(xs => xs[R] === 0).length / runs.length;
+  const flipW = runs.filter(xs => 2 * xs[0] > n && 2 * xs[R] < n).length, flipR = runs.filter(xs => 2 * xs[0] < n && 2 * xs[R] > n).length;
+  ['n', 'p', 'a', 'b', 'r'].forEach(k => { $('#db-' + k + '-o').textContent = k === 'n' || k === 'r' ? DB[k === 'r' ? 'R' : k] : fmt(DB[k], 2); });
+  $('#db-m0').innerHTML = tip(pct(m0, 1), `${runs.filter(xs => 2 * xs[0] > n).length} of ${nf(DB.M)} simulated debates\nexact (section 1): ${pct(MAC.majBin(n, p), 1)}`);
+  $('#db-mr').innerHTML = tip(pct(mR, 1), `${runs.filter(xs => 2 * xs[R] > n).length} of ${nf(DB.M)} debates have a right majority after ${R} round${R === 1 ? '' : 's'}\n${flipR} turned a wrong majority right, ${flipW} turned a right one wrong`);
+  $('#db-un').innerHTML = tip(pct(una, 0), `${runs.filter(xs => xs[R] === 0 || xs[R] === n).length} debates end with every agent agreeing\n${pct(unaW, 1)} unanimously wrong`);
+  $('#db-msg').innerHTML = tip(nf(n * (n - 1) * R), `n(n − 1) × rounds = ${n}×${n - 1}×${R}\nevery agent reads every other agent's latest answer each round`);
+  const x0 = p, x1 = mf[1] != null ? mf[1] : p;
+  $('#run-db').innerHTML = `<b>Running example</b> x<sub>0</sub> = ${fmt(x0, 2)}, a = ${fmt(a, 2)}, b = ${fmt(b, 2)}: x<sub>1</sub> = ${fmt(x0, 2)} + (${fmt(a, 2)} &minus; ${fmt(b, 2)})&times;${fmt(x0, 2)}&times;${fmt(1 - x0, 2)} = ${tip('<b>' + fmt(x1, 3) + '</b>', 'expected share right after one round, given x₀')}; after ${R} round${R === 1 ? '' : 's'} the mean-field curve is at ${tip(fmt(mf[R], 3), mf.map(x => fmt(x, 3)).join(' → '))} and the simulated average at ${tip(fmt(mean[R], 3), `average over ${nf(DB.M)} seeded debates`)}.`;
+  $('#db-say').innerHTML = R === 0 ? 'Round 0 is just the independent first answers: a plain majority vote. Add rounds.'
+    : a > b ? `The right answer is more persuasive than the wrong one (a &gt; b), so debate pulls the panel towards it: a right majority in ${pct(m0, 1)} of debates at the start, ${pct(mR, 1)} after ${R} rounds. Debate is not free of risk: in ${pct(unaW, 1)} of debates the agents talked each other into a unanimous wrong answer${flipR ? `, though ${flipR} debates rescued an initially wrong majority` : ''}.`
+    : a < b ? `Here the wrong answer is more persuasive (b &gt; a), as when agents defer to a confident-sounding peer. Debate now <b>destroys</b> accuracy: ${pct(m0, 1)} right majorities before, ${pct(mR, 1)} after, and ${pct(unaW, 1)} of debates end unanimously wrong. Talking does not help unless arguments for the truth are stronger.`
+    : `With a = b, debate changes nothing on average (the mean-field line is flat), but each debate drifts towards unanimity, wherever it happens to be heading: ${pct(una, 0)} end unanimous.`;
+}
+['n', 'p', 'a', 'b', 'r'].forEach(k => slider('db-' + k, x => { DB[k === 'r' ? 'R' : k] = x; drawDB(); }));
+$('#db-run').addEventListener('click', () => { DB.seed++; drawDB(); });
+fig($('#db-cv'), drawDB);
+
+/* ---------- 6. critique ---------- */
+const CR = { p: 0.7, c: 0.8, e: 0.1, R: 3, fb: 'last' };
+function drawCR() {
+  const C = C0(), { p, c, e, R } = CR, K = MAC.critique(p, c, e, R), rr = mulberry32(5), cats = [];
+  for (let i = 0; i < 400; i++) { let out = null, last = 0, tries = 0; for (let t = 0; t < R; t++) { tries++; const ok = rr() < p, rej = rr() < (ok ? e : c); last = ok; if (!rej) { out = ok ? 'ok' : 'bad'; break; } } if (!out) out = CR.fb === 'human' ? 'esc' : last ? 'okL' : 'badL'; cats.push([out, tries]); }
+  const cv = $('#cr-cv'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), cx = v.ctx, cols = v.w < 520 ? 16 : 25, rows = 400 / cols, gw = v.w / cols, gh = v.h / rows, rad = Math.min(gw, gh) * 0.36;
+  cats.forEach(([o, tries], i) => { const x = gw * (i % cols + 0.5), y = gh * (Math.floor(i / cols) + 0.5); cx.beginPath(); cx.arc(x, y, rad, 0, 7);
+    if (o === 'esc') { cx.strokeStyle = C.muted; cx.lineWidth = 1.5; cx.stroke(); }
+    else { cx.fillStyle = o.startsWith('ok') ? C.a : C.bad; cx.globalAlpha = o.endsWith('L') ? 0.45 : 0.9; cx.fill(); cx.globalAlpha = 1; }
+    if (tries > 1) { cx.fillStyle = C.surf; cx.font = `600 ${Math.max(8, rad * 0.95)}px ` + css('--f-mono'); cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText(tries, x, y + 0.5); } });
+  const cnt = k => cats.filter(x => x[0] === k).length;
+  ['p', 'c', 'e', 'r'].forEach(k => { $('#cr-' + k + '-o').textContent = k === 'r' ? R : fmt(CR[k], 2); });
+  const human = CR.fb === 'human', right = human ? K.precision : K.finalLast, wrongOut = human ? K.slip : K.slip + K.allRej * (1 - K.lastOK);
+  $('#cr-acc').innerHTML = tip(pct(right, 1), human ? `accuracy of the answers given: p(1−e)/a = ${fmt(p * (1 - e), 3)}/${fmt(K.a, 3)}` : `accepted and right: ${fmt(K.precision * K.accepted, 4)}\n+ all ${R} rejected, last one right: ${fmt(K.allRej * K.lastOK, 4)}`);
+  $('#cr-prec').innerHTML = tip(pct(wrongOut, 1), human ? `accepted but wrong: (1 − (1−a)^R) × (1 − p(1−e)/a)\nshare of all tasks` : `accepted but wrong ${fmt(K.slip, 4)} + fallback wrong ${fmt(K.allRej * (1 - K.lastOK), 4)}`);
+  $('#cr-tries').innerHTML = tip(fmt(K.tries, 2), `(1 − (1−a)^R)/a = (1 − ${fmt(1 - K.a, 3)}${pw(R)})/${fmt(K.a, 3)}\ngenerator attempts per task, each also read by the critic`);
+  $('#cr-esc').innerHTML = tip(pct(K.allRej, 1), `(1 − a)^R = ${fmt(1 - K.a, 3)}${pw(R)}\n${human ? 'handed to a human' : 'last attempt returned anyway'}`);
+  $('#run-cr').innerHTML = `<b>Running example</b> a = ${fmt(p, 2)}&times;${fmt(1 - e, 2)} + ${fmt(1 - p, 2)}&times;${fmt(1 - c, 2)} = ${tip(fmt(K.a, 3), 'chance the critic accepts an attempt')}; P(right | accepted) = ${fmt(p * (1 - e), 3)} / ${fmt(K.a, 3)} = ${tip('<b>' + pct(K.precision, 1) + '</b>', 'Bayes: the accepted attempts that were right')} (alone: ${pct(p, 0)}); no acceptance in ${R} tr${R === 1 ? 'y' : 'ies'}: ${fmt(1 - K.a, 3)}${pw(R)} = ${tip(fmt(K.allRej, 4), 'every attempt rejected')}.`;
+  $('#cr-say').innerHTML = (c > e ? `A critic that rejects wrong answers (${pct(c, 0)}) more often than right ones (${pct(e, 0)}) is a useful filter: accepted answers are right ${pct(K.precision, 1)} of the time, against ${pct(p, 0)} for the generator alone, at a cost of ${fmt(K.tries, 2)} attempts per task.`
+    : c === e ? `The critic rejects right and wrong answers equally often (c = e), so it carries no information: accepted answers are right exactly ${pct(K.precision, 1)} of the time, the same as the generator alone, and you pay for ${fmt(K.tries, 2)} attempts.`
+    : `This critic is worse than none: it rejects right answers (${pct(e, 0)}) more often than wrong ones (${pct(c, 0)}), so it filters <i>towards</i> mistakes: accepted answers are right only ${pct(K.precision, 1)} of the time, below the generator&rsquo;s ${pct(p, 0)}.`)
+    + ` Of the 400 simulated tasks, ${cnt('ok')} were accepted and right and ${cnt('bad')} slipped through wrong; ${human ? cnt('esc') + ' went to a human.' : (cnt('okL') + cnt('badL')) + ' ran out of tries and returned the last attempt anyway (faded).'} The formula assumes each retry is a fresh, independent try; real retries of the same model often repeat the same mistake (section 2), which makes them worth less.`;
+}
+['p', 'c', 'e', 'r'].forEach(k => slider('cr-' + k, x => { CR[k === 'r' ? 'R' : k] = x; drawCR(); }));
+seg1('[data-crf]', 'data-crf', k => { CR.fb = k; drawCR(); });
+fig($('#cr-cv'), drawCR);
+
+/* ---------- 7. hand-offs ---------- */
+const FACTS = [
+  ['customer', 'Customer: Dana Okafor', true, '"customer": "Dana Okafor"'],
+  ['booking', 'Booking ref QX7-4419', true, '"booking": "QX7-4419"'],
+  ['issue', 'Flight cancelled: 14 Mar, London to Lisbon', true, '"issue": "flight cancelled, 14 Mar, LHR-LIS"'],
+  ['goal', 'Wants rebooking, not a refund', true, '"goal": "rebook, no refund"'],
+  ['deadline', 'Must land before 18:00 on 15 Mar', true, '"deadline": "land before 18:00, 15 Mar"'],
+  ['needs', 'Travels with a wheelchair user', true, '"needs": ["wheelchair assistance"]'],
+  ['history', 'Already declined a voucher', false, '"history": "declined a voucher"'],
+  ['seat', 'Prefers a window seat', false, '"seat": "window"'],
+  ['tier', 'Gold loyalty member', false, '"tier": "gold"'],
+  ['contact', 'Contact by text message', false, '"contact": "text message"']];
+const AGENTS = ['Triage', 'Bookings', 'Seats', 'Payments', 'Assist', 'Follow-up', 'Survey', 'Archive', 'Audit'];
+const HO = { mode: 'free', r: 0.9, k: 4, seed: 3 };
+function hoRun() { const rr = mulberry32(HO.seed * 7919), keep = [FACTS.map(() => true)]; for (let h = 1; h <= 8; h++) keep.push(keep[h - 1].map((k, i) => { const u = rr(); return k && ((HO.mode === 'struct' && FACTS[i][2]) || u < HO.r); })); return keep; }
+function drawHO() {
+  const C = C0(), { r, k } = HO, keep = hoRun(), cv = $('#ho-cv'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, narrow = v.w < 520;
+  const lw = narrow ? 112 : 210, top = 26, rh = (v.h - top - 6) / FACTS.length, cw = (v.w - lw - 6) / (k + 1);
+  c.font = (narrow ? '10px ' : '11px ') + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = C.muted;
+  for (let h = 0; h <= k; h++) c.fillText(fitText(c, h === 0 ? 'caller' : AGENTS[h - 1], cw - 2), lw + cw * (h + 0.5), 12);
+  FACTS.forEach((f, i) => { const y = top + rh * i; c.save(); c.textAlign = 'left'; c.font = (narrow ? '10px ' : '12px ') + css('--f-body'); c.fillStyle = C.ink; c.fillText(fitText(c, f[1], lw - (HO.mode === 'struct' && f[2] ? 22 : 8)), 4, y + rh / 2);
+      if (HO.mode === 'struct' && f[2]) { c.fillStyle = C.lda; c.font = '600 9px ' + css('--f-mono'); c.textAlign = 'right'; c.fillText('REQ', lw - 4, y + rh / 2); } c.restore();
+    for (let h = 0; h <= k; h++) { const x = lw + cw * h + 2, kept = keep[h][i]; rrect(c, x, y + 3, cw - 4, rh - 6, 4);
+      if (kept) { c.fillStyle = i === 5 ? C.lda : C.a; c.globalAlpha = 0.75; c.fill(); c.globalAlpha = 1; }
+      else { c.strokeStyle = C.line; c.lineWidth = 1; c.stroke(); if (keep[h - 1][i]) { c.fillStyle = C.bad; c.font = '700 13px ' + css('--f-body'); c.fillText('×', x + (cw - 4) / 2, y + rh / 2); } } } });
+  const m = FACTS.length, mreq = HO.mode === 'struct' ? FACTS.filter(f => f[2]).length : 0, got = keep[k].filter(Boolean).length, E = mreq + (m - mreq) * Math.pow(r, k), all = Math.pow(r, (m - mreq) * k), crit = HO.mode === 'struct' ? 1 : Math.pow(r, k);
+  $('#ho-r-o').textContent = fmt(r, 2); $('#ho-k-o').textContent = k;
+  $('#ho-kept').innerHTML = tip(got + ' of ' + m, `this run (seed ${HO.seed}): facts the ${AGENTS[k - 1]} agent receives`);
+  $('#ho-exp').innerHTML = tip(fmt(E, 2), HO.mode === 'struct' ? `${mreq} required + ${m - mreq} × ${fmt(r, 2)}${pw(k)}` : `${m} × ${fmt(r, 2)}${pw(k)}`);
+  $('#ho-all').innerHTML = tip(pct(all, 1), `${fmt(r, 2)}^(${m - mreq}×${k})\nevery ${HO.mode === 'struct' ? 'optional ' : ''}fact survives every hop`);
+  $('#ho-crit').innerHTML = tip(pct(crit, 1), HO.mode === 'struct' ? 'a required field: a hand-off without it fails validation and is sent back' : `${fmt(r, 2)}${pw(k)}: the wheelchair fact must survive ${k} summaries`);
+  const last = keep[k];
+  $('#ho-msg').textContent = HO.mode === 'struct'
+    ? `handoff_to_${AGENTS[k - 1].toLowerCase().replace(/-/g, '_')}({\n  ` + FACTS.filter((f, i) => last[i]).map(f => f[3]).join(',\n  ') + `,\n  "done": [${AGENTS.slice(0, k - 1).map(a => '"' + a.toLowerCase() + '"').join(', ')}]\n})`
+    : '"' + FACTS.filter((f, i) => last[i]).map(f => f[1]).join('. ') + '."';
+  $('#run-ho').innerHTML = `<b>Running example</b> m = ${m} facts, r = ${fmt(r, 2)}, k = ${k}: ${HO.mode === 'struct' ? `${mreq} + ${m - mreq}&times;${fmt(r, 2)}${pw(k)}` : `${m}&times;${fmt(r, 2)}${pw(k)}`} = ${tip('<b>' + fmt(E, 2) + '</b>', 'expected facts that reach the last agent')}; all survive: ${fmt(r, 2)}<sup>${(m - mreq) * k}</sup> = ${tip(pct(all, 1), 'chance nothing is lost')}.`;
+  const lostCrit = !last[5];
+  $('#ho-say').innerHTML = HO.mode === 'free'
+    ? `Each agent passes on a free-text summary that keeps each fact with probability ${fmt(r, 2)}. After ${k} hand-off${k > 1 ? 's' : ''} the ${AGENTS[k - 1]} agent expects ${fmt(E, 1)} of the ${m} facts, and has all of them only ${pct(all, 1)} of the time. ${lostCrit ? '<b>In this run the wheelchair fact was lost</b>: the agent will rebook a flight without assistance.' : 'In this run the wheelchair fact survived; <b>re-run</b> a few times.'} ${r < 1 ? `Losses compound: a ${pct(r, 0)}-faithful summary sounds good, but ${fmt(r, 2)} to the power ${m * k} is ${pct(all, 1)}.` : 'With r = 1 nothing is ever lost; no real free-text summary is that faithful.'}`
+    : `With a structured hand-off the ${mreq} required fields (REQ) travel as checked arguments: a hand-off that omits one fails validation and goes back to the sender, so they always arrive. Only the ${m - mreq} optional facts still erode (${fmt((m - mreq) * Math.pow(r, k), 1)} of ${m - mreq} expected to arrive). The same discipline is what JSON-schema tool calls give you (chapter 5.2).`;
+}
+seg1('[data-hom]', 'data-hom', x => { HO.mode = x; drawHO(); });
+slider('ho-r', x => { HO.r = x; drawHO(); }); slider('ho-k', x => { HO.k = x; drawHO(); });
+$('#ho-run').addEventListener('click', () => { HO.seed++; drawHO(); });
+fig($('#ho-cv'), drawHO);
+
+/* ---------- 8. topologies ---------- */
+const TP = { kind: 'mesh', n: 8, m: 300, R: 3, b: 3 };
+function tpPos(kind, n, w, h) {
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.4;
+  if (kind === 'star') return Array.from({ length: n }, (_, i) => i === 0 ? [cx, cy] : [cx + R * Math.cos(-Math.PI / 2 + (i - 1) / (n - 1) * 2 * Math.PI), cy + R * Math.sin(-Math.PI / 2 + (i - 1) / (n - 1) * 2 * Math.PI)]);
+  if (kind === 'tree') { const lev = [0]; for (let i = 1; i < n; i++) lev[i] = lev[Math.floor((i - 1) / TP.b)] + 1; const L = Math.max(...lev); return lev.map((l, i) => { const same = lev.map((x, k) => k).filter(k => lev[k] === l), r = same.indexOf(i); return [w * (r + 0.5) / same.length, 20 + (h - 40) * (L ? l / L : 0.5)]; }); }
+  if (kind === 'chain') { const cols = Math.min(n, Math.max(4, Math.ceil(Math.sqrt(n * w / h)))), rows = Math.ceil(n / cols); return Array.from({ length: n }, (_, i) => { const r = Math.floor(i / cols), c = r % 2 ? cols - 1 - i % cols : i % cols; return [w * (c + 0.5) / cols, h * (r + 0.5) / rows]; }); }
+  return Array.from({ length: n }, (_, i) => [cx + R * Math.cos(-Math.PI / 2 + i / n * 2 * Math.PI), cy + R * Math.sin(-Math.PI / 2 + i / n * 2 * Math.PI)]);
+}
+function drawTP() {
+  const C = C0(), { kind, n, m, R } = TP, T = MAC.topo(kind, n, TP.b);
+  { const cv = $('#tp-cv'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, P = tpPos(kind, n, v.w, v.h);
+    c.save(); c.strokeStyle = C.muted; c.lineWidth = kind === 'mesh' && n > 12 ? 0.6 : 1.3; c.globalAlpha = kind === 'mesh' ? Math.max(0.18, 0.7 - n * 0.025) : 0.8; T.E.forEach(([i, j]) => { c.beginPath(); c.moveTo(P[i][0], P[i][1]); c.lineTo(P[j][0], P[j][1]); c.stroke(); }); c.restore();
+    const rad = n > 16 ? 7 : 9.5; P.forEach(([x, y], i) => { const hub = T.deg[i] === T.maxDeg && kind !== 'mesh' && kind !== 'chain'; c.beginPath(); c.arc(x, y, hub ? rad + 3 : rad, 0, 7); c.fillStyle = hub ? C.bad : C.lda; c.fill(); c.strokeStyle = C.surf; c.lineWidth = 1.5; c.stroke();
+      c.fillStyle = C.surf; c.font = `600 ${n > 16 ? 8.5 : 10}px ` + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(T.deg[i], x, y + 0.5); }); }
+  { const cv = $('#tp-curve'), v = frame(cv, [1, 25], [0, 280], { l: 44, b: 30 }); axes(v, 'agents, n', 'links', { sx: 4, sy: 50 }); clip(v);
+    curve(v, x => x * (x - 1) / 2, C.bad, 2.4); curve(v, x => x - 1, C.lda, 2.4); dot(v, n, T.L, kind === 'mesh' ? C.bad : C.lda, 6); dot(v, n, T.L, C.ink, 10, true); v.ctx.restore(); }
+  $('#tp-n-o').textContent = n; $('#tp-m-o').textContent = nf(m); $('#tp-r-o').textContent = R;
+  const reads = 2 * T.L, ctx = T.maxDeg * m * R;
+  $('#tp-L').innerHTML = tip(nf(T.L), kind === 'mesh' ? `n(n − 1)/2 = ${n}×${n - 1}/2` : `n − 1 = ${n - 1}: ${kind === 'tree' ? 'every agent but the root has one parent' : kind === 'star' ? 'one line from the hub to each worker' : 'one line per neighbouring pair'}`);
+  $('#tp-tok').innerHTML = tip(nf(reads * m), `2L messages read per round × ${m} tokens\n= ${nf(reads)} × ${m}`);
+  $('#tp-ctx').innerHTML = tip(nf(ctx), `the busiest agent reads ${T.maxDeg} message${T.maxDeg === 1 ? '' : 's'} per round\n${T.maxDeg} × ${m} tokens × ${R} rounds`);
+  $('#tp-diam').innerHTML = tip(nf(T.diam), 'hops between the two agents farthest apart (breadth-first search)\na fact needs this many relays to cross the team');
+  $('#run-tp').innerHTML = `<b>Running example</b> n = ${n}: full mesh L = ${n}&times;${n - 1}/2 = ${tip('<b>' + nf(n * (n - 1) / 2) + '</b>', 'links if everyone talks to everyone')} against ${n - 1} for a star; this ${kind === 'mesh' ? 'mesh' : kind} reads 2&times;${nf(T.L)}&times;${m} = ${tip('<b>' + nf(reads * m) + '</b>', 'tokens read per round')} tokens per round.`;
+  $('#tp-say').innerHTML = kind === 'mesh' ? `Everyone talks to everyone: ${nf(T.L)} links for ${n} agents, and the count grows with the square of the team. Each round costs ${nf(reads * m)} tokens of reading, and after ${R} rounds every agent carries ${nf(ctx)} tokens of other people&rsquo;s messages. Information crosses in one hop, but the bill and the noise grow fast.`
+    : kind === 'star' ? `An orchestrator in the middle (red) keeps the link count at n &minus; 1 = ${n - 1} and the total reading at ${nf(reads * m)} tokens a round, ${n > 2 ? fmt(n / 2, 1) + '&times; less than a mesh' : ''}. The price: every message passes through one agent, whose context fills ${T.maxDeg} times faster than a worker&rsquo;s (${nf(ctx)} tokens after ${R} rounds). The hub is both the bottleneck and the single point of failure.`
+    : kind === 'chain' ? `A pipeline: each agent talks only to its neighbours, so contexts stay small (${nf(ctx)} tokens at most), but a fact from one end needs ${T.diam} hand-offs to reach the other, and every hop can lose it (section 7).`
+    : `A hierarchy (each lead manages up to ${TP.b}): still only ${n - 1} links, the busiest agent handles ${T.maxDeg} conversations rather than ${n - 1}, and any two agents are at most ${T.diam} hops apart. This is how large teams of people, and of agents, usually scale.`;
+}
+seg1('[data-tpk]', 'data-tpk', k => { TP.kind = k; drawTP(); });
+slider('tp-n', x => { TP.n = x; drawTP(); }); slider('tp-m', x => { TP.m = x; drawTP(); }); slider('tp-r', x => { TP.R = x; drawTP(); });
+fig($('#tp-cv'), drawTP); fig($('#tp-curve'), drawTP);
+
+/* ---------- project ---------- */
+// Python reference values (from ma-ref.py, see the listing below)
+const PY = {"pbar": 0.6355650522317189, "maj": 0.7592592592592593, "ds": 0.8888888888888888, "wcf": 0.8796296296296297, "best": 0.8888888888888888, "pois": 0.9666059713457551, "rho": 0.11103940770573517, "dsIt": 79, "curve": {"1": [0.635565052231719, 0.6355650522317189, 0.6355650522317192], "3": [0.6852388826073039, 0.6983647809051554, 0.6802327246255953], "5": [0.7131242482119675, 0.7420021991394233, 0.7044213234572625], "7": [0.7308039442542366, 0.7756935030559761, 0.7198501723756774], "9": [0.7426601515910414, 0.8030062819921386, 0.7306114154871337], "11": [0.7508107003835833, 0.825780759196175, 0.7385654728380401], "13": [0.7564332796245868, 0.8451226921169731, 0.7446921537966372], "15": [0.7602481365827521, 0.861762764332009, 0.7495599589586711], "17": [0.7627232374625231, 0.8762160471334333, 0.7535225488281494], "19": [0.7641745090883425, 0.8888629136281294, 0.7568119105628841], "21": [0.7648234179109871, 0.899994230775038, 0.7595867284992518], "23": [0.7648353612542217, 0.9098384933211305, 0.7619593053298965], "25": [0.7643474129590392, 0.9185790642095888, 0.7640113982981861], "27": [0.7634852701593525, 0.9263656393234121, 0.7658039664884869], "29": [0.762368617207327, 0.9333221623582549, 0.7673834018700154], "31": [0.7611037611037611, 0.9395524627713764, 0.7687856427958513], "33": [0.7597542597542597, 0.9451443798255708, 0.7700389659008781], "35": [0.7582967582967584, 0.9501728486388219, 0.771165927327048], "37": [0.7568850902184237, 0.9547022553771265, 0.7721847414536356], "39": [0.7592592592592593, 0.9587882657668089, 0.7731102787529858]}};
+const DS = MAC.dawidSkene(V), WCF = MAC.weightedCF(V, Y);
+const dsRight = it => sum(DS.hist[it].T.map((t, j) => (t > 0.5 ? 1 : 0) === Y[j] ? 1 : 0));
+const PJ = { sort: 'sorted', pick: null, n: 9, draws: [], rng: mulberry32(1785), it: DS.it };
+const HARD = Y.map((_, j) => j).sort((a, b) => KC[b] - KC[a] || a - b);
+function drawMat() {
+  const C = C0(), cv = $('#pj-mat'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, rows = PJ.sort === 'sorted' ? BYACC : V.map((_, i) => i), cols = PJ.sort === 'sorted' ? HARD : Y.map((_, j) => j);
+  const L = 30, top = 4, bh = 34, gw = (v.w - L - 4) / NI, gh = (v.h - top - bh - 8) / NW;
+  rows.forEach((w, r) => cols.forEach((j, k) => { c.fillStyle = V[w][j] === Y[j] ? C.a : C.bad; c.globalAlpha = V[w][j] === Y[j] ? 0.72 : 0.85; c.fillRect(L + k * gw, top + r * gh, Math.max(1, gw - (gw > 4 ? 0.6 : 0)), Math.max(1, gh - 0.6)); })); c.globalAlpha = 1;
+  c.save(); c.font = '9.5px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'right'; c.textBaseline = 'middle'; [0, NW - 1].forEach(r => c.fillText(pct(ACC[rows[r]], 0), L - 3, top + (r + 0.5) * gh)); c.restore();
+  const y0 = v.h - 4; cols.forEach((j, k) => { const s = KC[j] / NW; c.fillStyle = s > 0.5 ? C.a : C.bad; c.globalAlpha = 0.85; c.fillRect(L + k * gw, y0 - s * bh, Math.max(1, gw - 0.6), s * bh); }); c.globalAlpha = 1;
+  c.strokeStyle = C.ink; c.setLineDash([3, 3]); c.beginPath(); c.moveTo(L, y0 - bh / 2); c.lineTo(v.w - 4, y0 - bh / 2); c.stroke(); c.setLineDash([]);
+  c.save(); c.font = '9.5px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillText('50%', L - 3, y0 - bh / 2); c.restore();
+  if (PJ.pick) { const [w, j] = PJ.pick, r = rows.indexOf(w), k = cols.indexOf(j); c.strokeStyle = C.ink; c.lineWidth = 2; c.strokeRect(L + k * gw - 1, top + r * gh - 1, gw + 2, gh + 2); }
+  PJ.geo = { L, top, gw, gh, rows, cols };
+  const hard = KC.filter(k => 2 * k < NW).length;
+  $('#pj-mcap').innerHTML = PJ.pick ? (() => { const [w, j] = PJ.pick; return `<b>Annotator ${MD.workers[w]}</b> (right on ${tip(Math.round(ACC[w] * NI) + ' of ' + NI, 'compared with the expert labels')}, says &ldquo;yes&rdquo; to ${pct(sum(V[w]) / NI, 0)} of photos) answered <b>${V[w][j] ? 'yes' : 'no'}</b> on <b>photo ${MD.imgs[j]}</b>, whose expert label is <b>${Y[j] ? 'yes' : 'no'}</b>. ${KC[j]} of the 39 annotators got this photo right.`; })()
+    : `Rows: the 39 annotators${PJ.sort === 'sorted' ? ', most accurate at the top' : ''}. Columns: the 108 photos${PJ.sort === 'sorted' ? ', easiest on the left' : ''}. <span style="color:var(--cA)">&#9632;</span> right <span style="color:var(--qda)">&#9632;</span> wrong. The bars below show the share of annotators right on each photo: on ${hard} photos (red bars, below the dashed 50% line) most annotators are wrong, and those photos are exactly the ones a majority vote must get wrong. Click any cell.`;
+}
+$('#pj-mat').addEventListener('click', e => { const g = PJ.geo; if (!g) return; const [px, py] = evPos($('#pj-mat'), e), k = Math.floor((px - g.L) / g.gw), r = Math.floor((py - g.top) / g.gh); PJ.pick = (k >= 0 && k < NI && r >= 0 && r < NW) ? [g.rows[r], g.cols[k]] : null; drawMat(); });
+seg1('[data-pjs]', 'data-pjs', k => { PJ.sort = k; PJ.pick = null; drawMat(); });
+fig($('#pj-mat'), drawMat);
+const NS = Array.from({ length: 20 }, (_, i) => 2 * i + 1), CURVE = { real: NS.map(n => MAC.hyperMaj(KC, NW, n)), ind: NS.map(n => MAC.majBin(n, PBAR)), bb: NS.map(n => MAC.majBB(n, PBAR, ICC.rho)) };
+function drawPanel() {
+  const C = C0(), n = PJ.n, k = NS.indexOf(n), cv = $('#pj-cv'), v = frame(cv, [0, 40], [0.55, 1], { l: 44, b: 30 }); axes(v, 'panel size, n', 'majority right', { sx: 5, sy: 0.05, fy: y => pct(y, 0) }); clip(v);
+  const line = (arr, col, lw, dash) => { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw; if (dash) c.setLineDash(dash); c.beginPath(); arr.forEach((y, i) => i ? c.lineTo(v.X(NS[i]), v.Y(y)) : c.moveTo(v.X(NS[i]), v.Y(y))); c.stroke(); c.restore(); };
+  PJ.draws.forEach(([dn, a], i) => { v.ctx.fillStyle = C.muted; v.ctx.globalAlpha = 0.35; v.ctx.beginPath(); v.ctx.arc(v.X(dn + ((i * 0.618) % 1 - 0.5) * 1.2), v.Y(a), 2.2, 0, 7); v.ctx.fill(); }); v.ctx.globalAlpha = 1;
+  line(CURVE.ind, C.b, 2, [6, 4]); line(CURVE.bb, C.lda, 2); line(CURVE.real, C.a, 3); CURVE.real.forEach((y, i) => dot(v, NS[i], y, C.a, 3));
+  const ceil = MAC.ceiling(PBAR, ICC.rho); seg(v, 0, ceil, 40, ceil, C.lda, 1, [2, 3], 0.8);
+  dot(v, n, CURVE.real[k], C.ink, 10, true); v.ctx.restore();
+  $('#pj-n-o').textContent = n;
+  $('#pj-real').innerHTML = tip(pct(CURVE.real[k], 2), `exact average over all C(39,${n}) = ${Math.exp(MAC.lch(39, n)).toExponential(2)} panels\nper photo: hypergeometric chance that most of the panel is right`);
+  $('#pj-ind').innerHTML = tip(pct(CURVE.ind[k], 2), `binomial, n = ${n}, p̄ = ${fmt(PBAR, 4)}: if the annotators were independent`);
+  $('#pj-bb').innerHTML = tip(pct(CURVE.bb[k], 2), `beta-binomial, p̄ = ${fmt(PBAR, 4)}, ρ = ${fmt(ICC.rho, 4)} (fitted)\nceiling as n → ∞: ${pct(ceil, 1)}`);
+  $('#pj-ne').innerHTML = tip(fmt(MAC.nEff(n, ICC.rho), 2), `${n} / (1 + ${n - 1}×${fmt(ICC.rho, 4)})`);
+  const recent = PJ.draws.filter(d => d[0] === n);
+  $('#pj-psay').innerHTML = `A random panel of ${n} real annotators is right ${pct(CURVE.real[k], 1)} of the time on average; independent annotators of the same average skill would manage ${pct(CURVE.ind[k], 1)}. The correlated model of section 2, with &rho; = ${fmt(ICC.rho, 3)} estimated from the spread of the bars above, tracks the real curve closely (${pct(CURVE.bb[k], 1)}). ${n >= 21 ? 'Past about 21 annotators the real curve stops rising and even dips slightly: new annotators mostly add votes to blind spots the panel already has.' : ''} ${recent.length ? `Your ${recent.length} random panel${recent.length > 1 ? 's' : ''} of ${n} scored between ${pct(Math.min(...recent.map(d => d[1])), 0)} and ${pct(Math.max(...recent.map(d => d[1])), 0)}: which annotators you happen to pick matters a lot.` : ''}`;
+}
+slider('pj-n', x => { PJ.n = x; drawPanel(); });
+$('#pj-draw').addEventListener('click', () => { const n = PJ.n; for (let t = 0; t < 25; t++) { const ids = V.map((_, i) => i); for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(PJ.rng() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; } const M = ids.slice(0, n).map(i => V[i]); PJ.draws.push([n, sum(Y.map((y, j) => MAJ(M, j) === y ? 1 : 0)) / NI]); } drawPanel(); });
+fig($('#pj-cv'), drawPanel);
+function drawBoard() {
+  const maj = sum(RIGHT.real.map(Number)), wr = sum(WCF.pred.map((p, j) => p === Y[j] ? 1 : 0)), dr = dsRight(DS.it - 1), best = Math.round(ACC[BYACC[0]] * NI);
+  const rows = [['One annotator, on average', 'no', PBAR * NI, PBAR, PY.pbar, 'mean of the 39 accuracies'],
+    ['Majority of all 39', 'no', maj, maj / NI, PY.maj, 'each photo: the answer most annotators gave'],
+    ['Dawid&ndash;Skene EM', 'no', dr, dr / NI, PY.ds, `${DS.it} EM iterations from the majority vote\nlearns each annotator's sensitivity and specificity`],
+    ['Weighted vote, ln(p/(1 &minus; p))', 'half', wr, wr / NI, PY.wcf, 'accuracies estimated on the other half of the photos\n(cross-fitted: odd photos weight even ones and vice versa)'],
+    ['Best annotator, chosen in hindsight', 'yes', best, best / NI, PY.best, `annotator ${MD.workers[BYACC[0]]}; you only know who is best once you have the answers`],
+    ['If the 39 were independent (theory)', '&ndash;', POIS39 * NI, POIS39, PY.pois, 'Poisson-binomial with the 39 real accuracies']];
+  $('#pj-board').innerHTML = '<thead><tr><th>method</th><th>needs the answers?</th><th>photos right</th><th>accuracy</th><th>Python</th></tr></thead><tbody>' + rows.map(([n, k, r, a, py, how], i) => `<tr${i === 2 ? ' class="win"' : ''}><td><b>${n}</b></td><td>${k}</td><td class="num">${tip(Number.isInteger(r) ? r + ' of ' + NI : fmt(r, 1), how)}</td><td class="num">${pct(a, 2)}</td><td class="num">${py == null ? '&ndash;' : pct(py, 2)}</td></tr>`).join('') + '</tbody>';
+}
+function drawDS() {
+  const C = C0(), it = PJ.it, H = DS.hist[it - 1], cv = $('#pj-ds'), v = frame(cv, [0.25, 1], [0.25, 1], { l: 44, b: 30 }); axes(v, 'true accuracy (needs the answers)', 'estimated by EM (no answers)', { sx: 0.25, sy: 0.25, fx: x => pct(x, 0), fy: y => pct(y, 0) }); clip(v);
+  seg(v, 0, 0, 1, 1, C.muted, 1.2, [4, 3]); ACC.forEach((a, w) => dot(v, a, H.acc[w], C.lda, 4.5)); v.ctx.restore();
+  const ma = sum(H.acc) / NW, cov = sum(H.acc.map((e, w) => (e - ma) * (ACC[w] - PBAR))), r = cov / Math.sqrt(sum(H.acc.map(e => (e - ma) ** 2)) * sum(ACC.map(a => (a - PBAR) ** 2)));
+  $('#pj-it-o').textContent = it;
+  $('#pj-dsr').innerHTML = tip(dsRight(it - 1) + ' of ' + NI, 'photos where the EM posterior P(yes) > ½ agrees with the expert label');
+  $('#pj-dsc').innerHTML = tip(fmt(r, 3), 'Pearson correlation between estimated and true annotator accuracies');
+  $('#pj-dsl').innerHTML = tip(fmt(H.ll, 2), 'log-likelihood of all 4,212 answers under the current estimates\nEM never lets it fall');
+  $('#pj-dss').innerHTML = `${it === 1 ? 'Iteration 1 starts from the plain majority vote: each annotator is scored against it.' : `After ${it} iterations`} EM&rsquo;s estimate of each annotator&rsquo;s accuracy correlates ${fmt(r, 2)} with the truth, and its labels get ${dsRight(it - 1)} of the 108 photos right. ${it >= DS.it ? `At convergence (iteration ${DS.it}) it settles at ${dsRight(DS.it - 1)}; it touched ${Math.max(...DS.hist.map((_, k) => dsRight(k)))} on the way, a reminder that EM maximises the likelihood, not the accuracy.` : ''} The answer key was never used, only to draw the x-axis.`;
+}
+slider('pj-it', x => { PJ.it = x; drawDS(); });
+$('#pj-it').max = DS.it; $('#pj-it').value = DS.it;
+fig($('#pj-ds'), drawDS);
+$('#pj-stats').innerHTML = `<div class="stat"><div class="v">${tip(pct(PBAR, 1), 'mean of the 39 accuracies against the expert labels')}</div><div class="k">average annotator</div></div><div class="stat"><div class="v">${tip(pct(ACC[BYACC[NW - 1]], 0) + '&ndash;' + pct(ACC[BYACC[0]], 0), 'worst and best annotator')}</div><div class="k">range</div></div><div class="stat"><div class="v">${tip(fmt(ICC.rho, 3), `ρ = (v/(p̄(1−p̄)) − 1/39)/(1 − 1/39)\nv = ${fmt(ICC.v, 5)}: variance of the per-photo share right`)}</div><div class="k">correlation &rho; between annotators</div></div><div class="stat"><div class="v">${tip(KC.filter(k => 2 * k < NW).length + ' of ' + NI, 'photos on which fewer than 20 of the 39 annotators are right')}</div><div class="k">photos most annotators get wrong</div></div>`;
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+drawBoard();
+redrawAll();
+window.__maDebug = { MAC, V, Y, ACC, KC, ICC, PBAR, DS, WCF, CURVE, POIS39, OR, DB, CR, HO, TP, SC, CO, WY, gOf };
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

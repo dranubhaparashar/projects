@@ -1,0 +1,1483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on policy-gradient reinforcement learning: why stochastic policies, the softmax policy and its score, the log-derivative trick, REINFORCE, baselines and advantages, actor–critic with a TD-error critic, PPO's clipped objective and Gaussian policies for continuous actions, with CartPole trained live in the browser three ways and verified against Python and Gymnasium.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Policy Gradients &amp; Actor–Critic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+table.race td:first-child { white-space: nowrap; }
+table.race td, table.race th { font-size: 0.86rem; }
+#ep-tbl td, #ep-tbl th { font-size: 0.78rem; padding: 4px 5px; white-space: nowrap; text-transform: none; letter-spacing: 0; }
+#wa-w .cf span:first-child { font-size: 0.8rem; }
+@media (max-width: 560px) {
+  .lab .plot.ar-16x10 { aspect-ratio: 1.15 / 1; }
+  #co-cv { min-height: 120px; }
+  .lab .plot[style*="4.2/1"] { aspect-ratio: 2.6 / 1 !important; }
+  .lab .plot[style*="3.2/1"] { aspect-ratio: 1.8 / 1 !important; }
+}
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Policy gradients <span>&middot; learn what to do</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Why policies?</a>
+      <a href="#softmax">Softmax policy</a>
+      <a href="#theorem">The gradient</a>
+      <a href="#reinforce">REINFORCE</a>
+      <a href="#baseline">Baselines</a>
+      <a href="#critic">Actor&ndash;critic</a>
+      <a href="#ppo">PPO</a>
+      <a href="#gauss">Continuous actions</a>
+      <a href="#project">CartPole project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Reinforcement learning · chapter 3.3 · policy gradients</div>
+      <h1>Policy Gradients &amp; Actor&ndash;Critic</h1>
+      <div class="sub">Learn what to do, not just what it is worth</div>
+      <p class="lead">Q-learning and DQN learn the <em>value</em> of every action, then act greedily. Policy-gradient methods skip the middle step. The policy itself is a function with dials &theta;, and learning turns the dials so that actions followed by high returns become more likely. On the right, a policy of just <strong>five numbers</strong>, learnt by PPO in this chapter&rsquo;s project, balances a pole on a cart. <strong>Click or tap the picture</strong> to shove the pole, and watch the probability of pushing right swing as the policy fights back.</p>
+      <dl class="facts">
+        <div><dt>The idea</dt><dd>Make the actions that led to high return more probable</dd></div>
+        <div><dt>The estimator</dt><dd>&nabla;J = E[G &middot; &nabla; log &pi;]: no model of the world needed</dd></div>
+        <div><dt>In practice</dt><dd>PPO trains robots, game agents and the RLHF stage of chat assistants</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="A cart balancing a pole under a learnt policy; click to shove the pole"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Why learn the policy itself</a></li>
+    <li><a href="#softmax"><i>02</i>A policy with dials</a></li>
+    <li><a href="#theorem"><i>03</i>A slope you can sample</a></li>
+    <li><a href="#reinforce"><i>04</i>REINFORCE: credit by return</a></li>
+    <li><a href="#baseline"><i>05</i>Baselines cut the noise</a></li>
+    <li><a href="#critic"><i>06</i>Actor–critic: grade every step</a></li>
+    <li><a href="#ppo"><i>07</i>PPO: improve, not too far</a></li>
+    <li><a href="#gauss"><i>08</i>Continuous actions</a></li>
+    <li><a href="#project"><i>09</i>CartPole, three ways</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Why learn the policy itself?</h2>
+    <div class="prose">
+      <p>A value-based agent learns Q(s, a) and then picks the best action, every time. Its policy is <em>deterministic</em>, with a little &epsilon;-greedy noise on top. Usually that is fine. But sometimes the best thing to do is to be random on purpose. Sutton and Barto&rsquo;s <em class="term">short corridor</em> shows it. Every step costs &minus;1 and the goal is on the right. In the second cell the controls are reversed, and the agent sees nothing that tells the cells apart, so it must use one rule everywhere: go right with probability p. Always right bounces between the start and the reversed cell for ever; always left never leaves the start. <strong>Slide p and find the best mix</strong>, then walk an episode.</p>
+    </div>
+    <div class="eq"><div class="m">\[ J(p) = v_\pi(S_0) = -\,\frac{2\,(2-p)}{p\,(1-p)} \]</div><div class="read"><b>Read it as:</b> J is the expected return from the start, which here is minus the expected number of steps to the goal. The formula comes from solving the three Bellman equations of chapter 3.1, one per cell, for a policy that goes right with probability p. It blows up at p = 0 and p = 1 and is best at p = 2 &minus; &radic;2 &asymp; 0.59, where J &asymp; &minus;11.66.</div><div class="eq-say"><b>Say it</b><em>&ldquo;J of p equals minus two times two minus p, over p times one minus p.&rdquo;</em></div><div class="eq-run" id="run-co"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot" style="aspect-ratio:4.2/1"><canvas id="co-cv" aria-label="The short corridor: four cells, the second one with reversed controls"></canvas></div>
+        <div class="plot ar-16x10" style="margin-top:10px"><canvas id="cj-cv" aria-label="Expected return J against the probability p of going right"></canvas></div>
+        <figcaption><span style="color:var(--cA)">&#9644;</span> J(p), the value of the policy &nbsp; <span style="color:var(--qda)">&#9679;</span> the best an &epsilon;-greedy policy (&epsilon; = 0.1) can do &nbsp; <span style="color:var(--ink)">&#9733;</span> the best stochastic policy</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="co-p">p, the chance of choosing &ldquo;right&rdquo;</label><output id="co-p-o"></output></div><input type="range" id="co-p" min="0.02" max="0.98" step="0.01" value="0.95"></div>
+        <div class="btns"><button type="button" class="btn primary" id="co-walk">Walk one episode</button><button type="button" class="btn" id="co-best">Jump to the best p</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="co-j"></div><div class="k">expected return J(p)</div></div><div class="stat"><div class="v" id="co-ep"></div><div class="k">your last walk</div></div><div class="stat"><div class="v" id="co-star"></div><div class="k">best possible</div></div></div>
+        <p class="note" id="co-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>Three more reasons to learn the policy directly. With <b>continuous actions</b> (a steering angle, a motor torque) there is no list of actions to take the max over, but a policy can simply output a number. A policy is often <b>simpler</b> than the values: &ldquo;push towards the side the pole is falling&rdquo; is easier to write down than the expected future reward of every state. And small changes to &theta; give <b>small, smooth changes</b> in behaviour, while a tiny change in Q can flip an argmax.</p></div>
+  </div>
+</section>
+
+<!-- SOFTMAX -->
+<section class="chap" id="softmax">
+  <div class="wrap">
+    <div class="tag">Parametrising a policy</div>
+    <h2>A policy with dials: the softmax</h2>
+    <div class="prose"><p>For a handful of discrete actions the standard choice gives each action a <em class="term">preference</em> h, any real number, and turns the preferences into probabilities with the softmax. The preferences can be a table, a linear function of features, or the last layer of a neural network; &theta; is whatever sets them. Learning needs one more ingredient: the <em class="term">score</em> &nabla; log &pi;(a), the direction in &theta;-space that makes action a more likely. <strong>Pick the action that was taken</strong> (click its bar), say how good the outcome was with G, and apply one update.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \pi(a \mid s;\theta) = \frac{e^{h(s,a;\,\theta)}}{\sum_{b} e^{h(s,b;\,\theta)}} \]</div><div class="read"><b>Read it as:</b> exponentiate each preference so it is positive, then divide by the total so the probabilities add up to 1. Only differences between preferences matter: add 5 to all of them and nothing changes.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Pi of a given s is e to the h of a, over the sum of e to the h of every action.&rdquo;</em></div><div class="eq-run" id="run-sm"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\frac{\partial \log \pi(a)}{\partial h_b} = \mathbb{1}[b = a] - \pi(b) \\ &h \leftarrow h + \alpha\, G\, \nabla_h \log \pi(a) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the score raises the taken action&rsquo;s preference by 1 &minus; &pi;(a) and lowers every other preference by its own probability. Scaled by a positive G it makes a more likely; by a negative G, less likely. Rare actions get the biggest push, because 1 &minus; &pi;(a) is large.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The derivative of log pi of a with respect to h-b is one if b is a, minus pi of b. Then h moves by alpha times G times the score.&rdquo;</em></div><div class="eq-run" id="run-sc"></div></div>
+    </div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="sm-cv" aria-label="Probabilities of three actions, before and after one policy-gradient update; click a bar to choose the action taken"></canvas></div><figcaption>Solid bars: &pi; now. Outlined bars: &pi; after the update. Arrows under the axis: the score &nabla;<sub>h</sub> log &pi;(a) for the chosen action.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="sm-h0">h(&#9664; left)</label><output id="sm-h0-o"></output></div><input type="range" id="sm-h0" min="-3" max="3" step="0.1" value="0.5"></div>
+        <div class="ctrl"><div class="top"><label for="sm-h1">h(&#9679; stay)</label><output id="sm-h1-o"></output></div><input type="range" id="sm-h1" min="-3" max="3" step="0.1" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="sm-h2">h(&#9654; right)</label><output id="sm-h2-o"></output></div><input type="range" id="sm-h2" min="-3" max="3" step="0.1" value="-1"></div>
+        <div class="seg" role="group" aria-label="Action taken"><button type="button" data-sa="0">took &#9664;</button><button type="button" data-sa="1">took &#9679;</button><button type="button" data-sa="2" aria-pressed="true">took &#9654;</button></div>
+        <div class="ctrl"><div class="top"><label for="sm-g">G, the return that followed</label><output id="sm-g-o"></output></div><input type="range" id="sm-g" min="-2" max="2" step="0.1" value="1"></div>
+        <div class="btns"><button type="button" class="btn primary" id="sm-apply">Apply the update (&alpha; = 1)</button><button type="button" class="btn" id="sm-sample">Sample an action</button></div>
+        <p class="note" id="sm-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- THEOREM -->
+<section class="chap" id="theorem">
+  <div class="wrap">
+    <div class="tag">The key identity</div>
+    <h2>The policy gradient: a slope you can sample</h2>
+    <div class="prose"><p>We want the slope of J(&theta;), the expected return, with respect to &theta;. The trouble is that &theta; changes <em>which</em> actions get sampled, and we cannot differentiate through a coin flip. The <em class="term">log-derivative trick</em> gets around it. It rewrites the slope as an average of reward &times; score over the actions the policy actually takes, so every sampled action gives a noisy but <b>unbiased</b> estimate. Below, a two-lever bandit: the left lever pays 1 with probability 0.4, the right one with probability 0.7, and &pi;(right) = &sigma;(&theta;). Each faint line is the slope estimated from one batch of N pulls. <strong>Draw some estimates</strong>, then change N.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \nabla_\theta J &= \textstyle\sum_a r(a)\,\nabla_\theta\, \pi_\theta(a) \\ &= \textstyle\sum_a \pi_\theta(a)\, r(a)\, \nabla_\theta \log \pi_\theta(a) \\ &= \mathbb{E}_{A\sim\pi_\theta}\!\big[\,R\;\nabla_\theta \log \pi_\theta(A)\,\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> J = &Sigma; &pi;(a) r(a) is an average reward, so its slope is &Sigma; r(a) &nabla;&pi;(a). Multiply and divide by &pi;(a), using &nabla;&pi; = &pi; &nabla;log &pi;, and the sum becomes an expectation under the policy itself. That expectation can be estimated by sampling: pull, observe R, multiply by the score, average.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The gradient of J is the expected value of the reward times the gradient of log pi of the action taken.&rdquo;</em></div><div class="eq-run" id="run-th"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="th-cv" aria-label="Expected reward J against theta, with the true tangent and a fan of sampled slope estimates"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> J(&theta;) = 0.4 + 0.3 &sigma;(&theta;) &nbsp; <span style="color:var(--ink)">&#9644;</span> the true tangent &nbsp; <span style="color:var(--cB)">&#9644;</span> slopes estimated from batches of N pulls</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="th-t">&theta;</label><output id="th-t-o"></output></div><input type="range" id="th-t" min="-4" max="4" step="0.1" value="-1"></div>
+        <div class="seg" role="group" aria-label="Batch size N"><button type="button" data-tn="1">N = 1</button><button type="button" data-tn="10" aria-pressed="true">N = 10</button><button type="button" data-tn="100">N = 100</button><button type="button" data-tn="1000">N = 1000</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="th-draw">Draw 20 estimates</button><button type="button" class="btn" id="th-clear">Clear</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="th-true"></div><div class="k">true slope</div></div><div class="stat"><div class="v" id="th-mean"></div><div class="k">mean of estimates</div></div><div class="stat"><div class="v" id="th-sd"></div><div class="k">spread (std)</div></div></div>
+        <p class="note" id="th-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>The same trick works for whole episodes. The probability of a trajectory is a product of policy terms &pi;(A<sub>t</sub>|S<sub>t</sub>) and environment terms p(S<sub>t+1</sub>|S<sub>t</sub>, A<sub>t</sub>). Take the log and it becomes a sum. The environment terms do not depend on &theta;, so their gradients vanish. That is the <em class="term">policy gradient theorem</em> (Sutton et al., 2000): we can improve the policy <b>without a model of the world</b>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \nabla_\theta J(\theta) = \mathbb{E}_{\pi_\theta}\Big[&\sum_{t=0}^{T-1} G_t \\ &\times \nabla_\theta \log \pi_\theta(A_t \mid S_t)\Big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> each action is credited with G<sub>t</sub>, the return from that step on. Rewards that came <i>before</i> the action could not have been caused by it, and on average they add nothing to the estimate except noise. With discounting, the exact gradient carries an extra factor &gamma;<sup>t</sup>; most code leaves it out.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The gradient of J is the expected sum over time of the return from t on, times the gradient of log pi of the action taken at t.&rdquo;</em></div></div>
+  </div>
+</section>
+
+<!-- REINFORCE -->
+<section class="chap" id="reinforce">
+  <div class="wrap">
+    <div class="tag">The first algorithm</div>
+    <h2>REINFORCE: credit every action with its return</h2>
+    <div class="prose"><p>Ronald Williams (1992) turned the estimate into an algorithm: play a whole episode, then nudge &theta; along G<sub>t</sub> &nabla;log &pi;(A<sub>t</sub>|S<sub>t</sub>) for every step. Back to the short corridor, with p = &sigma;(&theta;) and the start at p = 0.05, the &epsilon;-greedy &ldquo;mostly left&rdquo; policy. Every return is negative, so every action is pushed down. The trick is that the actions in <i>long</i> episodes are pushed down hardest, and on balance that pushes p towards the best value. <strong>Press Run</strong> and watch the dot climb the curve.</p></div>
+    <div class="eq"><div class="m">\[ \theta \leftarrow \theta + \alpha \sum_{t=0}^{T-1} G_t\,\nabla_\theta \log \pi_\theta(A_t \mid S_t) \]</div><div class="read"><b>Read it as:</b> after each episode, add up return &times; score over its steps and take a small step that way. Here p = &sigma;(&theta;), so the score is 1 &minus; p after choosing right and &minus;p after choosing left. G<sub>t</sub> = &minus;(steps still to go). No value function, no bootstrapping: a pure Monte-Carlo method.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Theta moves by alpha times the sum over the episode of the return from t times the gradient of log pi of the action at t.&rdquo;</em></div><div class="eq-run" id="run-rf"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="rf-cv" aria-label="The policy's position on the J(p) curve during REINFORCE training"></canvas></div>
+        <div class="plot" style="aspect-ratio:3.2/1; margin-top:10px"><canvas id="rf-lc" aria-label="Return of each episode during training"></canvas></div>
+        <figcaption>Top: where the policy sits on J(p); the trail shows its path. Bottom: the return of every episode (dots) and the mean of the last 50 (line).</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Step size"><button type="button" data-ra="-14">&alpha; = 2⁻¹⁴</button><button type="button" data-ra="-12">&alpha; = 2⁻¹²</button><button type="button" data-ra="-10" aria-pressed="true">&alpha; = 2⁻¹⁰</button><button type="button" data-ra="-7">&alpha; = 2⁻⁷</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="rf-run">Run 300 episodes</button><button type="button" class="btn" id="rf-one">One episode</button><button type="button" class="btn" id="rf-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="rf-n"></div><div class="k">episodes</div></div><div class="stat"><div class="v" id="rf-p"></div><div class="k">p = &sigma;(&theta;) now</div></div><div class="stat"><div class="v" id="rf-j"></div><div class="k">J(p) now</div></div></div>
+        <p class="note" id="rf-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BASELINE -->
+<section class="chap" id="baseline">
+  <div class="wrap">
+    <div class="tag">Variance</div>
+    <h2>Baselines: the same direction, far less noise</h2>
+    <div class="prose"><p>REINFORCE is unbiased but noisy. In the corridor every return is negative, so every action is pushed down, and the useful signal is only the <em>difference</em> between pushes. Subtract a <em class="term">baseline</em> b from the return and the expected gradient does not change, because the score averages to zero. But the noise can shrink a lot. A natural baseline is the value of the state, V(s). Then G &minus; V(s) says whether this action did better or worse than usual: an estimate of the <em class="term">advantage</em> A(s, a) = Q(s, a) &minus; V(s). <strong>Slide b</strong> on the two-lever bandit and watch the spread change while the mean stays put.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbb{E}\big[\,b\,\nabla_\theta \log \pi_\theta(A)\big] &= b \sum_a \nabla_\theta\, \pi_\theta(a) \\ &= b\,\nabla_\theta 1 = 0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> the probabilities always add up to 1, so their gradients add up to zero. Any baseline that does not depend on the action adds nothing on average.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected value of b times the score is b times the gradient of one, which is zero.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \nabla_\theta J = \mathbb{E}\big[&(G_t - b(S_t)) \\ &\times \nabla_\theta \log \pi_\theta(A_t \mid S_t)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> credit each action with how much better than b it did. The best constant b is close to the average return, weighted towards the samples with large scores.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The gradient is the expected value of G minus the baseline, times the score.&rdquo;</em></div><div class="eq-run" id="run-bl"></div></div>
+    </div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="bl-cv" aria-label="Variance of the one-pull gradient estimate as a function of the baseline b"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> spread (standard deviation) of a one-pull estimate against b &nbsp; <span style="color:var(--ink)">&#9679;</span> your b &nbsp; <span style="color:var(--ink)">&#9733;</span> the best b. The mean of the estimate is the same everywhere.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="bl-b">Baseline b</label><output id="bl-b-o"></output></div><input type="range" id="bl-b" min="-1" max="2" step="0.01" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="bl-t">&theta; (as above)</label><output id="bl-t-o"></output></div><input type="range" id="bl-t" min="-4" max="4" step="0.1" value="-1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="bl-m"></div><div class="k">mean of the estimate</div></div><div class="stat"><div class="v" id="bl-s"></div><div class="k">spread at your b</div></div><div class="stat"><div class="v" id="bl-x"></div><div class="k">pulls for the same precision as b = 0</div></div></div>
+        <p class="note" id="bl-say"></p>
+      </div></div>
+    </div>
+    <h3>Does it help learning?</h3>
+    <div class="prose"><p>Now the corridor again: REINFORCE without a baseline, against REINFORCE with a learnt baseline b &larr; b + &beta;(G<sub>t</sub> &minus; b), the running average return. The step sizes are the ones Sutton and Barto use in their Figure 13.2; the baseline lets us use a step size 16 times larger without the updates blowing up. Each curve is the average of 50 independent runs.</p></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="br-cv" aria-label="Average return per episode with and without a baseline"></canvas></div><figcaption><span style="color:var(--cB)">&#9644;</span> REINFORCE, &alpha; = 2<sup>&minus;13</sup> &nbsp; <span style="color:var(--cA)">&#9644;</span> with a baseline, &alpha; = 2<sup>&minus;9</sup>, &beta; = 2<sup>&minus;6</sup> &nbsp; dashed: the best possible, &minus;11.66</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="br-run">Run 50 runs of each</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="br-a"></div><div class="k">no baseline, episodes 100&ndash;200</div></div><div class="stat"><div class="v" id="br-b"></div><div class="k">with baseline, episodes 100&ndash;200</div></div></div>
+        <p class="note" id="br-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CRITIC -->
+<section class="chap" id="critic">
+  <div class="wrap">
+    <div class="tag">Bootstrapping</div>
+    <h2>Actor&ndash;critic: a critic grades every step</h2>
+    <div class="prose"><p>REINFORCE waits for the end of the episode. An <em class="term">actor&ndash;critic</em> learns a value function V<sub>w</sub>(s), the critic, and grades each action as soon as it lands, with the TD error &delta; from chapter 3.1. A positive &delta; means things went better than the critic expected, so the actor makes that action more likely. A negative &delta; means worse, so less likely. Bootstrapping on V makes the grades less noisy but slightly biased, because the critic can be wrong. Barto, Sutton and Anderson used exactly this split in 1983, for the same pole-balancing task as our project. Below, a gridworld: reach the goal (+1), avoid the pits (&minus;1), &gamma; = 0.9. <strong>Step through a few moves</strong>, then run 50 episodes.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\delta_t = R_{t+1} + \gamma\, V_w(S_{t+1}) - V_w(S_t) \\ &\theta \leftarrow \theta + \alpha\,\delta_t\,\nabla_\theta \log \pi_\theta(A_t \mid S_t) \\ &w \leftarrow w + \beta\,\delta_t\,\nabla_w V_w(S_t) \end{aligned} \]</div><div class="read"><b>Read it as:</b> &delta; compares what happened (the reward plus the critic&rsquo;s value of where we landed) with what the critic expected. On average it equals the advantage of the action. The actor moves along &delta; &times; score; the critic moves its estimate towards the target. In this table-based version, &nabla;V is simply 1 for the current cell and 0 for every other cell.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Delta is the reward plus gamma times V of the next state minus V of this state. The actor moves by alpha delta times the score; the critic by beta delta times the gradient of V.&rdquo;</em></div><div class="eq-run" id="run-ac"></div></div>
+    <div class="lab">
+      <figure><div class="plot" style="aspect-ratio:6/5"><canvas id="ac-cv" aria-label="Gridworld with the critic's values as colours and the actor's action probabilities as arrows"></canvas></div><figcaption>Colour: the critic&rsquo;s V(s) (<span style="color:var(--cA)">green</span> positive, <span style="color:var(--qda)">red</span> negative). Arrows: the actor&rsquo;s probability of each move. G: goal, &times;: pits, dark: walls.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="ac-step">Step</button><button type="button" class="btn" id="ac-ep">Run 1 episode</button><button type="button" class="btn" id="ac-50">Run 50 episodes</button><button type="button" class="btn" id="ac-reset">Reset</button></div>
+        <div class="ctrl"><div class="top"><label for="ac-a">&alpha;, actor step size</label><output id="ac-a-o"></output></div><input type="range" id="ac-a" min="0.05" max="2" step="0.05" value="0.5"></div>
+        <div class="ctrl"><div class="top"><label for="ac-b">&beta;, critic step size</label><output id="ac-b-o"></output></div><input type="range" id="ac-b" min="0.02" max="1" step="0.02" value="0.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ac-n"></div><div class="k">episodes</div></div><div class="stat"><div class="v" id="ac-s"></div><div class="k">reached the goal, last 20</div></div><div class="stat"><div class="v" id="ac-d"></div><div class="k">last &delta;</div></div></div>
+        <p class="note" id="ac-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PPO -->
+<section class="chap" id="ppo">
+  <div class="wrap">
+    <div class="tag">Stability</div>
+    <h2>PPO: improve, but not too far</h2>
+    <div class="prose"><p>Collecting experience is expensive, so we would like to squeeze several gradient steps out of every batch. But the batch was collected by the <em>old</em> policy. Step too far and the new policy visits states the batch knows nothing about, and performance can collapse in one update. TRPO (Schulman et al., 2015) limited each step with a constraint on the KL divergence. <em class="term">Proximal Policy Optimization</em> (Schulman et al., 2017) does it with a simple clip: once the probability ratio &rho; between the new and old policy leaves [1 &minus; &epsilon;, 1 + &epsilon;] in the helpful direction, the objective goes flat and that sample stops pulling. <strong>Move the ratio and flip the sign of the advantage</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \rho_t(\theta) = \frac{\pi_\theta(A_t \mid S_t)}{\pi_{\text{old}}(A_t \mid S_t)} \]</div><div class="read"><b>Read it as:</b> how much more (&rho; &gt; 1) or less (&rho; &lt; 1) likely the new policy makes the action that was actually taken. Since &nabla;&rho; = &rho; &nabla;log &pi;, at &rho; = 1 the surrogate &rho;&Acirc; has the ordinary policy gradient.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Rho is pi-theta of the action over pi-old of the action.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} L^{\text{CLIP}}(\theta) &= \mathbb{E}_t\big[\min(\rho_t \hat A_t,\ c_t \hat A_t)\big] \\ c_t &= \operatorname{clip}(\rho_t,\,1-\epsilon,\,1+\epsilon) \end{aligned} \]</div><div class="read"><b>Read it as:</b> take the smaller of the plain surrogate and its clipped version. For a good action (&Acirc; &gt; 0) the gain stops growing once &rho; passes 1 + &epsilon;. For a bad one (&Acirc; &lt; 0) the gain stops once &rho; drops below 1 &minus; &epsilon;. Moves that make things <i>worse</i> are never clipped, so mistakes can still be undone.</div><div class="eq-say"><b>Say it</b><em>&ldquo;L-clip is the average of the minimum of rho times A-hat and rho clipped to one plus or minus epsilon, times A-hat.&rdquo;</em></div><div class="eq-run" id="run-cl"></div></div>
+    </div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="cl-cv" aria-label="The clipped surrogate objective against the ratio rho"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> L<sup>CLIP</sup> for one sample &nbsp; <span style="color:var(--muted)">- -</span> the unclipped surrogate &rho;&Acirc; &nbsp; shaded: where the gradient is zero</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cl-r">ratio &rho;</label><output id="cl-r-o"></output></div><input type="range" id="cl-r" min="0.2" max="2" step="0.01" value="1.35"></div>
+        <div class="ctrl"><div class="top"><label for="cl-a">advantage &Acirc;</label><output id="cl-a-o"></output></div><input type="range" id="cl-a" min="-2" max="2" step="0.1" value="1"></div>
+        <div class="ctrl"><div class="top"><label for="cl-e">&epsilon;, the clip range</label><output id="cl-e-o"></output></div><input type="range" id="cl-e" min="0.05" max="0.5" step="0.01" value="0.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="cl-l"></div><div class="k">L<sup>CLIP</sup></div></div><div class="stat"><div class="v" id="cl-g"></div><div class="k">slope dL/d&rho;</div></div></div>
+        <p class="note" id="cl-say"></p>
+      </div></div>
+    </div>
+    <h3>Many epochs on one batch</h3>
+    <div class="prose"><p>Here is why the clip matters. A three-armed bandit (true mean rewards 1.0, 0.0 and 0.6, plus noise) gives one batch of 24 pulls from a uniform policy, and we take K gradient steps on that same batch. The plain surrogate keeps moving the policy for as long as you let it, further and further from the policy that collected the data, on the strength of 24 noisy pulls. The clipped one stops near the band: once a sample&rsquo;s ratio has left it in the helpful direction, that sample stops pulling. <strong>Draw a few new batches</strong> and raise K.</p></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="ep-cv" aria-label="Probability ratio of each arm over K gradient epochs, clipped and unclipped"></canvas></div><figcaption>Ratio &pi;<sub>new</sub>(arm)/&pi;<sub>old</sub>(arm) after each epoch. Solid: PPO-clip. Dashed: the plain surrogate. Shaded: [1 &minus; &epsilon;, 1 + &epsilon;] with &epsilon; = 0.2. Arms: <span style="color:var(--cA)">&#9644;</span> 1 (mean 1.0), <span style="color:var(--cB)">&#9644;</span> 2 (mean 0.0), <span style="color:var(--cC)">&#9644;</span> 3 (mean 0.6).</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ep-k">K, epochs on the batch</label><output id="ep-k-o"></output></div><input type="range" id="ep-k" min="1" max="60" step="1" value="40"></div>
+        <div class="ctrl"><div class="top"><label for="ep-lr">step size</label><output id="ep-lr-o"></output></div><input type="range" id="ep-lr" min="0.1" max="3" step="0.1" value="0.5"></div>
+        <div class="btns"><button type="button" class="btn primary" id="ep-new">Draw a new batch</button></div>
+        <div class="tbl-wrap"><table class="hand" id="ep-tbl"></table></div>
+        <p class="note" id="ep-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- GAUSS -->
+<section class="chap" id="gauss">
+  <div class="wrap">
+    <div class="tag">Continuous actions</div>
+    <h2>Continuous actions: a Gaussian policy</h2>
+    <div class="prose"><p>A robot joint does not choose from a menu; it outputs a torque. A policy-gradient method handles that with no extra machinery. Let the policy output the mean &mu; and spread &sigma; of a normal distribution, sample the action from it, and use the same score-function update. Here the task is a single throw at a target on a line: reward = &minus;(a &minus; target)&sup2;. Each update uses a batch of 16 throws, with the batch&rsquo;s mean reward as the baseline. <strong>Press Run, then click the axis to move the target.</strong></p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \pi(a \mid \mu, \sigma) = \frac{1}{\sigma\sqrt{2\pi}}\; e^{-(a-\mu)^2 / 2\sigma^2} \]</div><div class="read"><b>Read it as:</b> a bell curve centred on &mu; with width &sigma;. In a real controller &mu; and log &sigma; are outputs of a network that reads the state.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Pi of a is the normal density with mean mu and standard deviation sigma.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \frac{\partial \log\pi}{\partial \mu} &= \frac{a-\mu}{\sigma^2} \\ \frac{\partial \log\pi}{\partial \log\sigma} &= \frac{(a-\mu)^2}{\sigma^2} - 1 \end{aligned} \]</div><div class="read"><b>Read it as:</b> a throw that beat the baseline drags &mu; towards itself. A good throw far out in the tails (|a &minus; &mu;| &gt; &sigma;) widens &sigma;; a good throw near the centre narrows it.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The score for mu is a minus mu over sigma squared; for log sigma it is a minus mu squared over sigma squared, minus one.&rdquo;</em></div><div class="eq-run" id="run-ga"></div></div>
+    </div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="ga-cv" aria-label="A Gaussian policy over a one-dimensional action, its latest batch of samples and the target; click to move the target"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> the policy &pi;(a) &nbsp; <span style="color:var(--ink)">|</span> target &nbsp; dots: the last 16 throws, <span style="color:var(--cA)">green</span> if they beat the baseline, <span style="color:var(--cB)">orange</span> if not. Thin curves: the policy over the previous four updates.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="ga-run">Run</button><button type="button" class="btn" id="ga-step">One update</button><button type="button" class="btn" id="ga-reset">Reset</button></div>
+        <div class="ctrl"><div class="top"><label for="ga-lr">&alpha;, step size</label><output id="ga-lr-o"></output></div><input type="range" id="ga-lr" min="0.01" max="0.3" step="0.01" value="0.05"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ga-mu"></div><div class="k">&mu;</div></div><div class="stat"><div class="v" id="ga-sd"></div><div class="k">&sigma;</div></div><div class="stat"><div class="v" id="ga-r"></div><div class="k">mean reward, last batch</div></div></div>
+        <p class="note" id="ga-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: CartPole, three ways</h2>
+    <div class="prose">
+      <p>CartPole is the pole-balancing task of Barto, Sutton and Anderson (1983), and the &ldquo;hello world&rdquo; of reinforcement learning. A cart on a 4.8 m track carries a hinged pole. Every 0.02 s the agent pushes the cart left or right with 10 N, and earns +1 for every step the pole stays within 12&deg; of upright and the cart stays on the track, up to 500 steps. This page runs the equations of Gymnasium&rsquo;s <span class="mono">CartPole-v1</span> line for line; the Python check below steps Gymnasium 1.4.0&rsquo;s own environment alongside it, and the states agree to within 5 &times; 10<sup>&minus;15</sup>.</p>
+      <p>All three learners use the same <b>five-number policy</b>: a logistic function of the four state variables (each divided by a fixed scale) plus a bias. All three also train the same small <b>critic</b>, a network with 16 tanh units: REINFORCE uses it as a baseline, actor&ndash;critic and PPO to bootstrap. Each learner gets <b>100,000 steps</b> of experience, five times, with seeds 1 to 5. <strong>Press Train</strong>: the 15 runs happen in your browser now.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \pi(\text{right} \mid s) &= \sigma(z) \\ z &= w_1 \tfrac{x}{2.4} + w_2 \tfrac{\dot x}{3} \\ &\quad + w_3 \tfrac{\vartheta}{0.21} + w_4 \tfrac{\dot\vartheta}{3} + b \end{aligned} \]</div><div class="read"><b>Read it as:</b> x is the cart&rsquo;s position, &#7819; its velocity, &#977; the pole&rsquo;s angle from vertical (positive leaning right) and &#977;&#775; how fast it is turning. A positive weight on &#977; means &ldquo;push right when the pole leans right&rdquo;, which slides the cart back under it. Training only ever adjusts these five numbers. The critic is used only to grade them.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The probability of pushing right is the sigmoid of a weighted sum of the four scaled state variables, plus a bias.&rdquo;</em></div><div class="eq-run" id="run-pj"></div></div>
+    <div class="btns block"><button type="button" class="btn primary" id="pj-train">Train all 15 agents</button><span class="note" id="pj-prog" style="align-self:center"></span></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-race"></table></div>
+
+    <h3>Learning curves</h3>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Curve view"><button type="button" data-lv="mean" aria-pressed="true">Mean of 5 seeds</button><button type="button" data-lv="all">Every seed</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pj-lc" aria-label="Episode return against environment steps for the three algorithms"></canvas></div>
+        <figcaption><span style="color:var(--cB)">&#9644;</span> REINFORCE (with critic baseline) &nbsp; <span style="color:var(--lda)">&#9644;</span> one-step actor&ndash;critic &nbsp; <span style="color:var(--cA)">&#9644;</span> PPO-clip. Returns are averaged over windows of 5,000 steps; shading shows the lowest and highest seed.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="stats"><div class="stat"><div class="v" id="pj-best"></div><div class="k">best mean, last 10k steps</div></div><div class="stat"><div class="v" id="pj-py"></div><div class="k">runs identical to Python</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Watch a trained agent</h3>
+    <div class="prose"><p>Pick a learner and a seed and run its final policy on a fresh episode. Its five weights are listed beside the cart. The policy stays stochastic, so even a good one occasionally makes a bad push.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Algorithm"><button type="button" data-wa="reinforce">REINFORCE</button><button type="button" data-wa="ac">Actor&ndash;critic</button><button type="button" data-wa="ppo" aria-pressed="true">PPO</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pj-cart" aria-label="A trained policy balancing the pole"></canvas></div>
+        <figcaption id="pj-cartcap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="wa-s">Seed</label><output id="wa-s-o"></output></div><input type="range" id="wa-s" min="1" max="5" step="1" value="1"></div>
+        <div class="btns"><button type="button" class="btn primary" id="wa-go">Run an episode</button></div>
+        <div class="coefs" id="wa-w"></div>
+        <div class="stats"><div class="stat"><div class="v" id="wa-t"></div><div class="k">steps balanced</div></div><div class="stat"><div class="v" id="wa-p"></div><div class="k">&pi;(right) now</div></div></div>
+        <p class="note" id="wa-say"></p>
+      </div></div>
+    </div>
+
+    <h3>PPO&rsquo;s clip at work</h3>
+    <div class="prose"><p>PPO collects 1,024 steps, estimates advantages with GAE (&lambda; = 0.95), then takes 8 passes over the batch in minibatches of 256. Below are the ratios &rho; of every sample in the final pass of one update. Most stay close to 1. The ones that leave the band in the helpful direction contribute no gradient: the clip is doing its job.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \hat A_t &= \sum_{k \ge 0} (\gamma\lambda)^k\, \delta_{t+k} \\ \delta_t &= R_{t+1} + \gamma V(S_{t+1}) - V(S_t) \end{aligned} \]</div><div class="read"><b>Read it as:</b> generalised advantage estimation (Schulman et al., 2016) blends TD errors over the following steps. &lambda; = 0 gives the one-step actor&ndash;critic&rsquo;s &delta;. &lambda; = 1 gives G<sub>t</sub> &minus; V(S<sub>t</sub>), REINFORCE with a baseline. In between it trades bias against variance. The sum stops at the end of an episode.</div><div class="eq-say"><b>Say it</b><em>&ldquo;A-hat at t is the sum over k of gamma lambda to the k, times the TD error k steps later.&rdquo;</em></div><div class="eq-run" id="run-gae"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pj-clip" aria-label="Histogram of PPO probability ratios in the last epoch of one update"></canvas></div><figcaption>Ratios &rho; in the last of 8 passes, for PPO seed 1. Shaded: [0.8, 1.2]. <span style="color:var(--qda)">Red</span>: samples clipped (no gradient).</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cp-u">Update</label><output id="cp-u-o"></output></div><input type="range" id="cp-u" min="1" max="98" step="1" value="10"></div>
+        <div class="stats"><div class="stat"><div class="v" id="cp-f"></div><div class="k">clipped, last pass</div></div><div class="stat"><div class="v" id="cp-r"></div><div class="k">ratio range</div></div></div>
+        <p class="note" id="cp-say"></p>
+      </div></div>
+    </div>
+
+    <h3>The same project in Python</h3>
+    <div class="prose"><p>The reference is a pure-Python port of this page&rsquo;s code, operation for operation, with the same random-number generator (mulberry32), so it must reproduce every episode exactly. It also checks the physics against Gymnasium. An excerpt:</p></div>
+<pre class="code"><code>import gymnasium as gym                    # 1.4.0
+# reset(), step(), obs(), critic(), vf(), v_train() ... as in the page (pg-ref.py)
+
+def gym_check():                           # same start state and actions -> same states?
+    env = gym.make("CartPole-v1").unwrapped; env.reset(seed=0)
+    r = rng(7); worst, n = 0.0, 0
+    for ep in range(20):
+        s = reset(r); env.state = np.array(s); env.steps_beyond_terminated = None; done = False
+        while not done:
+            a = 1 if r() &lt; 0.5 else 0
+            s, done = step(s, a); ob, rew, term, trunc, _ = env.step(a); n += 1
+            worst = max(worst, max(abs(x - y) for x, y in zip(s, env.state)))
+            assert term == done and all(np.float32(x) == y for x, y in zip(s, ob))
+    return n, worst
+
+# PPO-clip update on one minibatch (the actor is 5 numbers A, the critic C a 4-16-1 tanh net)
+for t in mb:
+    p = p_right(A, Os[t]); pa = p if As[t] else 1 - p; rho = pa / Ps[t]; adv = An[t]
+    cut = (adv &gt; 0 and rho &gt; 1 + eps) or (adv &lt; 0 and rho &lt; 1 - eps)
+    if not cut: add_score(g, Os[t], As[t], p, adv * rho)   # gradient of rho * A
+for i in range(5): A[i] += aLr * g[i] / len(mb)
+v_train_batch(C, [Os[t] for t in mb], [Ret[t] for t in mb], cLr)
+
+print("gymnasium check: %d steps, max |state difference| = %g" % gym_check())
+for algo in ["reinforce", "ac", "ppo"]:
+    for seed in [1, 2, 3, 4, 5]:
+        R = train(algo, seed, 100_000)
+        last = [T for s, T in R["log"] if s &gt; 90_000]
+        print(f"{algo:9s} seed {seed}: {len(R['log']):4d} episodes, "
+              f"mean return last 10k steps {sum(last)/len(last):6.1f}, "
+              f"weights {' '.join(f'{w:+.3f}' for w in R['A'])}")</code></pre>
+<pre class="code out"><code id="pj-out">gymnasium check: 393 steps, max |state difference| = 4.66294e-15
+reinforce seed 1:  425 episodes, mean return last 10k steps  278.7, weights +0.929 -1.116 +6.008 +3.786 +0.119
+reinforce seed 2:  386 episodes, mean return last 10k steps  269.9, weights +1.194 -1.287 +4.609 +4.076 -0.236
+reinforce seed 3:  362 episodes, mean return last 10k steps  405.5, weights +2.126 -1.169 +4.551 +3.896 +0.827
+reinforce seed 4:  350 episodes, mean return last 10k steps  431.7, weights +1.855 -1.231 +4.120 +3.664 +0.306
+reinforce seed 5:  413 episodes, mean return last 10k steps  347.8, weights +0.713 -1.060 +4.934 +3.744 +0.181
+ac        seed 1:  902 episodes, mean return last 10k steps  468.1, weights +3.625 -2.536 +7.060 +7.265 -0.932
+ac        seed 2:  676 episodes, mean return last 10k steps  495.3, weights +4.514 -2.852 +7.424 +8.309 +0.572
+ac        seed 3:  757 episodes, mean return last 10k steps  489.5, weights +2.509 -3.538 +8.100 +7.892 +0.135
+ac        seed 4: 1325 episodes, mean return last 10k steps  498.5, weights +3.746 -3.533 +8.849 +8.464 -0.401
+ac        seed 5:  841 episodes, mean return last 10k steps  146.8, weights +3.509 -3.173 +7.421 +6.538 +0.390
+ppo       seed 1:  541 episodes, mean return last 10k steps  486.0, weights +2.888 -0.166 +4.366 +5.610 -0.205
+ppo       seed 2:  479 episodes, mean return last 10k steps  475.4, weights +2.935 -0.436 +4.289 +5.893 +0.297
+ppo       seed 3:  504 episodes, mean return last 10k steps  415.7, weights +2.594 -0.472 +4.301 +5.106 +0.202
+ppo       seed 4:  497 episodes, mean return last 10k steps  480.1, weights +2.282 -0.830 +4.317 +5.477 -0.210
+ppo       seed 5:  478 episodes, mean return last 10k steps  471.5, weights +2.271 -0.835 +4.299 +4.745 +0.009</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest">Agreement to the last bit takes care. CartPole amplifies tiny differences: an early version that used each language&rsquo;s built-in sin, cos and exp drifted apart after a few hundred episodes, because the two maths libraries round a few results differently in the last bit. So the page and the reference compute exp, tanh, sin and cos with the same short series in plain arithmetic, accurate to about 10<sup>&minus;15</sup> (that is the only difference from Gymnasium&rsquo;s states). The hyperparameters (step sizes, network size, batch sizes) were tuned briefly by hand, with similar effort for each learner, so treat the ranking as one honest experiment, not a law. With bigger networks, Adam and longer training, all three methods can solve CartPole reliably.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Policy-gradient methods learn the policy &pi;<sub>&theta;</sub>(a|s) directly and climb J(&theta;), the expected return. Stochastic policies and continuous actions come free.</li>
+      <li>The log-derivative trick, &nabla;J = E[G<sub>t</sub> &nabla;<sub>&theta;</sub> log &pi;<sub>&theta;</sub>(A<sub>t</sub>|S<sub>t</sub>)], turns the gradient into an average over your own experience. The environment&rsquo;s dynamics never need to be known.</li>
+      <li>REINFORCE is that estimate, one episode at a time: unbiased but noisy. Subtracting a baseline such as V(s) keeps it unbiased and cuts the noise.</li>
+      <li>Actor&ndash;critic replaces the return with the critic&rsquo;s TD error &delta;: it learns every step, with less variance and a little bias. GAE&rsquo;s &lambda; slides between the two.</li>
+      <li>PPO reuses each batch for several epochs but clips the ratio &pi;<sub>new</sub>/&pi;<sub>old</sub> to [1 &minus; &epsilon;, 1 + &epsilon;], so no single update moves the policy too far. That stability made it the workhorse of deep RL and of RLHF.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why can&rsquo;t a greedy policy derived from Q values solve the short corridor well, even with perfect Q values?</summary><p>The agent cannot tell the cells apart, so it needs one rule for all of them. Any greedy rule always goes the same way and gets stuck: always right loops in the reversed cell, always left never leaves the start. The best rule is random (right with probability about 0.59), and an argmax can never be random on purpose. &epsilon;-greedy adds only a fixed, small amount of randomness.</p></details>
+      <details class="q"><summary>Every return in the corridor is negative, so REINFORCE pushes down every action it takes. How can it still learn?</summary><p>The pushes differ in size. Actions in long, bad episodes have large negative returns and are pushed down hard; actions in short episodes are pushed down gently. Also, in expectation the score sums to zero over actions, so pushing every action down by the same amount changes nothing. Only the differences between returns move the policy, which is exactly why a baseline helps.</p></details>
+      <details class="q"><summary>Why doesn&rsquo;t subtracting a baseline b(s) bias the gradient, and why must b not depend on the action?</summary><p>E[b(s) &nabla;log &pi;(A|s)] = b(s) &Sigma;<sub>a</sub> &nabla;&pi;(a|s) = b(s) &nabla;1 = 0. That step pulls b out of the sum over actions. If b depended on a it could not be pulled out, and the term would no longer vanish.</p></details>
+      <details class="q"><summary>A critic is trained badly and its values are all far too high. What happens to a one-step actor&ndash;critic?</summary><p>&delta; = R + &gamma;V(s&prime;) &minus; V(s) is biased: the actor gets graded against wrong expectations, so it may favour actions that lead to states the critic overrates. The gradient is no longer unbiased; that is the price of bootstrapping. REINFORCE with a baseline stays unbiased however bad the baseline is; a bad baseline only adds noise.</p></details>
+      <details class="q"><summary>In PPO a sample has &Acirc; &lt; 0 and ratio &rho; = 1.5. Is it clipped? What does the objective do?</summary><p>No. For a bad action the clip only applies when &rho; &lt; 1 &minus; &epsilon;. At &rho; = 1.5 the new policy has made a bad action <i>more</i> likely. The minimum picks the unclipped term &rho;&Acirc;, whose gradient pushes &rho; back down. PPO always lets you undo a move in the wrong direction.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../language-modelling/">Next chapter: Language Modelling &rarr;</a>
+      <a class="btn" href="../deep-q-networks/">&larr; Previous: Deep Q-Networks</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Sutton, R. S. &amp; Barto, A. G. (2018). <em>Reinforcement Learning: An Introduction</em>, 2nd ed., MIT Press, ch. 13: policy gradient methods, including the short corridor (Example 13.1) and Figures 13.1&ndash;13.2.</li>
+      <li>Williams, R. J. (1992). Simple statistical gradient-following algorithms for connectionist reinforcement learning. <em>Machine Learning</em> 8, 229&ndash;256: REINFORCE.</li>
+      <li>Sutton, R. S., McAllester, D., Singh, S. &amp; Mansour, Y. (2000). Policy gradient methods for reinforcement learning with function approximation. <em>NeurIPS</em> 12: the policy gradient theorem.</li>
+      <li>Barto, A. G., Sutton, R. S. &amp; Anderson, C. W. (1983). Neuronlike adaptive elements that can solve difficult learning control problems. <em>IEEE Transactions on Systems, Man, and Cybernetics</em> SMC-13(5), 834&ndash;846: the first actor&ndash;critic, on cart-pole.</li>
+      <li>Konda, V. R. &amp; Tsitsiklis, J. N. (2000). Actor-critic algorithms. <em>NeurIPS</em> 12.</li>
+      <li>Mnih, V. et al. (2016). Asynchronous methods for deep reinforcement learning. <em>ICML</em>: A3C and A2C.</li>
+      <li>Schulman, J., Levine, S., Moritz, P., Jordan, M. &amp; Abbeel, P. (2015). Trust region policy optimization. <em>ICML</em>.</li>
+      <li>Schulman, J., Moritz, P., Levine, S., Jordan, M. &amp; Abbeel, P. (2016). High-dimensional continuous control using generalized advantage estimation. <em>ICLR</em>.</li>
+      <li>Schulman, J., Wolski, F., Dhariwal, P., Radford, A. &amp; Klimov, O. (2017). Proximal policy optimization algorithms. arXiv:1707.06347.</li>
+      <li>Ouyang, L. et al. (2022). Training language models to follow instructions with human feedback. <em>NeurIPS</em>: PPO in RLHF.</li>
+      <li>Towers, M. et al. (2024). Gymnasium: a standard interface for reinforcement learning environments. arXiv:2407.17032: the CartPole-v1 environment used here.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- pg core: CartPole (Gym equations) + REINFORCE / actor-critic / PPO-clip, mirrored in pg-ref.py ---------- */
+const PGC = (() => {
+  function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  // portable maths: only + - * / so that the browser and the Python reference agree to the last bit
+  const LN2H = 0.6931471803691238, LN2L = 1.9082149292705877e-10, INVLN2 = 1.4426950408889634, TWOPI = 6.283185307179586;
+  const IF = [1]; for (let n = 1; n <= 14; n++) IF.push(IF[n - 1] * n); for (let n = 0; n <= 14; n++) IF[n] = 1 / IF[n];   // 1/n!, exact factorials
+  const P2 = []; for (let k = -1022; k <= 1023; k++) P2.push(Math.pow(2, k));                                                 // exact powers of two
+  function exp(x) { if (x > 700) x = 700; if (x < -700) x = -700;
+    const k = Math.floor(x * INVLN2 + 0.5), r = (x - k * LN2H) - k * LN2L;
+    const s = 1 + r * (IF[1] + r * (IF[2] + r * (IF[3] + r * (IF[4] + r * (IF[5] + r * (IF[6] + r * (IF[7] + r * (IF[8] + r * (IF[9] + r * (IF[10] + r * (IF[11] + r * (IF[12] + r * (IF[13] + r * IF[14])))))))))))));
+    return s * P2[k + 1022]; }
+  function tanh(x) { if (x > 20) return 1; if (x < -20) return -1; const e = exp(2 * x); return (e - 1) / (e + 1); }
+  function sincos(x) { const k = Math.floor(x / TWOPI + 0.5), r = x - k * TWOPI, r2 = r * r; let ts = r, ss = r, tc = 1, sc = 1;
+    for (let n = 1; n <= 14; n++) { ts = -ts * r2 / ((2 * n) * (2 * n + 1)); ss = ss + ts; tc = -tc * r2 / ((2 * n - 1) * (2 * n)); sc = sc + tc; }
+    return [ss, sc]; }
+  // CartPole-v1 (Barto, Sutton & Anderson 1983, as written in Gymnasium's cartpole.py, Euler integrator)
+  const G = 9.8, MC = 1.0, MP = 0.1, TM = MP + MC, LEN = 0.5, PML = MP * LEN, FM = 10.0, TAU = 0.02, XT = 2.4, TT = 12 * 2 * Math.PI / 360, TMAX = 500;
+  function reset(r) { return [-0.05 + 0.1 * r(), -0.05 + 0.1 * r(), -0.05 + 0.1 * r(), -0.05 + 0.1 * r()]; }
+  function step(s, a, force) {
+    const x = s[0], xd = s[1], th = s[2], thd = s[3], f = force != null ? force : (a === 1 ? FM : -FM);
+    const sc = sincos(th), si = sc[0], c = sc[1];
+    const temp = (f + PML * (thd * thd) * si) / TM;
+    const tha = (G * si - c * temp) / (LEN * (4.0 / 3.0 - MP * (c * c) / TM));
+    const xa = temp - PML * tha * c / TM;
+    const n = [x + TAU * xd, xd + TAU * xa, th + TAU * thd, thd + TAU * tha];
+    return { s: n, done: n[0] < -XT || n[0] > XT || n[2] < -TT || n[2] > TT };
+  }
+  const SC = [2.4, 3.0, 0.21, 3.0];               // observation scaling: the Gym observation (float32) divided by these
+  const obs = s => [Math.fround(s[0]) / SC[0], Math.fround(s[1]) / SC[1], Math.fround(s[2]) / SC[2], Math.fround(s[3]) / SC[3]];
+  const sig = z => 1 / (1 + exp(-z));
+  // actor: a logistic policy, p(push right | s) = sigma(w . o + b): five numbers
+  const pRight = (A, o) => sig(A[0] * o[0] + A[1] * o[1] + A[2] * o[2] + A[3] * o[3] + A[4]);
+  // critic: V(s) = VS * net(o), net = 4 -> H tanh -> 1
+  const H = 16, VS = 20;
+  function critic(r) { const W = new Float64Array(4 * H), b = new Float64Array(H), u = new Float64Array(H); const b1 = 1 / Math.sqrt(4), b2 = 1 / Math.sqrt(H);
+    for (let j = 0; j < H; j++) for (let i = 0; i < 4; i++) W[j * 4 + i] = (r() * 2 - 1) * b1;
+    for (let j = 0; j < H; j++) b[j] = (r() * 2 - 1) * b1;
+    for (let j = 0; j < H; j++) u[j] = (r() * 2 - 1) * b2;
+    return { W, b, u, c: 0 }; }
+  const HS = new Float64Array(H), GW = new Float64Array(4 * H), GB = new Float64Array(H), GU = new Float64Array(H);
+  function vf(C, o) { const W = C.W, b = C.b, u = C.u; let v = C.c;
+    for (let j = 0, q = 0; j < H; j++, q += 4) { const h = tanh(W[q] * o[0] + W[q + 1] * o[1] + W[q + 2] * o[2] + W[q + 3] * o[3] + b[j]); HS[j] = h; v += u[j] * h; }
+    return VS * v; }
+  // move V(o) towards a target: one SGD step on the squared error, measured in units of VS
+  function vTrain(C, o, target, lr) { const v = vf(C, o), e = lr * (target - v) / VS, W = C.W, b = C.b, u = C.u;
+    for (let j = 0, q = 0; j < H; j++, q += 4) { const h = HS[j], gj = e * u[j] * (1 - h * h); u[j] += e * h; b[j] += gj; W[q] += gj * o[0]; W[q + 1] += gj * o[1]; W[q + 2] += gj * o[2]; W[q + 3] += gj * o[3]; }
+    C.c += e; return v; }
+  // batched version: average the gradient over a minibatch (indices I into Os, Ts), then one step
+  function vTrainBatch(C, Os, Ts, I, i0, i1, lr) { GW.fill(0); GB.fill(0); GU.fill(0); let gc = 0; const n = i1 - i0, u = C.u;
+    for (let m = i0; m < i1; m++) { const t = I[m], o = Os[t], v = vf(C, o), e = (Ts[t] - v) / VS;
+      for (let j = 0, q = 0; j < H; j++, q += 4) { const h = HS[j], gj = e * u[j] * (1 - h * h); GU[j] += e * h; GB[j] += gj; GW[q] += gj * o[0]; GW[q + 1] += gj * o[1]; GW[q + 2] += gj * o[2]; GW[q + 3] += gj * o[3]; }
+      gc += e; }
+    const s = lr / n, W = C.W, b = C.b;
+    for (let j = 0, q = 0; j < H; j++, q += 4) { u[j] += s * GU[j]; b[j] += s * GB[j]; W[q] += s * GW[q]; W[q + 1] += s * GW[q + 1]; W[q + 2] += s * GW[q + 2]; W[q + 3] += s * GW[q + 3]; }
+    C.c += s * gc; }
+
+  const HP = {
+    reinforce: { gamma: 0.99, aLr: 2, cLr: 0.01 },
+    ac:        { gamma: 0.99, aLr: 0.1, cLr: 0.01 },
+    ppo:       { gamma: 0.99, lam: 0.95, aLr: 0.5, cLr: 0.05, T: 1024, K: 8, MB: 256, eps: 0.2 },
+  };
+  // run one training run; returns episode log [[cumulative steps, return], ...], final actor, critic, PPO clip log
+  function* trainGen(algo, seed, budget, hp, R) {
+    hp = Object.assign({}, HP[algo], hp || {});
+    const r = rng(seed), C = critic(r), A = [0, 0, 0, 0, 0], log = [], clips = [];
+    let steps = 0; Object.assign(R, { log, A, C, clips, steps: 0, hp });
+    const act = o => { const p = pRight(A, o); return { p, a: r() < p ? 1 : 0 }; };
+    const addScore = (g, o, a, p, k) => { const d = k * (a - p); g[0] += d * o[0]; g[1] += d * o[1]; g[2] += d * o[2]; g[3] += d * o[3]; g[4] += d; };
+    if (algo === 'reinforce' || algo === 'ac') {
+      while (steps < budget) {
+        let s = reset(r), o = obs(s), T = 0, done = false; const Os = [], As = [], Ps = [];
+        while (!done && T < TMAX) {
+          const { p, a } = act(o), st = step(s, a), o2 = obs(st.s); T++; steps++;
+          if (algo === 'ac') {
+            const v2 = st.done ? 0 : vf(C, o2), v = vf(C, o), delta = 1 + hp.gamma * v2 - v;
+            const g = [0, 0, 0, 0, 0]; addScore(g, o, a, p, delta); for (let i = 0; i < 5; i++) A[i] += hp.aLr * g[i] / VS;
+            vTrain(C, o, 1 + hp.gamma * v2, hp.cLr);
+          } else { Os.push(o); As.push(a); Ps.push(p); }
+          s = st.s; o = o2; done = st.done;
+        }
+        if (algo === 'reinforce') {
+          const n = Os.length, Gs = new Array(n); let Gt = 0; for (let t = n - 1; t >= 0; t--) { Gt = 1 + hp.gamma * Gt; Gs[t] = Gt; }
+          const g = [0, 0, 0, 0, 0]; for (let t = 0; t < n; t++) addScore(g, Os[t], As[t], Ps[t], Gs[t] - vf(C, Os[t]));
+          for (let i = 0; i < 5; i++) A[i] += hp.aLr * g[i] / (n * VS);
+          for (let t = 0; t < n; t++) vTrain(C, Os[t], Gs[t], hp.cLr);
+        }
+        log.push([steps, T]); R.steps = steps; yield;
+      }
+    } else { // PPO-clip
+      let s = reset(r), o = obs(s), T = 0;
+      while (steps < budget) {
+        const Os = [], As = [], Ps = [], Rs = [], Ds = [], Vs = [], Nx = [];
+        for (let k = 0; k < hp.T; k++) {
+          const { p, a } = act(o), st = step(s, a), o2 = obs(st.s); T++; steps++;
+          Os.push(o); As.push(a); Ps.push(a ? p : 1 - p); Vs.push(vf(C, o));
+          const trunc = !st.done && T >= TMAX;
+          Ds.push(st.done ? 1 : trunc ? 2 : 0); Nx.push(st.done ? 0 : vf(C, o2));
+          if (st.done || trunc) { log.push([steps, T]); s = reset(r); o = obs(s); T = 0; } else { s = st.s; o = o2; }
+        }
+        // GAE(lambda); a 'cut' (done or time limit) stops the trace; the next-state value is 0 only on true failure
+        const n = Os.length, Adv = new Array(n), Ret = new Array(n); let gae = 0;
+        for (let t = n - 1; t >= 0; t--) { const nxt = t === n - 1 || Ds[t] ? Nx[t] : Vs[t + 1], dl = 1 + hp.gamma * nxt - Vs[t];
+          gae = dl + (Ds[t] || t === n - 1 ? 0 : hp.gamma * hp.lam * gae); Adv[t] = gae; Ret[t] = gae + Vs[t]; }
+        let mu = 0; for (let t = 0; t < n; t++) mu += Adv[t]; mu /= n; let sd = 0; for (let t = 0; t < n; t++) sd += (Adv[t] - mu) * (Adv[t] - mu); sd = Math.sqrt(sd / n) + 1e-8;
+        const An = Adv.map(x => (x - mu) / sd), idx = Array.from({ length: n }, (_, i) => i); let nclip = 0, ntot = 0; const ratios = [], cutf = [];
+        for (let ep = 0; ep < hp.K; ep++) {
+          for (let i = n - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = idx[i]; idx[i] = idx[j]; idx[j] = t; }
+          for (let m0 = 0; m0 < n; m0 += hp.MB) {
+            const g = [0, 0, 0, 0, 0], m1 = Math.min(n, m0 + hp.MB);
+            for (let m = m0; m < m1; m++) { const t = idx[m]; const p = pRight(A, Os[t]), pa = As[t] ? p : 1 - p, rho = pa / Ps[t], adv = An[t];
+              const cut = (adv > 0 && rho > 1 + hp.eps) || (adv < 0 && rho < 1 - hp.eps);
+              if (ep === hp.K - 1) { ratios.push(rho); cutf.push(cut ? 1 : 0); ntot++; if (cut) nclip++; }
+              if (!cut) addScore(g, Os[t], As[t], p, adv * rho); }
+            for (let i = 0; i < 5; i++) A[i] += hp.aLr * g[i] / (m1 - m0);
+            vTrainBatch(C, Os, Ret, idx, m0, m1, hp.cLr);
+          }
+        }
+        const nx0 = n === 1 || Ds[0] ? Nx[0] : Vs[1];
+        clips.push({ steps, frac: nclip / ntot, ratios, cut: cutf, ex: { v0: Vs[0], vn: nx0, d0: 1 + hp.gamma * nx0 - Vs[0], a0: Adv[0], a1: Adv[1], cut: !!Ds[0] } }); R.steps = steps; yield;
+      }
+    }
+    R.done = true;
+  }
+  function train(algo, seed, budget, hp) { const R = {}; for (const _ of trainGen(algo, seed, budget, hp, R)) void _; return R; }
+  return { exp, tanh, sincos, rng, reset, step, obs, pRight, sig, critic, vf, train, trainGen, HP, SC, TT, XT, TMAX, TAU, H, VS };
+})();
+if (typeof module !== 'undefined') module.exports = PGC;
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sum = a => a.reduce((s, v) => s + v, 0);
+const mean = a => a.length ? sum(a) / a.length : NaN;
+const sgm = z => 1 / (1 + Math.exp(-z));
+const logit = p => Math.log(p / (1 - p));
+const sub = n => String(n).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch] || ch).join('');
+const REF = {"gym":[393,4.6629367034256575e-15],"src":"python","runs":{"reinforce/1":{"n":425,"sumT":100273,"sumIT":24952056,"A":[0.928983336660663,-1.1161457547034959,6.008309476733516,3.786083786703851,0.11939861884894372],"last":278.6756756756757},"reinforce/2":{"n":386,"sumT":100228,"sumIT":23870075,"A":[1.194139396034954,-1.2872333227498327,4.609230179288577,4.075813362240259,-0.23619518868961142],"last":269.92105263157896},"reinforce/3":{"n":362,"sumT":100294,"sumIT":23063532,"A":[2.125712699593104,-1.169174521365109,4.5513757391219825,3.896104324120313,0.8274705193460448],"last":405.46153846153845},"reinforce/4":{"n":350,"sumT":100156,"sumIT":21722712,"A":[1.854961410428808,-1.2309294612500234,4.120080371854664,3.664483154074748,0.30607737029954324],"last":431.6666666666667},"reinforce/5":{"n":413,"sumT":100263,"sumIT":26055044,"A":[0.7127613022990607,-1.0597128010115415,4.933996662712281,3.743968650359419,0.18081256212594554],"last":347.8},"ac/1":{"n":902,"sumT":100458,"sumIT":73360436,"A":[3.6246155182295774,-2.536134634199203,7.060351071890266,7.26525187319473,-0.9317708052196592],"last":468.0869565217391},"ac/2":{"n":676,"sumT":100477,"sumIT":53397157,"A":[4.514422963154141,-2.8523784526834066,7.423523204142069,8.308641692609738,0.5722570989850467],"last":495.3181818181818},"ac/3":{"n":757,"sumT":100025,"sumIT":57821444,"A":[2.5086651726811504,-3.5377340830805757,8.10029553794963,7.891923997539866,0.13549365765778215],"last":489.5238095238095},"ac/4":{"n":1325,"sumT":100315,"sumIT":110649823,"A":[3.745680804191216,-3.5328433283497707,8.84933443363066,8.46380899666962,-0.40110318380403],"last":498.4761904761905},"ac/5":{"n":841,"sumT":100276,"sumIT":59575166,"A":[3.5094662143452156,-3.173206584260578,7.4208199526369745,6.538151578383586,0.39011438540569054],"last":146.75342465753425},"ppo/1":{"n":541,"sumT":100349,"sumIT":40025323,"A":[2.8884862437559167,-0.1663145142492101,4.365847026289702,5.609936751351684,-0.204620056764078],"last":485.95454545454544},"ppo/2":{"n":479,"sumT":100201,"sumIT":34786452,"A":[2.9351704962479968,-0.4360810618883707,4.289400263988042,5.8930292200434735,0.2971827869306109],"last":475.40909090909093},"ppo/3":{"n":504,"sumT":100072,"sumIT":36348469,"A":[2.59440185444596,-0.47197458169118256,4.301391845369213,5.105501846262967,0.2021687971319209],"last":415.72},"ppo/4":{"n":497,"sumT":99969,"sumIT":35264801,"A":[2.2821417244788997,-0.8304905876093971,4.31674182552031,5.476691977866572,-0.21017699650492222],"last":480.0952380952381},"ppo/5":{"n":478,"sumT":100189,"sumIT":33901689,"A":[2.270788700810637,-0.8348828352022217,4.298645307748683,4.745174724627092,0.009452569986289176],"last":471.45454545454544}}};
+const MINUS = s => String(s).replace(/^-/, '−');
+const sfmt = (v, d) => MINUS(fmt(v, d));
+const sgn = (v, d) => (v < 0 ? '&minus;' : '+') + fmt(Math.abs(v), d);
+
+/* ---------- drawing a cart and pole (shared by the hero and the project) ---------- */
+function drawCart(cv, s, opts) {
+  const C = C0(), r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); const w = r.width, h = r.height; c.clearRect(0, 0, w, h);
+  const sc = w / 5.6, gy = h * 0.74, X = x => w / 2 + x * sc;
+  // limits and track
+  c.save(); c.fillStyle = C.bad; c.globalAlpha = 0.08; c.fillRect(0, gy - 4, X(-2.4), 8); c.fillRect(X(2.4), gy - 4, w - X(2.4), 8); c.restore();
+  c.strokeStyle = C.muted; c.lineWidth = 2; c.beginPath(); c.moveTo(X(-2.4), gy); c.lineTo(X(2.4), gy); c.stroke();
+  c.fillStyle = C.muted; [-2.4, 2.4].forEach(x => c.fillRect(X(x) - 1.5, gy - 10, 3, 20));
+  c.font = '11px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'top'; c.fillStyle = C.muted;
+  [-2, -1, 0, 1, 2].forEach(x => { c.fillRect(X(x) - 0.5, gy + 3, 1, 5); c.fillText((x > 0 ? '+' : '') + x + ' m', X(x), gy + 10); });
+  const x = clamp(s[0], -2.7, 2.7), th = s[2], cw = 0.5 * sc, ch = 0.28 * sc, px = X(x), py = gy - ch - 3, L = 1.0 * sc;
+  // the 12 degree wedge
+  c.save(); c.globalAlpha = 0.09; c.fillStyle = C.a; c.beginPath(); c.moveTo(px, py); c.arc(px, py, L * 1.05, -Math.PI / 2 - PGC.TT, -Math.PI / 2 + PGC.TT); c.closePath(); c.fill(); c.restore();
+  // push arrow
+  if (opts && opts.p != null) { const dir = opts.a ? 1 : -1, ax = px + dir * (cw / 2 + 6), len = 26; c.save(); c.strokeStyle = C.b; c.fillStyle = C.b; c.lineWidth = 3; c.globalAlpha = 0.85;
+    c.beginPath(); c.moveTo(ax, py + ch / 2); c.lineTo(ax + dir * len, py + ch / 2); c.stroke(); c.beginPath(); c.moveTo(ax + dir * (len + 8), py + ch / 2); c.lineTo(ax + dir * len, py + ch / 2 - 6); c.lineTo(ax + dir * len, py + ch / 2 + 6); c.fill(); c.restore(); }
+  // cart, wheels
+  c.fillStyle = C.q; c.globalAlpha = 0.9; c.fillRect(px - cw / 2, py, cw, ch); c.globalAlpha = 1;
+  c.fillStyle = C.muted; [-1, 1].forEach(k => { c.beginPath(); c.arc(px + k * cw * 0.3, gy - 3, 3.2, 0, 7); c.fill(); });
+  // pole
+  const tx = px + L * Math.sin(th), ty = py - L * Math.cos(th), fell = Math.abs(th) > PGC.TT || Math.abs(s[0]) > PGC.XT;
+  c.save(); c.strokeStyle = fell ? C.bad : C.c; c.lineWidth = Math.max(5, sc * 0.07); c.lineCap = 'round'; c.beginPath(); c.moveTo(px, py); c.lineTo(tx, ty); c.stroke(); c.restore();
+  c.fillStyle = C.surf; c.beginPath(); c.arc(px, py, 3.5, 0, 7); c.fill(); c.strokeStyle = C.q; c.lineWidth = 1.4; c.stroke();
+  // probability gauge
+  if (opts && opts.p != null) { const gx = 16, gw = Math.min(220, w - 32), gyy = 16; c.fillStyle = C.muted; c.font = '11px ' + css('--f-mono'); c.textAlign = 'left'; c.textBaseline = 'top';
+    c.fillText('π(push right) = ' + fmt(opts.p, 2), gx, gyy); c.strokeStyle = C.line; c.lineWidth = 1; c.strokeRect(gx, gyy + 16, gw, 9);
+    c.fillStyle = C.b; c.globalAlpha = 0.75; c.fillRect(gx, gyy + 16, gw * opts.p, 9); c.globalAlpha = 1; c.fillStyle = C.q; c.fillRect(gx + gw / 2 - 0.5, gyy + 13, 1, 15);
+    if (opts.label) { c.textAlign = 'right'; c.fillStyle = C.muted; c.fillText(opts.label, w - 12, gyy); } }
+  if (opts && opts.flash) { c.save(); c.globalAlpha = 0.12 * opts.flash; c.fillStyle = C.bad; c.fillRect(0, 0, w, h); c.restore(); }
+}
+
+/* ---------- hero: a PPO policy of five numbers balancing the pole ---------- */
+const HW = REF.runs['ppo/1'].A;
+const HERO = { r: PGC.rng(20240501), s: null, t: 0, falls: 0, shoves: 0, best: 0, p: 0.5, a: 1, flash: 0, wait: 0, vis: true, last: 0 };
+HERO.s = PGC.reset(HERO.r);
+function heroCap() {
+  $('#hero-cap').innerHTML = `The policy: w = (${HW.map(v => tip(sfmt(v, 2), 'final weight of PPO, seed 1\n(from the project below)')).join(', ')}), five numbers. Balanced for <b>${fmt(HERO.t * PGC.TAU, 1)} s</b>${HERO.best ? ` &middot; best ${fmt(HERO.best * PGC.TAU, 1)} s` : ''} &middot; shoves ${HERO.shoves} &middot; falls ${HERO.falls}. It is stochastic, so it wobbles and eventually drifts off; it starts again.`;
+}
+function heroDraw() { drawCart($('#hero-cv'), HERO.s, { p: HERO.p, a: HERO.a, flash: HERO.flash, label: 't = ' + fmt(HERO.t * PGC.TAU, 1) + ' s' }); }
+function heroTick(now) {
+  if (HERO.vis && !document.hidden) {
+    const n = HERO.last ? clamp(Math.round((now - HERO.last) / 20), 0, 3) : 1;
+    for (let k = 0; k < n; k++) {
+      if (HERO.wait > 0) { HERO.wait--; HERO.flash = HERO.wait / 30; if (!HERO.wait) { HERO.s = PGC.reset(HERO.r); HERO.t = 0; } continue; }
+      const o = PGC.obs(HERO.s); HERO.p = PGC.pRight(HW, o); HERO.a = HERO.r() < HERO.p ? 1 : 0;
+      const st = PGC.step(HERO.s, HERO.a); HERO.s = st.s; HERO.t++;
+      if (st.done) { HERO.falls++; HERO.best = Math.max(HERO.best, HERO.t); HERO.wait = 30; }
+    }
+    heroDraw(); if (HERO.t % 10 === 0 || HERO.wait) heroCap();
+  }
+  HERO.last = now; requestAnimationFrame(heroTick);
+}
+$('#hero-cv').addEventListener('click', e => { if (HERO.wait) return; const rr = $('#hero-cv').getBoundingClientRect(), px = e.clientX - rr.left, cx = rr.width / 2 + clamp(HERO.s[0], -2.7, 2.7) * rr.width / 5.6;
+  HERO.s[3] += px < cx ? 0.5 : -0.5; HERO.shoves++; heroCap(); });
+$('#hero-cv').style.cursor = 'pointer';
+if ('IntersectionObserver' in window) new IntersectionObserver(es => { HERO.vis = es.some(e => e.isIntersecting); }).observe($('#hero-cv'));
+fig($('#hero-cv'), heroDraw); heroCap(); requestAnimationFrame(heroTick);
+
+/* ---------- the short corridor ---------- */
+const Jc = p => -2 * (2 - p) / (p * (1 - p)), PSTAR = 2 - Math.SQRT2, JSTAR = Jc(PSTAR);
+const corMove = (s, a) => s === 1 ? (a ? 0 : 2) : s === 0 ? (a ? 1 : 0) : (a ? 3 : 1);
+function corEpisode(p, r, cap) { let s = 0; const A = []; cap = cap || 1000; while (s < 3 && A.length < cap) { const a = r() < p ? 1 : 0; A.push(a); s = corMove(s, a); } return A; }
+function drawCorridor(cv, s, opts) {
+  const C = C0(), v = frame(cv, [0, 4], [0, 1], { l: 8, r: 8, t: 8, b: 8 }), c = v.ctx, cw = v.pw / 4, y0 = v.pad.t, hh = v.ph;
+  for (let i = 0; i < 4; i++) { const x0 = v.pad.l + i * cw; c.fillStyle = i === 3 ? 'color-mix(in srgb, ' + C.a + ' 18%, transparent)' : i === 1 ? 'color-mix(in srgb, ' + C.b + ' 12%, transparent)' : C.surf; c.fillRect(x0 + 2, y0 + 2, cw - 4, hh - 4); c.strokeStyle = C.line; c.lineWidth = 1.2; c.strokeRect(x0 + 2, y0 + 2, cw - 4, hh - 4);
+    c.fillStyle = C.muted; c.font = '11px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText(['start', 'reversed!', '', 'goal'][i], x0 + cw / 2, y0 + 7);
+    if (i < 3) { const dir = i === 1 ? -1 : 1, ax = x0 + cw / 2, ay = y0 + hh - 16; c.strokeStyle = C.muted; c.lineWidth = 1.3; c.beginPath(); c.moveTo(ax - dir * 14, ay); c.lineTo(ax + dir * 14, ay); c.stroke(); c.beginPath(); c.moveTo(ax + dir * 14, ay); c.lineTo(ax + dir * 9, ay - 4); c.lineTo(ax + dir * 9, ay + 4); c.closePath(); c.fillStyle = C.muted; c.fill();
+      c.font = '10px ' + css('--f-mono'); c.fillText('"right"', ax, ay - 17); } }
+  if (s != null) { const x = v.pad.l + (s + 0.5) * cw, y = y0 + hh / 2 + 2; c.beginPath(); c.arc(x, y, Math.min(11, hh / 5), 0, 7); c.fillStyle = s === 3 ? C.a : C.c; c.fill(); c.strokeStyle = C.surf; c.lineWidth = 1.5; c.stroke(); }
+  if (opts && opts.text) { c.fillStyle = C.q; c.font = '12px ' + css('--f-mono'); c.textAlign = 'right'; c.textBaseline = 'bottom'; c.fillText(opts.text, v.w - v.pad.r - 6, y0 + hh - 4); }
+}
+function drawJ(cv, p, extra) {
+  const C = C0(), v = frame(cv, [0, 1], [-106, 0], { b: 30 }); axes(v, 'p = π(right)', 'J(p)', { sx: 0.1, sy: 20 }); clip(v);
+  const c = v.ctx; c.save(); c.globalAlpha = 0.07; c.fillStyle = C.bad; c.fillRect(v.X(0), v.pad.t, v.X(0.1) - v.X(0), v.ph); c.fillRect(v.X(0.9), v.pad.t, v.X(1) - v.X(0.9), v.ph); c.restore();
+  curve(v, x => x <= 0.005 || x >= 0.995 ? -1e4 : Jc(x), C.a, 2.6);
+  if (extra) extra(v, C);
+  [0.05, 0.95].forEach(q => dot(v, q, Jc(q), C.bad, 5));
+  star(v, PSTAR, JSTAR, C.q, 9);
+  if (p != null) { seg(v, p, -106, p, Jc(p), C.q, 1.1, [4, 4]); dot(v, p, Math.max(-99, Jc(p)), C.c, 6.5); }
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = C.bad; c.textBaseline = 'middle'; c.textAlign = 'left'; c.fillText('ε-greedy, −82.1', v.X(0.05) + 9, v.Y(Jc(0.05))); c.textAlign = 'right'; c.fillText('ε-greedy, −44.2', v.X(0.95) - 9, v.Y(Jc(0.95)));
+  v.ctx.restore(); return v;
+}
+const CO = { p: 0.95, walk: null, tmr: 0, nw: 0, last: null };
+function drawCO() {
+  const p = CO.p, w = CO.walk;
+  drawCorridor($('#co-cv'), w ? w.path[w.i] : 0, { text: w ? `step ${w.i}${w.i === w.path.length - 1 && w.path[w.i] === 3 ? ' · goal!' : ''}` : '' });
+  drawJ($('#cj-cv'), p);
+  $('#co-p-o').textContent = fmt(p, 2);
+  $('#co-j').innerHTML = tip(sfmt(Jc(p), 2), `−2(2 − ${fmt(p, 2)}) / (${fmt(p, 2)} × ${fmt(1 - p, 2)})\n= −${fmt(2 * (2 - p), 3)} / ${fmt(p * (1 - p), 4)}\nan average of ${fmt(-Jc(p), 1)} steps to the goal`);
+  $('#co-star').innerHTML = tip(sfmt(JSTAR, 2), `at p = 2 − √2 = ${fmt(PSTAR, 4)}\nset dJ/dp = 0: p² − 4p + 2 = 0`);
+  $('#co-ep').innerHTML = !CO.last ? '—' : CO.last.done ? tip(sfmt(-CO.last.T, 0), `${CO.last.T} steps, −1 each\n${CO.last.R} × right, ${CO.last.T - CO.last.R} × left`) : `${CO.last.T}&hellip;`;
+  const gap = Jc(p) - JSTAR;
+  $('#co-say').innerHTML = p >= 0.9 || p <= 0.1 ? `p = ${fmt(p, 2)} is what an &epsilon;-greedy agent gets (always ${p > 0.5 ? 'right' : 'left'}, plus 10% random moves, half of them the same way). It needs ${fmt(-Jc(p), 0)} steps on average, against ${fmt(-JSTAR, 1)} for the best mix. ${p > 0.5 ? 'It keeps bouncing back from the reversed cell.' : 'It keeps bumping into the left wall.'}`
+    : gap > -0.3 ? `Within ${fmt(-gap, 2)} of the best possible. The best policy goes right only ${pct(PSTAR, 0)} of the time: it <b>must</b> be random, and no greedy rule can say that.`
+    : `J(p) = ${fmt(Jc(p), 1)}: ${p < PSTAR ? 'too cautious; it wastes steps bumping into the left wall at the start' : 'too keen on right; in the reversed cell &ldquo;right&rdquo; sends it back to the start'}. The best mix is p &asymp; ${fmt(PSTAR, 2)}.`;
+  $('#run-co').innerHTML = `<b>Running example</b>: p = ${fmt(p, 2)}: J = &minus;2(2 &minus; ${fmt(p, 2)}) / (${fmt(p, 2)} &times; ${fmt(1 - p, 2)}) = &minus;${fmt(2 * (2 - p), 2)} / ${fmt(p * (1 - p), 4)} = ${tip(sfmt(Jc(p), 2), 'expected return from the start')}. At p = 0.95 (&epsilon;-greedy) it is ${tip(sfmt(Jc(0.95), 1), '−2(1.05) / (0.95 × 0.05) = −2.1 / 0.0475')}; at the best p = ${fmt(PSTAR, 3)} it is ${fmt(JSTAR, 2)}.`;
+}
+function coWalk() {
+  clearInterval(CO.tmr); const r = mulberry32(777 + CO.nw++), A = corEpisode(CO.p, r, 400), path = [0]; A.forEach(a => path.push(corMove(path[path.length - 1], a)));
+  CO.walk = { path, i: 0 }; CO.last = { T: A.length, R: sum(A), done: false }; drawCO();
+  const dt = A.length > 120 ? 25 : A.length > 40 ? 60 : 120;
+  CO.tmr = setInterval(() => { const w = CO.walk; if (w.i >= w.path.length - 1) { clearInterval(CO.tmr); CO.last.done = true; drawCO(); return; } w.i++; CO.last.T = w.i; if (w.i % 2 === 0 || w.i === w.path.length - 1) drawCO(); else drawCorridor($('#co-cv'), w.path[w.i], { text: 'step ' + w.i }); }, dt);
+  CO.last.T = 0; CO.last.full = A.length;
+}
+$('#co-p').addEventListener('input', e => { CO.p = +e.target.value; clearInterval(CO.tmr); CO.walk = null; CO.last = null; drawCO(); });
+$('#co-walk').addEventListener('click', coWalk);
+$('#co-best').addEventListener('click', () => { CO.p = 0.59; $('#co-p').value = 0.59; clearInterval(CO.tmr); CO.walk = null; CO.last = null; drawCO(); });
+fig($('#co-cv'), drawCO); fig($('#cj-cv'), drawCO);
+// keep the R count right while walking
+{ const _cw = coWalk; void _cw; }
+
+/* ---------- softmax policy and its score ---------- */
+const SM = { h: [0.5, 0, -1], a: 2, G: 1, n: 0 };
+const softmax = h => { const m = Math.max(...h), e = h.map(x => Math.exp(x - m)), z = sum(e); return e.map(x => x / z); };
+const ANAME = ['◀ left', '● stay', '▶ right'], AHTML = ['&#9664; left', '&#9679; stay', '&#9654; right'];
+let smV = null;
+function smCalc() { const pi = softmax(SM.h), sc = pi.map((p, b) => (b === SM.a ? 1 : 0) - p), dh = sc.map(x => SM.G * x), h2 = SM.h.map((x, b) => x + dh[b]), pi2 = softmax(h2); return { pi, sc, dh, h2, pi2 }; }
+function drawSM() {
+  const C = C0(), { pi, sc, pi2 } = smCalc(), cols = [C.b, C.muted, C.a];
+  const v = smV = frame($('#sm-cv'), [-0.5, 2.5], [-0.62, 1.08], { b: 26, l: 40 }); axes(v, '', 'π(a)', { sx: 1, sy: 0.25, fx: x => ANAME[Math.round(x)] || '', fy: y => y < -0.01 ? '' : fmt(y, 2) });
+  const c = v.ctx, bw = (v.X(1) - v.X(0)) * 0.5;
+  c.save(); c.fillStyle = C.surf; c.fillRect(v.pad.l, v.Y(0), v.pw, v.Y(-0.62) - v.Y(0)); c.restore();
+  seg(v, -0.5, 0, 2.5, 0, C.q, 1.2);
+  c.font = '10px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText('score ∇log π(a) for a = ' + ANAME[SM.a], v.pad.l + 6, v.Y(-0.04));
+  for (let k = 0; k < 3; k++) { const x = v.X(k);
+    c.save(); c.fillStyle = cols[k]; c.globalAlpha = SM.a === k ? 0.9 : 0.55; c.fillRect(x - bw / 2, v.Y(pi[k]), bw, v.Y(0) - v.Y(pi[k])); c.restore();
+    c.save(); c.strokeStyle = C.q; c.setLineDash([4, 3]); c.lineWidth = 1.6; c.strokeRect(x - bw / 2 - 4, v.Y(pi2[k]), bw + 8, v.Y(0) - v.Y(pi2[k])); c.restore();
+    c.fillStyle = C.q; c.font = '12px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillText(fmt(pi[k], 3), x, Math.min(v.Y(pi[k]), v.Y(pi2[k])) - 4);
+    if (SM.a === k) { c.fillStyle = C.q; c.font = '11px ' + css('--f-mono'); c.fillText('taken', x, v.Y(0) - 4 > v.Y(pi[k]) + 16 ? v.Y(0) - 4 : v.Y(pi[k]) - 18); }
+    // score arrow
+    const y0 = v.Y(-0.36), len = sc[k] * (v.Y(0) - v.Y(0.24)); c.save(); c.strokeStyle = cols[k]; c.fillStyle = cols[k]; c.lineWidth = 3;
+    c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y0 - len); c.stroke(); if (Math.abs(len) > 4) { const d = len > 0 ? -1 : 1; c.beginPath(); c.moveTo(x, y0 - len + d * 1); c.lineTo(x - 6, y0 - len - d * 7); c.lineTo(x + 6, y0 - len - d * 7); c.fill(); }
+    c.restore(); c.fillStyle = C.q; c.font = '11px ' + css('--f-mono'); c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(sgn(sc[k], 2).replace('&minus;', '−'), x + 9, y0 - len / 2);
+  }
+}
+function syncSM() {
+  const { pi, sc, dh, h2, pi2 } = smCalc(), e = SM.h.map(Math.exp), z = sum(e), a = SM.a;
+  SM.h.forEach((x, k) => { $('#sm-h' + k + '-o').textContent = sfmt(x, 1); $('#sm-h' + k).value = x; }); $('#sm-g-o').textContent = sfmt(SM.G, 1);
+  drawSM();
+  $('#run-sm').innerHTML = `<b>Running example</b>: e<sup>h</sup> = (${e.map(x => fmt(x, 3)).join(', ')}), total ${fmt(z, 3)}, so &pi; = (${pi.map((p, k) => tip(fmt(p, 3), `e^${sfmt(SM.h[k], 1)} / ${fmt(z, 3)} = ${fmt(e[k], 3)} / ${fmt(z, 3)}`)).join(', ')}) for (${AHTML.join(', ')}).`;
+  $('#run-sc').innerHTML = `<b>Running example</b>: the action taken was ${AHTML[a]}, so the score is (${sc.map((s, k) => tip(sgn(s, 3), k === a ? `1 − π(${ANAME[k]}) = 1 − ${fmt(pi[k], 3)}` : `0 − π(${ANAME[k]}) = −${fmt(pi[k], 3)}`)).join(', ')}). With &alpha; = 1 and G = ${sfmt(SM.G, 1)}, h moves by (${dh.map(x => sgn(x, 3)).join(', ')}) and &pi;(${AHTML[a]}) goes from ${fmt(pi[a], 3)} to ${tip(fmt(pi2[a], 3), `softmax of the new h = (${h2.map(x => sfmt(x, 2)).join(', ')})`)}.`;
+  const ch = pi2[a] - pi[a];
+  $('#sm-say').innerHTML = Math.abs(SM.G) < 0.05 ? 'G = 0: an outcome exactly as good as the baseline teaches nothing, so the policy stays put.'
+    : `${SM.G > 0 ? 'A good outcome' : 'A bad outcome'}: &pi;(${AHTML[a]}) ${ch > 0 ? 'rises' : 'falls'} by ${fmt(Math.abs(ch) * 100, 1)} points. ${pi[a] < 0.2 ? 'It was a rare action, so its score 1 &minus; &pi; is large and the push is strong.' : pi[a] > 0.8 ? 'It was already likely, so its score 1 &minus; &pi; is small: little left to learn.' : 'The other actions move the opposite way, each in proportion to its own probability.'}${SM.n ? ` (${SM.n} update${SM.n > 1 ? 's' : ''} applied.)` : ''}`;
+}
+[0, 1, 2].forEach(k => $('#sm-h' + k).addEventListener('input', e => { SM.h[k] = +e.target.value; syncSM(); }));
+$('#sm-g').addEventListener('input', e => { SM.G = +e.target.value; syncSM(); });
+seg1('[data-sa]', 'data-sa', k => { SM.a = +k; syncSM(); });
+const smPick = k => { SM.a = k; $$('[data-sa]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.sa === k ? 'true' : 'false')); syncSM(); };
+$('#sm-cv').addEventListener('click', e => { if (!smV) return; const [px] = evPos($('#sm-cv'), e); smPick(clamp(Math.round(smV.iX(px)), 0, 2)); });
+$('#sm-cv').style.cursor = 'pointer';
+$('#sm-apply').addEventListener('click', () => { const { h2 } = smCalc(); SM.h = h2.map(x => Math.round(clamp(x, -3, 3) * 1000) / 1000); SM.n++; syncSM(); });
+const smR = mulberry32(31);
+$('#sm-sample').addEventListener('click', () => { const pi = softmax(SM.h); let u = smR(), k = 0; while (k < 2 && u >= pi[k]) { u -= pi[k]; k++; } smPick(k); });
+fig($('#sm-cv'), drawSM);
+
+/* ---------- the log-derivative trick on a two-lever bandit ---------- */
+const PL = 0.4, PR = 0.7;
+const thJ = t => PL + (PR - PL) * sgm(t), thG = t => { const s = sgm(t); return (PR - PL) * s * (1 - s); };
+const thVar1 = (t, b) => { const s = sgm(t), m = thG(t), q = (pw, bb) => pw * (1 - bb) * (1 - bb) + (1 - pw) * bb * bb; return s * (1 - s) * (1 - s) * q(PR, b) + (1 - s) * s * s * q(PL, b) - m * m; };
+const TH = { t: -1, N: 10, est: [], r: mulberry32(4242) };
+function thEstimate(t, N, r, b) { const s = sgm(t); let g = 0; for (let i = 0; i < N; i++) { const right = r() < s, R = r() < (right ? PR : PL) ? 1 : 0; g += (R - (b || 0)) * (right ? 1 - s : -s); } return g / N; }
+function drawTH() {
+  const C = C0(), t = TH.t, J = thJ(t), g = thG(t), v = frame($('#th-cv'), [-4, 4], [0.36, 0.74], { b: 30 }); axes(v, 'θ', 'J(θ)', { sx: 1, sy: 0.05 }); clip(v);
+  curve(v, thJ, C.a, 2.6);
+  TH.est.forEach(e => seg(v, t - 1.6, J - 1.6 * e, t + 1.6, J + 1.6 * e, C.b, 1.3, null, 0.35));
+  seg(v, t - 2, J - 2 * g, t + 2, J + 2 * g, C.q, 2.2); dot(v, t, J, C.q, 5.5);
+  v.ctx.restore();
+  $('#th-t-o').textContent = sfmt(t, 1);
+  const s = sgm(t), sd1 = Math.sqrt(thVar1(t, 0));
+  $('#th-true').innerHTML = tip(fmt(g, 4), `0.3 × σ(θ)(1 − σ(θ))\n= 0.3 × ${fmt(s, 3)} × ${fmt(1 - s, 3)}`);
+  if (TH.est.length) { const m = mean(TH.est), sd = Math.sqrt(mean(TH.est.map(x => (x - m) * (x - m)))), wrong = TH.est.filter(x => x * g < 0).length;
+    $('#th-mean').innerHTML = tip(fmt(m, 4), `average of ${TH.est.length} estimates,\neach from N = ${TH.N} pulls`); $('#th-sd').innerHTML = tip(fmt(sd, 4), `theory: √(Var₁ / N) = ${fmt(sd1, 3)} / √${TH.N} = ${fmt(sd1 / Math.sqrt(TH.N), 4)}`);
+    $('#th-say').innerHTML = `${TH.est.length} estimates with N = ${TH.N}: their average ${fmt(m, 3)} sits ${Math.abs(m - g) < 2.5 * sd / Math.sqrt(TH.est.length) ? 'close to' : 'not yet close to'} the true slope ${fmt(g, 3)} (unbiased), but single estimates spread by &plusmn;${fmt(sd, 3)}${wrong ? `, and <b>${wrong}</b> of them even point downhill` : ''}. ${TH.N < 1000 ? 'Raise N: the spread falls like 1/&radic;N.' : 'With N = 1000 the spread is small, but that is 1,000 pulls for one step.'}`; }
+  else { $('#th-mean').textContent = '—'; $('#th-sd').innerHTML = tip('—', `theory: one-pull spread ${fmt(sd1, 3)},\n÷ √N = ${fmt(sd1 / Math.sqrt(TH.N), 4)}`); $('#th-say').innerHTML = `The true slope at &theta; = ${sfmt(t, 1)} is ${fmt(g, 4)}: J ${t < 3.5 ? 'still rises' : 'barely rises'} as &theta; grows. Press <b>Draw</b> to estimate it from pulls alone, without knowing 0.4 and 0.7.`; }
+  $('#run-th').innerHTML = `<b>Running example</b>: &theta; = ${sfmt(t, 1)}, so &pi;(right) = &sigma;(&theta;) = ${fmt(s, 3)}, with scores 1 &minus; &sigma; = ${fmt(1 - s, 3)} (right) and &minus;&sigma; = &minus;${fmt(s, 3)} (left). Exactly: &Sigma; &pi; r &nabla;log &pi; = ${fmt(s, 3)}&times;0.7&times;${fmt(1 - s, 3)} + ${fmt(1 - s, 3)}&times;0.4&times;(&minus;${fmt(s, 3)}) = ${tip(fmt(g, 4), 'the same as 0.3 σ(1 − σ), the slope of J')}. A right-lever pull that pays 1 estimates it as ${fmt(1 - s, 3)}, a left-lever pull that pays 1 as &minus;${fmt(s, 3)}, and any pull that pays 0 as 0.`;
+}
+$('#th-t').addEventListener('input', e => { TH.t = +e.target.value; TH.est = []; drawTH(); });
+seg1('[data-tn]', 'data-tn', k => { TH.N = +k; TH.est = []; drawTH(); });
+$('#th-draw').addEventListener('click', () => { for (let k = 0; k < 20; k++) TH.est.push(thEstimate(TH.t, TH.N, TH.r)); drawTH(); });
+$('#th-clear').addEventListener('click', () => { TH.est = []; drawTH(); });
+fig($('#th-cv'), drawTH);
+
+/* ---------- REINFORCE on the corridor ---------- */
+const RF = { la: -10, th: logit(0.05), n: 0, rets: [], trail: [logit(0.05)], r: mulberry32(9001), tmr: 0, last: null };
+function rfEpisode() {
+  const p = sgm(RF.th), A = corEpisode(p, RF.r, 1000), T = A.length; let d = 0, nR = 0;
+  for (let t = 0; t < T; t++) { d += -(T - t) * (A[t] - p); nR += A[t]; }
+  const al = Math.pow(2, RF.la), th0 = RF.th; RF.th = clamp(RF.th + al * d, -12, 12); RF.n++; RF.rets.push(-T); RF.trail.push(RF.th);
+  RF.last = { p, T, nR, d, al, th0, th1: RF.th, capped: T >= 1000 };
+}
+function drawRF() {
+  const C = C0(), p = sgm(RF.th);
+  drawJ($('#rf-cv'), p, (v, C) => { const tr = RF.trail.slice(-400); tr.forEach((t, i) => { const q = sgm(t); if (q > 0.006 && q < 0.994) { v.ctx.globalAlpha = 0.15 + 0.6 * i / tr.length; dot(v, q, Math.max(-99, Jc(q)), C.c, 2.2); } }); v.ctx.globalAlpha = 1; });
+  const N = Math.max(300, RF.n), lo = -150, v = frame($('#rf-lc'), [0, N], [lo, 0], { b: 28 }); axes(v, 'episode', 'return', { sy: 50, nx: 6 }); clip(v);
+  const c = v.ctx; c.fillStyle = C.b; c.globalAlpha = 0.35; RF.rets.forEach((g, i) => { c.fillRect(v.X(i + 1) - 1, v.Y(Math.max(lo + 1, g)) - 1, 2, 2); }); c.globalAlpha = 1;
+  seg(v, 0, JSTAR, N, JSTAR, C.q, 1, [4, 4]);
+  if (RF.rets.length > 1) { c.save(); c.strokeStyle = C.a; c.lineWidth = 2.2; c.beginPath(); let s = 0; RF.rets.forEach((g, i) => { s += g; if (i >= 50) s -= RF.rets[i - 50]; const m = s / Math.min(i + 1, 50), x = v.X(i + 1), y = v.Y(Math.max(lo, m)); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); }
+  v.ctx.restore();
+  $('#rf-n').textContent = RF.n; $('#rf-p').innerHTML = tip(fmt(p, 3), `σ(θ) with θ = ${sfmt(RF.th, 3)}`); $('#rf-j').innerHTML = tip(sfmt(Jc(p), 1), `J(${fmt(p, 3)}); the best is ${fmt(JSTAR, 2)}`);
+  const L = RF.last;
+  $('#run-rf').innerHTML = !L ? `<b>Running example</b>: press <i>One episode</i> to see a single update worked out.`
+    : `<b>Running example</b>, episode ${RF.n}: p = ${fmt(L.p, 3)}, the walk took T = ${L.T} steps (${L.nR} &times; right, ${L.T - L.nR} &times; left). &Sigma;<sub>t</sub> G<sub>t</sub>&middot;score = &Sigma;<sub>t</sub> &minus;(T &minus; t)&middot;(a<sub>t</sub> &minus; p) = ${tip(sfmt(L.d, 1), 'a_t = 1 for right, 0 for left;\nscore of right = 1 − p, of left = −p')}, so &theta; moves by 2<sup>${MINUS(RF.la)}</sup> &times; ${sfmt(L.d, 1)} = ${tip(sgn(L.th1 - L.th0, 4), `θ: ${sfmt(L.th0, 3)} → ${sfmt(L.th1, 3)}`)} and p becomes ${fmt(sgm(L.th1), 3)}.`;
+  const recent = RF.rets.slice(-50), m = mean(recent);
+  $('#rf-say').innerHTML = !RF.n ? 'p starts at 0.05, the value of the &epsilon;-greedy &ldquo;always left&rdquo; policy. Every return will be negative; watch which way p drifts anyway.'
+    : (p < 0.01 || p > 0.99) ? `p = ${fmt(p, 3)}: the step size was so large that one long episode threw the policy to an extreme. ${p < 0.01 ? 'At p &asymp; 0 the agent almost never leaves the start (episodes are cut off at 1,000 steps), and the score &minus;p is tiny, so it barely learns: stuck.' : 'At p &asymp; 1 it loops in the reversed cell.'} Reset and choose a smaller &alpha;.`
+    : Jc(p) - JSTAR > -0.5 ? `After ${RF.n} episodes p = ${fmt(p, 2)}, close to the best ${fmt(PSTAR, 2)}, and the last 50 episodes average ${fmt(m, 1)}. ${RF.la >= -8 ? 'With this large &alpha; it keeps jittering around the optimum: each episode kicks &theta; hard.' : 'It found the stochastic optimum from returns alone, with no value function.'}`
+    : p > PSTAR ? `After ${RF.n} episodes p = ${fmt(p, 2)}, past the best ${fmt(PSTAR, 2)}: a big step overshot. Episodes that loop through the reversed cell grow long, and their large negative returns push p back down.`
+    : `After ${RF.n} episodes p = ${fmt(p, 2)} and still climbing towards ${fmt(PSTAR, 2)}. ${RF.la <= -14 ? 'With &alpha; = 2<sup>&minus;14</sup> progress is slow; try a larger step.' : 'Long episodes come with large negative returns, and they push p hardest.'}`;
+}
+function rfStop() { clearTimeout(RF.tmr); RF.tmr = 0; $('#rf-run').textContent = 'Run 300 episodes'; }
+$('#rf-run').addEventListener('click', () => { if (RF.tmr) return rfStop(); let left = 300; $('#rf-run').textContent = 'Pause';
+  (function go() { for (let k = 0; k < 6 && left > 0; k++, left--) rfEpisode(); drawRF(); if (left > 0) RF.tmr = setTimeout(go, 30); else rfStop(); })(); });
+$('#rf-one').addEventListener('click', () => { rfStop(); rfEpisode(); drawRF(); });
+$('#rf-reset').addEventListener('click', () => { rfStop(); Object.assign(RF, { th: logit(0.05), n: 0, rets: [], trail: [logit(0.05)], last: null, r: mulberry32(9001) }); drawRF(); });
+seg1('[data-ra]', 'data-ra', k => { RF.la = +k; drawRF(); });
+fig($('#rf-cv'), drawRF); fig($('#rf-lc'), drawRF);
+
+/* ---------- baselines: variance on the bandit ---------- */
+const BL = { b: 0, t: -1 };
+const blBest = t => { const s = sgm(t); return PR * (1 - s) + PL * s; };
+function drawBL() {
+  const C = C0(), t = BL.t, b = BL.b, sdf = x => Math.sqrt(Math.max(0, thVar1(t, x))), top = Math.max(sdf(-1), sdf(2)) * 1.1;
+  const v = frame($('#bl-cv'), [-1, 2], [0, top], { b: 30 }); axes(v, 'baseline b', 'spread', { sx: 0.5 }); clip(v);
+  curve(v, sdf, C.a, 2.6); const bs = blBest(t); star(v, bs, sdf(bs), C.q, 9); seg(v, b, 0, b, sdf(b), C.q, 1.1, [4, 4]); dot(v, b, sdf(b), C.c, 6.5);
+  seg(v, thJ(t), 0, thJ(t), top * 0.08, C.muted, 2); v.ctx.font = '10px ' + css('--f-mono'); v.ctx.fillStyle = C.muted; v.ctx.textAlign = 'center'; v.ctx.fillText('J(θ)', v.X(thJ(t)), v.Y(top * 0.08) - 5);
+  v.ctx.restore();
+  const s = sgm(t), g = thG(t), ratio = thVar1(t, b) / thVar1(t, 0);
+  $('#bl-b-o').textContent = sfmt(b, 2); $('#bl-t-o').textContent = sfmt(t, 1);
+  $('#bl-m').innerHTML = tip(fmt(g, 4), `0.3 σ(1 − σ), whatever b is:\nb × E[score] = b × (σ(1 − σ) − (1 − σ)σ) = 0`);
+  $('#bl-s').innerHTML = tip(fmt(sdf(b), 4), `√(E[(R − b)² score²] − slope²)\nat b = 0 it is ${fmt(sdf(0), 4)}`);
+  $('#bl-x').innerHTML = tip(fmt(ratio, 2) + '&times;', `Var(b) / Var(0) = ${fmt(thVar1(t, b), 5)} / ${fmt(thVar1(t, 0), 5)}`);
+  $('#run-bl').innerHTML = `<b>Running example</b>: &theta; = ${sfmt(t, 1)}, &sigma; = ${fmt(s, 3)}. With b = ${sfmt(b, 2)}, a right-lever win gives (1 &minus; ${sfmt(b, 2)})&times;${fmt(1 - s, 3)} = ${sfmt((1 - b) * (1 - s), 3)}, a right-lever loss (0 &minus; ${sfmt(b, 2)})&times;${fmt(1 - s, 3)} = ${sfmt(-b * (1 - s), 3)}. The mean stays ${fmt(g, 4)}; the best b is 0.7(1 &minus; &sigma;) + 0.4&sigma; = ${tip(fmt(bs, 3), 'minimises E[(R − b)² score²]:\nb* = E[R·score²] / E[score²]')}.`;
+  $('#bl-say').innerHTML = ratio > 1.02 ? `b = ${sfmt(b, 2)} makes things <b>worse</b>: ${fmt(ratio, 2)} times the variance of no baseline. A baseline far from typical returns adds noise.`
+    : ratio > 0.98 ? `b &asymp; 0: no baseline. A loss teaches nothing (R &minus; b = 0), and every win pushes towards the lever just pulled, even the worse one. Only the difference in how often the two levers win steers &theta;, so most of each estimate is noise.`
+    : `b = ${sfmt(b, 2)} needs only ${pct(ratio, 0)} as many pulls as b = 0 for the same precision. ${Math.abs(b - bs) < 0.05 ? 'You are at the best constant baseline.' : `The best is b = ${fmt(bs, 2)}, close to the average reward ${fmt(thJ(t), 2)}.`} Wins now push up and losses push down: the signal is the difference.`;
+}
+$('#bl-b').addEventListener('input', e => { BL.b = +e.target.value; drawBL(); });
+$('#bl-t').addEventListener('input', e => { BL.t = +e.target.value; drawBL(); });
+fig($('#bl-cv'), drawBL);
+
+/* baseline race on the corridor (Sutton & Barto, Figure 13.2) */
+const BR = { done: false, A: null, B: null, stuckA: 0, stuckB: 0, runs: 50, eps: 1000 };
+function corRun(seed, al, be, useB) { const r = mulberry32(seed); let th = logit(0.05), b = 0; const R = new Float64Array(BR.eps);
+  for (let e = 0; e < BR.eps; e++) { const p = sgm(th), A = corEpisode(p, r, 1000), T = A.length; let d = 0;
+    for (let t = 0; t < T; t++) { const G = -(T - t); if (useB) { d += (G - b) * (A[t] - p); b += be * (G - b); } else d += G * (A[t] - p); }
+    th = clamp(th + al * d, -12, 12); R[e] = -T; }
+  return { R, p: sgm(th) }; }
+function brRun() {
+  if (BR.done) return; $('#br-run').disabled = true; $('#br-say').textContent = 'Running…'; BR.A = new Float64Array(BR.eps); BR.B = new Float64Array(BR.eps); BR.stuckA = BR.stuckB = 0; let k = 0;
+  (function go() { const t0 = performance.now();
+    while (k < BR.runs && performance.now() - t0 < 30) { const a = corRun(500 + k, Math.pow(2, -13), 0, false), b = corRun(500 + k, Math.pow(2, -9), Math.pow(2, -6), true);
+      for (let e = 0; e < BR.eps; e++) { BR.A[e] += a.R[e] / BR.runs; BR.B[e] += b.R[e] / BR.runs; } if (a.p < 0.01 || a.p > 0.99) BR.stuckA++; if (b.p < 0.01 || b.p > 0.99) BR.stuckB++; k++; }
+    BR.k = k; drawBR(); if (k < BR.runs) setTimeout(go, 0); else { BR.done = true; drawBR(); } })();
+}
+function drawBR() {
+  const C = C0(), v = frame($('#br-cv'), [0, BR.eps], [-90, 0], { b: 30 }); axes(v, 'episode', 'average return', { sx: 200, sy: 20 }); clip(v);
+  seg(v, 0, JSTAR, BR.eps, JSTAR, C.q, 1.1, [5, 4]);
+  if (BR.A) { const sc = BR.runs / Math.max(1, BR.k); [[BR.A, C.b], [BR.B, C.a]].forEach(([Y, col]) => { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = 2.2; c.beginPath(); for (let e = 0; e < BR.eps; e += 2) { const m = (Y[e] + Y[e + 1]) / 2 * sc, x = v.X(e + 1), y = v.Y(Math.max(-90, m)); e ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); c.restore(); }); }
+  v.ctx.restore();
+  if (!BR.A) { $('#br-a').textContent = '…'; $('#br-b').textContent = '…'; $('#br-say').textContent = 'Press Run: 100 learners, 1,000 episodes each, take about a second.'; return; }
+  const sc = BR.runs / Math.max(1, BR.k), w = (Y, a, b) => sum([...Y.slice(a, b)]) / (b - a) * sc, a1 = w(BR.A, 100, 200), b1 = w(BR.B, 100, 200), a2 = w(BR.A, 900, 1000), b2 = w(BR.B, 900, 1000);
+  $('#br-a').innerHTML = tip(sfmt(a1, 1), `mean of episodes 100–200 over ${BR.k} runs\nepisodes 900–1000: ${sfmt(a2, 1)}`); $('#br-b').innerHTML = tip(sfmt(b1, 1), `mean of episodes 100–200 over ${BR.k} runs\nepisodes 900–1000: ${sfmt(b2, 1)}`);
+  if (!BR.done) { $('#br-say').textContent = `Running… ${BR.k} of ${BR.runs} runs done.`; return; }
+  const ep = (Y, lim) => { for (let e = 0; e < BR.eps - 20; e++) { if (sum([...Y.slice(e, e + 20)]) / 20 > lim) return e + 1; } return null; }, ea = ep(BR.A, -15), eb = ep(BR.B, -15);
+  $('#br-say').innerHTML = `With a baseline the average return passes &minus;15 after about <b>${eb ?? '—'}</b> episodes, against ${ea ?? 'more than 1,000'} without. By the end the two are at ${sfmt(b2, 1)} and ${sfmt(a2, 1)}. Without a baseline every update pushes all actions down, and only the difference between pushes teaches; with one, good episodes push up and bad ones down, so a much larger step size is safe.${BR.stuckA + BR.stuckB ? ` (${BR.stuckA + BR.stuckB} of the 100 learners ended stuck at an extreme p.)` : ''}`;
+}
+$('#br-run').addEventListener('click', brRun);
+fig($('#br-cv'), drawBR);
+
+/* ---------- actor-critic in a gridworld ---------- */
+const GMAP = ['.....G', '.###..', '...#.X', '.X....', 'S..#..'], NR = GMAP.length, NC = GMAP[0].length, GSTART = 4 * NC, MOVES = [[-1, 0], [0, 1], [1, 0], [0, -1]], MNAME = ['up', 'right', 'down', 'left'], GAMMA = 0.9, GMAX = 60;
+const gch = s => GMAP[Math.floor(s / NC)][s % NC];
+function gStep(s, a) { const r = Math.floor(s / NC), c = s % NC; let nr = r + MOVES[a][0], nc = c + MOVES[a][1]; if (nr < 0 || nr >= NR || nc < 0 || nc >= NC || GMAP[nr][nc] === '#') { nr = r; nc = c; } const s2 = nr * NC + nc, ch = gch(s2); return { s2, r: ch === 'G' ? 1 : ch === 'X' ? -1 : 0, done: ch === 'G' || ch === 'X' }; }
+const AC = { H: new Float64Array(NR * NC * 4), V: new Float64Array(NR * NC), s: GSTART, t: 0, ep: 0, res: [], trail: [GSTART], last: null, alpha: 0.5, beta: 0.2, r: mulberry32(2718), tmr: 0, fresh: true };
+const acPi = s => softmax([0, 1, 2, 3].map(a => AC.H[s * 4 + a]));
+const cellName = s => `(${Math.floor(s / NC) + 1}, ${s % NC + 1})`;
+function acStep() {
+  if (AC.fresh) { AC.s = GSTART; AC.t = 0; AC.trail = [GSTART]; AC.fresh = false; }
+  const s = AC.s, p = acPi(s); let u = AC.r(), a = 0; while (a < 3 && u >= p[a]) { u -= p[a]; a++; }
+  const o = gStep(s, a), vs = AC.V[s], vs2 = o.done ? 0 : AC.V[o.s2], d = o.r + GAMMA * vs2 - vs, h0 = AC.H[s * 4 + a];
+  AC.V[s] += AC.beta * d; for (let b = 0; b < 4; b++) AC.H[s * 4 + b] += AC.alpha * d * ((b === a ? 1 : 0) - p[b]);
+  AC.last = { s, a, r: o.r, s2: o.s2, done: o.done, vs, vs2, d, p: p[a], h0, h1: AC.H[s * 4 + a], v1: AC.V[s], p1: acPi(s)[a] };
+  AC.s = o.s2; AC.t++; AC.trail.push(o.s2);
+  if (o.done || AC.t >= GMAX) { AC.ep++; AC.res.push(o.r > 0 ? 1 : 0); AC.fresh = true; return true; }
+  return false;
+}
+function drawAC() {
+  const C = C0(), cv = $('#ac-cv'), r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1; cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, r.width, r.height);
+  const pad = 6, cw = (r.width - 2 * pad) / NC, chh = (r.height - 2 * pad) / NR, X = s => pad + (s % NC + 0.5) * cw, Y = s => pad + (Math.floor(s / NC) + 0.5) * chh;
+  for (let s = 0; s < NR * NC; s++) { const x0 = pad + (s % NC) * cw, y0 = pad + Math.floor(s / NC) * chh, ch = gch(s);
+    if (ch === '#') { c.fillStyle = C.q; c.globalAlpha = 0.75; c.fillRect(x0 + 1, y0 + 1, cw - 2, chh - 2); c.globalAlpha = 1; continue; }
+    const val = ch === 'G' ? 1 : ch === 'X' ? -1 : AC.V[s]; c.fillStyle = C.surf; c.fillRect(x0 + 1, y0 + 1, cw - 2, chh - 2);
+    c.save(); c.globalAlpha = Math.min(0.55, Math.abs(val) * 0.55); c.fillStyle = val >= 0 ? C.a : C.bad; c.fillRect(x0 + 1, y0 + 1, cw - 2, chh - 2); c.restore();
+    c.strokeStyle = C.line; c.lineWidth = 1; c.strokeRect(x0 + 1, y0 + 1, cw - 2, chh - 2);
+    if (ch === 'G' || ch === 'X') { c.fillStyle = C.q; c.font = `600 ${Math.round(Math.min(cw, chh) * 0.38)}px ` + css('--f-display'); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ch === 'G' ? 'G' : '×', x0 + cw / 2, y0 + chh / 2); continue; }
+    c.fillStyle = C.muted; c.font = '10px ' + css('--f-mono'); c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText(sfmt(AC.V[s], 2), x0 + 4, y0 + 3);
+    if (s === GSTART) { c.textAlign = 'right'; c.fillText('S', x0 + cw - 4, y0 + 3); }
+    const p = acPi(s), cx = x0 + cw / 2, cy = y0 + chh / 2 + 4, L = Math.min(cw, chh) * 0.4;
+    for (let a = 0; a < 4; a++) { const dx = MOVES[a][1], dy = MOVES[a][0], len = 4 + L * p[a]; c.save(); c.strokeStyle = C.q; c.fillStyle = C.q; c.globalAlpha = 0.25 + 0.75 * p[a]; c.lineWidth = 1 + 2.2 * p[a];
+      c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + dx * len, cy + dy * len); c.stroke(); const hx = cx + dx * (len + 4), hy = cy + dy * (len + 4); c.beginPath(); c.moveTo(hx, hy); c.lineTo(cx + dx * len - dy * 3.5, cy + dy * len + dx * 3.5); c.lineTo(cx + dx * len + dy * 3.5, cy + dy * len - dx * 3.5); c.fill(); c.restore(); }
+  }
+  if (AC.trail.length > 1) { c.save(); c.strokeStyle = C.b; c.lineWidth = 2.5; c.globalAlpha = 0.55; c.lineJoin = 'round'; c.beginPath(); AC.trail.forEach((s, i) => { const jx = ((i * 7) % 5 - 2) * 1.2, jy = ((i * 3) % 5 - 2) * 1.2; i ? c.lineTo(X(s) + jx, Y(s) + jy) : c.moveTo(X(s), Y(s)); }); c.stroke(); c.restore(); }
+  const ag = AC.trail[AC.trail.length - 1]; c.beginPath(); c.arc(X(ag), Y(ag), Math.min(cw, chh) * 0.14, 0, 7); c.fillStyle = C.b; c.fill(); c.strokeStyle = C.surf; c.lineWidth = 2; c.stroke();
+}
+function syncAC() {
+  drawAC(); $('#ac-a-o').textContent = fmt(AC.alpha, 2); $('#ac-b-o').textContent = fmt(AC.beta, 2);
+  const L = AC.last, last20 = AC.res.slice(-20);
+  $('#ac-n').textContent = AC.ep; $('#ac-s').innerHTML = last20.length ? tip(`${sum(last20)} / ${last20.length}`, 'episodes that ended at G\n(others fell in a pit or ran out of 60 moves)') : '—';
+  $('#ac-d').innerHTML = L ? tip(sgn(L.d, 3), `${L.r} + 0.9 × ${fmt(L.vs2, 3)} − ${fmt(L.vs, 3)}`) : '—';
+  $('#run-ac').innerHTML = !L ? '<b>Running example</b>: press <i>Step</i> to make one move and see every number of its update.'
+    : `<b>Running example</b>: from ${cellName(L.s)} the actor moved <b>${MNAME[L.a]}</b> (probability ${fmt(L.p, 3)}) and landed in ${cellName(L.s2)}${L.done ? (L.r > 0 ? ', the goal' : ', a pit') : ''}, R = ${L.r}. &delta; = ${L.r} + 0.9 &times; ${fmt(L.vs2, 3)}${L.done ? ' (episode over, so V = 0)' : ''} &minus; ${fmt(L.vs, 3)} = ${tip(sgn(L.d, 3), 'better than expected if positive')}. Critic: V ${fmt(L.vs, 3)} &rarr; ${tip(fmt(L.v1, 3), `${fmt(L.vs, 3)} + ${fmt(AC.beta, 2)} × ${sfmt(L.d, 3)}`)}. Actor: h(${MNAME[L.a]}) ${sfmt(L.h0, 3)} &rarr; ${tip(sfmt(L.h1, 3), `${sfmt(L.h0, 3)} + ${fmt(AC.alpha, 2)} × ${sfmt(L.d, 3)} × (1 − ${fmt(L.p, 3)})`)}, so &pi;(${MNAME[L.a]}) becomes ${fmt(L.p1, 3)}.`;
+  const sr = last20.length ? sum(last20) / last20.length : 0;
+  $('#ac-say').innerHTML = !L ? 'At first the critic knows nothing (all V = 0) and the actor picks moves uniformly. Every &delta; is zero until something happens: the first reward is what gets learning started.'
+    : AC.ep < 5 ? `${Math.abs(L.d) < 1e-9 ? 'This &delta; is 0: nothing surprising happened, so nothing changed.' : L.d > 0 ? 'A positive &delta;: the move went better than the critic expected, so it becomes more likely.' : 'A negative &delta;: worse than expected, so the move becomes less likely.'} Value spreads backwards from the goal one cell at a time as the critic learns.`
+    : sr >= 0.9 ? `${pct(sr, 0)} of the last 20 episodes reach the goal. The arrows point along a short path, and the critic&rsquo;s values rise towards G (by a factor of up to 0.9 per step). Values near the pits stay lower: the actor is still slightly random, and the critic prices that in.`
+    : `${AC.ep} episodes in, ${pct(sr, 0)} of the last 20 reached the goal. The green region is spreading back from G; where it reaches, &delta; becomes informative and the arrows sharpen.`;
+}
+function acStop() { clearInterval(AC.tmr); AC.tmr = 0; }
+$('#ac-step').addEventListener('click', () => { acStop(); acStep(); syncAC(); });
+$('#ac-ep').addEventListener('click', () => { acStop(); if (AC.fresh === false && AC.t === 0) AC.fresh = true; AC.tmr = setInterval(() => { const end = acStep(); syncAC(); if (end) acStop(); }, 90); });
+$('#ac-50').addEventListener('click', () => { acStop(); let n = 0; while (n < 50) { if (acStep()) n++; } syncAC(); });
+$('#ac-reset').addEventListener('click', () => { acStop(); AC.H.fill(0); AC.V.fill(0); Object.assign(AC, { s: GSTART, t: 0, ep: 0, res: [], trail: [GSTART], last: null, r: mulberry32(2718), fresh: true }); syncAC(); });
+$('#ac-a').addEventListener('input', e => { AC.alpha = +e.target.value; syncAC(); });
+$('#ac-b').addEventListener('input', e => { AC.beta = +e.target.value; syncAC(); });
+fig($('#ac-cv'), drawAC);
+
+/* ---------- PPO: the clip ---------- */
+const CL = { r: 1.35, A: 1, e: 0.2 };
+const clipObj = (r, A, e) => Math.min(r * A, clamp(r, 1 - e, 1 + e) * A), clipCut = (r, A, e) => (A > 0 && r > 1 + e) || (A < 0 && r < 1 - e);
+function drawCL() {
+  const C = C0(), { r, A, e } = CL, m = Math.max(0.3, Math.abs(A)) * 2.3, v = frame($('#cl-cv'), [0, 2.2], [-m, m], { b: 30 }); axes(v, 'ratio ρ', 'objective', { sx: 0.2 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.muted; c.globalAlpha = 0.12; if (A > 0) c.fillRect(v.X(1 + e), v.pad.t, v.X(2.2) - v.X(1 + e), v.ph); else if (A < 0) c.fillRect(v.X(0), v.pad.t, v.X(1 - e) - v.X(0), v.ph); c.restore();
+  seg(v, 1 - e, -m, 1 - e, m, C.line, 1, [3, 3]); seg(v, 1 + e, -m, 1 + e, m, C.line, 1, [3, 3]); seg(v, 1, -m, 1, m, C.muted, 1);
+  curve(v, x => x * A, C.muted, 1.6, [6, 5]); curve(v, x => clipObj(x, A, e), C.a, 3);
+  seg(v, r, -m, r, clipObj(r, A, e), C.q, 1, [4, 4]); dot(v, r, clipObj(r, A, e), clipCut(r, A, e) ? C.bad : C.c, 6.5);
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'right'; c.fillText('1 − ε', v.X(1 - e) - 4, v.pad.t + 26); c.textAlign = 'left'; c.fillText('1 + ε', v.X(1 + e) + 4, v.pad.t + 26);
+  c.restore();
+  const L = clipObj(r, A, e), cut = clipCut(r, A, e), g = cut ? 0 : A, cr = clamp(r, 1 - e, 1 + e);
+  $('#cl-r-o').textContent = fmt(r, 2); $('#cl-a-o').textContent = sfmt(A, 1); $('#cl-e-o').textContent = fmt(e, 2);
+  $('#cl-l').innerHTML = tip(sfmt(L, 3), `min(${fmt(r, 2)} × ${sfmt(A, 1)}, ${fmt(cr, 2)} × ${sfmt(A, 1)})\n= min(${sfmt(r * A, 3)}, ${sfmt(cr * A, 3)})`);
+  $('#cl-g').innerHTML = tip(sfmt(g, 2), cut ? 'the clipped term is the minimum\nand it is flat in ρ' : 'the unclipped term ρÂ is the minimum,\nslope Â');
+  $('#run-cl').innerHTML = `<b>Running example</b>: &rho; = ${fmt(r, 2)}, &Acirc; = ${sfmt(A, 1)}, &epsilon; = ${fmt(e, 2)}: &rho;&Acirc; = ${sfmt(r * A, 3)}; clip(${fmt(r, 2)}, ${fmt(1 - e, 2)}, ${fmt(1 + e, 2)}) = ${fmt(cr, 2)}, times &Acirc; = ${sfmt(cr * A, 3)}; the minimum is ${tip(sfmt(L, 3), cut ? 'clipped: this sample adds no gradient' : 'unclipped: an ordinary policy-gradient pull')}.`;
+  $('#cl-say').innerHTML = Math.abs(A) < 0.05 ? '&Acirc; = 0: this action was exactly as good as expected, so it exerts no pull either way.'
+    : cut ? `Clipped: the new policy already makes this ${A > 0 ? 'good' : 'bad'} action ${A > 0 ? 'more' : 'less'} likely by more than ${pct(e, 0)}. The objective is flat here, so this sample stops pulling. That is the &ldquo;proximal&rdquo; in PPO.`
+    : (A > 0 && r < 1 - e) || (A < 0 && r > 1 + e) ? `Not clipped, even though &rho; is outside the band: the new policy has moved the <b>wrong</b> way (made a ${A > 0 ? 'good action less' : 'bad action more'} likely). The minimum keeps the full slope so the mistake gets undone.`
+    : `Inside the band: an ordinary policy-gradient pull with slope &Acirc; = ${sfmt(A, 1)}, ${A > 0 ? 'raising' : 'lowering'} the action&rsquo;s probability.`;
+}
+$('#cl-r').addEventListener('input', e => { CL.r = +e.target.value; drawCL(); });
+$('#cl-a').addEventListener('input', e => { CL.A = +e.target.value; drawCL(); });
+$('#cl-e').addEventListener('input', e => { CL.e = +e.target.value; drawCL(); });
+fig($('#cl-cv'), drawCL);
+
+/* many epochs on one batch */
+const EPM = [1.0, 0.0, 0.6], EP = { K: 40, lr: 0.5, nb: 0, batch: null };
+function epBatch() { const r = mulberry32(6000 + EP.nb++), a = [], R = []; for (let i = 0; i < 24; i++) { const k = Math.min(2, Math.floor(r() * 3)); a.push(k); R.push(EPM[k] + gaussOf(r)); } const m = mean(R); EP.batch = { a, R, adv: R.map(x => x - m), m }; }
+function epRun(clipOn) { const { a, adv } = EP.batch, N = a.length, e = 0.2; let h = [0, 0, 0]; const hist = [softmax(h).map(p => p * 3)];
+  for (let k = 0; k < EP.K; k++) { const pi = softmax(h), g = [0, 0, 0];
+    for (let i = 0; i < N; i++) { const rho = pi[a[i]] * 3; if (clipOn && clipCut(rho, adv[i], e)) continue; for (let b = 0; b < 3; b++) g[b] += adv[i] * rho * ((b === a[i] ? 1 : 0) - pi[b]) / N; }
+    h = h.map((x, b) => x + EP.lr * g[b]); hist.push(softmax(h).map(p => p * 3)); }
+  const pi = softmax(h); return { hist, pi, kl: sum(pi.map(p => (1 / 3) * Math.log((1 / 3) / p))) }; }
+function drawEP() {
+  if (!EP.batch) epBatch();
+  const C = C0(), cols = [C.a, C.b, C.c], A = epRun(true), B = epRun(false), top = Math.max(1.6, ...B.hist.flat(), ...A.hist.flat()) * 1.05;
+  const v = frame($('#ep-cv'), [0, EP.K], [0, top], { b: 30 }); axes(v, 'epoch', 'ratio π/π_old', { nx: 6 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.muted; c.globalAlpha = 0.13; c.fillRect(v.pad.l, v.Y(1.2), v.pw, v.Y(0.8) - v.Y(1.2)); c.restore(); seg(v, 0, 1, EP.K, 1, C.muted, 1);
+  [[A, null, 2.6], [B, [6, 4], 1.8]].forEach(([R, dash, lw]) => { for (let k = 0; k < 3; k++) { c.save(); c.strokeStyle = cols[k]; c.lineWidth = lw; if (dash) c.setLineDash(dash); c.beginPath(); R.hist.forEach((q, i) => { i ? c.lineTo(v.X(i), v.Y(q[k])) : c.moveTo(v.X(i), v.Y(q[k])); }); c.stroke(); c.restore(); } });
+  c.restore();
+  $('#ep-k-o').textContent = EP.K; $('#ep-lr-o').textContent = fmt(EP.lr, 1);
+  const { a, R, m } = EP.batch, cnt = [0, 1, 2].map(k => a.filter(x => x === k).length), avg = [0, 1, 2].map(k => cnt[k] ? mean(R.filter((_, i) => a[i] === k)) : NaN);
+  $('#ep-tbl').innerHTML = '<thead><tr><th>arm</th><th>pulls</th><th>batch mean</th><th>&pi; clip</th><th>&pi; plain</th></tr></thead><tbody>' + [0, 1, 2].map(k => `<tr><td><span style="color:${['var(--cA)', 'var(--cB)', 'var(--cC)'][k]}">&#9644;</span> ${k + 1}</td><td class="num">${cnt[k]}</td><td class="num">${cnt[k] ? tip(sfmt(avg[k], 2), `true mean ${fmt(EPM[k], 1)}; advantage = reward − ${fmt(m, 2)}`) : '—'}</td><td class="num">${tip(fmt(A.pi[k], 3), `ratio ${fmt(A.pi[k] * 3, 2)} after ${EP.K} epochs`)}</td><td class="num">${tip(fmt(B.pi[k], 3), `ratio ${fmt(B.pi[k] * 3, 2)} after ${EP.K} epochs`)}</td></tr>`).join('') + `<tr><td colspan="3">KL(&pi;<sub>old</sub> &Vert; &pi;<sub>new</sub>)</td><td class="num">${tip(fmt(A.kl, 3), 'Σ π_old log(π_old / π_new)')}</td><td class="num">${tip(fmt(B.kl, 3), 'Σ π_old log(π_old / π_new)')}</td></tr></tbody>`;
+  const bestB = B.pi.indexOf(Math.max(...B.pi)), looks = avg.indexOf(Math.max(...avg.map(x => isNaN(x) ? -1e9 : x)));
+  $('#ep-say').innerHTML = `In this batch arm ${looks + 1} has the best average reward (${sfmt(avg[looks], 2)})${looks === 0 ? ', and it truly is the best arm' : ', though arm 1 is truly better'}. The surrogate weighs each arm by its <i>total</i> advantage in the batch (pulls &times; how far above average), so arm ${bestB + 1} gains most. After ${EP.K} epoch${EP.K > 1 ? 's' : ''} the plain surrogate gives it probability ${fmt(B.pi[bestB], 2)} (KL ${fmt(B.kl, 3)}); PPO-clip gives ${fmt(A.pi[bestB], 2)} (KL ${fmt(A.kl, 3)}). ${B.kl > 3 * A.kl ? `The clip kept the new policy ${fmt(B.kl / Math.max(A.kl, 1e-9), 0)} times closer to the old one, as measured by KL: ${bestB === 0 ? 'a modest, safe step in the right direction' : 'it refuses to bet everything on 24 noisy pulls'}.` : 'With few epochs or a small step the two barely differ: the clip only bites once ratios leave the band.'}`;
+}
+$('#ep-k').addEventListener('input', e => { EP.K = +e.target.value; drawEP(); });
+$('#ep-lr').addEventListener('input', e => { EP.lr = +e.target.value; drawEP(); });
+$('#ep-new').addEventListener('click', () => { epBatch(); drawEP(); });
+fig($('#ep-cv'), drawEP);
+
+/* ---------- Gaussian policy for a continuous action ---------- */
+const GA = { mu: -3, ls: Math.log(1.5), target: 2.5, lr: 0.05, batch: [], ghosts: [], n: 0, r: mulberry32(1357), tmr: 0, b: 0, ex: null };
+let gaV = null;
+function gaUpdate() {
+  const sd = Math.exp(GA.ls), B = []; for (let i = 0; i < 16; i++) { const a = GA.mu + sd * gaussOf(GA.r); B.push({ a, R: -(a - GA.target) * (a - GA.target) }); }
+  const b = mean(B.map(x => x.R)); let gm = 0, gs = 0; B.forEach(x => { const z = (x.a - GA.mu) / sd; x.adv = x.R - b; x.sm = (x.a - GA.mu) / (sd * sd); x.ss = z * z - 1; gm += x.adv * x.sm / 16; gs += x.adv * x.ss / 16; });
+  GA.ghosts.push([GA.mu, sd]); if (GA.ghosts.length > 4) GA.ghosts.shift();
+  const mu0 = GA.mu, ls0 = GA.ls; GA.mu = clamp(GA.mu + GA.lr * gm, -6, 6); GA.ls = clamp(GA.ls + GA.lr * gs, Math.log(0.03), Math.log(4));
+  GA.batch = B; GA.b = b; GA.n++; const ex = B.reduce((p, x) => Math.abs(x.adv) > Math.abs(p.adv) ? x : p, B[0]); GA.ex = { ...ex, mu0, sd0: sd, gm, gs, mu1: GA.mu, sd1: Math.exp(GA.ls), ls0 };
+}
+const npdf = (x, m, s) => Math.exp(-(x - m) * (x - m) / (2 * s * s)) / (s * Math.sqrt(2 * Math.PI));
+function drawGA() {
+  const C = C0(), sd = Math.exp(GA.ls), top = Math.max(0.45, npdf(GA.mu, GA.mu, sd) * 1.15), v = gaV = frame($('#ga-cv'), [-6, 6], [-top * 0.12, top], { b: 30 }); axes(v, 'action a', 'π(a)', { sx: 1 }); clip(v);
+  GA.ghosts.forEach((g, i) => curve(v, x => npdf(x, g[0], g[1]), C.a, 1.2, null)); v.ctx.globalAlpha = 1;
+  const c = v.ctx; c.save(); c.globalAlpha = 0.18; c.fillStyle = C.a; c.beginPath(); c.moveTo(v.X(-6), v.Y(0)); for (let i = 0; i <= 240; i++) { const x = -6 + 12 * i / 240; c.lineTo(v.X(x), v.Y(npdf(x, GA.mu, sd))); } c.lineTo(v.X(6), v.Y(0)); c.fill(); c.restore();
+  curve(v, x => npdf(x, GA.mu, sd), C.a, 2.8);
+  seg(v, GA.target, -top * 0.12, GA.target, top, C.q, 2); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.q; c.textAlign = 'left'; c.fillText('target ' + sfmt(GA.target, 2), v.X(GA.target) + 5, v.pad.t + 12);
+  GA.batch.forEach(x => dot(v, clamp(x.a, -5.95, 5.95), -top * 0.06, x.adv >= 0 ? C.a : C.b, 4));
+  v.ctx.restore();
+  // fade ghosts by redrawing alpha via CSS is not possible on canvas; ghosts are thin lines
+  $('#ga-lr-o').textContent = fmt(GA.lr, 2);
+  $('#ga-mu').innerHTML = tip(sfmt(GA.mu, 2), GA.ex ? `${sfmt(GA.ex.mu0, 3)} + ${fmt(GA.lr, 2)} × ${sfmt(GA.ex.gm, 3)}` : 'start');
+  $('#ga-sd').innerHTML = tip(fmt(sd, 3), GA.ex ? `exp(log σ) with log σ = ${sfmt(GA.ex.ls0, 3)} + ${fmt(GA.lr, 2)} × ${sfmt(GA.ex.gs, 3)}` : 'start');
+  $('#ga-r').innerHTML = GA.batch.length ? tip(sfmt(GA.b, 2), `mean of −(a − target)² over 16 throws;\nalso the baseline b`) : '—';
+  const E = GA.ex;
+  $('#run-ga').innerHTML = !E ? '<b>Running example</b>: press <i>One update</i> and one throw from the batch is worked out here.'
+    : `<b>Running example</b>: one throw of update ${GA.n}: a = ${sfmt(E.a, 2)} from &mu; = ${sfmt(E.mu0, 2)}, &sigma; = ${fmt(E.sd0, 2)}; R = &minus;(a &minus; ${sfmt(GA.target, 2)})&sup2; = ${sfmt(E.R, 2)}, so R &minus; b = ${sfmt(E.adv, 2)}. Scores: (a &minus; &mu;)/&sigma;&sup2; = ${tip(sfmt(E.sm, 3), `(${sfmt(E.a, 3)} − ${sfmt(E.mu0, 3)}) / ${fmt(E.sd0 * E.sd0, 3)}`)}, (a &minus; &mu;)&sup2;/&sigma;&sup2; &minus; 1 = ${tip(sfmt(E.ss, 3), `z = ${sfmt((E.a - E.mu0) / E.sd0, 3)}, z² − 1`)}. Averaged over all 16 throws: &Delta;&mu; = ${fmt(GA.lr, 2)} &times; ${sfmt(E.gm, 3)} = ${sgn(GA.lr * E.gm, 3)}, &Delta;log &sigma; = ${sgn(GA.lr * E.gs, 3)}.`;
+  const d = Math.abs(GA.mu - GA.target);
+  $('#ga-say').innerHTML = !GA.n ? 'The policy starts at &mu; = &minus;3, &sigma; = 1.5, far from the target. Press Run.'
+    : d > 3 * sd ? `Far from the target: throws on the target side beat the baseline (green), so &mu; slides towards it. ${GA.lr > 0.25 ? 'A large &alpha; makes the jumps big and jittery.' : ''}`
+    : sd > 0.25 ? `Close now (|&mu; &minus; target| = ${fmt(d, 2)}). Throws near the centre win, so the score for log &sigma; is negative on average and &sigma; shrinks: the policy is getting confident.`
+    : `&sigma; = ${fmt(sd, 3)}: nearly deterministic. With so little spread there is little left to explore, so if the target moves, learning restarts slowly. Practical methods such as SAC add an entropy bonus to keep exploring.`;
+}
+function gaStop() { clearInterval(GA.tmr); GA.tmr = 0; $('#ga-run').textContent = 'Run'; }
+$('#ga-run').addEventListener('click', () => { if (GA.tmr) return gaStop(); $('#ga-run').textContent = 'Pause'; GA.tmr = setInterval(() => { gaUpdate(); drawGA(); if (GA.n > 4000) gaStop(); }, 110); });
+$('#ga-step').addEventListener('click', () => { gaStop(); gaUpdate(); drawGA(); });
+$('#ga-reset').addEventListener('click', () => { gaStop(); Object.assign(GA, { mu: -3, ls: Math.log(1.5), batch: [], ghosts: [], n: 0, r: mulberry32(1357), ex: null }); drawGA(); });
+$('#ga-lr').addEventListener('input', e => { GA.lr = +e.target.value; drawGA(); });
+$('#ga-cv').addEventListener('click', e => { if (!gaV) return; const [px] = evPos($('#ga-cv'), e); GA.target = Math.round(clamp(gaV.iX(px), -5.5, 5.5) * 100) / 100; drawGA(); });
+$('#ga-cv').style.cursor = 'crosshair';
+fig($('#ga-cv'), drawGA);
+
+/* ---------- project: CartPole three ways ---------- */
+const ALGOS = [['reinforce', 'REINFORCE + baseline', 'var(--cB)', '--cB'], ['ac', 'One-step actor–critic', 'var(--lda)', '--lda'], ['ppo', 'PPO-clip', 'var(--cA)', '--cA']], SEEDS = [1, 2, 3, 4, 5], BUDGET = 100000, BIN = 5000, NBIN = BUDGET / BIN;
+const PJ = { runs: {}, running: false, done: false, view: 'mean', t0: 0, time: {} };
+ALGOS.forEach(([k]) => { PJ.runs[k] = []; PJ.time[k] = 0; });
+function binned(log) { const S = new Array(NBIN).fill(0), N = new Array(NBIN).fill(0); log.forEach(([s, T]) => { const b = Math.min(NBIN - 1, Math.floor((s - 1) / BIN)); S[b] += T; N[b]++; }); return S.map((x, i) => N[i] ? x / N[i] : null); }
+function solvedAt(log) { let run = 0; for (const [s, T] of log) { run = T >= 500 ? run + 1 : 0; if (run >= 10) return s; } return null; }
+const lastMean = log => mean(log.filter(x => x[0] > BUDGET - 10000).map(x => x[1]));
+function refMatch(algo, seed, R) { const F = REF.runs[algo + '/' + seed]; if (!F || !R.done) return null; const n = R.log.length, sT = sum(R.log.map(x => x[1])), sI = sum(R.log.map((x, i) => (i + 1) * x[1])); return n === F.n && sT === F.sumT && sI === F.sumIT && R.A.every((v, i) => v === F.A[i]); }
+function pjTrain() {
+  if (PJ.running) return; PJ.running = true; PJ.done = false; $('#pj-train').disabled = true; ALGOS.forEach(([k]) => { PJ.runs[k] = []; PJ.time[k] = 0; });
+  const Q = {}; ALGOS.forEach(([k]) => { Q[k] = { i: 0, gen: null, R: null }; });
+  const startRun = k => { const q = Q[k]; if (q.i >= SEEDS.length) return false; q.R = { seed: SEEDS[q.i] }; q.gen = PGC.trainGen(k, SEEDS[q.i], BUDGET, null, q.R); PJ.runs[k].push(q.R); return true; };
+  ALGOS.forEach(([k]) => startRun(k)); let lastDraw = 0;
+  (function tick() { const t0 = performance.now(); let active = 0;
+    ALGOS.forEach(([k]) => { const q = Q[k]; if (!q.gen) return; active++; const ta = performance.now();
+      while (performance.now() - ta < 9) { const it = q.gen.next(); if (it.done) { q.i++; q.gen = null; if (startRun(k)) { } break; } }
+      PJ.time[k] += performance.now() - ta; });
+    if (performance.now() - lastDraw > 120 || !active) { drawRace(); drawLC(); lastDraw = performance.now(); const d = ALGOS.map(([k]) => PJ.runs[k].filter(R => R.done).length); $('#pj-prog').textContent = active ? `Training… runs finished: REINFORCE ${d[0]}/5, actor–critic ${d[1]}/5, PPO ${d[2]}/5` : ''; }
+    if (active) setTimeout(tick, 0); else { PJ.running = false; PJ.done = true; $('#pj-train').disabled = false; $('#pj-train').textContent = 'Train all 15 again'; drawRace(); drawLC(); drawWA(); drawCP(); }
+    void t0; })();
+}
+function drawRace() {
+  const rows = ALGOS.map(([k, name, col]) => { const R = PJ.runs[k], fin = R.filter(r => r.done), lm = fin.map(r => lastMean(r.log)), sv = fin.map(r => solvedAt(r.log)), ok = fin.map(r => refMatch(k, r.seed, r));
+    const svn = sv.filter(x => x != null).sort((a, b) => a - b), med = svn.length ? svn[Math.floor((svn.length - 1) / 2)] : null;
+    const refLm = SEEDS.map(s => REF.runs[k + '/' + s].last);
+    return `<tr><td><span style="color:${col}">&#9644;</span> <b>${name}</b></td><td class="num">${fin.length} / 5</td><td class="num">${fin.length ? tip(fmt(mean(lm), 1), `per seed: ${lm.map(x => fmt(x, 0)).join(', ')}`) : '…'}</td><td class="num">${fin.length ? tip(`${svn.length} / ${fin.length}`, svn.length ? `first reached after ${svn.map(x => x.toLocaleString('en-GB')).join(', ')} steps\n(median ${med.toLocaleString('en-GB')})` : 'no seed managed 10 × 500 in a row') : '…'}</td><td class="num">${tip(fmt(mean(refLm), 1), `Python, per seed: ${refLm.map(x => fmt(x, 0)).join(', ')}`)}</td><td class="num">${fin.length ? (ok.every(x => x) ? tip(`&#10003; ${ok.length} / ${ok.length}`, 'same number of episodes, same return\nin every episode, same final weights\nto the last bit') : `&#10007; ${ok.filter(x => x).length} / ${ok.length}`) : '…'}</td><td class="num">${PJ.time[k] ? fmt(PJ.time[k] / 1000, 1) + ' s' : ''}</td></tr>`; }).join('');
+  $('#pj-race').innerHTML = '<thead><tr><th>learner</th><th>runs</th><th>mean return, last 10k steps</th><th>10 perfect episodes in a row</th><th>Python reference</th><th>identical to Python</th><th>time</th></tr></thead><tbody>' + rows + '</tbody>';
+}
+function drawLC() {
+  const C = C0(), v = frame($('#pj-lc'), [0, BUDGET], [0, 520], { b: 30 }); axes(v, 'environment steps', 'episode return', { sx: 20000, sy: 100, fx: x => x ? (x / 1000) + 'k' : '0' }); clip(v);
+  seg(v, 0, 500, BUDGET, 500, C.q, 1, [4, 4]);
+  const c = v.ctx;
+  ALGOS.forEach(([k, , , tok]) => { const col = css(tok), B = PJ.runs[k].map(R => binned(R.log || []));
+    if (PJ.view === 'all') B.forEach(b => { c.save(); c.strokeStyle = col; c.lineWidth = 1.4; c.globalAlpha = 0.6; c.beginPath(); let st = false; b.forEach((y, i) => { if (y == null) return; const x = v.X((i + 0.5) * BIN); st ? c.lineTo(x, v.Y(y)) : c.moveTo(x, v.Y(y)); st = true; }); c.stroke(); c.restore(); });
+    else { const M = [], LO = [], HI = []; for (let i = 0; i < NBIN; i++) { const ys = B.map(b => b[i]).filter(y => y != null); if (!ys.length) break; M.push(mean(ys)); LO.push(Math.min(...ys)); HI.push(Math.max(...ys)); }
+      if (M.length) { c.save(); c.fillStyle = col; c.globalAlpha = 0.13; c.beginPath(); HI.forEach((y, i) => { const x = v.X((i + 0.5) * BIN); i ? c.lineTo(x, v.Y(y)) : c.moveTo(x, v.Y(y)); }); for (let i = LO.length - 1; i >= 0; i--) c.lineTo(v.X((i + 0.5) * BIN), v.Y(LO[i])); c.closePath(); c.fill(); c.restore();
+        c.save(); c.strokeStyle = col; c.lineWidth = 2.6; c.beginPath(); M.forEach((y, i) => { const x = v.X((i + 0.5) * BIN); i ? c.lineTo(x, v.Y(y)) : c.moveTo(x, v.Y(y)); }); c.stroke(); c.restore(); } } });
+  c.restore();
+  const fin = k => PJ.runs[k].filter(R => R.done);
+  if (!ALGOS.some(([k]) => PJ.runs[k].length)) { $('#pj-best').textContent = '…'; $('#pj-py').textContent = '…'; $('#pj-say').innerHTML = 'Press <b>Train</b>. The three learners run side by side, five seeds each; PPO is the slowest per step because it reuses every batch eight times.'; return; }
+  const done = ALGOS.every(([k]) => fin(k).length === 5);
+  if (!done) { $('#pj-best').textContent = '…'; $('#pj-py').textContent = '…'; $('#pj-say').textContent = 'Curves grow as the agents learn. Each window averages the episodes that ended in it.'; return; }
+  const stat = ALGOS.map(([k, name]) => { const R = fin(k), B = R.map(r => binned(r.log)), early = mean(B.map(b => mean(b.slice(0, 4).filter(y => y != null)))), last = mean(R.map(r => lastMean(r.log)));
+    let drop = { d: 0 }; R.forEach((r, j) => B[j].forEach((y, i) => { if (i && y != null && B[j][i - 1] != null && B[j][i - 1] - y > drop.d) drop = { d: B[j][i - 1] - y, from: B[j][i - 1], to: y, at: i * BIN, seed: r.seed }; }));
+    return { k, name, early, last, drop }; });
+  const best = stat.reduce((a, b) => b.last > a.last ? b : a), fast = stat.reduce((a, b) => b.early > a.early ? b : a), crash = stat.reduce((a, b) => b.drop.d > a.drop.d ? b : a);
+  const okAll = ALGOS.map(([k]) => fin(k).filter(r => refMatch(k, r.seed, r)).length);
+  $('#pj-best').innerHTML = tip(fmt(best.last, 0), `${best.name}, mean over 5 seeds\nof the episodes in the last 10,000 steps`); $('#pj-py').innerHTML = tip(`${sum(okAll)} / 15`, 'episode-by-episode returns and final\nweights compared with pg-ref.py');
+  const spread = stat.map(st => { const lm = fin(st.k).map(r => ({ v: lastMean(r.log), seed: r.seed })); const lo = lm.reduce((a, b) => b.v < a.v ? b : a), hi = lm.reduce((a, b) => b.v > a.v ? b : a); return { ...st, lo, hi, w: hi.v - lo.v }; });
+  const tight = spread.reduce((a, b) => b.w < a.w ? b : a), loose = spread.reduce((a, b) => b.w > a.w ? b : a);
+  $('#pj-say').innerHTML = `Fastest start: <b>${fast.name}</b> (mean ${fmt(fast.early, 0)} over the first 20k steps)${fast.k === 'reinforce' ? ', since its Monte-Carlo returns are useful before the critic has learnt anything' : ''}. Highest at the end: <b>${best.name}</b>, ${fmt(best.last, 0)} over the last 10k. Most consistent: ${tight.name}, whose five seeds end between ${fmt(tight.lo.v, 0)} and ${fmt(tight.hi.v, 0)}. Least consistent: ${loose.name}, from ${fmt(loose.lo.v, 0)} (seed ${loose.lo.seed}) to ${fmt(loose.hi.v, 0)}${loose.k === 'ac' ? ': one-step updates after every move, graded by a critic that can be wrong, can knock a good policy off course' : ''}. No learner is monotone: the biggest single drop was ${crash.name}, seed ${crash.drop.seed}, from ${fmt(crash.drop.from, 0)} to ${fmt(crash.drop.to, 0)} around ${crash.drop.at / 1000}k steps. Switch to <i>Every seed</i> to see it.`;
+}
+seg1('[data-lv]', 'data-lv', k => { PJ.view = k; drawLC(); });
+$('#pj-train').addEventListener('click', pjTrain);
+fig($('#pj-lc'), drawLC);
+
+/* watch a trained agent */
+const WA = { algo: 'ppo', seed: 1, s: null, t: 0, running: false, p: 0.5, a: 1, r: null, n: 0, end: '' };
+const waW = () => { const R = (PJ.runs[WA.algo] || []).find(x => x.seed === WA.seed && x.done); return R ? R.A : REF.runs[WA.algo + '/' + WA.seed].A; };
+const WN = ['w₁ · cart position x', 'w₂ · cart velocity ẋ', 'w₃ · pole angle ϑ', 'w₄ · pole spin ϑ̇', 'b · bias'];
+function drawWA() {
+  const A = waW(), s = WA.s || [0, 0, 0, 0];
+  drawCart($('#pj-cart'), s, WA.s ? { p: WA.p, a: WA.a, label: 'step ' + WA.t } : null);
+  $('#wa-s-o').textContent = WA.seed;
+  $('#wa-w').innerHTML = '<span class="mini-h">The five numbers</span>' + A.map((w, i) => { const wd = Math.min(50, Math.abs(w) / 9 * 50); return `<div class="cf"><span>${WN[i]}</span><span class="cf-track"><i style="left:${w < 0 ? 50 - wd : 50}%;width:${wd}%;background:${w < 0 ? 'var(--cB)' : 'var(--cA)'}"></i></span><span class="num">${tip(sfmt(w, 3), `final weight after 100,000 steps\n${(PJ.runs[WA.algo] || []).some(x => x.seed === WA.seed && x.done) ? 'trained in your browser' : 'from the Python reference (identical)'}`)}</span></div>`; }).join('');
+  $('#wa-t').innerHTML = WA.s ? tip(String(WA.t), `${fmt(WA.t * PGC.TAU, 2)} s of simulated time`) : '—';
+  $('#wa-p').innerHTML = WA.s ? tip(fmt(WA.p, 3), 'σ(w · scaled state + b)') : '—';
+  $('#pj-cartcap').innerHTML = `${ALGOS.find(x => x[0] === WA.algo)[1]}, seed ${WA.seed}. ${WA.end || (WA.running ? 'Running&hellip;' : 'Press Run.')}`;
+  const big = [0, 1, 2, 3].sort((i, j) => Math.abs(A[j]) - Math.abs(A[i]));
+  $('#wa-say').innerHTML = `The largest weights are on ${WN[big[0]].split('· ')[1]} and ${WN[big[1]].split('· ')[1]}${A[2] > 0 && A[3] > 0 ? ': push the way the pole is leaning and turning, which slides the cart back under it' : ''}. ${A[0] > 0 ? `The positive weight on position (${sfmt(A[0], 2)}) looks backwards, but it is how you steer a balanced pole: to move the cart back left you must first tip the pole left, by pushing right.` : ''}`;
+  // running example for the policy formula
+  const o = PGC.obs(s), z = A[0] * o[0] + A[1] * o[1] + A[2] * o[2] + A[3] * o[3] + A[4];
+  $('#run-pj').innerHTML = `<b>Running example</b> (the cart below${WA.s ? `, step ${WA.t}` : ', at rest'}): x = ${sfmt(s[0], 3)}, &#7819; = ${sfmt(s[1], 3)}, &#977; = ${sfmt(s[2], 4)}, &#977;&#775; = ${sfmt(s[3], 3)}. z = ${sfmt(A[0], 2)}&times;${sfmt(o[0], 3)} ${sgn(A[1], 2)}&times;${sfmt(o[1], 3)} ${sgn(A[2], 2)}&times;${sfmt(o[2], 3)} ${sgn(A[3], 2)}&times;${sfmt(o[3], 3)} ${sgn(A[4], 2)} = ${tip(sfmt(z, 3), 'each state variable divided by its scale first')}, so &pi;(right) = &sigma;(z) = ${tip(fmt(sgm(z), 3), `1 / (1 + e^${MINUS(fmt(-z, 3))})`)}.`;
+}
+function waGo() {
+  if (WA.running) { WA.running = false; return; }
+  WA.r = PGC.rng(424242 + WA.n++); WA.s = PGC.reset(WA.r); WA.t = 0; WA.end = ''; WA.running = true; $('#wa-go').textContent = 'Stop'; const A = waW();
+  (function frameStep() { if (!WA.running) { $('#wa-go').textContent = 'Run an episode'; drawWA(); return; }
+    for (let k = 0; k < 2 && WA.running; k++) { const o = PGC.obs(WA.s); WA.p = PGC.pRight(A, o); WA.a = WA.r() < WA.p ? 1 : 0; const st = PGC.step(WA.s, WA.a); WA.s = st.s; WA.t++;
+      if (st.done || WA.t >= PGC.TMAX) { WA.running = false; WA.end = st.done ? `Fell after <b>${WA.t}</b> steps (${Math.abs(WA.s[2]) > PGC.TT ? 'the pole passed 12&deg;' : 'the cart left the track'}).` : `Balanced for the full <b>500</b> steps (10 s).`; } }
+    drawWA(); requestAnimationFrame(frameStep); })();
+}
+seg1('[data-wa]', 'data-wa', k => { WA.algo = k; WA.running = false; WA.s = null; WA.end = ''; drawWA(); });
+$('#wa-s').addEventListener('input', e => { WA.seed = +e.target.value; WA.running = false; WA.s = null; WA.end = ''; drawWA(); });
+$('#wa-go').addEventListener('click', waGo);
+fig($('#pj-cart'), drawWA);
+
+/* PPO clip histogram */
+const CP = { u: 10 };
+function drawCP() {
+  const C = C0(), R = (PJ.runs.ppo || []).find(x => x.seed === 1 && x.done), U = R ? R.clips[CP.u - 1] : null;
+  $('#cp-u').max = R ? R.clips.length : 98; $('#cp-u-o').textContent = CP.u;
+  const lo = 0.6, hi = 1.4, bw = 0.01, nb = Math.round((hi - lo) / bw), H0 = new Array(nb).fill(0), H1 = new Array(nb).fill(0);
+  if (U) U.ratios.forEach((r, i) => { const b = clamp(Math.floor((r - lo) / bw), 0, nb - 1); (U.cut[i] ? H1 : H0)[b]++; });
+  const top = U ? Math.max(...H0.map((x, i) => x + H1[i])) * 1.12 : 100, v = frame($('#pj-clip'), [lo, hi], [0, top], { b: 30 }); axes(v, 'ratio ρ (last pass)', 'samples', { sx: 0.1, ny: 4 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.muted; c.globalAlpha = 0.12; c.fillRect(v.X(0.8), v.pad.t, v.X(1.2) - v.X(0.8), v.ph); c.restore();
+  if (U) for (let b = 0; b < nb; b++) { const x0 = v.X(lo + b * bw) + 0.5, x1 = v.X(lo + (b + 1) * bw) - 0.5; c.save(); c.globalAlpha = 0.8; c.fillStyle = C.a; c.fillRect(x0, v.Y(H0[b]), x1 - x0, v.Y(0) - v.Y(H0[b])); c.fillStyle = C.bad; c.fillRect(x0, v.Y(H0[b] + H1[b]), x1 - x0, v.Y(H0[b]) - v.Y(H0[b] + H1[b])); c.restore(); }
+  seg(v, 1, 0, 1, top, C.q, 1.2); c.restore();
+  if (!U) { $('#cp-f').textContent = '…'; $('#cp-r').textContent = '…'; $('#cp-say').textContent = 'Train the agents first: this shows PPO seed 1 as trained in your browser.'; $('#run-gae').innerHTML = '<b>Running example</b>: after training, the first sample of the chosen update is worked out here.'; return; }
+  const n = U.ratios.length, nc = sum(U.cut), mn = Math.min(...U.ratios), mx = Math.max(...U.ratios), outside = U.ratios.filter(r => r < 0.8 || r > 1.2).length;
+  $('#cp-f').innerHTML = tip(pct(nc / n), `${nc} of ${n} samples in the last pass\nhad ρ past the band in the helpful direction`); $('#cp-r').innerHTML = tip(`${fmt(mn, 2)}–${fmt(mx, 2)}`, `${outside} samples outside [0.8, 1.2]`);
+  $('#cp-say').innerHTML = `Update ${CP.u} (after ${U.steps.toLocaleString('en-GB')} steps): ${pct(nc / n)} of the samples are clipped. ${outside > nc ? `${outside - nc} more sit outside the band on the <i>unhelpful</i> side, where the clip never applies, so they keep pulling back.` : ''} ${nc / n > 0.1 ? 'A big step: the policy changed a lot on this batch, and the clip held it back.' : nc / n < 0.02 ? 'A gentle step: few samples reached the edge.' : 'Typical: most of the batch still pulls, a few samples are held back.'}`;
+  const ex = U.ex;
+  $('#run-gae').innerHTML = `<b>Running example</b>, the first sample of update ${CP.u}: &delta;<sub>0</sub> = 1 + 0.99 &times; ${fmt(ex.vn, 2)} &minus; ${fmt(ex.v0, 2)} = ${tip(sfmt(ex.d0, 3), 'reward 1, then the critic’s values')}${ex.cut ? '; the episode ended there, so &Acirc;<sub>0</sub> = &delta;<sub>0</sub>' : `; with &Acirc;<sub>1</sub> = ${sfmt(ex.a1, 3)}, &Acirc;<sub>0</sub> = &delta;<sub>0</sub> + 0.9405 &times; &Acirc;<sub>1</sub> = ${tip(sfmt(ex.a0, 3), `${sfmt(ex.d0, 3)} + 0.99 × 0.95 × ${sfmt(ex.a1, 3)}\n(the sum written recursively)`)}`} (before PPO normalises the advantages of the batch).`;
+}
+$('#cp-u').addEventListener('input', e => { CP.u = +e.target.value; drawCP(); });
+fig($('#pj-clip'), drawCP);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+syncSM(); syncAC(); drawCO(); drawTH(); drawRF(); drawBL(); drawBR(); drawCL(); drawEP(); drawGA(); drawRace(); drawLC(); drawWA(); drawCP();
+{ const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { brRun(); io.disconnect(); } }, { rootMargin: '300px' }) : null; if (io) io.observe($('#br-cv')); else brRun(); }
+window.__pgDebug = { PGC, PJ, REF, RF, BR, AC, EP, GA, TH, BL, CO, SM, WA, CP, pjTrain, corRun, thVar1, epRun, Jc };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

@@ -1,0 +1,1382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="An interactive lecture on deep Q-networks: why Q-tables fail on continuous states, linear function approximation and generalisation, the deadly triad in two states, the Q-network and its regression loss, experience replay, target networks on Baird's counterexample, and Double DQN's fix for max-bias, with a DQN trained live on CartPole whose physics matches Gymnasium.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Deep Q-Networks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: -4px; }
+.hero-cp canvas { cursor: pointer; touch-action: manipulation; }
+.seg-wrap { flex-wrap: wrap; }
+.triad-pic { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; max-width: 860px; font-size: 0.9rem; }
+.triad-pic .st { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 8px 14px; text-align: center; line-height: 1.35; min-width: 84px; }
+.triad-pic .st b { font-family: var(--f-mono); font-size: 1.05rem; color: var(--cA); }
+.triad-pic .st.end b { color: var(--muted); }
+.triad-pic .arr { color: var(--muted); font-family: var(--f-mono); font-size: 0.82rem; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+table.race td.mine { font-weight: 600; }
+table.ver td, table.ver th { font-size: 0.86rem; }
+.btn[disabled], .seg button[disabled] { opacity: 0.45; cursor: not-allowed; }
+@media (max-width: 560px) { .triad-pic { font-size: 0.8rem; gap: 6px; } .triad-pic .st { padding: 6px 8px; min-width: 64px; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Deep Q-Networks <span>&middot; Q-learning, scaled up</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Too many states</a>
+      <a href="#approx">Generalisation</a>
+      <a href="#triad">Deadly triad</a>
+      <a href="#net">The Q-network</a>
+      <a href="#replay">Replay</a>
+      <a href="#target">Target network</a>
+      <a href="#double">Double DQN</a>
+      <a href="#project">CartPole project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Reinforcement learning · chapter 3.2 · deep Q-networks</div>
+      <h1>Deep Q-Networks</h1>
+      <div class="sub">When the table is too big, learn a function instead</div>
+      <p class="lead">Chapter 3.1 kept one number for every state and action. That works on a 4&times;4 grid and fails on anything with a camera, a joystick or a continuous measurement. A <em>deep Q-network</em> replaces the table with a neural network that reads the state and outputs a value for every action. Getting it to learn needed three ideas, which this chapter builds one by one. On the right, a small network trained in this page is balancing a pole on a cart. <strong>Tap the picture to shove the pole</strong> and watch the network&rsquo;s two Q-values decide how to recover.</p>
+      <dl class="facts">
+        <div><dt>The idea</dt><dd>A network maps a state to one Q-value per action; similar states share what they learn</dd></div>
+        <div><dt>The tricks</dt><dd>Experience replay, a frozen target network, and Double DQN&rsquo;s split of choosing and judging</dd></div>
+        <div><dt>The landmark</dt><dd>One network and one set of settings learned 49 Atari games from raw pixels (Mnih et al., 2015)</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10 hero-cp"><canvas id="hero-cv" aria-label="A cart balancing a pole, steered by a Q-network; tap to shove the pole"></canvas></div>
+      <div class="fig-head" style="margin-top:10px">
+        <div class="seg" role="group" aria-label="Who steers the cart"><button type="button" data-hp="dqn" aria-pressed="true">Q-network steers</button><button type="button" data-hp="rand">Random pushes</button></div>
+        <div class="btns"><button type="button" class="btn" id="hero-shove-l">&larr; Shove</button><button type="button" class="btn" id="hero-shove-r">Shove &rarr;</button></div>
+      </div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>9 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>When the table is too big</a></li>
+    <li><a href="#approx"><i>02</i>One update, many states</a></li>
+    <li><a href="#triad"><i>03</i>The deadly triad, in two states</a></li>
+    <li><a href="#net"><i>04</i>A network that scores every move</a></li>
+    <li><a href="#replay"><i>05</i>Replay: shuffled memories</a></li>
+    <li><a href="#target"><i>06</i>Freezing the target</a></li>
+    <li><a href="#double"><i>07</i>Why max is an optimist</a></li>
+    <li><a href="#project"><i>08</i>Balancing a real CartPole, live</a></li>
+    <li><a href="#summary"><i>09</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The problem</div>
+    <h2>Too many states for a table</h2>
+    <div class="prose">
+      <p>The cart-pole&rsquo;s state is four real numbers: the cart&rsquo;s position x and velocity \(\dot x\), the pole&rsquo;s angle &theta; and its angular velocity \(\dot\theta\). A Q-table needs a finite list of states, so the obvious move is to chop each number into b bins. The trouble is the exponent. Four numbers with b bins each make b<sup>4</sup> cells, and every cell must be <em>visited</em>, many times, before its Q-value means anything. A table also learns nothing about a cell from its neighbours: with fine bins, a pole at 2.0&deg; and one at 2.1&deg; are strangers. <strong>Raise the number of bins</strong> and see how much of the table real experience ever touches.</p>
+    </div>
+    <div class="eq"><div class="m">\[ |\text{table}| = b^{\,d} \times |\mathcal{A}| \]</div><div class="read"><b>Read it as:</b> d numbers in the state, b bins for each, |&#120068;| actions. The table grows exponentially with the number of state variables. For an Atari screen (84&times;84 grey pixels, 4 frames stacked, 256 grey levels) d = 28,224, so the table would have 256<sup>28,224</sup> rows, a number with about 68,000 digits.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The table size is b to the power d, times the number of actions.&rdquo;</em></div><div class="eq-run" id="run-wy"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="wy-cv" aria-label="Which angle and angular-velocity cells were visited"></canvas></div><figcaption>The (&theta;, \(\dot\theta\)) face of the table: darker cells were visited more often (summed over the x and \(\dot x\) bins). Empty squares were never seen.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="wy-b">Bins per state variable</label><output id="wy-b-o"></output></div><input type="range" id="wy-b" min="2" max="30" step="1" value="10"></div>
+        <div class="seg" role="group" aria-label="How much experience"><button type="button" data-wn="10">10 episodes</button><button type="button" data-wn="100">100</button><button type="button" data-wn="1000" aria-pressed="true">1,000</button><button type="button" data-wn="10000">10,000</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="wy-size"></div><div class="k">table entries</div></div><div class="stat"><div class="v" id="wy-vis"></div><div class="k">cells ever visited</div></div><div class="stat"><div class="v" id="wy-per"></div><div class="k">visits per visited cell</div></div></div>
+        <p class="note" id="wy-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- APPROX -->
+<section class="chap" id="approx">
+  <div class="wrap">
+    <div class="tag">Function approximation</div>
+    <h2>One update, many states</h2>
+    <div class="prose"><p>Instead of a row per state, describe each state by a few <em class="term">features</em> &phi;(s) and let Q be a weighted sum of them. Now the parameters are the weights w, not the table entries, and one update changes Q at every state that shares features with the one you updated. That sharing is called <em class="term">generalisation</em>. Below is a one-dimensional corridor: from position s the agent steps 0.1 to the right, and reaching the end pays +1. The true Q-values form a staircase, &gamma; lower for every step still to go. The features are bumps spread along the corridor. <strong>Click anywhere on the plot</strong> to make one Q-learning update at that state, then widen the bumps and click again.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} Q(s,a;\mathbf{w}) &= \mathbf{w}_a^{\top}\boldsymbol{\phi}(s) \\ &= \sum_{i=1}^{k} w_{a,i}\,\phi_i(s) \end{aligned} \]</div><div class="read"><b>Read it as:</b> k features, each a bump &phi;<sub>i</sub>(s) centred at c<sub>i</sub> with width &sigma;, scaled so the k bumps add up to 1 at every s. Q is a blend of the weights of the bumps that are &ldquo;on&rdquo; at s. A table is the special case of one bump per state, each covering only its own state.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Q of s and a is the dot product of that action&rsquo;s weights with the feature vector of s.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \delta &= r + \gamma \max_{a'} Q(s',a') - Q(s,a) \\ \mathbf{w} &\leftarrow \mathbf{w} + \alpha\,\delta\,\nabla_{\mathbf{w}} Q(s,a;\mathbf{w}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the same TD error as tabular Q-learning (Q now means the current approximation Q(&middot;;w)), but the correction is spread over the weights in proportion to the gradient, which for a linear Q is just &phi;(s). It is called a <i>semi</i>-gradient update because the target r + &gamma; max Q(s&prime;) also depends on w, and we pretend it doesn&rsquo;t.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Delta is reward plus gamma times the best next Q, minus the current Q; nudge the weights by alpha times delta times the gradient of Q.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-ap" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="ap-cv" aria-label="Approximate Q-values along a corridor; click to update at a state"></canvas></div><figcaption><span style="color:var(--ink)">- -</span> true Q(s, right) &nbsp; <span style="color:var(--cA)">&#9644;</span> the approximation &nbsp; <span style="color:var(--cB)">&#9644;</span> how much the last update changed it &nbsp; faint bumps: the features</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ap-k">Number of features k</label><output id="ap-k-o"></output></div><input type="range" id="ap-k" min="3" max="31" step="1" value="11"></div>
+        <div class="ctrl"><div class="top"><label for="ap-w">Bump width &sigma;</label><output id="ap-w-o"></output></div><input type="range" id="ap-w" min="0.01" max="0.3" step="0.01" value="0.04"></div>
+        <div class="ctrl"><div class="top"><label for="ap-a">Step size &alpha;</label><output id="ap-a-o"></output></div><input type="range" id="ap-a" min="0.1" max="1" step="0.05" value="0.5"></div>
+        <div class="btns"><button type="button" class="btn primary" id="ap-run">200 updates at random states</button><button type="button" class="btn" id="ap-reset">Reset the weights</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ap-n"></div><div class="k">updates so far</div></div><div class="stat"><div class="v" id="ap-spread"></div><div class="k">states moved by the last update</div></div><div class="stat"><div class="v" id="ap-err"></div><div class="k">RMS error vs the truth</div></div></div>
+        <p class="note" id="ap-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- TRIAD -->
+<section class="chap" id="triad">
+  <div class="wrap">
+    <div class="tag">The price</div>
+    <h2>The deadly triad, in two states</h2>
+    <div class="prose"><p>Generalisation has a dark side. Sutton and Barto name three ingredients that are each harmless and together can make the weights run off to infinity: <b>function approximation</b> (states share weights), <b>bootstrapping</b> (targets built from your own estimates) and <b>off-policy</b> learning (updating on a different mix of states than the policy would visit). Their smallest example has two states. The first has feature 1, so its value is w; the second has feature 2, so its value is 2w. The move from the first to the second pays 0, and the true value of both is 0. If we only ever update the first transition, its target is &gamma;&middot;2w: raising w raises the target <em>twice as fast</em>. <strong>Pick which ingredient to remove</strong> and watch whether the estimate settles.</p></div>
+    <div class="triad-pic block" aria-hidden="true"><span class="st">state 1<br><b>w</b></span><span class="arr">reward 0 &rarr;</span><span class="st">state 2<br><b>2w</b></span><span class="arr">reward 0 &rarr;</span><span class="st end">end<br><b>0</b></span></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} w_{t+1} &= w_t + \alpha\,(0 + \gamma\cdot 2w_t - w_t)\cdot 1 \\ &= \big(1 + \alpha(2\gamma - 1)\big)\,w_t \end{aligned} \]</div><div class="read"><b>Read it as:</b> the TD error at state 1 is the target &gamma;&middot;2w minus the estimate w; the gradient of w&middot;1 with respect to w is 1. Each update multiplies w by the same factor. When &gamma; &gt; &frac12; the factor is above 1, so w grows geometrically, for <b>any</b> step size &alpha; &gt; 0. Shrinking &alpha; only slows the explosion.</div><div class="eq-say"><b>Say it</b><em>&ldquo;w next is w times one plus alpha times two-gamma-minus-one.&rdquo;</em></div><div class="eq-run" id="run-tr"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="tr-cv" aria-label="The estimate of state 1 over 200 updates, log scale"></canvas></div><figcaption>Size of the estimate for state 1 over 200 updates, on a log scale (the truth is 0, so lower is better). The bold line is your choice, the faint dashed lines the other three: <span style="color:var(--qda)">&#9644;</span> all three &nbsp; <span style="color:var(--cA)">&#9644;</span> on-policy &nbsp; <span style="color:var(--lda)">&#9644;</span> Monte Carlo &nbsp; <span style="color:var(--cB)">&#9644;</span> table.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg seg-wrap" role="group" aria-label="Which ingredients are present"><button type="button" data-tv="all" aria-pressed="true">All three</button><button type="button" data-tv="on">Drop off-policy</button><button type="button" data-tv="mc">Drop bootstrapping</button><button type="button" data-tv="tab">Drop approximation</button></div>
+        <div class="ctrl"><div class="top"><label for="tr-g">Discount &gamma;</label><output id="tr-g-o"></output></div><input type="range" id="tr-g" min="0" max="1" step="0.01" value="0.9"></div>
+        <div class="ctrl"><div class="top"><label for="tr-a">Step size &alpha;</label><output id="tr-a-o"></output></div><input type="range" id="tr-a" min="0.01" max="0.3" step="0.01" value="0.1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="tr-f"></div><div class="k">growth per update</div></div><div class="stat"><div class="v" id="tr-w"></div><div class="k">estimate after 200 updates</div></div></div>
+        <p class="note" id="tr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- NET -->
+<section class="chap" id="net">
+  <div class="wrap">
+    <div class="tag">The architecture</div>
+    <h2>A network that scores every move</h2>
+    <div class="prose"><p>Hand-made bumps work in one dimension. For four (or 28,224) dimensions we let a neural network learn its own features. The DQN design has one trick worth noticing: the state goes <em>in</em>, and one output per action comes <em>out</em>, so a single forward pass scores every move and the greedy action is the largest output. Learning is regression: the network&rsquo;s Q(s,a) is pulled towards the target y = r + &gamma; max Q(s&prime;,&middot;). The network below has two hidden layers of 32 ReLU units and is the best snapshot of the project&rsquo;s seed-0 run (press Train below with both tricks on and seed 0 to get exactly this network). <strong>Move the sliders to set up a state</strong> and see what the network would do, and whether its numbers satisfy Bellman&rsquo;s equation.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{h}_1 &= \operatorname{relu}(W_1\mathbf{s} + \mathbf{b}_1) \\ \mathbf{h}_2 &= \operatorname{relu}(W_2\mathbf{h}_1 + \mathbf{b}_2) \\ Q(\mathbf{s},\cdot\,;\theta) &= W_3\mathbf{h}_2 + \mathbf{b}_3 \end{aligned} \]</div><div class="read"><b>Read it as:</b> s is the 4-number state (each divided by a fixed scale so it is roughly between &minus;1 and 1). Two layers of ReLU units build features; the last layer gives two numbers, Q(s, push left) and Q(s, push right). &theta; collects every weight and bias: here 1,282 numbers in all.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Two ReLU layers, then a linear layer with one output per action.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} y &= r + \gamma \max_{a'} Q(s',a';\theta) \\ L(\theta) &= \mathbb{E}\big[\,\ell\big(y - Q(s,a;\theta)\big)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> the loss compares the network&rsquo;s value for the action taken with a one-step look-ahead. &ell; is the squared error, or (as DQN uses) the <i>Huber</i> loss: squared for errors below 1 and linear beyond, which caps each sample&rsquo;s gradient at 1. A network that has learned well has y &asymp; Q everywhere it has been.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The target is reward plus gamma times the best next Q; the loss is the expected Huber error between target and prediction.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-nt" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-3x1"><canvas id="nt-cart" aria-label="The cart and pole in the chosen state"></canvas></div></figure>
+        <figure style="margin-top:12px"><div class="plot ar-16x10"><canvas id="nt-cv" aria-label="The network's preferred action over angle and angular velocity"></canvas></div><figcaption>Every (&theta;, \(\dot\theta\)) at the chosen x and \(\dot x\): <span style="color:var(--cA)">&#9632;</span> pushes left, <span style="color:var(--cB)">&#9632;</span> pushes right, deeper colour = bigger gap between the two Q-values. The ring is your state.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="nt-x">Cart position x (m)</label><output id="nt-x-o"></output></div><input type="range" id="nt-x" min="-2.3" max="2.3" step="0.05" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="nt-xd">Cart velocity \(\dot x\) (m/s)</label><output id="nt-xd-o"></output></div><input type="range" id="nt-xd" min="-2" max="2" step="0.05" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="nt-th">Pole angle &theta; (&deg;)</label><output id="nt-th-o"></output></div><input type="range" id="nt-th" min="-11.5" max="11.5" step="0.1" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="nt-thd">Angular velocity \(\dot\theta\) (rad/s)</label><output id="nt-thd-o"></output></div><input type="range" id="nt-thd" min="-2.5" max="2.5" step="0.05" value="-0.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="nt-ql"></div><div class="k">Q(s, push left)</div></div><div class="stat"><div class="v" id="nt-qr"></div><div class="k">Q(s, push right)</div></div><div class="stat"><div class="v" id="nt-life"></div><div class="k">TD error y &minus; Q</div></div></div>
+        <p class="note" id="nt-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- REPLAY -->
+<section class="chap" id="replay">
+  <div class="wrap">
+    <div class="tag">Trick one</div>
+    <h2>Experience replay: learning from shuffled memories</h2>
+    <div class="prose"><p>An agent&rsquo;s experience arrives as a stream in which each step looks almost exactly like the last. Gradient descent assumes the opposite: that each mini-batch is a fair sample of everything. Feed a network 32 consecutive steps and it fits the corner of the world it is standing in, and quietly forgets the rest. <em class="term">Experience replay</em> (Lin, 1992) stores the last N transitions (s, a, r, s&prime;) in a buffer and trains on random mini-batches drawn from it. Neighbouring steps rarely land in the same batch, and each transition gets reused many times. To isolate the effect, the network below fits a fixed target curve (no bootstrapping), from data that arrives in the order an agent walking the corridor would see it. <strong>Press Run, then change the buffer size</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathcal{D} &= \{e_{t-N+1},\dots,e_t\} \\ e &= (s,a,r,s') \\ \mathcal{B} &\sim \text{Uniform}(\mathcal{D}) \\ L(\theta) &= \tfrac{1}{|\mathcal{B}|}\textstyle\sum_{j\in\mathcal{B}} \big(y_j - Q(s_j,a_j;\theta)\big)^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> keep the N most recent transitions; at every step draw a mini-batch &#120069; uniformly at random from them and take one gradient step on its average loss. A transition stays in the buffer for N steps and is picked with probability |&#120069;|/N each time, so it is used about |&#120069;| times on average whatever N is. Replay only works with an off-policy method like Q-learning: old transitions came from older, worse policies, and the max in Q-learning&rsquo;s target does not care.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The loss is the average squared error over a mini-batch drawn uniformly from the last N transitions.&rdquo;</em></div><div class="eq-run" id="run-rp"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="rp-cv" aria-label="A network fitting a curve from streamed data, with a replay buffer"></canvas></div><figcaption><span style="color:var(--ink)">- -</span> target curve &nbsp; <span style="color:var(--cA)">&#9644;</span> the network&rsquo;s fit &nbsp; <span style="color:var(--muted)">&#9679;</span> points in the buffer &nbsp; <span style="color:var(--cB)">&#9679;</span> the current mini-batch &nbsp; &#9660; where the agent is now</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Replay buffer size"><button type="button" data-rn="16">16 (none)</button><button type="button" data-rn="128">128</button><button type="button" data-rn="1024">1,024</button><button type="button" data-rn="8192" aria-pressed="true">8,192</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="rp-run">Run</button><button type="button" class="btn" id="rp-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="rp-t"></div><div class="k">gradient steps</div></div><div class="stat"><div class="v" id="rp-span"></div><div class="k">range of s in this batch</div></div><div class="stat"><div class="v" id="rp-err"></div><div class="k">RMS error over the corridor</div></div></div>
+        <p class="note" id="rp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- TARGET -->
+<section class="chap" id="target">
+  <div class="wrap">
+    <div class="tag">Trick two</div>
+    <h2>Freezing the target</h2>
+    <div class="prose"><p>In supervised learning the labels sit still. In Q-learning the label y = r + &gamma; max Q(s&prime;) is computed by the very network being trained, so every gradient step also moves the target, often in the same direction: you are chasing your own tail. DQN&rsquo;s fix is a <em class="term">target network</em>: a copy &theta;<sup>&minus;</sup> of the weights that computes the targets and is only refreshed every C steps. Between refreshes the problem is ordinary regression towards fixed labels. Below is Baird&rsquo;s counterexample (1995), the classic case where semi-gradient Q-learning blows up: seven states, eight weights, all rewards 0, and updates spread evenly over the states while the target policy always heads for state 7. <strong>Raise the refresh period C</strong> and compare the two curves.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} y &= r + \gamma \max_{a'} Q(s',a';\theta^{-}) \\ \theta^{-} &\leftarrow \theta \ \text{ every } C \text{ updates} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the only change to the loss is the minus sign on &theta;: the target comes from the frozen copy. With C = 1 the copy is always current and nothing changes. Mnih et al. refreshed it every 10,000 updates. Here, states 1&ndash;6 have value 2w<sub>i</sub> + w<sub>8</sub> and state 7 has w<sub>7</sub> + 2w<sub>8</sub>; every state&rsquo;s target is &gamma; times the value of state 7, and the true values are all 0.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The target uses the frozen weights theta-minus, which are copied from theta every C updates.&rdquo;</em></div><div class="eq-run" id="run-tg"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="tg-cv" aria-label="Size of the weights in Baird's counterexample, online target vs target network"></canvas></div><figcaption>Size of the weight vector &Vert;w&Vert; over 1,000 sweeps of expected updates (log scale; it starts at 10.3 and can never fall below 8.6, because one direction of the eight weights changes none of the seven values). <span style="color:var(--qda)">&#9644;</span> targets from the live weights &nbsp; <span style="color:var(--cA)">&#9644;</span> targets from a copy refreshed every C sweeps (ticks mark the refreshes).</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="tg-c">Refresh period C (sweeps)</label><output id="tg-c-o"></output></div><input type="range" id="tg-c" min="1" max="100" step="1" value="20"></div>
+        <div class="ctrl"><div class="top"><label for="tg-g">Discount &gamma;</label><output id="tg-g-o"></output></div><input type="range" id="tg-g" min="0.8" max="0.99" step="0.01" value="0.99"></div>
+        <div class="stats"><div class="stat"><div class="v" id="tg-on"></div><div class="k">&Vert;w&Vert;, live target</div></div><div class="stat"><div class="v" id="tg-fr"></div><div class="k">&Vert;w&Vert;, target network</div></div></div>
+        <p class="note" id="tg-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- DOUBLE -->
+<section class="chap" id="double">
+  <div class="wrap">
+    <div class="tag">Trick three</div>
+    <h2>Why max is an optimist: Double DQN</h2>
+    <div class="prose"><p>Every Q-value the network outputs is an estimate with some error. The target takes the <em>maximum</em> of several such estimates, and the maximum of noisy numbers is biased upwards: whichever action happens to be overestimated wins. That optimism is then bootstrapped into the previous state, and the one before. Double Q-learning (van Hasselt, 2010) separates the two jobs. One set of estimates <b>chooses</b> the best action; an independent set <b>judges</b> it. Double DQN (van Hasselt, Guez &amp; Silver, 2016) uses the online network to choose and the target network to judge, a one-line change. Below, every action is truly worth 0 and each estimate is the true value plus noise. <strong>Add actions or noise</strong> and compare the two targets.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \mathbb{E}\Big[\max_a \hat Q(a)\Big] \;\ge\; \max_a \mathbb{E}\big[\hat Q(a)\big] \]</div><div class="read"><b>Read it as:</b> the expected maximum of the estimates is at least the maximum of the true values, with equality only when there is no noise. For n actions with independent errors of size &sigma;, the bias is &sigma; times the expected largest of n standard normal draws: about 0.56&sigma; for 2 actions, 1.54&sigma; for 10.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected max of the estimates is at least the max of their expectations.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} a^{*} &= \arg\max_{a'} Q(s',a';\theta) \\ y^{\text{DDQN}} &= r + \gamma\, Q(s',a^{*};\theta^{-}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> pick the next action with the online weights &theta;, but read its value from the target weights &theta;<sup>&minus;</sup>. An action that looks good only because of the online net&rsquo;s noise is unlikely to be overvalued by the target net too, so the bias mostly disappears.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Reward plus gamma times the target net&rsquo;s value of the action the online net likes best.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-db" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="db-cv" aria-label="Histograms of the max target and the double target over 2000 trials"></canvas></div><figcaption>2,000 trials. <span style="color:var(--qda)">&#9644;</span> max over one set of noisy estimates (the DQN target) &nbsp; <span style="color:var(--cA)">&#9644;</span> chosen by set A, judged by set B (the double target) &nbsp; <span style="color:var(--ink)">|</span> the truth, 0</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="db-n">Number of actions</label><output id="db-n-o"></output></div><input type="range" id="db-n" min="1" max="18" step="1" value="6"></div>
+        <div class="ctrl"><div class="top"><label for="db-s">Noise in each estimate &sigma;</label><output id="db-s-o"></output></div><input type="range" id="db-s" min="0" max="2" step="0.05" value="1"></div>
+        <div class="btns"><button type="button" class="btn" id="db-new">Draw 2,000 new trials</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="db-b1"></div><div class="k">average max target</div></div><div class="stat"><div class="v" id="db-b2"></div><div class="k">average double target</div></div><div class="stat"><div class="v" id="db-th"></div><div class="k">theory for the max</div></div></div>
+        <p class="note" id="db-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: teaching a network to balance a pole</h2>
+    <div class="prose">
+      <p>The cart-pole is the oldest benchmark in reinforcement learning. Barto, Sutton and Anderson (1983) used it to show that two neuron-like elements could learn to balance a pole from nothing but a failure signal; today it ships as <b>CartPole-v1</b> in Gymnasium, the maintained successor of OpenAI Gym. A 1 kg cart on a frictionless track carries a 0.1 kg pole, 1 m long, hinged at its base. Each 0.02 s the agent pushes the cart left or right with 10 N. It earns +1 for every step the pole stays within 12&deg; of upright and the cart within 2.4 m of the centre; an episode is capped at 500 steps. You will check the page&rsquo;s physics against Gymnasium itself, then train a DQN here, with each of the three tricks switchable.</p>
+    </div>
+    <h3>1 &middot; The physics, checked against Gymnasium</h3>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{temp} &= \frac{F + m_p l\,\dot\theta^2 \sin\theta}{m_c + m_p} \\ \ddot\theta &= \frac{g\sin\theta - \cos\theta\cdot\text{temp}}{l\left(\frac43 - \frac{m_p\cos^2\theta}{m_c+m_p}\right)} \\ \ddot x &= \text{temp} - \frac{m_p l\,\ddot\theta\cos\theta}{m_c+m_p} \end{aligned} \]</div><div class="read"><b>Read it as:</b> F = &plusmn;10 N is the push, g = 9.8 m/s&sup2;, m<sub>c</sub> = 1, m<sub>p</sub> = 0.1, and l = 0.5 m is <i>half</i> the pole&rsquo;s length. Gravity tips the pole (g sin&theta;); accelerating the cart swings it the other way (cos&theta;&middot;temp). Then one Euler step of 0.02 s: x += 0.02&middot;\(\dot x\), \(\dot x\) += 0.02&middot;\(\ddot x\), &theta; += 0.02&middot;\(\dot\theta\), \(\dot\theta\) += 0.02&middot;\(\ddot\theta\), exactly as Gymnasium&rsquo;s cartpole.py computes them, operation for operation.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Theta double-dot is g sine theta minus cos theta times temp, over l times four-thirds minus the pole&rsquo;s share of cos-squared theta.&rdquo;</em></div><div class="eq-run" id="run-pj"></div></div>
+    <div class="tbl-wrap block"><table class="hand" id="pj-ver"></table></div>
+    <p class="note block" style="max-width:72ch" id="pj-versay"></p>
+
+    <h3>2 &middot; Train a DQN, live</h3>
+    <div class="prose"><p>Settings: a 4&ndash;32&ndash;32&ndash;2 ReLU network, Adam with learning rate 0.001 falling linearly towards zero, &gamma; = 0.99, Huber loss, mini-batches of 32, a buffer of 25,000 transitions, a target network refreshed every 200 updates, and &epsilon;-greedy exploration falling from 1 to 0.05 over the first 4,000 steps; 25,000 steps in all. Switch a trick off and train again. Each run is deterministic: the same seed and switches give the same run every time.</p></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pj-curve" aria-label="Episode lengths during DQN training"></canvas></div><figcaption id="pj-curvecap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <span class="mini-h">Experience replay</span>
+        <div class="seg" role="group" aria-label="Experience replay"><button type="button" data-pr="1" aria-pressed="true">On</button><button type="button" data-pr="0">Off: last 32 steps</button></div>
+        <span class="mini-h">Target network</span>
+        <div class="seg" role="group" aria-label="Target network"><button type="button" data-pt="1" aria-pressed="true">On</button><button type="button" data-pt="0">Off</button></div>
+        <span class="mini-h">Double DQN target</span>
+        <div class="seg" role="group" aria-label="Double DQN"><button type="button" data-pd="0" aria-pressed="true">Off</button><button type="button" data-pd="1">On</button></div>
+        <span class="mini-h">Seed</span>
+        <div class="seg" role="group" aria-label="Random seed"><button type="button" data-ps="0" aria-pressed="true">0</button><button type="button" data-ps="1">1</button><button type="button" data-ps="2">2</button><button type="button" data-ps="3">3</button><button type="button" data-ps="4">4</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="pj-train">Train</button><button type="button" class="btn" id="pj-stop">Stop</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-step"></div><div class="k">environment steps</div></div><div class="stat"><div class="v" id="pj-ep"></div><div class="k">episodes</div></div><div class="stat"><div class="v" id="pj-eval"></div><div class="k">greedy test (20 starts)</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-race"></table></div>
+    <p class="note block" style="max-width:72ch" id="pj-racesay"></p>
+
+    <h3>3 &middot; Watch the trained network</h3>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pj-watch" aria-label="The network you trained, balancing the pole"></canvas></div><figcaption id="pj-watchcap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="pj-play">Play an episode</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-wt"></div><div class="k">steps this episode</div></div><div class="stat"><div class="v" id="pj-wq"></div><div class="k">max Q now</div></div></div>
+        <p class="note" id="pj-wsay"></p>
+      </div></div>
+    </div>
+
+    <h3>The same project in Python</h3>
+<pre class="code"><code>import numpy as np, gymnasium as gym
+
+def mulberry32(a):                       # the page's random numbers, bit for bit
+    s = [a &amp; 0xFFFFFFFF]
+    def r():
+        s[0] = (s[0] + 0x6D2B79F5) &amp; 0xFFFFFFFF; a = s[0]
+        t = ((a ^ (a >> 15)) * (1 | a)) &amp; 0xFFFFFFFF
+        t = ((t + (((t ^ (t >> 7)) * (61 | t)) &amp; 0xFFFFFFFF)) &amp; 0xFFFFFFFF) ^ t
+        return ((t ^ (t >> 14)) &amp; 0xFFFFFFFF) / 4294967296
+    return r
+
+CFG = dict(H=32, lr=1e-3, gamma=0.99, batch=32, buffer=25000, sync=200, steps=25000,
+           warmup=500, eps_steps=4000, eps_end=0.05, check=1000, check_n=5)
+SCALE = np.array([2.4, 3.0, 0.21, 3.0])
+env, test_env = gym.make("CartPole-v1"), gym.make("CartPole-v1")   # Gymnasium physics, 500-step limit
+
+def start(env, r):                                # seeded start state, uniform in ±0.05
+    env.reset(); s = np.array([r() * 0.1 - 0.05 for _ in range(4)])
+    env.unwrapped.state = s
+    return s.astype(np.float32) / SCALE
+
+def init(r, sizes):                               # uniform(±1/sqrt(fan_in)), like PyTorch
+    P = []
+    for fi, fo in zip(sizes[:-1], sizes[1:]):
+        b = 1 / np.sqrt(fi)
+        P += [np.array([[(r() * 2 - 1) * b for _ in range(fo)] for _ in range(fi)]),
+              np.array([(r() * 2 - 1) * b for _ in range(fo)])]
+    return P
+
+def forward(P, X):                                # ReLU hidden layers, linear output: one Q per action
+    hs = [X]
+    for i in range(0, len(P), 2):
+        z = hs[-1] @ P[i] + P[i + 1]
+        hs.append(z if i == len(P) - 2 else np.maximum(z, 0))
+    return hs
+
+def greedy_test(P, n, seed):
+    r, out = mulberry32(seed), []
+    for _ in range(n):
+        o, k, done = start(test_env, r), 0, False
+        while not done:
+            q = forward(P, o[None])[-1][0]
+            o, _, term, trunc, _ = test_env.step(int(q[1] > q[0])); o = o / SCALE; k += 1; done = term or trunc
+        out.append(k)
+    return np.mean(out)
+
+def train(seed, replay=True, target=True, double=False, c=CFG):
+    r = mulberry32(seed * 7919 + 1); B, N = c["batch"], c["buffer"]
+    P = init(r, [4, c["H"], c["H"], 2]); T = [p.copy() for p in P]
+    m = [0 * p for p in P]; v = [0 * p for p in P]
+    S, A, S2, D = np.zeros((N, 4)), np.zeros(N, int), np.zeros((N, 4)), np.zeros(N)
+    size = ptr = upd = ep = 0; episodes = []; best = (-1, None)
+    o = start(env, r)
+    for t in range(c["steps"]):
+        eps = max(c["eps_end"], 1 - (1 - c["eps_end"]) * t / c["eps_steps"])
+        if r() &lt; eps: a = int(r() * 2)                       # explore
+        else: q = forward(P, o[None])[-1][0]; a = int(q[1] > q[0])
+        o2, rew, term, trunc, _ = env.step(a); o2 = o2 / SCALE; ep += 1
+        S[ptr], A[ptr], S2[ptr], D[ptr] = o, a, o2, term       # store the transition
+        ptr = (ptr + 1) % N; size = min(size + 1, N); o = o2
+        if term or trunc: episodes.append(ep); ep = 0; o = start(env, r)
+        if t + 1 >= c["warmup"]:
+            idx = (np.array([int(r() * size) for _ in range(B)]) if replay      # random mini-batch
+                   else np.array([(ptr - 1 - j) % N for j in range(B)]))        # or: the last B steps
+            qn = forward(T if target else P, S2[idx])[-1]
+            if double and target:                                              # online net chooses, target net judges
+                nv = qn[np.arange(B), forward(P, S2[idx])[-1].argmax(1)]
+            else: nv = qn.max(1)
+            y = 1.0 + c["gamma"] * (1 - D[idx]) * nv                            # every step pays +1
+            hs = forward(P, S[idx]); err = hs[-1][np.arange(B), A[idx]] - y
+            g = np.zeros((B, 2)); g[np.arange(B), A[idx]] = np.clip(err, -1, 1) / B   # Huber gradient
+            grads = [None] * len(P)
+            for i in range(len(P) - 2, -1, -2):                                 # backpropagation
+                grads[i], grads[i + 1] = hs[i // 2].T @ g, g.sum(0)
+                if i: g = (g @ P[i].T) * (hs[i // 2] > 0)
+            upd += 1; lr = c["lr"] * max(0.05, 1 - t / c["steps"])
+            for k in range(len(P)):                                             # Adam
+                m[k] = 0.9 * m[k] + 0.1 * grads[k]; v[k] = 0.999 * v[k] + 0.001 * grads[k] ** 2
+                P[k] = P[k] - lr * (m[k] / (1 - 0.9 ** upd)) / (np.sqrt(v[k] / (1 - 0.999 ** upd)) + 1e-8)
+            if target and upd % c["sync"] == 0: T = [p.copy() for p in P]      # refresh the target net
+        if (t + 1) % c["check"] == 0:                                           # keep the best snapshot
+            e = greedy_test(P, c["check_n"], 999)
+            if e >= best[0]: best = (e, [p.copy() for p in P])
+    return episodes, greedy_test(P, 20, 12345), greedy_test(best[1], 20, 12345)
+
+RUNS = {"DQN: replay + target": (1, 1, 0), "Double DQN": (1, 1, 1), "no target network": (1, 0, 0),
+        "no replay": (0, 1, 0), "neither trick": (0, 0, 0)}</code></pre>
+<pre class="code out"><code>DQN: replay + target   seed 0: 301 episodes, greedy test final 118.7, best snapshot 498.8
+DQN: replay + target   seed 1: 133 episodes, greedy test final 198.3, best snapshot 499.1
+DQN: replay + target   seed 2: 152 episodes, greedy test final 340.0, best snapshot 500.0
+DQN: replay + target   seed 3: 214 episodes, greedy test final  74.5, best snapshot 500.0
+DQN: replay + target   seed 4: 198 episodes, greedy test final  36.4, best snapshot 500.0
+Double DQN             seed 0: 271 episodes, greedy test final  97.0, best snapshot 500.0
+Double DQN             seed 1: 214 episodes, greedy test final  83.0, best snapshot 500.0
+Double DQN             seed 2: 174 episodes, greedy test final 193.8, best snapshot 500.0
+Double DQN             seed 3: 178 episodes, greedy test final 210.8, best snapshot 500.0
+Double DQN             seed 4: 256 episodes, greedy test final 134.1, best snapshot 385.4
+no target network      seed 0: 2476 episodes, greedy test final   9.5, best snapshot   9.5
+no target network      seed 1: 2465 episodes, greedy test final   9.2, best snapshot   9.2
+no target network      seed 2: 2470 episodes, greedy test final   9.2, best snapshot   9.2
+no target network      seed 3: 2461 episodes, greedy test final   9.5, best snapshot   9.5
+no target network      seed 4: 2466 episodes, greedy test final   9.5, best snapshot   9.5
+no replay              seed 0: 246 episodes, greedy test final 500.0, best snapshot 500.0
+no replay              seed 1: 301 episodes, greedy test final 133.8, best snapshot 326.4
+no replay              seed 2: 291 episodes, greedy test final 105.5, best snapshot 351.9
+no replay              seed 3: 234 episodes, greedy test final 168.1, best snapshot 500.0
+no replay              seed 4: 312 episodes, greedy test final  91.5, best snapshot 234.1
+neither trick          seed 0: 2480 episodes, greedy test final   9.5, best snapshot   9.5
+neither trick          seed 1: 2469 episodes, greedy test final   9.2, best snapshot   9.2
+neither trick          seed 2: 2458 episodes, greedy test final   9.2, best snapshot   9.2
+neither trick          seed 3: 2466 episodes, greedy test final   9.5, best snapshot   9.5
+neither trick          seed 4: 2467 episodes, greedy test final   9.5, best snapshot   9.5</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest">How the page compares with Python. The physics matches Gymnasium 1.4.0 step for step (the largest difference, 2.2&times;10<sup>&minus;16</sup>, comes from one-bit disagreements between the browser&rsquo;s cosine and the C library&rsquo;s). The page runs the same algorithm with the same random numbers, so for <b>23 of the 25</b> runs in the table the page reproduces Python&rsquo;s episode lengths exactly, episode for episode, and the same test scores. In two runs (DQN seed 4 after episode 99, Double DQN seed 2 after episode 118) a last-digit rounding difference in numpy&rsquo;s matrix products eventually flips one close decision and the runs part ways; their best snapshots still score 500 vs 500 and 485 vs 500. What is scaled down: a network of 1,282 weights instead of DQN&rsquo;s 1.7 million, 25,000 steps instead of 50 million frames, and a four-number state instead of pixels. The reported score is the best of 25 periodic snapshots, chosen on 5 test starts that are different from the 20 used to score it.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>A Q-table needs b<sup>d</sup> rows and a visit to each; a function Q(s,a;&theta;) shares what it learns between similar states, which is the only way to handle continuous or pixel states.</li>
+      <li>Function approximation + bootstrapping + off-policy learning (the deadly triad) can diverge: in the two-state example w grows by 1 + &alpha;(2&gamma;&minus;1) per update.</li>
+      <li>A DQN takes the state in and gives one Q-value per action out, and is trained by regression towards y = r + &gamma; max Q(s&prime;,&middot;), usually with the Huber loss.</li>
+      <li>Experience replay breaks the correlation of consecutive steps and reuses data; a target network &theta;<sup>&minus;</sup> holds the labels still for C updates.</li>
+      <li>The max over noisy estimates is biased upwards; Double DQN lets the online net choose the action and the target net judge it.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why not simply discretise CartPole into 30 bins per variable and run tabular Q-learning?</summary><p>That is 30<sup>4</sup> = 810,000 cells, times 2 actions, and most are never visited, while the visited ones need many visits each. Worse, nothing learned in one cell helps its neighbour. A function approximator lets nearby states share estimates.</p></details>
+      <details class="q"><summary>Experience replay works with Q-learning. Why would it be a problem for SARSA?</summary><p>SARSA&rsquo;s target uses the next action the <i>current</i> policy would take. A stored transition carries the action an older policy took, so the target would describe the wrong policy. Q-learning&rsquo;s max target is off-policy: it does not care which policy produced (s, a, r, s&prime;).</p></details>
+      <details class="q"><summary>In the w&rarr;2w example with &gamma; = 0.9, would a smaller step size &alpha; prevent divergence?</summary><p>No. The factor 1 + &alpha;(2&gamma;&minus;1) = 1 + 0.8&alpha; is above 1 for every &alpha; &gt; 0; a smaller &alpha; only slows the growth. You must remove one leg of the triad (or change the features).</p></details>
+      <details class="q"><summary>A target network tamed Baird&rsquo;s counterexample. Would it rescue the two-state w&rarr;2w example too?</summary><p>No. With a frozen copy, each phase fits w to the target &gamma;&middot;2w<sup>&minus;</sup>, so after a long phase w &asymp; 2&gamma;w<sup>&minus;</sup>, which still grows when &gamma; &gt; &frac12;. A single feature cannot represent the target, so freezing it only slows the spiral. Baird&rsquo;s features can represent any value function, so there each frozen phase makes real progress.</p></details>
+      <details class="q"><summary>Ten actions, all truly worth 0, each estimated with independent noise of standard deviation 1. What does the max target expect, and what does the double target expect?</summary><p>The max of 10 standard normal draws averages about 1.54, so the max target is 1.54 too high on average. The double target picks with one set and reads the value from an independent set, whose error has mean 0, so it averages 0.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../policy-gradients/">Next chapter: Policy Gradients &amp; Actor&ndash;Critic &rarr;</a>
+      <a class="btn" href="../reinforcement-learning/">&larr; Previous: Reinforcement Learning</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Mnih, V. et al. (2015). Human-level control through deep reinforcement learning. <em>Nature</em> 518, 529&ndash;533.</li>
+      <li>van Hasselt, H., Guez, A. &amp; Silver, D. (2016). Deep reinforcement learning with double Q-learning. <em>Proc. AAAI</em> 30.</li>
+      <li>van Hasselt, H. (2010). Double Q-learning. <em>Advances in Neural Information Processing Systems</em> 23.</li>
+      <li>Sutton, R. S. &amp; Barto, A. G. (2018). <em>Reinforcement Learning: An Introduction</em>, 2nd ed., ch. 9 and 11: function approximation, the w&rarr;2w example, Baird&rsquo;s counterexample and the deadly triad.</li>
+      <li>Baird, L. (1995). Residual algorithms: reinforcement learning with function approximation. <em>Proc. ICML</em>, 30&ndash;37.</li>
+      <li>Lin, L.-J. (1992). Self-improving reactive agents based on reinforcement learning, planning and teaching. <em>Machine Learning</em> 8, 293&ndash;321: experience replay.</li>
+      <li>Barto, A. G., Sutton, R. S. &amp; Anderson, C. W. (1983). Neuronlike adaptive elements that can solve difficult learning control problems. <em>IEEE Trans. Systems, Man, and Cybernetics</em> SMC-13(5), 834&ndash;846: the cart-pole.</li>
+      <li>Towers, M. et al. (2024). Gymnasium: a standard interface for reinforcement learning environments. arXiv:2407.17032.</li>
+      <li>Hessel, M. et al. (2018). Rainbow: combining improvements in deep reinforcement learning. <em>Proc. AAAI</em> 32: replay priorities, duelling heads and more.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- CartPole: the Gym / Gymnasium equations (Barto, Sutton & Anderson 1983) ---------- */
+const CP = { g: 9.8, mc: 1.0, mp: 0.1, l: 0.5, F: 10.0, tau: 0.02, xMax: 2.4, thMax: 12 * 2 * Math.PI / 360 };
+CP.tm = CP.mp + CP.mc; CP.pml = CP.mp * CP.l;
+function cpAcc(s, a) {
+  const th = s[2], thd = s[3], force = a === 1 ? CP.F : -CP.F, c = Math.cos(th), si = Math.sin(th);
+  const temp = (force + CP.pml * (thd * thd) * si) / CP.tm;
+  const tha = (CP.g * si - c * temp) / (CP.l * (4.0 / 3.0 - CP.mp * (c * c) / CP.tm));
+  const xa = temp - CP.pml * tha * c / CP.tm;
+  return [xa, tha];
+}
+function cpStep(s, a) {
+  const [xa, tha] = cpAcc(s, a);
+  const n = [s[0] + CP.tau * s[1], s[1] + CP.tau * xa, s[2] + CP.tau * s[3], s[3] + CP.tau * tha];
+  const done = n[0] < -CP.xMax || n[0] > CP.xMax || n[2] < -CP.thMax || n[2] > CP.thMax;
+  return [n, done];
+}
+const CP_SCALE = [2.4, 3.0, 0.21, 3.0];
+const cpObs = s => Float64Array.from(s, (v, i) => Math.fround(v) / CP_SCALE[i]);
+const cpStart = r => [r() * 0.1 - 0.05, r() * 0.1 - 0.05, r() * 0.1 - 0.05, r() * 0.1 - 0.05];
+
+/* ---------- a small multilayer perceptron with ReLU hidden layers (flat, batched) ---------- */
+function netInit(r, sizes) {
+  const P = [];
+  for (let i = 0; i < sizes.length - 1; i++) {
+    const fi = sizes[i], fo = sizes[i + 1], bd = 1 / Math.sqrt(fi), W = new Float64Array(fi * fo), b = new Float64Array(fo);
+    for (let k = 0; k < fi * fo; k++) W[k] = (r() * 2 - 1) * bd;
+    for (let k = 0; k < fo; k++) b[k] = (r() * 2 - 1) * bd;
+    P.push({ W, b, fi, fo });
+  }
+  return P;
+}
+const netCopy = P => P.map(L => ({ W: Float64Array.from(L.W), b: Float64Array.from(L.b), fi: L.fi, fo: L.fo }));
+function netWs(P, n) { return [new Float64Array(n * P[0].fi), ...P.map(L => new Float64Array(n * L.fo))]; }
+// forward n rows stored in H[0]; fills H[1..]; returns the output array
+function netFwd(P, H, n) {
+  for (let li = 0; li < P.length; li++) {
+    const L = P[li], X = H[li], O = H[li + 1], fi = L.fi, fo = L.fo, W = L.W, b = L.b, last = li === P.length - 1;
+    for (let r = 0; r < n; r++) { const xo = r * fi, oo = r * fo;
+      for (let j = 0; j < fo; j++) { let s = 0; for (let i = 0; i < fi; i++) s += X[xo + i] * W[i * fo + j]; s += b[j]; O[oo + j] = last ? s : (s > 0 ? s : 0); } }
+  }
+  return H[P.length];
+}
+function netQ(P, x) { const H = netWs(P, 1); H[0].set(x); return Array.from(netFwd(P, H, 1)); }
+function netGrads(P) { return P.map(L => ({ W: new Float64Array(L.W.length), b: new Float64Array(L.b.length) })); }
+// backward: dOut (n x out) is overwritten; D is scratch (per-layer delta buffers)
+function netBack(P, H, n, dOut, G, D) {
+  G.forEach(g => { g.W.fill(0); g.b.fill(0); });
+  let d = dOut;
+  for (let li = P.length - 1; li >= 0; li--) {
+    const L = P[li], X = H[li], g = G[li], fi = L.fi, fo = L.fo, W = L.W;
+    for (let r = 0; r < n; r++) { const xo = r * fi, dd = r * fo;
+      for (let i = 0; i < fi; i++) { const hi = X[xo + i]; if (hi === 0) continue; for (let j = 0; j < fo; j++) g.W[i * fo + j] += hi * d[dd + j]; }
+      for (let j = 0; j < fo; j++) g.b[j] += d[dd + j]; }
+    if (li > 0) { const nd = D[li];
+      for (let r = 0; r < n; r++) { const xo = r * fi, dd = r * fo;
+        for (let i = 0; i < fi; i++) { if (X[xo + i] <= 0) { nd[xo + i] = 0; continue; } let s = 0; for (let j = 0; j < fo; j++) s += d[dd + j] * W[i * fo + j]; nd[xo + i] = s; } }
+      d = nd; }
+  }
+  return G;
+}
+function adamInit(P) { return { t: 0, m: netGrads(P), v: netGrads(P) }; }
+function adamStep(P, G, O, lr) {
+  O.t++; const b1c = 1 - Math.pow(0.9, O.t), b2c = 1 - Math.pow(0.999, O.t);
+  for (let li = 0; li < P.length; li++) for (const k of ['W', 'b']) { const p = P[li][k], g = G[li][k], m = O.m[li][k], v = O.v[li][k];
+    for (let i = 0; i < p.length; i++) { m[i] = 0.9 * m[i] + 0.1 * g[i]; v[i] = 0.999 * v[i] + 0.001 * g[i] * g[i]; p[i] = p[i] - lr * (m[i] / b1c) / (Math.sqrt(v[i] / b2c) + 1e-8); } }
+}
+
+/* ---------- DQN agent: replay buffer, target network, double DQN ---------- */
+const DQN_BASE = { H: 32, layers: 2, lr: 1e-3, gamma: 0.99, batch: 32, buffer: 25000, sync: 200, steps: 25000, warmup: 500, eps_end: 0.05, eps_steps: 4000, lr_decay: true, lr_min: 0.05, check: 1000, check_n: 5, replay: true, target: true, double: false };
+function dqnMake(cfg, seed) {
+  cfg = Object.assign({}, DQN_BASE, cfg);
+  const r = mulberry32(seed * 7919 + 1), sizes = [4]; for (let i = 0; i < cfg.layers; i++) sizes.push(cfg.H); sizes.push(2);
+  const P = netInit(r, sizes), N = cfg.buffer, B = cfg.batch;
+  const A = { cfg, seed, r, P, T: netCopy(P), O: adamInit(P), N, S: new Float64Array(N * 4), Ac: new Int8Array(N), D: new Uint8Array(N), S2: new Float64Array(N * 4),
+    size: 0, ptr: 0, t: 0, upd: 0, s: null, o: null, ep: 0, eps: [], ends: [], losses: [], qmean: [], ck: [], best: null,
+    H1: netWs(P, 1), Hb: netWs(P, B), Hn: netWs(P, B), Ho: netWs(P, B), G: netGrads(P), Dl: netWs(P, B), dOut: new Float64Array(B * 2), idx: new Int32Array(B) };
+  A.s = cpStart(r); A.o = cpObs(A.s); return A;
+}
+function dqnLr(A) { const c = A.cfg; return c.lr_decay ? c.lr * Math.max(c.lr_min, 1 - A.t / c.steps) : c.lr; }
+function dqnEps(A) { const c = A.cfg; return Math.max(c.eps_end, 1 - (1 - c.eps_end) * A.t / c.eps_steps); }
+function dqnTick(A) {
+  const c = A.cfg, r = A.r, eps = dqnEps(A);
+  let a; if (r() < eps) a = Math.floor(r() * 2); else { A.H1[0].set(A.o); const q = netFwd(A.P, A.H1, 1); a = q[1] > q[0] ? 1 : 0; }
+  const [s2, done] = cpStep(A.s, a); A.s = s2; A.ep++;
+  const o2 = cpObs(s2), trunc = A.ep >= 500, p = A.ptr;
+  A.S.set(A.o, p * 4); A.Ac[p] = a; A.S2.set(o2, p * 4); A.D[p] = done ? 1 : 0;
+  A.ptr = (p + 1) % A.N; A.size = Math.min(A.size + 1, A.N); A.o = o2; A.lastA = a;
+  let ended = 0;
+  if (done || trunc) { A.eps.push(A.ep); A.ends.push(A.t + 1); ended = A.ep; A.s = cpStart(r); A.o = cpObs(A.s); A.ep = 0; }
+  if (A.t + 1 >= c.warmup) dqnUpdate(A);
+  A.t++; return ended;
+}
+function dqnUpdate(A) {
+  const c = A.cfg, r = A.r, B = c.batch, idx = A.idx, nL = A.P.length;
+  if (c.replay) for (let j = 0; j < B; j++) idx[j] = Math.floor(r() * A.size);
+  else for (let j = 0; j < B; j++) idx[j] = ((A.ptr - 1 - j) % A.N + A.N) % A.N;
+  for (let j = 0; j < B; j++) for (let k = 0; k < 4; k++) { A.Hb[0][j * 4 + k] = A.S[idx[j] * 4 + k]; A.Hn[0][j * 4 + k] = A.S2[idx[j] * 4 + k]; }
+  const dbl = c.double && c.target, qn = netFwd(c.target ? A.T : A.P, A.Hn, B);
+  let qo = null; if (dbl) { A.Ho[0].set(A.Hn[0]); qo = netFwd(A.P, A.Ho, B); }
+  const q = netFwd(A.P, A.Hb, B), dOut = A.dOut; let loss = 0, qs = 0;
+  dOut.fill(0);
+  for (let j = 0; j < B; j++) {
+    const i = idx[j], nv = dbl ? qn[j * 2 + (qo[j * 2 + 1] > qo[j * 2] ? 1 : 0)] : Math.max(qn[j * 2], qn[j * 2 + 1]);
+    const y = 1.0 + c.gamma * (1 - A.D[i]) * nv, a = A.Ac[i], dl = q[j * 2 + a] - y;
+    dOut[j * 2 + a] = Math.max(-1, Math.min(1, dl)) / B;
+    loss += Math.abs(dl) <= 1 ? 0.5 * dl * dl : Math.abs(dl) - 0.5; qs += q[j * 2 + a];
+  }
+  adamStep(A.P, netBack(A.P, A.Hb, B, dOut, A.G, A.Dl), A.O, dqnLr(A)); A.upd++;
+  if (A.upd % 50 === 0 || A.upd <= 2000) { A.losses.push(loss / B); A.qmean.push(qs / B); }
+  if (c.target && A.upd % c.sync === 0) A.T = netCopy(A.P);
+}
+function dqnGreedyRun(P, r, cap) { let s = cpStart(r), k = 0; while (k < cap) { const q = netQ(P, cpObs(s)); const [n, d] = cpStep(s, q[1] > q[0] ? 1 : 0); s = n; k++; if (d) break; } return k; }
+function dqnEval(P, n, seed, cap) { const r = mulberry32(seed == null ? 12345 : seed), out = []; for (let i = 0; i < (n || 20); i++) out.push(dqnGreedyRun(P, r, cap || 500)); return out; }
+// one training step plus the periodic greedy check that keeps the best snapshot
+function dqnTrainStep(A) {
+  dqnTick(A); const c = A.cfg;
+  if (A.t % c.check === 0) { const ev = dqnEval(A.P, c.check_n, 999), e = ev.reduce((s, x) => s + x, 0) / ev.length; A.ck.push([A.t, e]); if (!A.best || e >= A.best.e) A.best = { e, t: A.t, P: netCopy(A.P) }; }
+}
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sum = a => a.reduce((s, v) => s + v, 0);
+const meanOf = a => sum(a) / a.length;
+const comma = n => Math.round(n).toLocaleString('en-GB');
+const sci = (v, d) => { if (!isFinite(v)) return '&infin;'; const a = Math.abs(v); if (a !== 0 && (a >= 1e5 || a < 1e-3)) { const e = Math.floor(Math.log10(a)), m = v / Math.pow(10, e); return `${fmt(m, d == null ? 2 : d)}&times;10<sup>${e}</sup>`; } return fmt(v, a >= 100 ? 1 : a >= 10 ? 2 : 3); };
+const sciT = v => sci(v).replace(/&times;10<sup>(-?\d+)<\/sup>/, 'e$1').replace('&infin;', '∞');
+const deg = r => r * 180 / Math.PI;
+function polyline(v, pts, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); pts.forEach((p, i) => { const x = v.X(p[0]), y = clamp(v.Y(p[1]), -2000, 4000); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); }
+const visible = el => { const r = el.getBoundingClientRect(); return r.bottom > -50 && r.top < innerHeight + 50 && r.width > 0; };
+
+/* ---------- the pretrained network (trained offline by this page's own code, seed 0) ---------- */
+const PRE_RAW = {"cfg":{"H":32,"layers":2,"lr":0.001,"gamma":0.99,"batch":32,"buffer":25000,"sync":200,"steps":25000,"warmup":500,"eps_end":0.05,"eps_steps":4000,"lr_decay":true,"lr_min":0.05,"check":1000,"check_n":5},"P":[{"W":[0.09028636446,-0.3892941232,-0.01739258747,0.446397113,0.4497277714,-0.1971667532,-0.3109170023,0.4418791785,0.5064535389,0.6086236542,0.5015700468,0.07046513483,-0.3068412371,-0.3709940679,-0.2346684734,-0.6117588408,-0.01085610455,-0.4473700911,-0.2863308407,-0.3068126816,0.1941966273,-0.3175252475,-0.3641953395,-0.1257120294,0.06928520723,0.02379996983,-0.2564933825,-0.6580598166,-0.2034157644,0.03256431106,0.2596835848,-0.163303152,0.02701419831,0.4501628266,0.07941464444,0.3959121022,-0.5087028706,0.3055071141,0.2813120363,-0.7102714388,-0.7759310627,-0.4179319945,-0.8744060289,0.3619863007,0.1619479615,0.1838943491,0.2411481588,-0.4070161278,0.122220041,0.2077073787,0.08802566701,0.9144315195,-0.3598532166,-0.2672800316,0.4013037352,-0.0004782995353,0.428524701,-0.4318443737,0.111260253,0.9676187881,0.5138209653,0.5250443734,-0.4778756257,-0.3520699132,0.4433505301,-0.5866360462,0.4913095307,-0.0540852504,0.3095116309,0.02137745055,-0.6679338571,0.6777988408,0.7113887911,-0.4098082339,0.7404262777,-0.497143345,-0.2435381986,-0.6016917456,-0.6016112841,-0.5034589141,0.157551469,0.03531673888,-0.264248107,-0.7394455823,0.6880571907,0.3862217273,-0.561428549,-0.2846044707,-0.3123757409,0.7931072547,-0.2730322268,-1.001019099,-0.5478334195,-0.01742390393,-0.1936433134,-0.4773683526,-0.2247898207,-0.9389261575,-0.01987875931,0.1271819869,0.3157170468,-0.630479128,-0.6772919351,0.8517554571,0.5953343218,0.2683907006,0.4779727872,0.1761248127,0.2023392741,-0.3118815813,-1.071319509,-0.7362185716,-0.471649403,0.5822530232,-0.6079461033,-0.3778117887,1.218753059,-0.2988837711,-0.8082226219,0.4807891769,0.1378285087,1.176341532,-0.3866824387,-1.337043078,-0.8541092069,-0.3335278245,0.04391343828,-0.4589825587],"b":[0.8304223002,-0.5453059695,0.8453230762,0.8218328277,0.6617123384,0.6022024385,-0.5758468337,-0.4714070838,-0.6436598584,-0.3039882171,-0.7353317724,0.768646913,0.801060636,-0.4671791703,-0.407245459,-0.181816541,-0.4634054939,0.7309476254,-0.3191989087,-0.5692094066,-0.7022489547,0.7819185625,-0.5602584262,0.8403726795,0.5008250177,0.3294069725,0.6676327252,-0.4262875596,-0.4177704721,0.5023674016,0.7264270156,0.7391317827],"fi":4,"fo":32},{"W":[-0.213055202,-0.1463159519,0.2033441994,0.4947281666,-0.1662010741,0.2052148259,0.4575045903,0.5177854618,0.05261375311,-0.07274307677,0.3502137439,0.4455343832,-0.5981577457,0.6025577159,0.01417049182,-0.003348961159,0.01659789428,0.25750401,0.3098900547,0.08986375983,0.2433947803,0.457730395,-0.09984020389,0.4921945092,-0.09254136123,0.4432139042,0.5704371698,-0.1794920647,-0.1069479879,0.2887494824,0.06396673321,0.2383407631,-0.04718619987,0.7670348904,0.1008322055,-1.218779164,-0.1472381705,1.106686127,-0.9218873442,-1.125717183,0.1275679575,-0.1486553738,-0.7437761713,-0.6473200323,1.01796531,-1.39018093,0.0751566563,-0.2339975544,-0.09195068162,-0.4391438316,-1.652530963,0.007006316635,-0.6320124871,-0.7398460883,0.02227182614,-0.8727250827,-0.1413778561,-0.6645704335,-0.6859243201,-0.1911836571,-0.1529639684,-0.8131710129,-0.03463993009,-0.4474243202,0.00123707093,0.09369468785,0.241914714,0.5119866419,0.1620284029,-0.009093181637,0.6246798668,0.5268360462,-0.1674346726,0.09130924132,0.4073210827,0.4191917895,-0.5986877765,0.3261998808,-0.1472149432,0.0415353782,-0.07733249202,0.2025976638,0.5006254686,-0.003422108604,0.4097275038,0.4904776812,-0.02271214513,0.5319580327,-0.1732280489,0.3839363286,0.4979675903,-0.1331207325,0.2045767194,0.489701607,-0.1427175109,0.2651879671,0.00953365261,-0.2280263071,0.1126112154,0.5872395712,-0.0577983633,0.5542375056,0.585281086,0.4424874272,-0.01121546885,0.01216126157,0.3908718017,0.3261612448,-0.3068152653,0.5919518653,0.05170891962,-0.1925746918,0.003418253094,0.4474239359,0.2879562494,-0.1426239127,0.5611311588,0.3299581758,-0.1906514628,0.4445349283,-0.08042287251,0.609589731,0.4715966598,-0.0368544211,-0.3041776968,0.4727275238,-0.1652748942,0.5217444708,0.1075990446,-0.01118757716,0.5027833308,0.6240538508,0.03144265534,-0.2783324864,0.5163421346,0.389463898,0.0241070497,0.07527592642,0.500482615,0.3042039359,-2.00877717,0.5979540928,-0.09123012723,-0.1593038436,0.1046065638,0.2747587242,0.8014422283,-0.02036859984,0.284404193,0.2337873563,-0.137443365,0.5192659695,0.04509964346,0.4911344117,0.2767224757,-0.1515287785,0.3163599628,0.4378801024,-0.09859822405,0.222864464,0.02579043302,-0.3488612733,-0.2694314391,0.2160759671,-0.06869865769,0.8079932108,0.3194093092,0.3603500591,0.06051364784,-0.1454635539,0.4679210568,0.5446941095,0.06483054263,0.3583231092,-0.1408546757,-0.05810699804,0.1107520877,0.4242578564,0.3884667113,0.1547405237,0.4983950766,0.3348634295,0.02746966696,0.4711804451,0.01382897259,0.5781974274,0.367893645,0.1363618355,-0.6279580625,0.4219418118,-0.09081147649,0.2972549191,-0.07164739414,0.9958616485,0.02807466757,-1.351628147,0.109213778,0.6329116508,-1.23951206,-1.359062346,0.01918821276,0.00575062111,-1.007354416,-0.8039829719,1.326364009,-1.295039284,-0.005509800295,-0.1640044641,-0.0347726832,-1.020146323,-1.380071566,-0.1635219001,-0.809083892,-0.9821958971,0.0004265355273,-1.097278794,-0.1472602864,-1.07796514,-1.02854262,-0.1025246521,0.06660651216,-0.9077595366,-0.1489971303,-0.89879775,-0.1458070886,0.8718528355,-2.110102383,-0.3484954626,-0.005470347305,-4.194578036,-0.2303544634,-0.7442081536,0.03007362561,0.1495723761,-0.6703343547,-0.7491356332,0.0125157978,-0.1794578431,-0.03819535229,-0.2175000877,-0.003289163434,-0.7636820542,0.3063620502,-0.1837266518,-1.222114144,-1.188835215,0.04707355885,-0.2957837784,0.147653408,-0.6172167355,-0.3423980707,-0.002549650881,0.6968099134,-0.8406801169,0.1513283997,-1.193784695,-0.09615070597,0.8609452455,-1.375654932,-0.8289792989,0.09020985105,-2.730571264,-0.6753511896,-1.169482517,-0.1560639754,-0.135193413,-0.9784888468,-1.153496249,0.02497967947,-0.7681021699,-0.06000099284,0.01882555306,0.03164124848,-1.002449213,-0.6421914564,0.102958438,-1.304694891,-1.396412525,0.1325285394,-0.9036046131,-0.05300422012,-1.064281255,-0.7486835722,0.0229912947,1.26241924,-1.190113616,0.1388828788,-1.282117414,-0.002045666579,-0.1853704879,-0.1385446414,-0.02579236159,0.06813915194,0.2939229751,-0.009056351896,0.09135821108,-0.05759274941,0.06731054919,0.1728368643,0.2636125375,-0.1748913645,0.207634066,-0.07346964801,-0.1708795544,-0.0393525318,0.1625309151,-0.09704254366,0.01065262024,0.0502558078,0.1269355228,0.1469262387,0.1643694108,-0.1421318263,0.02940068997,0.01036195744,-0.1208226601,0.4434479395,-0.05687086141,-0.1511965072,0.04644830832,-0.072300054,0.6923774953,-0.8182526416,-1.307593454,-0.1613966497,-1.594873205,-1.161509025,-1.213344761,0.1067419201,-0.06218165947,-1.364396949,-1.448591229,0.06956996568,-1.35923564,0.04917541411,-0.04872998103,-0.1227882405,-1.313033444,-0.8958060345,-0.08089435366,-1.481686414,-1.541980605,0.1718970232,-1.15072629,0.1149195964,-1.387083375,-1.231225093,-0.09978238471,1.447511031,-1.315854492,-0.1596813548,-1.61499638,0.05655350896,-0.07983500348,-0.06846635825,0.1909737268,0.04975792834,0.5771344857,0.2343454366,0.2767774979,-0.1608009457,0.0568887032,0.2324308777,0.5504289906,-0.1052218112,0.3487059779,-0.1612719884,0.01919736326,0.04126797349,0.5304464195,0.4688373158,-0.1686913386,0.5396036524,0.4526425269,0.01955353051,0.3407320871,-0.1774387383,0.526137995,0.276730235,0.03547448503,-0.4156331041,0.3339502573,-0.03378815043,0.566539478,0.07192145234,-0.2106154519,0.09331038529,0.2498143024,0.0201000027,0.2616374491,0.317839224,0.214457373,-0.1089599632,-0.05650048152,0.3880951681,0.2558245291,0.03027482425,0.3668538435,-0.1589480654,-0.04124397976,-0.132029212,0.3106633815,0.2561842557,0.02912857824,0.5030520586,0.5233477613,-0.1172383716,0.5036593732,-0.0002824563255,0.3131295222,0.5182282511,-0.1856033456,-0.2634450617,0.2232839611,-0.03550080104,0.4806355052,0.003697475403,0.806681888,-0.008875233743,-0.8067471453,-0.04102373888,0.01664312888,-0.8178013396,-0.7191536565,0.06942007303,0.06897993129,-0.8661851949,-0.7278586203,0.9465997832,-0.5552975111,0.1247800167,0.1331675611,-0.1015163612,-0.551083111,-0.4474384212,0.1449072006,-0.8298286669,-0.576231804,-0.1856562669,-0.7208898771,-0.1419477506,-0.6598468482,-0.8703894378,0.03952929181,-0.1820359617,-0.8296583549,-0.05643790897,-0.729968866,-0.1579657673,0.6934119134,-0.2124438904,-1.127925616,-0.08045940921,1.64342964,-0.9420405423,-0.6363553723,-0.008727034454,0.1643372315,-0.3843418728,-0.5739457952,1.04087661,-1.389661113,-0.1048270307,-0.1165904085,0.008885826624,-0.2614939182,-1.952740501,-0.05606100554,-0.02041204996,-0.2358724969,-0.0762630726,-0.5962463183,0.05417575077,-0.3313110581,-0.4795583269,0.1338287443,0.08938306118,-0.2831882118,-0.06122284817,-0.004697579967,0.08723240804,0.5445723737,-0.3270166675,-0.4141492712,0.1549809601,0.5479090887,-0.7379226398,-0.3379728207,-0.005334536247,-0.03704221328,-0.5454980606,-0.4370118525,0.6767306633,-0.388327568,0.003208324793,0.2330648839,0.01677114796,-0.5414642063,-0.2195332576,0.01261381542,-0.2488228571,-0.5429111322,0.08034077926,-0.3463720236,0.07966600121,-0.2728985709,-0.2982936462,0.05849419781,-0.1653478863,-0.3321805072,-0.01321084562,-0.163555493,0.02013040638,0.04402633174,-0.1152571916,0.08717807258,-0.1131514946,0.007608262165,-0.08494207311,-0.1059887619,-0.04098999547,-0.1406548902,-0.1641132195,-0.03327889039,-0.1547650114,0.04779271727,-0.1179977279,-0.07161306929,-0.01744859574,0.1272623192,0.01808174958,0.1631764309,-0.04571292744,-0.04479678313,0.001541737316,-0.0707548685,-0.04090538016,0.02967140843,-0.01831349336,-0.001529947723,-0.1346116184,-0.07921236826,0.02319438159,-0.1620879392,-0.185831614,-0.07514094563,0.2044896107,0.3893111394,-0.1591085845,0.1686100886,0.3287510477,0.2073119952,0.1256446186,-0.136719021,0.2357415899,0.4469496079,-0.3842198795,0.5620341588,-0.09794271206,0.05043489175,-0.08398978672,0.499025569,0.6290789197,-0.1120787429,0.2006366375,0.2563977104,-0.1036115094,0.4672911278,-0.195299215,0.3083679425,0.5640873898,-0.05278723897,0.01910356538,0.4174535857,0.08684494784,0.2535110051,-0.039855988,1.129195664,0.3890507316,-1.169902005,0.0561199431,0.2560665791,-0.9364346005,-1.025234831,0.1714279856,0.002449027009,-0.7475535737,-0.535984132,0.9296705735,-1.143114769,0.1066096904,0.1467322488,-0.1436563469,-0.6231368589,-1.366030544,0.1620026616,-0.744666163,-0.8162498639,0.00849799701,-0.8686805227,0.03934212461,-0.7695305042,-0.8838316902,-0.06460972744,-0.04488460547,-0.5969577618,0.09716287452,-0.6076948803,0.0008432720139,1.027228503,0.1686417759,-0.9266926321,-0.02951231058,0.5952371558,-1.073047992,-0.933012098,-0.01274103412,0.07569281903,-0.7177093395,-0.7082420499,1.175530614,-1.345915045,-0.05655874695,-0.088913968,0.07248641538,-0.6680093233,-1.445578659,0.1016613137,-0.5798286787,-0.9256348028,0.04079809179,-0.6342713953,0.05672975511,-0.7968242108,-0.874467149,0.06684850736,-0.05582481193,-0.6233835497,-0.09261654147,-0.574010214,-0.148163694,0.888117468,-2.114137622,-0.8480068729,-0.07480110696,-3.703010204,-0.6048151387,-1.306835628,-0.01952065089,-0.03093466486,-1.216737383,-1.183545692,-0.08351429491,-0.5558223209,-0.1160416827,0.09213902576,0.02537208604,-1.144695337,-0.3235214079,-0.06289128344,-1.67316644,-1.533653677,0.117979166,-0.9167442104,-0.09658275624,-1.048687424,-0.9053425403,-0.0454422291,1.214927081,-1.226799872,0.1019639084,-1.310402663,-0.02439314954,0.00292193793,0.2360744792,0.5576419869,0.1430133226,0.3683009603,0.5990865213,0.4345562494,-0.02062871508,-0.1257960608,0.2872818043,0.5170026271,-0.5448044228,0.3549333502,0.02785981703,-0.1863606005,0.1136940875,0.4650585304,0.5902735501,0.009704735685,0.273425073,0.5126458817,-0.1319596236,0.4826227028,-0.1613183389,0.4912351203,0.4761062003,-0.1092157914,0.1130610047,0.406723758,0.1342161137,0.3003928059,-0.1397343419,0.9464300223,0.04492237045,-1.270826526,0.06086216384,0.2249041993,-1.032027159,-1.202587253,-0.09242606998,0.02615777974,-1.088860283,-1.112592887,1.118951634,-1.618240514,-0.1180039048,-0.07396745987,-0.09101307433,-0.9935937275,-1.51465792,0.1324516473,-0.9654668402,-0.8444211926,-0.04053273131,-1.004588612,0.1483962734,-1.008713953,-0.8229310725,-0.01477608807,-0.02952488944,-1.135389746,-0.04450376037,-0.9335813562,-0.1306440912,-0.0747102632,0.1214575321,0.5781738377,-0.06503622793,0.1898913306,0.5166267368,0.219240856,-0.1245769726,0.1093449682,0.5171400942,0.5017650016,-0.09805513041,0.6132909744,-0.1738586114,0.06092655241,-0.1941969847,0.2581858903,0.4214641992,-0.1137388664,0.3726858909,0.4821997406,-0.07188565249,0.5784511489,-0.1538367398,0.2405529498,0.3978735118,0.02364504802,-0.04573647647,0.3336676178,-0.1690301118,0.3940605011,0.03275690764,0.02561752125,-0.1823549809,0.26088583,-0.1127969383,0.4626087003,0.409984499,0.2759754223,0.01477111528,-0.01301865089,0.5299078446,0.3286027074,0.1374026185,0.3581402512,0.0008488863436,-0.07738072127,-0.07307172768,0.5803759298,0.2347108521,-0.03639667986,0.4115821457,0.5190748237,0.09427883472,0.5232471836,0.09240324184,0.3748877621,0.5426236833,0.0957860544,-0.6343559547,0.3013522788,-0.1722901632,0.5487065875,-0.01045468085,0.7077762372,0.5951032637,0.2872417623,0.02348182203,0.1343317572,0.30141716,0.09729526527,-0.1105318718,-0.05223423503,0.1513845814,0.06627052266,-0.2432639464,0.2833589117,-0.01533440372,0.1307817949,-0.1117802989,0.07851130842,0.5378824486,-0.182387154,0.07324032941,0.07424587725,-0.00184713692,0.3493467067,-0.1596483238,0.09720176355,0.3838684009,0.138984745,0.3651720793,0.1712747247,-0.01992064069,0.06105339621,-0.2031911182,-0.1362365363,-0.2444573331,0.3633605636,-0.07681734247,0.6253711392,0.3700030619,0.2633411421,-0.09600160751,-0.1382514893,0.5185389234,0.3028447877,0.1645604828,0.4675720638,-0.1277889442,-0.1211649922,0.1202910369,0.2716477473,0.3060217207,-0.0807333516,0.5320429565,0.3553773001,0.00668407479,0.3878509603,-0.08126415819,0.4452918099,0.4135768222,-0.04528600301,-0.924569116,0.330864772,0.1203980455,0.4695823293,0.0861556814,0.4980130178,-1.920016905,-0.3932993163,-0.1255378605,1.623844231,-0.7303435347,-0.2243434992,-0.1639867578,0.08720370287,-0.04644234405,0.2109590686,0.6940441516,-0.6312945647,-0.09475706688,-0.002364731176,-0.04916478898,0.2579017567,-0.981644026,0.09891876479,0.4188167937,0.2506241839,0.04763543079,-0.2933128045,0.1432078296,0.09303070556,-0.06924106158,-0.06695388042,-0.1284475257,0.1594905822,-0.1632176339,0.342117953,0.052230541,0.7468331722,0.4775830928,-0.9619585829,-0.0687790775,1.229147716,-0.7389925596,-0.582072658,-0.08954025567,-0.1098787061,-0.6394918452,-0.5735490159,1.026398933,-1.299804113,-0.06140667083,-0.09961648516,-0.09921667538,-0.4428110566,-1.497548894,-0.09020561677,-0.03479699602,-0.1382694032,-0.05665536085,-0.4553376329,-0.1404462826,-0.4643349739,-0.4792291417,0.138355243,-0.06238542412,-0.3332951139,-0.1225577919,-0.05089874489,-0.08206347551,-0.3386967471,-0.08686801061,0.3999170796,0.083392285,0.7212423651,0.5020584337,0.5353116744,0.03927156416,0.02590402452,0.5967623009,0.6052264891,-0.03474243494,0.2274418238,-0.1279222248,0.1100203159,0.06107930181,0.495916371,0.2750357696,0.01024320737,0.4511792473,0.4158147907,0.07052179672,0.4025388947,0.03523925696,0.4165327424,0.3678534963,0.01758655493,-0.5762005924,0.6197699742,0.05024189715,0.5924948362,0.02226091571,-0.05433829454,0.01986721136,0.5615677299,-0.05408899464,0.48255594,0.2873861252,0.4902413648,-0.1164463103,-0.1358106163,0.3991006381,0.4444464781,-0.2795030809,0.5406455062,0.03974491361,-0.08727991456,-0.1067416244,0.3914085191,0.4181388032,-0.1054638179,0.376438414,0.2094991262,-0.09848775874,0.5016597892,-0.006048514712,0.293004912,0.3211319906,-0.1585150808,0.007834815046,0.5079773684,-0.02069976684,0.2691599978,0.07754159415,-0.2747604776,-0.06612334434,0.4322386179,-0.1454996643,0.6519987508,0.2206193816,0.3316147131,-0.03142752751,-0.1436061393,0.3852517797,0.373575647,-0.02692868989,0.2428432668,0.1527275991,0.1327474566,-0.0772759675,0.5683341639,0.2130886623,-0.02299955329,0.5680565602,0.3926287119,0.1036595649,0.4223674295,0.04662077464,0.3210977983,0.4181773697,0.1296915041,-1.087880514,0.4516393533,-0.09363950483,0.2941250813],"b":[0.01943511705,-0.1105706888,-0.08805935312,0.4956088663,-0.04611903398,0.279616188,0.4954314897,0.516590951,-0.1351382649,0.07159334968,0.4749920703,0.3298150039,-0.2018813214,0.410513764,-0.1141502594,0.01092157826,-0.03209109104,0.5525651582,0.3583940945,0.05379001724,0.3179435651,0.4143818248,-0.1711459453,0.5666620027,0.03117227792,0.3964977541,0.4433535711,-0.04952710771,-0.2225047689,0.4471125115,-0.1723003547,0.4877316431],"fi":32,"fo":32},{"W":[-0.09324606383,-0.1355280305,-1.641816676,-0.3823899651,1.256030807,-0.9713499427,0.4152821561,0.7590050541,-0.01889243507,-0.03454032326,0.7359227312,-0.8057087425,0.3521602343,0.797145241,0.6585982282,0.7050419359,0.05479867924,0.1011308093,-0.0145502569,-0.1444356206,0.6494033507,0.714622214,0.5816594928,0.582136414,-1.880466635,-0.156199765,0.3307518274,0.8798830897,-0.06769189411,-0.14132576,-0.1013588092,-0.1937228404,-0.06295868631,-0.0910544965,0.6118383781,0.5179685059,0.05815376968,0.7034256471,-0.1590516273,-0.02309548835,0.7234347215,0.4257092374,0.6124753096,0.4875893054,0.05857876134,0.03001543694,0.4339672856,0.5740177546,-0.1222374879,-0.1255084295,0.6217900461,0.6972714353,0.5402490133,0.6647753001,0.1450858847,-0.1316343496,-0.6403831784,-1.664998169,0.6538983601,0.6168740725,-0.148529483,0.1587985305,0.7455102668,0.4749639773],"b":[0.3686183573,0.3799556538],"fi":32,"fo":2}]};
+const PRE = PRE_RAW.P.map(L => ({ W: Float64Array.from(L.W), b: Float64Array.from(L.b), fi: L.fi, fo: L.fo }));
+const GAM = PRE_RAW.cfg.gamma;
+const qOf = (P, s) => netQ(P, cpObs(s));
+
+/* ---------- drawing a cart and pole ---------- */
+function drawCartPole(cv, s, o) {
+  o = o || {}; const C = C0(), r = cv.getBoundingClientRect(), W = r.width, H = r.height;
+  const v = frame(cv, [-2.7, 2.7], [-0.4, 1.4], { l: 8, r: 8, t: 8, b: 8 }, true), c = v.ctx;
+  const yT = 0, x = s[0], th = s[2];
+  // track and limits
+  seg(v, -2.9, yT - 0.02, 2.9, yT - 0.02, C.muted, 2);
+  [-2.4, 2.4].forEach(xx => seg(v, xx, yT - 0.12, xx, 1.25, C.bad, 1.2, [4, 4], 0.7));
+  // angle wedge
+  c.save(); c.globalAlpha = 0.08; c.fillStyle = C.a; c.beginPath(); const px = v.X(x), py = v.Y(yT + 0.15), L = (v.Y(0) - v.Y(1.0));
+  c.moveTo(px, py); c.arc(px, py, L, -Math.PI / 2 - CP.thMax, -Math.PI / 2 + CP.thMax); c.closePath(); c.fill(); c.restore();
+  // cart
+  c.save(); c.fillStyle = C.q; c.globalAlpha = 0.85; const cw = v.X(0.25) - v.X(0), ch = v.Y(0) - v.Y(0.15); c.fillRect(px - cw, py, 2 * cw, ch); c.restore();
+  [-0.15, 0.15].forEach(dx => { c.beginPath(); c.arc(v.X(x + dx), v.Y(yT), Math.max(2.5, ch * 0.28), 0, 7); c.fillStyle = C.muted; c.fill(); });
+  // pole
+  const ex = px + L * Math.sin(th), ey = py - L * Math.cos(th);
+  c.save(); c.strokeStyle = o.fail ? C.bad : C.b; c.lineWidth = Math.max(4, L * 0.06); c.lineCap = 'round'; c.beginPath(); c.moveTo(px, py); c.lineTo(ex, ey); c.stroke(); c.restore();
+  c.beginPath(); c.arc(px, py, 4, 0, 7); c.fillStyle = C.surf; c.fill();
+  // push arrow
+  if (o.a != null) { const dir = o.a === 1 ? 1 : -1, ax = px + dir * (cw + 6), ay = py + ch / 2; c.save(); c.strokeStyle = o.a === 1 ? C.b : C.a; c.fillStyle = c.strokeStyle; c.lineWidth = 3; c.beginPath(); c.moveTo(ax, ay); c.lineTo(ax + dir * 26, ay); c.stroke(); c.beginPath(); c.moveTo(ax + dir * 34, ay); c.lineTo(ax + dir * 24, ay - 6); c.lineTo(ax + dir * 24, ay + 6); c.closePath(); c.fill(); c.restore(); }
+  // Q bars
+  if (o.q) { const q = o.q, bw = Math.min(150, W * 0.3), x0 = W - bw - 12, y0 = 12, top = Math.max(q[0], q[1], 1);
+    c.save(); c.font = '11px ' + css('--f-mono'); c.textBaseline = 'middle';
+    [['Q(left)', q[0], C.a], ['Q(right)', q[1], C.b]].forEach(([lab, val, col], i) => { const y = y0 + i * 20; c.fillStyle = C.line; c.globalAlpha = 0.5; c.fillRect(x0 + 62, y, bw - 62, 13); c.globalAlpha = 1; c.fillStyle = col; c.fillRect(x0 + 62, y, Math.max(0, (bw - 62) * val / top), 13); c.fillStyle = C.q; c.textAlign = 'left'; c.fillText(lab, x0, y + 7); c.textAlign = 'right'; c.fillStyle = C.surf; c.fillText(fmt(val, 1), x0 + bw - 3, y + 7); });
+    c.restore(); }
+  if (o.label) { c.save(); c.font = '12px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText(o.label, 12, 12); c.restore(); }
+  return v;
+}
+
+/* ---------- hero: the pretrained network balancing, live ---------- */
+const HERO = { s: null, t: 0, mode: 'dqn', fail: 0, best: 0, r: mulberry32(2024), acc: 0, last: 0, q: [0, 0], a: 1, falls: [] };
+function heroReset() { HERO.s = cpStart(HERO.r); HERO.t = 0; HERO.fail = 0; }
+function heroStep() {
+  if (HERO.fail) { if (--HERO.fail === 0) heroReset(); return; }
+  HERO.q = qOf(PRE, HERO.s);
+  HERO.a = HERO.mode === 'dqn' ? (HERO.q[1] > HERO.q[0] ? 1 : 0) : Math.floor(HERO.r() * 2);
+  const [n, d] = cpStep(HERO.s, HERO.a); HERO.s = n; HERO.t++;
+  if (d) { HERO.fail = 40; HERO.falls.push(HERO.t); if (HERO.falls.length > 20) HERO.falls.shift(); }
+}
+function drawHero() {
+  drawCartPole($('#hero-cv'), HERO.s, { q: HERO.q, a: HERO.fail ? null : HERO.a, fail: HERO.fail > 0, label: `step ${HERO.t}` });
+  const q = HERO.q, dir = q[1] > q[0] ? 'right' : 'left';
+  $('#hero-cap').innerHTML = HERO.fail ? `The pole fell after ${tip('<b>' + HERO.t + '</b>', 'steps of 0.02 s before |θ| > 12° or |x| > 2.4 m')} steps. ${HERO.mode === 'rand' ? 'Random pushes rarely last more than a few dozen steps.' : 'Resetting&hellip;'}`
+    : HERO.mode === 'dqn' ? `Step ${HERO.t}: Q(left) = ${tip(fmt(q[0], 2), 'network output 1 for the current state')}, Q(right) = ${tip(fmt(q[1], 2), 'network output 2 for the current state')}, so it pushes <b>${dir}</b>. ${HERO.t >= 500 ? 'Gymnasium would end the episode at 500 steps; here it carries on.' : 'Each Q counts the discounted +1s still to come; ' + fmt(1 / (1 - GAM), 0) + ' would mean &ldquo;for ever&rdquo;.'}`
+    : `Random pushes, step ${HERO.t}. The Q-values are still shown, but nobody is listening to them.`;
+}
+function heroShove(dir) { if (!HERO.fail) { HERO.s = HERO.s.slice(); HERO.s[3] += dir * 0.9; } }
+seg1('[data-hp]', 'data-hp', k => { HERO.mode = k; heroReset(); });
+$('#hero-shove-l').addEventListener('click', () => heroShove(-1)); $('#hero-shove-r').addEventListener('click', () => heroShove(1));
+$('#hero-cv').addEventListener('pointerdown', e => { const [px] = evPos($('#hero-cv'), e); heroShove(px > $('#hero-cv').getBoundingClientRect().width / 2 ? 1 : -1); });
+heroReset(); HERO.q = qOf(PRE, HERO.s);
+fig($('#hero-cv'), drawHero);
+
+/* ---------- why: discretising the cart-pole ---------- */
+const WY = { b: 10, n: 1000, data: null };
+const WY_R = [[-2.4, 2.4], [-3, 3], [-CP.thMax, CP.thMax], [-3.5, 3.5]];
+function wyData() {
+  if (WY.data) return WY.data;
+  const r = mulberry32(77), S = [], ends = [];
+  for (let e = 0; e < 10000; e++) { let s = cpStart(r); for (let t = 0; t < 500; t++) { S.push(s); const [n, d] = cpStep(s, Math.floor(r() * 2)); s = n; if (d) break; } ends.push(S.length); }
+  return (WY.data = { S, ends });
+}
+const wyBin = (v, k, b) => clamp(Math.floor((v - WY_R[k][0]) / (WY_R[k][1] - WY_R[k][0]) * b), 0, b - 1);
+function drawWY() {
+  const C = C0(), D = wyData(), b = WY.b, nS = D.ends[WY.n - 1], cells = new Map(), face = new Float64Array(b * b);
+  for (let i = 0; i < nS; i++) { const s = D.S[i], k = ((wyBin(s[0], 0, b) * b + wyBin(s[1], 1, b)) * b + wyBin(s[2], 2, b)) * b + wyBin(s[3], 3, b); cells.set(k, (cells.get(k) || 0) + 1); face[wyBin(s[3], 3, b) * b + wyBin(s[2], 2, b)]++; }
+  const v = frame($('#wy-cv'), [-12, 12], [-3.5, 3.5], { l: 44, b: 30 }), c = v.ctx; axes(v, 'pole angle θ (°)', 'dθ/dt (rad/s)', { sx: 4, sy: 1 });
+  const mx = Math.max(...face), dx = 24 / b, dy = 7 / b;
+  for (let i = 0; i < b; i++) for (let j = 0; j < b; j++) { const n = face[j * b + i], x0 = v.X(-12 + i * dx), x1 = v.X(-12 + (i + 1) * dx), y0 = v.Y(-3.5 + (j + 1) * dy), y1 = v.Y(-3.5 + j * dy);
+    if (n) { c.fillStyle = C.lda; c.globalAlpha = 0.15 + 0.85 * Math.log(1 + n) / Math.log(1 + mx); c.fillRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1); c.globalAlpha = 1; }
+    else if (b <= 30) { c.strokeStyle = C.line; c.lineWidth = 1; c.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1); } }
+  const nc = Math.pow(b, 4), vis = cells.size, size = nc * 2;
+  $('#wy-b-o').textContent = b;
+  $('#wy-size').innerHTML = tip(comma(size), `${b}⁴ = ${comma(nc)} cells × 2 actions`);
+  $('#wy-vis').innerHTML = tip(pct(vis / nc, vis / nc < 0.01 ? 2 : 1), `${comma(vis)} of ${comma(nc)} cells\nsaw at least one of ${comma(nS)} states`);
+  $('#wy-per').innerHTML = tip(fmt(nS / vis, 1), `${comma(nS)} states / ${comma(vis)} visited cells\n(each visit feeds one action's entry)`);
+  const facevis = [...face].filter(x => x > 0).length;
+  $('#wy-say').innerHTML = vis / nc > 0.5 ? `With ${b} bins the cells are so coarse that most get visited, but a single cell now lumps together a pole that is nearly upright and one that is about to fall. The table cannot tell them apart, so it cannot learn what to do in either.`
+    : `${comma(WY.n)} random episodes (${comma(nS)} states) touched only <b>${pct(vis / nc, vis / nc < 0.01 ? 2 : 1)}</b> of the ${comma(nc)} cells. Every other entry keeps its starting guess for ever, and the cells that were seen got about ${fmt(nS / vis, 0)} visits each, split between two actions. On this face alone ${facevis} of ${b * b} squares are lit.${b >= 20 ? ' Finer bins make it worse, not better.' : ''}`;
+  $('#run-wy').innerHTML = `<b>Running example</b>: b = ${b}, d = 4, |&#120068;| = 2: |table| = ${b}<sup>4</sup> &times; 2 = ${tip(comma(size), 'one Q-value per cell and action')}; experience so far filled ${comma(vis)} cells, ${tip(pct(vis / nc, 2), 'visited cells / all cells')} of them.`;
+}
+$('#wy-b').addEventListener('input', e => { WY.b = +e.target.value; drawWY(); });
+seg1('[data-wn]', 'data-wn', k => { WY.n = +k; drawWY(); });
+fig($('#wy-cv'), drawWY);
+
+/* ---------- approx: linear Q with normalised bumps on a corridor ---------- */
+const AP = { k: 11, sig: 0.04, al: 0.5, w: null, n: 0, last: null, prev: null, r: mulberry32(5), G: 0.9 };
+const apCentres = () => [...Array(AP.k).keys()].map(i => i / (AP.k - 1));
+function apPhi(s) { const cs = apCentres(), e = cs.map(c => Math.exp(-((s - c) ** 2) / (2 * AP.sig * AP.sig))), z = sum(e) || 1; return e.map(x => x / z); }
+const apQ = s => { const p = apPhi(s); let q = 0; for (let i = 0; i < AP.k; i++) q += AP.w[i] * p[i]; return q; };
+const apSteps = s => Math.ceil((1 - 1e-9 - s) / 0.1);
+const apTrue = s => Math.pow(AP.G, apSteps(s) - 1);
+const AP_GRID = [...Array(200).keys()].map(i => (i + 0.5) / 200);
+function apReset() { AP.w = new Array(AP.k).fill(0); AP.n = 0; AP.last = null; AP.prev = null; }
+function apUpdate(s) {
+  const p = apPhi(s), q = apQ(s), s2 = s + 0.1, term = s2 >= 1 - 1e-9, q2 = term ? 0 : apQ(s2), r = term ? 1 : 0, y = r + AP.G * q2, d = y - q;
+  let bi = 0; p.forEach((x, i) => { if (x > p[bi]) bi = i; });
+  const dw = p.map(x => AP.al * d * x);
+  AP.last = { s, q, s2, term, q2, r, y, d, bi, dwi: dw[bi], phi: p[bi], c: apCentres()[bi] };
+  for (let i = 0; i < AP.k; i++) AP.w[i] += dw[i]; AP.n++;
+}
+function drawAP() {
+  const C = C0(), v = frame($('#ap-cv'), [0, 1], [-0.1, 1.15], { b: 30 }); axes(v, 'position s', 'Q(s, right)', { sx: 0.1, sy: 0.2 }); clip(v);
+  const cs = apCentres(); cs.forEach(c0 => curve(v, s => { const z = sum(cs.map(c => Math.exp(-((s - c) ** 2) / (2 * AP.sig * AP.sig)))); return -0.1 + 0.25 * Math.exp(-((s - c0) ** 2) / (2 * AP.sig * AP.sig)) / (z || 1); }, C.muted, 1, null));
+  polyline(v, AP_GRID.map(s => [s, apTrue(s)]), C.q, 1.5, [6, 5]);
+  const cur = AP_GRID.map(apQ);
+  if (AP.prev) { const c = v.ctx; c.save(); c.fillStyle = C.b; c.globalAlpha = 0.28; c.beginPath(); AP_GRID.forEach((s, i) => { const x = v.X(s), y = v.Y(AP.prev[i]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); for (let i = AP_GRID.length - 1; i >= 0; i--) c.lineTo(v.X(AP_GRID[i]), v.Y(cur[i])); c.closePath(); c.fill(); c.restore(); }
+  polyline(v, AP_GRID.map((s, i) => [s, cur[i]]), C.a, 2.6);
+  if (AP.last) { const L = AP.last; seg(v, L.s, -0.1, L.s, 1.2, C.b, 1.2, [3, 3]); dot(v, L.s, apQ(L.s), C.b, 5.5); if (!L.term) dot(v, L.s2, L.q2, C.muted, 4, true); }
+  v.ctx.restore();
+  const err = Math.sqrt(meanOf(AP_GRID.map((s, i) => (cur[i] - apTrue(s)) ** 2))), h = 1 / (AP.k - 1);
+  $('#ap-k-o').textContent = AP.k; $('#ap-w-o').textContent = fmt(AP.sig, 2); $('#ap-a-o').textContent = fmt(AP.al, 2);
+  $('#ap-n').innerHTML = tip(comma(AP.n), 'clicks + random updates since the last reset');
+  let spread = '—';
+  if (AP.prev) { const dd = AP_GRID.map((s, i) => Math.abs(cur[i] - AP.prev[i])), mx = Math.max(...dd); if (mx > 1e-12) { const f = dd.filter(x => x > 0.1 * mx).length / AP_GRID.length; spread = tip(pct(f, 0), 'share of the corridor where Q moved by more than\n10% of the largest change'); AP.spreadF = f; } }
+  $('#ap-spread').innerHTML = spread; $('#ap-err').innerHTML = tip(fmt(err, 3), 'root-mean-square gap to the true staircase\nover 200 positions');
+  const L = AP.last, ratio = AP.sig / h;
+  $('#run-ap').innerHTML = L ? `<b>Running example</b>: at s = ${fmt(L.s, 3)}, Q = ${fmt(L.q, 3)}; ${L.term ? `the step reaches the end, so y = r = ${tip('1', 'reward for reaching the end; nothing to bootstrap')}` : `s&prime; = ${fmt(L.s2, 3)}, r = 0, y = 0 + ${AP.G} &times; ${fmt(L.q2, 3)} = ${tip(fmt(L.y, 3), 'bootstrapped from the current approximation\n(only “right” exists here, so the max is over one action)')}`}; &delta; = ${fmt(L.y, 3)} &minus; ${fmt(L.q, 3)} = ${tip(fmt(L.d, 3), 'TD error')}. The bump at c = ${fmt(L.c, 2)} has &phi; = ${fmt(L.phi, 3)}, so its weight moves by ${AP.al} &times; ${fmt(L.d, 3)} &times; ${fmt(L.phi, 3)} = ${tip('<b>' + fmt(L.dwi, 3) + '</b>', 'α · δ · φᵢ(s): the gradient of a linear Q is the feature itself')}; its neighbours move in proportion to their own &phi;.`
+    : `<b>Running example</b>: click the plot to make an update and see its numbers here.`;
+  $('#ap-say').innerHTML = (ratio < 0.35 ? `<b>Almost a table.</b> The bumps (&sigma; = ${fmt(AP.sig, 2)}) are much narrower than their spacing (${fmt(h, 3)}), so each one owns a strip of the corridor and an update changes only that strip. Nothing learned at one state helps its neighbours.`
+    : ratio > 1.5 ? `<b>Heavy generalisation.</b> Each bump is ${fmt(ratio, 1)}&times; wider than the spacing, so one update drags a long stretch of the curve with it. That is fast early on, but the smooth blend can no longer follow the sharp steps, and updates at one state undo work done at another.`
+    : `<b>A useful middle.</b> Neighbouring bumps overlap, so an update lifts nearby states too, and the curve can still bend at the steps.`) +
+    (AP.n >= 200 ? ` After ${comma(AP.n)} updates the RMS error is ${fmt(err, 3)}${err > 0.08 ? ', limited by what these features can represent' : ''}.` : '');
+}
+$('#ap-cv').addEventListener('pointerdown', e => { const cv = $('#ap-cv'), r = cv.getBoundingClientRect(), [px] = evPos(cv, e), s = clamp((px - 46) / (r.width - 46 - 14), 0, 0.999); AP.prev = AP_GRID.map(apQ); apUpdate(s); drawAP(); });
+$('#ap-run').addEventListener('click', () => { AP.prev = AP_GRID.map(apQ); for (let i = 0; i < 200; i++) apUpdate(AP.r() * 0.999); drawAP(); });
+$('#ap-reset').addEventListener('click', () => { apReset(); drawAP(); });
+$('#ap-k').addEventListener('input', e => { AP.k = +e.target.value; apReset(); drawAP(); });
+$('#ap-w').addEventListener('input', e => { AP.sig = +e.target.value; apReset(); drawAP(); });
+$('#ap-a').addEventListener('input', e => { AP.al = +e.target.value; drawAP(); });
+apReset(); fig($('#ap-cv'), drawAP);
+
+/* ---------- triad: the w -> 2w example ---------- */
+const TR = { v: 'all', g: 0.9, a: 0.1, T: 200 };
+function trRun(kind, g, a) {
+  let w = 1, v1 = 1; const v2 = 2, out = [1];
+  for (let t = 1; t <= TR.T; t++) {
+    if (kind === 'all') w = w + a * (g * 2 * w - w);
+    else if (kind === 'on') w = t % 2 ? w + a * (g * 2 * w - w) : w + a * (0 - 2 * w) * 2;
+    else if (kind === 'mc') w = w + a * (0 - w);
+    else v1 = v1 + a * (g * v2 - v1);
+    out.push(kind === 'tab' ? v1 : w);
+  }
+  return out;
+}
+const TR_NAMES = { all: 'all three ingredients', on: 'on-policy updates', mc: 'Monte Carlo targets', tab: 'a separate value per state' };
+function drawTR() {
+  const C = C0(), g = TR.g, a = TR.a, lv = x => Math.log10(Math.max(Math.abs(x), 1e-6)), v = frame($('#tr-cv'), [0, TR.T], [-4, 8], { l: 52, b: 30 });
+  axes(v, 'update', '|estimate of state 1|', { sx: 50, sy: 2, fy: y => y === 0 ? '1' : '10' + (y < 0 ? '⁻' : '') + String(Math.abs(y)).split('').map(d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+d]).join('') }); clip(v);
+  const cols = { all: C.bad, on: C.a, mc: C.lda, tab: C.b };
+  Object.keys(cols).forEach(k => { const o = trRun(k, g, a); polyline(v, o.map((x, t) => [t, lv(x)]), cols[k], k === TR.v ? 3 : 1.4, k === TR.v ? null : [4, 4], k === TR.v ? 1 : 0.45); });
+  v.ctx.restore();
+  const o = trRun(TR.v, g, a), fin = o[TR.T], f1 = 1 + a * (2 * g - 1), f2 = 1 - 4 * a;
+  $('#tr-g-o').textContent = fmt(g, 2); $('#tr-a-o').textContent = fmt(a, 2);
+  const fac = TR.v === 'all' ? [f1, `1 + ${fmt(a, 2)} × (2 × ${fmt(g, 2)} − 1)`, 'per update'] : TR.v === 'on' ? [f1 * f2, `(1 + α(2γ−1)) × (1 − 4α)\n= ${fmt(f1, 3)} × ${fmt(f2, 3)}`, 'per episode (2 updates)'] : TR.v === 'mc' ? [1 - a, '1 − α', 'per update'] : [null];
+  $('#tr-f').innerHTML = fac[0] == null ? tip('&rarr; ' + fmt(2 * g, 2), 'v₁ settles at γ · v₂ = γ × 2,\nbecause state 2 is never updated') : tip('&times;' + fmt(fac[0], 4), fac[1] + '\n' + fac[2]);
+  $('#tr-w').innerHTML = tip(sci(fin), `starting from w = 1, after ${TR.T} updates`);
+  const blow = Math.abs(fin) > 10;
+  $('#tr-say').innerHTML = TR.v === 'all' ? (blow ? `With all three ingredients the estimate has grown to ${sci(fin)} although the truth is 0. Each update raises w, which raises the target 2&gamma;w even more. Lower &gamma; below 0.5 and the spiral stops; lowering &alpha; only slows it.` : g < 0.5 ? `With &gamma; = ${fmt(g, 2)} the target 2&gamma;w is smaller than w, so the estimate shrinks towards 0: the triad can diverge, but it does not have to.` : `At &gamma; = ${fmt(g, 2)} the factor is ${fmt(f1, 4)}: the estimate ${f1 > 1 ? "creeps upwards only slowly" : f1 < 1 ? "creeps downwards only slowly" : "does not move at all"}.`)
+    : TR.v === 'on' ? `On-policy, every visit to state 1 is followed by a visit to state 2, whose update (target 0, value 2w, gradient 2) multiplies w by 1 &minus; 4&alpha; = ${fmt(f2, 2)}. That outweighs the push up, so the estimate ${Math.abs(fin) < 0.01 ? 'collapses to 0' : 'shrinks'}. Updating the states in the proportions the policy visits them restores stability for linear TD.`
+    : TR.v === 'mc' ? `Without bootstrapping the target is the real return, 0, which does not move when w moves. Each update shrinks w by (1 &minus; &alpha;): plain regression, no spiral. The price in general: you wait for whole episodes, and returns are noisier than one-step targets.`
+    : `With a separate number per state, raising v<sub>1</sub> does not touch v<sub>2</sub>. v<sub>1</sub> settles at &gamma;&middot;v<sub>2</sub> = ${fmt(2 * g, 2)}: stable, but still wrong, because off-policy we never update state 2 and it keeps its initial guess of 2. And a table gives up generalisation, which is the reason we wanted approximation.`;
+  $('#run-tr').innerHTML = TR.v === 'all' ? `<b>Running example</b>: &alpha; = ${fmt(a, 2)}, &gamma; = ${fmt(g, 2)}: w<sub>t+1</sub> = (1 + ${fmt(a, 2)} &times; (2 &times; ${fmt(g, 2)} &minus; 1)) w<sub>t</sub> = ${fmt(f1, 4)} w<sub>t</sub>, so after ${TR.T} updates w = ${fmt(f1, 4)}<sup>${TR.T}</sup> = ${tip('<b>' + sci(fin) + '</b>', 'the truth is 0')}.`
+    : TR.v === 'on' ? `<b>Running example</b>: state 1&rsquo;s update multiplies w by ${fmt(f1, 4)}; state 2&rsquo;s update w &larr; w + &alpha;(0 &minus; 2w)&middot;2 multiplies it by 1 &minus; 4&alpha; = ${fmt(f2, 3)}. Per episode: ${tip(fmt(f1 * f2, 4), `${fmt(f1, 4)} × ${fmt(f2, 3)}`)}, so after ${TR.T / 2} episodes w = ${sci(fin)}.`
+    : TR.v === 'mc' ? `<b>Running example</b>: w<sub>t+1</sub> = w<sub>t</sub> + ${fmt(a, 2)} (0 &minus; w<sub>t</sub>) = ${fmt(1 - a, 2)} w<sub>t</sub>; after ${TR.T} updates w = ${fmt(1 - a, 2)}<sup>${TR.T}</sup> = ${tip(sci(fin), 'heading to the true value 0')}.`
+    : `<b>Running example</b>: v<sub>1</sub> &larr; v<sub>1</sub> + ${fmt(a, 2)} (${fmt(g, 2)} &times; 2 &minus; v<sub>1</sub>), a fixed target ${fmt(2 * g, 2)}: after ${TR.T} updates v<sub>1</sub> = ${tip(fmt(fin, 4), 'the gap to 2γ shrinks by (1 − α) each update')}.`;
+}
+seg1('[data-tv]', 'data-tv', k => { TR.v = k; drawTR(); });
+$('#tr-g').addEventListener('input', e => { TR.g = +e.target.value; drawTR(); });
+$('#tr-a').addEventListener('input', e => { TR.a = +e.target.value; drawTR(); });
+fig($('#tr-cv'), drawTR);
+
+/* ---------- net: the pretrained Q-network ---------- */
+const NT = { s: [0, 0, 3 * Math.PI / 180, -0.2], cache: {} };
+function ntField() {
+  const key = NT.s[0] + ',' + NT.s[1]; if (NT.cache[key]) return NT.cache[key];
+  const nx = 72, ny = 48, D = new Float64Array(nx * ny), H = netWs(PRE, nx * ny);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const s = [NT.s[0], NT.s[1], -CP.thMax + (i + 0.5) / nx * 2 * CP.thMax, -2.5 + (j + 0.5) / ny * 5], o = cpObs(s); H[0].set(o, (j * nx + i) * 4); }
+  const Q = netFwd(PRE, H, nx * ny); for (let k = 0; k < nx * ny; k++) D[k] = Q[2 * k + 1] - Q[2 * k];
+  return (NT.cache = { [key]: { D, nx, ny } })[key];
+}
+function drawNT() {
+  const C = C0(), s = NT.s, q = qOf(PRE, s), a = q[1] > q[0] ? 1 : 0, gap = Math.abs(q[1] - q[0]);
+  drawCartPole($('#nt-cart'), s, { a });
+  const F = ntField(), v = frame($('#nt-cv'), [-12, 12], [-2.5, 2.5], { l: 44, b: 30 }), c = v.ctx; axes(v, 'pole angle θ (°)', 'dθ/dt (rad/s)', { sx: 4, sy: 1 });
+  const top = Math.max(...F.D.map(Math.abs)) || 1, dx = 24 / F.nx, dy = 5 / F.ny;
+  for (let j = 0; j < F.ny; j++) for (let i = 0; i < F.nx; i++) { const d = F.D[j * F.nx + i]; c.fillStyle = d > 0 ? C.b : C.a; c.globalAlpha = 0.12 + 0.78 * Math.min(1, Math.sqrt(Math.abs(d) / top)); const x0 = v.X(-12 + i * dx), y0 = v.Y(-2.5 + (j + 1) * dy); c.fillRect(x0, y0, v.X(-12 + (i + 1) * dx) - x0 + 0.5, v.Y(-2.5 + j * dy) - y0 + 0.5); }
+  c.globalAlpha = 1; dot(v, deg(s[2]), s[3], C.q, 7, true); dot(v, deg(s[2]), s[3], C.surf, 2.5);
+  $('#nt-x-o').textContent = fmt(s[0], 2); $('#nt-xd-o').textContent = fmt(s[1], 2); $('#nt-th-o').textContent = fmt(deg(s[2]), 1) + '°'; $('#nt-thd-o').textContent = fmt(s[3], 2);
+  const o = cpObs(s);
+  $('#nt-ql').innerHTML = tip(fmt(q[0], 2), `output 1 of the network for\ns/scale = (${[...o].map(x => fmt(x, 3)).join(', ')})`); $('#nt-qr').innerHTML = tip(fmt(q[1], 2), 'output 2 of the network');
+  const [s2, done] = cpStep(s, a), q2 = done ? [0, 0] : qOf(PRE, s2), y = 1 + (done ? 0 : GAM * Math.max(q2[0], q2[1])), dl = y - q[a];
+  const dir = a ? 'right' : 'left', mq = Math.max(q[0], q[1]), qr0 = qOf(PRE, [0, 0, 0, 0]), ref = Math.max(qr0[0], qr0[1]);
+  $('#nt-life').innerHTML = tip((dl >= 0 ? '+' : '') + fmt(dl, 3), `y − Q(s, ${dir}) for the greedy push
+(see the running example)`);
+  $('#run-nt').innerHTML = `<b>Running example</b>: forward pass on s = (${fmt(s[0], 2)}, ${fmt(s[1], 2)}, ${fmt(s[2], 3)}, ${fmt(s[3], 2)}) gives Q = (${fmt(q[0], 2)}, ${fmt(q[1], 2)}), so the greedy action is push ${dir}. One step later ${done ? `the episode ${tip('ends', 'the next state is outside the limits')}, so y = r = 1` : `s&prime; has max Q = ${fmt(Math.max(q2[0], q2[1]), 2)}, so y = 1 + ${GAM} &times; ${fmt(Math.max(q2[0], q2[1]), 2)} = ${fmt(y, 2)}`}, and the TD error is y &minus; Q(s, ${dir}) = ${tip('<b>' + fmt(dl, 3) + '</b>', 'small means the network is consistent with\nBellman’s equation at this state')}.`;
+  const lean = s[2] > 0.005 ? 'right' : s[2] < -0.005 ? 'left' : null, fall = s[3] > 0.05 ? 'right' : s[3] < -0.05 ? 'left' : null;
+  $('#nt-say').innerHTML = (done ? 'This push ends the episode: the state is already lost. ' : mq < 0.7 * ref ? `This state is in trouble: its best Q (${fmt(mq, 1)}) is well below the ${fmt(ref, 1)} of a calm, upright, centred state. ` : '') +
+    (gap < 0.3 ? `The two pushes are worth almost the same (gap ${fmt(gap, 2)}): from here one wrong push is easily corrected on the next step, so the network barely cares.`
+    : `Pushing ${dir} is worth ${fmt(gap, 2)} more than pushing ${a ? 'left' : 'right'}. ${lean && fall && lean === fall ? `The pole leans ${lean} and is falling ${fall}, so the cart must run underneath it.` : lean && fall ? `The pole leans ${lean} but is already swinging back ${fall}; the network pushes ${dir}.` : ''}`) +
+    ` The colour map shows the decision for every angle and angular velocity at this cart position; the boundary is a learned, slightly tilted line, close to the classic rule &ldquo;push towards where the pole is heading&rdquo;.${Math.abs(s[0]) > 1.5 ? ' Near the edge of the track it also has to start bringing the cart back.' : ''} Its values sit near ${fmt(ref, 0)}, well below the 1/(1&minus;&gamma;) = ${fmt(1 / (1 - GAM), 0)} that balancing for ever is worth: it learned <i>which</i> push is better long before its values finished climbing${dl > 0 ? ', and the positive TD error says they are still rising' : ''}.`;
+}
+[['#nt-x', 0], ['#nt-xd', 1], ['#nt-th', 2], ['#nt-thd', 3]].forEach(([id, k]) => $(id).addEventListener('input', e => { NT.s = NT.s.slice(); NT.s[k] = k === 2 ? +e.target.value * Math.PI / 180 : +e.target.value; drawNT(); }));
+fig($('#nt-cart'), drawNT); fig($('#nt-cv'), drawNT);
+
+/* ---------- replay: a stream, a buffer, a small network ---------- */
+const RP = { N: 8192, run: false, B: 16, dp: 0.002, lr: 0.01 };
+const rpF = s => 0.2 + 0.7 * s + 0.18 * Math.sin(5 * Math.PI * s);
+function rpReset() {
+  const r = mulberry32(11); RP.r = mulberry32(12); RP.P = netInit(r, [1, 20, 20, 1]); RP.O = adamInit(RP.P); RP.G = netGrads(RP.P);
+  RP.H = netWs(RP.P, RP.B); RP.Dl = netWs(RP.P, RP.B); RP.dO = new Float64Array(RP.B); RP.Hg = netWs(RP.P, 100);
+  RP.buf = new Float64Array(8192); RP.size = 0; RP.ptr = 0; RP.pos = 0; RP.t = 0; RP.batch = [];
+}
+function rpStep() {
+  RP.buf[RP.ptr] = RP.pos; RP.ptr = (RP.ptr + 1) % RP.N; RP.size = Math.min(RP.size + 1, RP.N);
+  RP.pos += RP.dp; if (RP.pos > 1) RP.pos = 0;
+  const B = RP.B, bt = [];
+  for (let j = 0; j < B; j++) { const k = RP.size < B ? Math.floor(RP.r() * RP.size) : RP.N === B ? j : Math.floor(RP.r() * RP.size); bt.push(RP.buf[RP.N === B ? (RP.ptr - 1 - j + RP.N * 4) % RP.N : k]); }
+  for (let j = 0; j < B; j++) RP.H[0][j] = bt[j] * 2 - 1;
+  const out = netFwd(RP.P, RP.H, B); for (let j = 0; j < B; j++) RP.dO[j] = 2 * (out[j] - rpF(bt[j])) / B;
+  adamStep(RP.P, netBack(RP.P, RP.H, B, RP.dO, RP.G, RP.Dl), RP.O, RP.lr); RP.t++; RP.batch = bt;
+}
+const RP_G = [...Array(100).keys()].map(i => (i + 0.5) / 100);
+function rpFit() { for (let i = 0; i < 100; i++) RP.Hg[0][i] = RP_G[i] * 2 - 1; return Array.from(netFwd(RP.P, RP.Hg, 100)); }
+function drawRP() {
+  const C = C0(), v = frame($('#rp-cv'), [0, 1], [-0.3, 1.4], { b: 30 }); axes(v, 'position s', 'value', { sx: 0.1, sy: 0.2 }); clip(v);
+  const c = v.ctx, n = Math.min(RP.size, 1500);
+  c.save(); c.globalAlpha = 0.35; for (let i = 0; i < n; i++) { const s = RP.buf[(RP.ptr - 1 - i + RP.N * 2) % RP.N]; c.fillStyle = C.muted; c.fillRect(v.X(s) - 1, v.Y(rpF(s)) - 1, 2, 2); } c.restore();
+  curve(v, rpF, C.q, 1.6, [6, 5]);
+  const fit = rpFit(); polyline(v, RP_G.map((s, i) => [s, fit[i]]), C.a, 2.8);
+  RP.batch.forEach(s => dot(v, s, rpF(s), C.b, 3.5));
+  if (RP.t) { const x = v.X(RP.pos), y = v.pad.t; c.beginPath(); c.moveTo(x, y + 10); c.lineTo(x - 7, y); c.lineTo(x + 7, y); c.closePath(); c.fillStyle = C.q; c.fill(); }
+  c.restore();
+  const err = Math.sqrt(meanOf(RP_G.map((s, i) => (fit[i] - rpF(s)) ** 2)));
+  const bmin = RP.batch.length ? Math.min(...RP.batch) : 0, bmax = RP.batch.length ? Math.max(...RP.batch) : 0, held = Math.min(RP.size, RP.N), sweep = Math.round(1 / RP.dp);
+  $('#rp-t').innerHTML = tip(comma(RP.t), `one Adam step on a batch of ${RP.B} per new data point`);
+  $('#rp-span').innerHTML = RP.t ? tip(`${fmt(bmin, 2)}–${fmt(bmax, 2)}`, `smallest and largest s among the ${RP.B} points\nof the latest mini-batch`) : '—';
+  $('#rp-err').innerHTML = tip(fmt(err, 3), 'root-mean-square gap between the fit\nand the target, over 100 positions');
+  $('#run-rp').innerHTML = `<b>Running example</b>: N = ${comma(RP.N)}; the buffer now holds ${comma(held)} points${RP.t ? `, covering ${held * RP.dp >= 1 ? tip('the whole corridor', `${comma(held)} points × ${RP.dp} per step ≥ one sweep of ${sweep}`) : `s from ${fmt(Math.max(0, RP.pos - held * RP.dp), 2)} to ${fmt(RP.pos, 2)}`}` : ''}. Each step draws |&#120069;| = ${RP.B}${RP.N === RP.B ? ' (here: simply the 16 newest points)' : ' at random'}; this batch spans ${RP.t ? fmt(bmax - bmin, 2) : '0'} of the corridor, and every point is used about ${tip(RP.B, 'it stays N steps and is drawn with probability |𝓑|/N each step')} times before it is dropped.`;
+  $('#rp-say').innerHTML = !RP.t ? 'Press Run. The agent walks the corridor from left to right, over and over; each new position joins the buffer.'
+    : RP.N === 16 ? `<b>No replay.</b> Every batch is the 16 newest points, all within ${fmt(16 * RP.dp, 3)} of the agent. The fit follows the agent like a spotlight: it is good where the agent is and bends away elsewhere, because each region is overwritten by the next. RMS error: ${fmt(err, 3)}.`
+    : held * RP.dp < 1 ? `A short memory: the buffer covers only ${fmt(held * RP.dp, 2)} of the corridor, so batches are still local and the far end drifts. RMS error: ${fmt(err, 3)}.`
+    : `The buffer spans ${fmt(held * RP.dp, 0)} sweep${held * RP.dp >= 2 ? 's' : ''} of the corridor, so each random batch is spread across it (this one: ${fmt(bmin, 2)} to ${fmt(bmax, 2)}). Every region keeps being revisited and the fit settles everywhere at once: RMS error ${fmt(err, 3)}.`;
+}
+let rpRaf = 0;
+function rpLoop() { if (!RP.run) return; if (visible($('#rp-cv'))) { for (let i = 0; i < 25; i++) rpStep(); drawRP(); } rpRaf = requestAnimationFrame(rpLoop); }
+$('#rp-run').addEventListener('click', () => { RP.run = !RP.run; $('#rp-run').textContent = RP.run ? 'Pause' : 'Run'; if (RP.run) rpLoop(); });
+$('#rp-reset').addEventListener('click', () => { rpReset(); drawRP(); });
+seg1('[data-rn]', 'data-rn', k => { RP.N = +k; rpReset(); drawRP(); });
+rpReset(); fig($('#rp-cv'), drawRP);
+
+/* ---------- target: Baird's counterexample ---------- */
+const TG = { C: 20, g: 0.99, a: 0.1, T: 1000 };
+const BPHI = [...Array(7).keys()].map(s => { const f = new Array(8).fill(0); if (s < 6) { f[s] = 2; f[7] = 1; } else { f[6] = 1; f[7] = 2; } return f; });
+const bV = (w, s) => { let v = 0; for (let k = 0; k < 8; k++) v += BPHI[s][k] * w[k]; return v; };
+const norm = w => Math.sqrt(sum(w.map(x => x * x)));
+function tgRun(C, g, a) {
+  let w = [1, 1, 1, 1, 1, 1, 10, 1], wt = w.slice(); const out = [norm(w)], snaps = [];
+  for (let t = 1; t <= TG.T; t++) {
+    const y = g * bV(wt, 6), d = new Array(8).fill(0);
+    for (let s = 0; s < 7; s++) { const e = y - bV(w, s); for (let k = 0; k < 8; k++) d[k] += e * BPHI[s][k]; }
+    if (t === 1) snaps.push({ y, v7: bV(w, 6), w: w.slice() });
+    w = w.map((x, k) => x + a / 7 * d[k]);
+    if (C <= 1 || t % C === 0) wt = w.slice();
+    out.push(norm(w));
+  }
+  return { out, w, first: snaps[0] };
+}
+function drawTG() {
+  const C = C0(), on = tgRun(1, TG.g, TG.a), fr = tgRun(TG.C, TG.g, TG.a), lg = x => Math.log10(Math.max(x, 1e-6));
+  const all = on.out.concat(fr.out).map(lg), lo = Math.floor(Math.min(...all, 0)), hi = Math.max(Math.ceil(Math.max(...all)), lo + 3);
+  const v = frame($('#tg-cv'), [0, TG.T], [lo - 0.2, hi + 0.2], { l: 52, b: 30 }), sup = n => String(n).split('').map(d => d === '-' ? '⁻' : '⁰¹²³⁴⁵⁶⁷⁸⁹'[+d]).join('');
+  axes(v, 'sweep', '‖w‖', { sx: 200, sy: Math.max(1, Math.ceil((hi - lo) / 6)), fy: y => y === 0 ? '1' : y === 1 ? '10' : '10' + sup(y) }); clip(v);
+  if (TG.C >= 5) for (let t = TG.C; t <= TG.T; t += TG.C) seg(v, t, lo - 0.2, t, lo - 0.2 + (hi - lo) * 0.03, C.a, 1, null, 0.6);
+  polyline(v, on.out.map((x, t) => [t, lg(x)]), C.bad, 2.4); polyline(v, fr.out.map((x, t) => [t, lg(x)]), C.a, 2.6, TG.C === 1 ? [6, 6] : null);
+  v.ctx.restore();
+  const n0 = on.out[0], nOn = on.out[TG.T], nFr = fr.out[TG.T], v7 = bV(fr.w, 6);
+  $('#tg-c-o').textContent = TG.C === 1 ? '1 (no copy)' : TG.C; $('#tg-g-o').textContent = fmt(TG.g, 2);
+  $('#tg-on').innerHTML = tip(sci(nOn), `after ${TG.T} sweeps, α = ${TG.a}; started at ${fmt(n0, 2)}`); $('#tg-fr').innerHTML = tip(sci(nFr), `after ${TG.T} sweeps with C = ${TG.C};\nvalue of state 7 is now ${sciT(v7)}`);
+  const growOn = nOn > 5 * n0, growFr = nFr > 5 * n0;
+  $('#tg-say').innerHTML = TG.C === 1 ? `With C = 1 the copy is refreshed after every sweep, which is exactly the same as having no copy: the two curves coincide${growOn ? ' and both explode' : ''}.`
+    : !growOn ? `With &gamma; = ${fmt(TG.g, 2)} even live targets stay bounded here: the triad makes divergence possible, not certain. Push &gamma; towards 0.99 to see it bite.`
+    : growFr ? `Live targets explode to ${sci(nOn)}; refreshing the copy every ${TG.C} sweeps is not enough to hold still, so the weights still grow, only more slowly (${sci(nFr)}).`
+    : `Live targets: &Vert;w&Vert; explodes to ${sci(nOn)}. With a copy refreshed every ${TG.C} sweeps it ends at ${sci(nFr)}. Between refreshes the weights do ordinary regression towards labels that hold still, and because these features can fit any target, a long enough phase leaves every value at about &gamma; times the old value of state 7: the feedback loop is cut.${TG.g >= 0.97 ? ' With &gamma; this close to 1 the values come down only slowly, but they no longer blow up.' : ''}`;
+  const f = fr.first;
+  $('#run-tg').innerHTML = `<b>Running example</b>: first sweep, C = ${TG.C}: every state&rsquo;s target is y = &gamma; &middot; v&#770;(7; w<sup>&minus;</sup>) = ${fmt(TG.g, 2)} &times; (w<sub>7</sub> + 2w<sub>8</sub>) = ${fmt(TG.g, 2)} &times; ${fmt(f.v7, 0)} = ${tip(fmt(f.y, 2), 'the same target for all seven states, all rewards are 0')}; the update is w &larr; w + (&alpha;/7) &sum;<sub>s</sub> (y &minus; v&#770;(s; w)) &phi;(s) with &alpha; = ${TG.a}. After ${TG.T} sweeps state 7&rsquo;s value is ${tip(sci(v7), 'w₇ + 2w₈ with the target network; the truth is 0')} with the frozen copy, against ${sci(bV(on.w, 6))} without it.`;
+}
+$('#tg-c').addEventListener('input', e => { TG.C = +e.target.value; drawTG(); });
+$('#tg-g').addEventListener('input', e => { TG.g = +e.target.value; drawTG(); });
+fig($('#tg-cv'), drawTG);
+
+/* ---------- double: optimism of the max ---------- */
+const DB = { n: 6, s: 1, seed: 1, M: 2000 };
+const EMAX = (() => { const cache = {}; return n => { if (cache[n]) return cache[n]; const h = 0.002, phi = x => Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI); let F = 0, e = 0, x = -9; while (x < 9) { const f0 = phi(x), f1 = phi(x + h); F += (f0 + f1) * h / 2; e += (x + h) * n * f1 * Math.pow(F, n - 1) * h; x += h; } return (cache[n] = e); }; })();
+function dbRun() {
+  const r = mulberry32(DB.seed * 1000 + 7), mx = [], dd = [], ex = null; let first = null;
+  for (let m = 0; m < DB.M; m++) { const A = [], B = []; for (let i = 0; i < DB.n; i++) A.push(DB.s * gaussOf(r)); for (let i = 0; i < DB.n; i++) B.push(DB.s * gaussOf(r));
+    let k = 0; A.forEach((x, i) => { if (x > A[k]) k = i; }); mx.push(A[k]); dd.push(B[k]); if (!m) first = { A, B, k }; }
+  return { mx, dd, first };
+}
+function drawDB() {
+  const C = C0(), R = dbRun(), sg = Math.max(DB.s, 0.25), lo = -3.5 * sg, hi = 4.5 * sg, NB = 44, h1 = new Array(NB).fill(0), h2 = new Array(NB).fill(0);
+  const bin = x => clamp(Math.floor((x - lo) / (hi - lo) * NB), 0, NB - 1); R.mx.forEach(x => h1[bin(x)]++); R.dd.forEach(x => h2[bin(x)]++);
+  const top = Math.max(...h1, ...h2) * 1.12, v = frame($('#db-cv'), [lo, hi], [0, top], { b: 30 }), c = v.ctx; axes(v, 'target value (truth = 0)', 'trials', { ny: 4 }); clip(v);
+  [[h2, C.a], [h1, C.bad]].forEach(([h, col]) => { c.save(); c.fillStyle = col; c.globalAlpha = 0.45; h.forEach((k, b) => { if (!k) return; const x0 = v.X(lo + b * (hi - lo) / NB) + 0.5, x1 = v.X(lo + (b + 1) * (hi - lo) / NB) - 0.5; c.fillRect(x0, v.Y(k), x1 - x0, v.Y(0) - v.Y(k)); }); c.restore(); });
+  const m1 = meanOf(R.mx), m2 = meanOf(R.dd), th = DB.s * EMAX(DB.n);
+  seg(v, 0, 0, 0, top, C.q, 2); seg(v, m1, 0, m1, top, C.bad, 2, [5, 4]); seg(v, m2, 0, m2, top, C.a, 2, [5, 4]); c.restore();
+  $('#db-n-o').textContent = DB.n; $('#db-s-o').textContent = fmt(DB.s, 2);
+  $('#db-b1').innerHTML = tip((m1 >= 0 ? '+' : '') + fmt(m1, 3), `mean over ${comma(DB.M)} trials of max over ${DB.n} noisy estimates`); $('#db-b2').innerHTML = tip((m2 >= 0 ? '+' : '') + fmt(m2, 3), `mean of set B's estimate of set A's favourite`);
+  $('#db-th').innerHTML = tip('+' + fmt(th, 3), `σ × E[max of ${DB.n} standard normals]\n= ${fmt(DB.s, 2)} × ${fmt(EMAX(DB.n), 4)} (numerical integral)`);
+  const F = R.first, sh = F.A.slice(0, 6).map((x, i) => i === F.k ? `<b>${fmt(x, 2)}</b>` : fmt(x, 2)).join(', ') + (DB.n > 6 ? ', &hellip;' : '');
+  $('#run-db').innerHTML = `<b>Running example</b>: trial 1, ${DB.n} actions, true values all 0. Set A estimates (${sh}); the max is ${fmt(F.A[F.k], 3)} at action ${F.k + 1}${F.k >= 6 ? ' (not shown)' : ''}. The DQN target uses that ${fmt(F.A[F.k], 3)}. The double target asks set B about action ${F.k + 1}: ${tip(fmt(F.B[F.k], 3), "B's noise is independent of the reason A picked this action")}. Over ${comma(DB.M)} trials: ${fmt(m1, 3)} against ${fmt(m2, 3)}.`;
+  $('#db-say').innerHTML = DB.n === 1 ? 'With one action there is nothing to choose, so both targets are unbiased: the max of one number is that number.'
+    : DB.s === 0 ? 'No noise, no bias: every estimate is exactly 0, and so is its maximum.'
+    : `The max target is too high by ${fmt(m1, 2)} on average (${fmt(m1 / DB.s, 2)}&sigma;, theory ${fmt(EMAX(DB.n), 2)}&sigma;), and the bias grows with the number of actions. In DQN this excess is added to the target, then bootstrapped back to the state before, and the one before that. The double target is centred on the truth (${fmt(m2, 2)}), at the cost of a little extra spread.`;
+}
+$('#db-n').addEventListener('input', e => { DB.n = +e.target.value; drawDB(); });
+$('#db-s').addEventListener('input', e => { DB.s = +e.target.value; drawDB(); });
+$('#db-new').addEventListener('click', () => { DB.seed++; drawDB(); });
+fig($('#db-cv'), drawDB);
+
+/* ---------- project: CartPole, checked against Gymnasium, and a DQN trained live ---------- */
+const CPREF = [{"gym": "1.4.0", "k": 0, "pol": "random", "steps": 30, "terminated": true, "final": ["0.04740942113268451", "0.4038017609405982", "-0.23332716392401232", "-1.2853705746561246"], "maxdiff": 2.220446049250313e-16}, {"gym": "1.4.0", "k": 1, "pol": "random", "steps": 20, "terminated": true, "final": ["-0.17448709642878857", "-1.1519878118624236", "0.2413731946230139", "1.98993088356383"], "maxdiff": 2.220446049250313e-16}, {"gym": "1.4.0", "k": 2, "pol": "random", "steps": 13, "terminated": true, "final": ["0.20740043824199603", "1.3770628726375653", "-0.247062814194285", "-2.2064080574416844"], "maxdiff": 0.0}, {"gym": "1.4.0", "k": 3, "pol": "lean", "steps": 500, "terminated": false, "final": ["0.404325636108182", "0.04641212236637235", "0.006034469233169473", "-0.0002880385195173085"], "maxdiff": 0.0}, {"gym": "1.4.0", "k": 4, "pol": "lean", "steps": 500, "terminated": false, "final": ["0.5131118444097563", "0.04469848522275641", "-0.0006651009986296356", "0.002569148908771912"], "maxdiff": 0.0}];
+const RACE = {"cfg":{"H":32,"layers":2,"lr":0.001,"gamma":0.99,"batch":32,"buffer":25000,"sync":200,"steps":25000,"warmup":500,"eps_end":0.05,"eps_steps":4000,"lr_decay":true,"lr_min":0.05,"check":1000,"check_n":5},"seeds":[0,1,2,3,4],"res":{"100":[{"fin":9.5,"best":9.5,"eps":2476},{"fin":9.2,"best":9.2,"eps":2465},{"fin":9.2,"best":9.2,"eps":2470},{"fin":9.5,"best":9.5,"eps":2461},{"fin":9.5,"best":9.5,"eps":2466}],"110":[{"fin":118.7,"best":498.8,"eps":301},{"fin":198.35,"best":499.05,"eps":133},{"fin":340,"best":500,"eps":152},{"fin":74.5,"best":500,"eps":214},{"fin":36.35,"best":500,"eps":198}],"111":[{"fin":97,"best":500,"eps":271},{"fin":82.95,"best":500,"eps":214},{"fin":193.75,"best":500,"eps":174},{"fin":210.8,"best":500,"eps":178},{"fin":134.1,"best":385.45,"eps":256}],"010":[{"fin":500,"best":500,"eps":246},{"fin":133.85,"best":326.4,"eps":301},{"fin":105.5,"best":351.9,"eps":291},{"fin":168.05,"best":500,"eps":234},{"fin":91.55,"best":234.1,"eps":312}],"000":[{"fin":9.5,"best":9.5,"eps":2480},{"fin":9.2,"best":9.2,"eps":2469},{"fin":9.2,"best":9.2,"eps":2458},{"fin":9.5,"best":9.5,"eps":2466},{"fin":9.5,"best":9.5,"eps":2467}]},"say":"Five seeds per row, 25,000 steps each, run in Python against Gymnasium&rsquo;s own CartPole-v1; each number is the mean length of 20 greedy test episodes (500 is perfect). <b>With both tricks</b>, every seed&rsquo;s best snapshot balances for essentially all 500 steps. <b>Without the target network</b> every run collapses: the Q-values chase their own targets upwards (seed 0 ends with Q &asymp; 2.3 million at the upright state, where the true value can never exceed 1/(1&minus;&gamma;) = 100), the greedy policy degenerates into pushing one way, and the pole falls in about 9 steps. That is the deadly triad, live. <b>Without replay</b> this easy task is still learned sometimes, but less reliably. Double DQN is no better here: with only two actions there is little max-bias to remove. Notice too how much worse the <i>final</i> networks are than the best snapshots: DQN often learns to balance and then partly forgets it.","src":"python"};
+const PJ_CFG = RACE.cfg;
+const PJ = { rep: 1, tgt: 1, dbl: 0, seed: 0, A: null, running: false, stop: false, mine: {}, net: null, netName: 'the pretrained network', watch: null };
+const cfgKey = (r, t, d) => `${r}${t}${t ? d : 0}`;
+const CFG_ROWS = [['110', 'DQN: replay + target network'], ['111', 'Double DQN (replay + target)'], ['100', 'No target network'], ['010', 'No replay'], ['000', 'Neither trick']];
+
+function pjVerify() {
+  const rows = CPREF.map(o => {
+    const r = mulberry32(100 + o.k); let s = cpStart(r), n = 0;
+    for (let t = 0; t < 500; t++) { const a = o.pol === 'random' ? Math.floor(r() * 2) : (s[2] + 0.5 * s[3] > 0 ? 1 : 0); const [s2, d] = cpStep(s, a); s = s2; n++; if (d) break; }
+    const ref = o.final.map(Number), diff = Math.max(...s.map((v, i) => Math.abs(v - ref[i])));
+    return { o, s, n, diff, ref };
+  });
+  $('#pj-ver').innerHTML = '<thead><tr><th>test</th><th>pushes</th><th>steps (page / Gymnasium)</th><th>final &theta;, this page</th><th>final &theta;, Gymnasium</th><th>largest gap</th></tr></thead><tbody>' +
+    rows.map(R => `<tr><td>${R.o.k + 1}</td><td>${R.o.pol === 'random' ? 'random' : 'towards the lean'}</td><td class="num">${R.n} / ${R.o.steps}</td><td class="num mono">${R.s[2].toPrecision(17)}</td><td class="num mono">${R.ref[2].toPrecision(17)}</td><td class="num">${tip(R.diff === 0 ? '0' : sciT(R.diff), `final state, all four variables: ${sciT(R.diff)}\nwhole trajectory (Python check): ${R.o.maxdiff === 0 ? '0' : sciT(R.o.maxdiff)}`)}</td></tr>`).join('') + '</tbody>';
+  const worst = Math.max(...CPREF.map(o => o.maxdiff));
+  $('#pj-versay').innerHTML = `Five test runs from seeded starts: three with random pushes (the pole falls within ${Math.min(...rows.slice(0, 3).map(R => R.n))}&ndash;${Math.max(...rows.slice(0, 3).map(R => R.n))} steps) and two with a hand-made controller that pushes towards where the pole leans, which survives all 500 steps. Every step and every variable agrees with Gymnasium ${CPREF[0].gym} to within ${tip(sciT(worst), 'largest |page − Gymnasium| over all steps and variables')}. The only differences are one-bit disagreements between the browser&rsquo;s cosine and Python&rsquo;s for a few angles; the arithmetic is otherwise identical.`;
+  const s = CPREF.length ? (() => { const r = mulberry32(100); return cpStart(r); })() : [0, 0, 0, 0];
+  const [xa, tha] = cpAcc(s, 1), temp = (CP.F + CP.pml * s[3] * s[3] * Math.sin(s[2])) / CP.tm;
+  $('#run-pj').innerHTML = `<b>Running example</b>: test 1 starts at &theta; = ${fmt(s[2], 4)}, d&theta;/dt = ${fmt(s[3], 4)}. Push right (F = +10): temp = (10 + 0.05 &times; ${fmt(s[3], 4)}&sup2; &times; sin ${fmt(s[2], 4)}) / 1.1 = ${tip(fmt(temp, 4), 'm_p·l = 0.05, m_c + m_p = 1.1')}, d&sup2;&theta;/dt&sup2; = ${tip(fmt(tha, 4), '(9.8 sinθ − cosθ · temp) / (0.5 (4/3 − 0.1 cos²θ / 1.1))')} rad/s&sup2;, d&sup2;x/dt&sup2; = ${tip(fmt(xa, 4), 'temp − 0.05 d²θ/dt² cosθ / 1.1')} m/s&sup2;. Pushing the cart right swings the pole to the left (d&sup2;&theta;/dt&sup2; &lt; 0).`;
+}
+
+function pjEnable() {
+  $$('[data-pd]').forEach(b => { b.disabled = !PJ.tgt || PJ.running; });
+  $$('[data-pr],[data-pt],[data-ps]').forEach(b => { b.disabled = PJ.running; });
+  if (!PJ.tgt) $$('[data-pd]').forEach(b => b.setAttribute('aria-pressed', b.dataset.pd === '0' ? 'true' : 'false'));
+  $('#pj-train').disabled = PJ.running; $('#pj-stop').disabled = !PJ.running;
+}
+function pjTrain() {
+  if (PJ.running) return;
+  const key = cfgKey(PJ.rep, PJ.tgt, PJ.dbl);
+  PJ.A = dqnMake(Object.assign({}, PJ_CFG, { replay: !!PJ.rep, target: !!PJ.tgt, double: !!(PJ.tgt && PJ.dbl) }), PJ.seed); PJ.A.key = key;
+  PJ.running = true; PJ.stop = false; pjEnable();
+  const A = PJ.A, T = PJ_CFG.steps, t0 = performance.now();
+  (function chunk() {
+    const tEnd = performance.now() + 30;
+    while (A.t < T && performance.now() < tEnd) dqnTrainStep(A);
+    drawPJ();
+    if (A.t < T && !PJ.stop) return void setTimeout(chunk, 0);
+    PJ.running = false; A.secs = (performance.now() - t0) / 1000;
+    if (A.t >= T) { A.evFinal = dqnEval(A.P); A.evBest = A.best ? dqnEval(A.best.P) : A.evFinal; PJ.mine[key + '|' + PJ.seed] = { fin: meanOf(A.evFinal), best: meanOf(A.evBest), eps: A.eps.length };
+      PJ.net = A.best ? A.best.P : A.P; PJ.netName = `your network (seed ${PJ.seed}, ${CFG_ROWS.find(r => r[0] === key)[1]}, best snapshot)`; }
+    pjEnable(); drawPJ(); drawRace(); drawWatch();
+  })();
+}
+function drawPJ() {
+  const C = C0(), A = PJ.A, T = PJ_CFG.steps, v = frame($('#pj-curve'), [0, T], [0, 540], { l: 44, b: 30 }); axes(v, 'environment step', 'episode length', { sx: T / 5, sy: 100, fx: x => x >= 1000 ? fmt(x / 1000, 0) + 'k' : fmt(x, 0) }); clip(v);
+  seg(v, 0, 500, T, 500, C.muted, 1, [5, 4]);
+  if (A) {
+    const c = v.ctx; c.save(); c.globalAlpha = 0.45; A.eps.forEach((L, i) => { c.fillStyle = C.lda; c.fillRect(v.X(A.ends[i]) - 1.5, v.Y(L) - 1.5, 3, 3); }); c.restore();
+    const roll = A.eps.map((_, i) => [A.ends[i], meanOf(A.eps.slice(Math.max(0, i - 9), i + 1))]); if (roll.length) polyline(v, roll, C.a, 2.6);
+    A.ck.forEach(([t, e]) => dot(v, t, e, C.b, 3.5));
+    if (A.best) star(v, A.best.t, A.best.e, C.b, 8);
+    if (A.t > 0 && A.t < T) seg(v, A.t, 0, A.t, 540, C.q, 1, [3, 3]);
+    v.ctx.restore();
+  } else v.ctx.restore();
+  const eps = A ? dqnEps(A) : 1;
+  $('#pj-step').innerHTML = A ? tip(comma(A.t), `of ${comma(T)}; ε is now ${fmt(eps, 3)}`) : '—';
+  $('#pj-ep').innerHTML = A ? tip(comma(A.eps.length), `last 10 average: ${A.eps.length ? fmt(meanOf(A.eps.slice(-10)), 1) : '—'} steps`) : '—';
+  $('#pj-eval').innerHTML = A && A.evFinal ? tip(`${fmt(meanOf(A.evFinal), 0)} / ${fmt(meanOf(A.evBest), 0)}`, `mean steps over 20 seeded starts, greedy, capped at 500:\nfinal network ${fmt(meanOf(A.evFinal), 1)}, best snapshot ${fmt(meanOf(A.evBest), 1)}${A.best ? ` (step ${comma(A.best.t)})` : ''}`) : '—';
+  $('#pj-curvecap').innerHTML = `<span style="color:var(--lda)">&#9632;</span> each training episode (with &epsilon;-greedy exploration) &nbsp; <span style="color:var(--cA)">&#9644;</span> average of the last 10 &nbsp; <span style="color:var(--cB)">&#9679;</span> greedy check every ${comma(PJ_CFG.check)} steps (${PJ_CFG.check_n} starts) &nbsp; <span style="color:var(--cB)">&#9733;</span> best snapshot. Dashed: the 500-step cap.`;
+  const key = A ? A.key : cfgKey(PJ.rep, PJ.tgt, PJ.dbl), ref = RACE.res[key] && RACE.res[key][A ? A.seed : PJ.seed];
+  $('#pj-say').innerHTML = !A ? `Press <b>Train</b>. ${comma(T)} steps take a few seconds to half a minute, depending on your device.`
+    : PJ.running ? `Training&hellip; ${pct(A.t / T, 0)} done. Early episodes are short because &epsilon; is high and the network knows nothing; watch the green average climb as &epsilon; falls.`
+    : A.t < T ? `Stopped at step ${comma(A.t)}. Press Train to start again from scratch.`
+    : `Finished in ${fmt(A.secs, 1)} s, ${comma(A.eps.length)} episodes. Greedy test: final network ${fmt(meanOf(A.evFinal), 0)} steps, best snapshot ${fmt(meanOf(A.evBest), 0)}.${ref ? ` Python with Gymnasium, same seed and switches: ${fmt(ref.fin, 0)} and ${fmt(ref.best, 0)}, ${ref.eps} episodes.` : ''} ${meanOf(A.evFinal) < meanOf(A.evBest) - 50 ? 'The final network is worse than its best snapshot: DQN often learns to balance and then partly forgets, which is why practical code keeps the best checkpoint.' : ''}`;
+}
+function drawRace() {
+  const mean = a => meanOf(a);
+  $('#pj-race').innerHTML = `<thead><tr><th>switches</th><th>Python + Gymnasium: best snapshot, seeds 0&ndash;${RACE.seeds.length - 1}</th><th>mean</th><th>final network, mean</th><th>your runs here</th></tr></thead><tbody>` +
+    CFG_ROWS.map(([k, name]) => { const R = RACE.res[k]; if (!R) return ''; const mine = Object.entries(PJ.mine).filter(([kk]) => kk.startsWith(k + '|'));
+      return `<tr${k === '110' ? ' class="win"' : ''}><td><b>${name}</b></td><td class="num note">${R.map(x => fmt(x.best, 0)).join(' &middot; ')}</td><td class="num">${tip(fmt(mean(R.map(x => x.best)), 0), 'mean greedy steps (20 starts) of the best snapshot,\naveraged over seeds')}</td><td class="num">${tip(fmt(mean(R.map(x => x.fin)), 0), 'the network at the very end of training')}</td><td class="num mine">${mine.length ? mine.map(([kk, m]) => tip(`s${kk.split('|')[1]}: ${fmt(m.best, 0)}`, `seed ${kk.split('|')[1]}: best ${fmt(m.best, 1)}, final ${fmt(m.fin, 1)}, ${m.eps} episodes`)).join(' ') : '&mdash;'}</td></tr>`; }).join('') + '</tbody>';
+  $('#pj-racesay').innerHTML = RACE.say;
+}
+
+/* watching a network play */
+function drawWatch() {
+  const W = PJ.watch, P = PJ.net || PRE, s = W ? W.s : [0, 0, 0.03, 0], q = qOf(P, s);
+  drawCartPole($('#pj-watch'), s, { q, a: W && !W.done ? (q[1] > q[0] ? 1 : 0) : null, fail: W && W.fell, label: W ? `step ${W.t}` : '' });
+  $('#pj-wt').innerHTML = W ? tip(W.t, W.done ? (W.fell ? 'the pole fell or the cart left the track' : 'reached the 500-step cap') : 'running, 50 steps per second') : '—';
+  $('#pj-wq').innerHTML = tip(fmt(Math.max(q[0], q[1]), 1), `max(Q(left), Q(right)) = max(${fmt(q[0], 2)}, ${fmt(q[1], 2)})`);
+  $('#pj-watchcap').innerHTML = `Playing: ${PJ.netName}, greedy, in real time (0.02 s per step).`;
+  $('#pj-wsay').innerHTML = !W ? `Press Play to watch ${PJ.netName} from a random start.` : !W.done ? `Balancing&hellip; Notice how small the corrections are: the network alternates pushes to hold the pole near upright while keeping the cart near the middle.`
+    : W.fell ? `It failed after ${W.t} steps, at x = ${fmt(W.s[0], 2)} m, &theta; = ${fmt(deg(W.s[2]), 1)}&deg;. ${Math.abs(W.s[0]) > 2.3 ? 'The cart ran off the track: balancing was fine, but drifting is a slow, long-horizon mistake that &gamma; = ' + GAM + ' only partly sees.' : 'The pole tipped past 12&deg;.'}`
+    : `All 500 steps: CartPole-v1 counts this as a perfect episode.`;
+}
+let watchRaf = 0;
+$('#pj-play').addEventListener('click', () => {
+  cancelAnimationFrame(watchRaf); const r = mulberry32(Math.floor(Math.random() * 1e9)); PJ.watch = { s: cpStart(r), t: 0, done: false, fell: false };
+  let last = 0, acc = 0; const W = PJ.watch, P = PJ.net || PRE;
+  (function loop(ts) { if (PJ.watch !== W) return; acc += Math.min(100, ts - (last || ts)); last = ts;
+    while (acc >= 20 && !W.done) { const q = qOf(P, W.s), [n, d] = cpStep(W.s, q[1] > q[0] ? 1 : 0); W.s = n; W.t++; acc -= 20; if (d) { W.done = true; W.fell = true; } else if (W.t >= 500) W.done = true; }
+    drawWatch(); if (!W.done) watchRaf = requestAnimationFrame(loop); })(0);
+});
+
+seg1('[data-pr]', 'data-pr', k => { PJ.rep = +k; drawPJ(); });
+seg1('[data-pt]', 'data-pt', k => { PJ.tgt = +k; if (!PJ.tgt) PJ.dbl = 0; pjEnable(); drawPJ(); });
+seg1('[data-pd]', 'data-pd', k => { PJ.dbl = +k; drawPJ(); });
+seg1('[data-ps]', 'data-ps', k => { PJ.seed = +k; drawPJ(); });
+$('#pj-train').addEventListener('click', pjTrain);
+$('#pj-stop').addEventListener('click', () => { PJ.stop = true; });
+function pjInit() { pjVerify(); pjEnable(); drawPJ(); drawRace(); drawWatch(); }
+fig($('#pj-curve'), drawPJ); fig($('#pj-watch'), drawWatch);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+drawHero(); drawWY(); drawAP(); drawTR(); drawNT(); drawRP(); drawTG(); drawDB(); pjInit();
+{ let last = 0, acc = 0; (function loop(ts) { const dt = Math.min(100, ts - (last || ts)); last = ts; if (visible($('#hero-cv'))) { acc += dt; let k = 0; while (acc >= 20 && k < 5) { heroStep(); acc -= 20; k++; } if (k) drawHero(); } else acc = 0; requestAnimationFrame(loop); })(0); }
+window.__dqDebug = { drawRP, HERO, WY, AP, TR, NT, RP, TG, DB, PJ, PRE, tgRun, dbRun, EMAX, apUpdate, rpStep, cpStep, netQ, cpObs };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

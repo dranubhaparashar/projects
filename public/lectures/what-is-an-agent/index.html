@@ -1,0 +1,1389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on AI agents: the observe-think-act loop, the history as the prompt, choosing the most informative action, an LLM as a sampled controller, compounding error and the p^n half-life, pass@k and pass^k, cost and latency budgets with prompt caching, levels of autonomy and approval gates, and when to use an agent, with a working agent loop that plays a word game against 2,000 real English words, verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>What Is an AI Agent?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.qin { flex: 1; min-width: 0; font: inherit; font-size: 0.92rem; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.qin:focus-visible { outline: 2px solid var(--lda); outline-offset: 1px; }
+.askrow { display: flex; gap: 8px; align-items: stretch; }
+.tiles { display: inline-flex; gap: 2px; vertical-align: -0.28em; }
+.tiles i { font-style: normal; font-family: var(--f-mono); font-weight: 600; font-size: 0.78em; width: 1.6em; height: 1.6em; display: inline-grid; place-items: center; border-radius: 3px; text-transform: uppercase; background: var(--soft); color: var(--ink); line-height: 1; }
+.tiles i.g { background: var(--cA); color: var(--surface); }
+.tiles i.y { background: var(--cB); color: var(--surface); }
+.tiles i.p { background: var(--surface); border: 1px solid var(--line); }
+.herofig { aspect-ratio: 16 / 11; }
+#hero-cap { min-height: 4.6em; }
+pre.prompt { max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-size: 0.8rem; }
+.cpruns { aspect-ratio: 3 / 1; }
+.boardplot { aspect-ratio: 2.8 / 1; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+table.trace tr.over td { background: color-mix(in srgb, var(--qda) 9%, transparent); }
+table.trace td { vertical-align: middle; }
+@media (max-width: 560px) { .herofig { aspect-ratio: 0.9 / 1; } .cpruns { aspect-ratio: 1.6 / 1; } .boardplot { aspect-ratio: 1.6 / 1; } .plot.tall { aspect-ratio: 0.95 / 1; } }
+@media (max-width: 560px) { .plot.autall { aspect-ratio: 0.62 / 1; } .plot.aucurve { aspect-ratio: 1.5 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">AI agents <span>&middot; a model in a loop</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Answers to actions</a>
+      <a href="#loop">The loop</a>
+      <a href="#think">Thinking</a>
+      <a href="#controller">LLM controller</a>
+      <a href="#compound">Compounding error</a>
+      <a href="#budget">Budgets</a>
+      <a href="#autonomy">Autonomy</a>
+      <a href="#when">When to use</a>
+      <a href="#project">Word-game project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">AI agents · chapter 5.1 · the agent loop</div>
+      <h1>What Is an AI Agent?</h1>
+      <div class="sub">A model in a loop: observe, think, act, and go round again</div>
+      <p class="lead">A chat model answers once. An agent keeps going: it looks at what has happened so far, chooses an action, takes it, sees the result and decides again, until the job is done or the budget runs out. In the figure an agent plays a five-letter word game against 2,000 real English words. Its controller is a transparent stand-in for a language model, a rule you can inspect, not an LLM. <strong>Press Step</strong> and follow it round the loop.</p>
+      <dl class="facts">
+        <div><dt>The idea</dt><dd>A model in a loop: observe, think, act, until the goal is met or the budget runs out</dd></div>
+        <div><dt>The controller</dt><dd>An LLM in real agents; here a rule you can check: keep the words that fit, guess the most informative</dd></div>
+        <div><dt>The catch</dt><dd>Errors compound: a step that is right 95% of the time gets 20 steps in a row right only 36% of the time</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot herofig"><canvas id="hero-cv" aria-label="The agent loop: observe, think, act, beside the game board and the 2,000 words that might be the secret"></canvas></div>
+      <div class="btns" style="margin-top:10px"><button type="button" class="btn primary" id="hero-step">Step</button><button type="button" class="btn" id="hero-run">Play to the end</button><button type="button" class="btn" id="hero-new">New secret word</button></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--qda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>From answers to actions</a></li>
+    <li><a href="#loop"><i>02</i>The agent loop</a></li>
+    <li><a href="#think"><i>03</i>Choosing the most informative action</a></li>
+    <li><a href="#controller"><i>04</i>An LLM as the controller</a></li>
+    <li><a href="#compound"><i>05</i>Why long tasks fail</a></li>
+    <li><a href="#budget"><i>06</i>Cost and latency budgets</a></li>
+    <li><a href="#autonomy"><i>07</i>Levels of autonomy</a></li>
+    <li><a href="#when"><i>08</i>When to use an agent</a></li>
+    <li><a href="#project"><i>09</i>An agent loop over 2,000 real words</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>From answers to actions</h2>
+    <div class="prose">
+      <p>A chat model maps a prompt to a reply in one pass. That is enough when everything it needs is already in the prompt. Many tasks are not like that: the information arrives only as you act. You run the tests and see which one fails; you search and read what comes back; you guess a word and learn which letters are right. Russell and Norvig&rsquo;s textbook definition fits exactly: an <em class="term">agent</em> is anything that perceives its environment through sensors and acts upon it through actuators. An <em class="term">AI agent</em> in today&rsquo;s sense puts a language model in charge of that loop, a system in which, in Anthropic&rsquo;s phrase, the model &ldquo;dynamically directs its own processes and tool usage&rdquo;. Contrast a <b>workflow</b>, where the programmer fixes the sequence of model calls in code.</p>
+      <p>The environment for this whole chapter is a word game with Wordle&rsquo;s rules. The secret is one of 2,000 common five-letter words. After each guess every letter is marked <span class="tiles"><i class="g">g</i></span> right letter, right place; <span class="tiles"><i class="y">y</i></span> in the word, elsewhere; or <span class="tiles"><i>x</i></span> not in the word. Three players get k guesses each: one who never sees the feedback, a careless agent that guesses any word that still fits the feedback, and the careful stand-in from the hero. <strong>Move the guess limit k</strong> and compare them.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} P_{\text{blind}}(k) &= \frac{k}{N} \\ P_{\text{loop}}(k) &= \frac{1}{N}\sum_{w} \mathbb{1}\big[K_w \le k\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> P<sub>blind</sub>(k) is the chance of winning within k guesses without ever seeing feedback, P<sub>loop</sub>(k) the same for an agent in the loop. The secret is one of N = 2,000 equally likely words. Without feedback each new guess rules out exactly one word, so k different guesses cover k of the N. With feedback, one guess rules out whole groups of words. K<sub>w</sub> is the number of guesses an agent needs when the secret is w; it is counted by playing the agent against every one of the 2,000 secrets.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Without feedback you win with probability k over N; with the loop, it is the share of secret words the agent finds within k guesses.&rdquo;</em></div><div class="eq-run" id="run-wy"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="wy-cv" aria-label="Share of games won within k guesses for three players"></canvas></div><figcaption><span style="color:var(--muted)">&#9644;</span> no feedback &nbsp; <span style="color:var(--cB)">&#9644;</span> loop, careless controller (any word that fits, chosen at random) &nbsp; <span style="color:var(--cA)">&#9644;</span> loop, careful stand-in. Every curve is measured over all 2,000 secret words.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="wy-hist" aria-label="How many guesses each agent needed, over 2,000 games"></canvas></div><figcaption>Guesses needed, K<sub>w</sub>, over the 2,000 games: <span style="color:var(--cB)">&#9644;</span> careless &nbsp; <span style="color:var(--cA)">&#9644;</span> careful. The shaded area is beyond your limit k.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="wy-k">Guess limit k</label><output id="wy-k-o"></output></div><input type="range" id="wy-k" min="1" max="10" step="1" value="4"></div>
+        <div class="stats"><div class="stat"><div class="v" id="wy-b"></div><div class="k">no feedback, wins within k</div></div><div class="stat"><div class="v" id="wy-r"></div><div class="k">careless loop</div></div><div class="stat"><div class="v" id="wy-c"></div><div class="k">careful loop</div></div><div class="stat"><div class="v" id="wy-m"></div><div class="k">average guesses, careful</div></div></div>
+        <p class="note" id="wy-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- LOOP -->
+<section class="chap" id="loop">
+  <div class="wrap">
+    <div class="tag">The loop</div>
+    <h2>The agent loop: observe, think, act</h2>
+    <div class="prose"><p>Every agent, from this word-game player to a coding assistant, runs the same loop. The <b>history</b> holds everything so far: the task, every action, every observation. The <b>controller</b> reads the history and chooses the next action. The <b>environment</b> carries the action out and returns an observation, which is appended to the history. The loop stops when the goal is reached or a budget runs out. With an LLM as the controller the history is literally the prompt: each turn the whole transcript is sent again and the model writes the next action. ReAct (Yao et al., 2023) adds a written thought before each action; the loop is the same. Below is the transcript an LLM controller would receive in this game. <strong>Step through a game</strong> and watch the history grow while the list of words that fit shrinks.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} a_t &= \pi(h_t) \\ o_t &= E(a_t) \\ h_{t+1} &= h_t \oplus (a_t,\, o_t) \\ \text{stop if } & o_t = \text{goal or } t = T \end{aligned} \]</div><div class="read"><b>Read it as:</b> h<sub>t</sub> is the history before step t, starting with the task description h<sub>1</sub>; a<sub>t</sub> is the action (a guess), chosen by the controller &pi;; o<sub>t</sub> is the observation the environment E returns (the coloured feedback); &oplus; means &ldquo;append&rdquo;. T is the step budget, 6 guesses in the usual game.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The action is pi of the history; the observation is E of the action; the next history is the old one with the action and observation appended; stop at the goal or at step T.&rdquo;</em></div><div class="eq-run" id="run-lp"></div></div>
+    <div class="lab">
+      <div>
+        <pre class="code prompt" id="lp-prompt" aria-label="The prompt an LLM controller would receive"></pre>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="lp-cv" aria-label="Words that still fit after each step, on a log scale"></canvas></div><figcaption>Words that still fit the history after each step (log scale). The dashed line is the budget T.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <label class="mini-h" for="lp-w">Secret word</label>
+        <div class="askrow"><input type="text" id="lp-w" class="qin" value="river" maxlength="5" aria-label="Secret word"><button type="button" class="btn" id="lp-go">Set</button></div>
+        <div class="chips" id="lp-chips"></div>
+        <div class="btns"><button type="button" class="btn primary" id="lp-step">Step</button><button type="button" class="btn" id="lp-back">Back</button><button type="button" class="btn" id="lp-all">To the end</button></div>
+        <div class="ctrl"><div class="top"><label for="lp-T">Budget T (guesses)</label><output id="lp-T-o"></output></div><input type="range" id="lp-T" min="1" max="8" step="1" value="6"></div>
+        <div class="stats"><div class="stat"><div class="v" id="lp-t"></div><div class="k">step</div></div><div class="stat"><div class="v" id="lp-n"></div><div class="k">words that fit</div></div><div class="stat"><div class="v" id="lp-tok"></div><div class="k">prompt size, tokens</div></div><div class="stat"><div class="v" id="lp-st"></div><div class="k">status</div></div></div>
+        <p class="note" id="lp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- THINK -->
+<section class="chap" id="think">
+  <div class="wrap">
+    <div class="tag">The controller &middot; 1</div>
+    <h2>Thinking: choosing the most informative action</h2>
+    <div class="prose"><p>Between observing and acting sits the decision. An LLM makes it implicitly, inside its forward pass and whatever reasoning it writes out. The stand-in makes it explicitly, in two moves you can check. First, <b>keep what fits</b>: a word stays a candidate only if it would have produced every piece of feedback seen so far. Second, <b>score each possible action</b> by what it is expected to teach. A guess sorts the remaining words into groups by the feedback each would give; if the groups are small and even, whatever comes back tells you a lot. Shannon&rsquo;s entropy measures this in bits. The stand-in guesses the highest-scoring word among those that still fit, so every guess could also win (ties go to the first alphabetically). <strong>Pick a moment in a game, then try different guesses</strong> and see how each would split the words.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} C_{t+1} &= \{\, w \in C_t : \text{fb}(a_t, w) = o_t \,\} \\ H(a) &= -\sum_{f} \frac{n_f(a)}{|C_t|}\,\log_2 \frac{n_f(a)}{|C_t|} \end{aligned} \]</div><div class="read"><b>Read it as:</b> C<sub>t</sub> is the set of words that still fit; fb(a, w) is the feedback guess a would receive if the secret were w. n<sub>f</sub>(a) counts the candidates that would give feedback pattern f; there are 3<sup>5</sup> = 243 patterns. H(a) is the expected information of guess a, in bits. Finding the secret among |C<sub>t</sub>| equally likely words takes log<sub>2</sub>|C<sub>t</sub>| bits in all.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The new candidate set is the words whose feedback matches what we saw; the entropy of a guess is minus the sum over patterns of the share times log two of the share.&rdquo;</em></div><div class="eq-run" id="run-th"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="th-cv" aria-label="How the chosen guess splits the candidate words into feedback groups"></canvas></div><figcaption id="th-cap"></figcaption><figcaption>Bars are the feedback groups, largest first.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <label class="mini-h">The game: secret word</label>
+        <div class="chips" id="th-sec"></div>
+        <div class="seg" role="group" aria-label="Moment in the game"><button type="button" data-tha="0">Start</button><button type="button" data-tha="1" aria-pressed="true">After 1 guess</button><button type="button" data-tha="2">After 2 guesses</button></div>
+        <label class="mini-h">Best-scoring guesses that fit</label>
+        <div class="chips" id="th-top"></div>
+        <div class="askrow"><input type="text" id="th-w" class="qin" maxlength="5" placeholder="any of the 2,000 words" aria-label="Try any guess"><button type="button" class="btn" id="th-go">Try</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="th-h"></div><div class="k">expected information H</div></div><div class="stat"><div class="v" id="th-e"></div><div class="k">expected words left</div></div><div class="stat"><div class="v" id="th-g"></div><div class="k">feedback groups</div></div><div class="stat"><div class="v" id="th-l"></div><div class="k">largest group</div></div></div>
+        <p class="note" id="th-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTROLLER -->
+<section class="chap" id="controller">
+  <div class="wrap">
+    <div class="tag">The controller &middot; 2</div>
+    <h2>An LLM as the controller</h2>
+    <div class="prose"><p>Swap the stand-in for a language model and the loop is unchanged; only the decision is made differently. An LLM outputs a probability distribution over its next tokens, so its choice of action is a <i>sample</i>, sharpened or flattened by the sampling temperature, and coloured by whatever it learned in training rather than by an exact calculation. Two things make that workable inside an agent. Code can check every action before it runs: is the reply five letters, is it a real word? And the loop absorbs weak choices: a poor guess costs an extra step, and the next observation puts the agent back on course. To see the second effect, let a softmax over the information scores stand in for the LLM&rsquo;s sampling. <strong>Raise the temperature</strong> and watch how many guesses the games take.</p></div>
+    <div class="eq"><div class="m">\[ \pi_\tau(a \mid h_t) = \frac{e^{H(a)/\tau}}{\sum_{a' \in C_t} e^{H(a')/\tau}} \]</div><div class="read"><b>Read it as:</b> the controller samples guess a from the words that fit, with a probability that grows with its information score H(a). As &tau; &rarr; 0 it becomes the greedy stand-in; as &tau; &rarr; &infin; it picks any fitting word uniformly, the careless player of section 1. This is an analogy, not a model of any particular LLM: a real model&rsquo;s distribution comes from its weights, but temperature acts on its logits in exactly this way.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The probability of guess a is e to the H of a over tau, divided by the same sum over all words that fit.&rdquo;</em></div><div class="eq-run" id="run-ct"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="ct-cv" aria-label="Probability of each opening guess at the chosen temperature"></canvas></div><figcaption>The controller&rsquo;s distribution over its first guess: the twelve best-scoring words, then the other 1,988 together. The number beside each word is its H in bits.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="ct-curve" aria-label="Average guesses per game against temperature"></canvas></div><figcaption><span style="color:var(--lda)">&#9679;</span> average guesses per game at each temperature, measured on 400 secret words (every fifth word of the list, fixed random seed) &nbsp; <span style="color:var(--cA)">- -</span> greedy stand-in &nbsp; <span style="color:var(--cB)">- -</span> careless, on the same 400 words. The ring is your &tau;.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ct-t">Temperature &tau;</label><output id="ct-t-o"></output></div><input type="range" id="ct-t" min="0" max="100" step="1" value="45"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ct-p"></div><div class="k">chance of the best opener</div></div><div class="stat"><div class="v" id="ct-x"></div><div class="k">effective number of choices</div></div><div class="stat"><div class="v" id="ct-m"></div><div class="k">average guesses, 400 games</div></div><div class="stat"><div class="v" id="ct-w"></div><div class="k">won within 6</div></div></div>
+        <p class="note" id="ct-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPOUND -->
+<section class="chap" id="compound">
+  <div class="wrap">
+    <div class="tag">Reliability</div>
+    <h2>Why long tasks fail: compounding error</h2>
+    <div class="prose"><p>A weak choice costs a step. Some mistakes cost the whole task. Suppose the controller misreads one piece of feedback, taking a grey letter for a yellow one, and trusts its notes: from then on it filters with a false clue, crosses out the real answer, and nothing later can bring it back. If each step goes right independently with probability p and any failure is fatal, n steps all go right with probability p<sup>n</sup>, which falls off exponentially with the length of the task. Ord (2025) found that this constant-hazard model describes the measured success of AI agents on longer and longer tasks surprisingly well, which gives every agent a &ldquo;half-life&rdquo;. The defence is to check: a verifier that catches a share v of the errors before they do harm raises the effective reliability of every step. <strong>Move p, v and the task length n</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} P(\text{success}) &= p_{\text{eff}}^{\,n} \\ p_{\text{eff}} &= 1 - (1-p)(1-v) \\ n_{1/2} &= \frac{\ln 2}{-\ln p_{\text{eff}}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> p is the chance one step goes right, v the share of wrong steps a check catches and repairs, n the number of steps. The half-life n<sub>1/2</sub> is the task length at which success falls to 50%; double the length and success is squared.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Success is p-effective to the power n, where p-effective is one minus the uncaught error rate; the half-life is log two over minus log p-effective.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{pass@}k &= 1-(1-P)^k \\ \text{pass}^k &= P^k \end{aligned} \]</div><div class="read"><b>Read it as:</b> run the same task k times independently, each succeeding with probability P. pass@k is the chance that <i>at least one</i> run succeeds, useful only if you can tell which. pass<sup>k</sup> (Yao et al., 2024, the &tau;-bench paper) is the chance that <i>all k</i> succeed: what a user sees from an agent that must work every time.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Pass at k is one minus the chance that all k fail; pass to the k is the chance that all k succeed.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-cp" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot cpruns"><canvas id="cp-runs" aria-label="Twenty simulated runs, step by step"></canvas></div><figcaption>Twenty simulated runs of an n-step task, one row each: <span style="color:var(--cA)">&#9632;</span> step right &nbsp; <span style="color:var(--cB)">&#9632;</span> step wrong, caught and repaired &nbsp; <span style="color:var(--qda)">&#9632;</span> uncaught error: the run is lost from here on.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="cp-cv" aria-label="Success probability against task length"></canvas></div><figcaption><span style="color:var(--muted)">- -</span> p<sup>n</sup>, no checks &nbsp; <span style="color:var(--cA)">&#9644;</span> p<sub>eff</sub><sup>n</sup>, with checks. The ring is your n.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cp-p">Step reliability p</label><output id="cp-p-o"></output></div><input type="range" id="cp-p" min="0.8" max="0.999" step="0.001" value="0.95"></div>
+        <div class="ctrl"><div class="top"><label for="cp-v">Errors caught by a check, v</label><output id="cp-v-o"></output></div><input type="range" id="cp-v" min="0" max="0.99" step="0.01" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="cp-n">Steps in the task, n</label><output id="cp-n-o"></output></div><input type="range" id="cp-n" min="1" max="100" step="1" value="20"></div>
+        <div class="ctrl"><div class="top"><label for="cp-k">Repeated runs, k</label><output id="cp-k-o"></output></div><input type="range" id="cp-k" min="1" max="10" step="1" value="5"></div>
+        <div class="btns"><button type="button" class="btn" id="cp-re">Draw 20 new runs</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cp-s"></div><div class="k">success, p<sub>eff</sub><sup>n</sup></div></div><div class="stat"><div class="v" id="cp-h"></div><div class="k">half-life, steps</div></div><div class="stat"><div class="v" id="cp-a"></div><div class="k">pass@k</div></div><div class="stat"><div class="v" id="cp-b"></div><div class="k">pass<sup>k</sup></div></div></div>
+        <p class="note" id="cp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BUDGET -->
+<section class="chap" id="budget">
+  <div class="wrap">
+    <div class="tag">Budgets</div>
+    <h2>Cost and latency budgets</h2>
+    <div class="prose"><p>An agent pays for every trip round the loop. With an LLM controller each turn sends the whole history again, so the prompt grows with every step and the <i>total</i> input grows with the square of the number of steps. Prompt caching, offered by the major API providers, bills the unchanged start of a prompt at a reduced rate; it softens the square but does not remove it, and every call still costs time. The clock runs step by step too: each turn waits for the model to start answering, for it to write its output, and for the tool to run. The prices below are examples, not any provider&rsquo;s list price. <strong>Set your own numbers</strong> and see where the money and the minutes go.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} T_{\text{in}}(n) &= \sum_{t=1}^{n} \big(s + (t-1)\,m\big) \\ &= n\,s + m\,\tfrac{n(n-1)}{2} \\ \text{cost} &= c_{\text{in}}\,T_{\text{in}} + c_{\text{out}}\,n\,o \\ \text{time} &= n\,\big(\ell + o/r\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> s tokens of fixed prompt (instructions, tool descriptions, the task), m tokens added to the history per step (the action and its observation), o output tokens per step, c<sub>in</sub> and c<sub>out</sub> the prices per token, &ell; the waiting per step (time to the first token plus the tool&rsquo;s own run time) and r the output speed in tokens per second. With caching, the part of each prompt already sent on the previous turn is billed at a fraction &kappa; of c<sub>in</sub> (a simplification: real cache pricing also has a write charge and an expiry time).</div><div class="eq-say"><b>Say it</b><em>&ldquo;Total input is n times s plus m times n times n minus one over two; cost is input price times input plus output price times output; time is n times waiting plus output over speed.&rdquo;</em></div><div class="eq-run" id="run-bu"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="bu-cv" aria-label="Input tokens sent at each step"></canvas></div><figcaption>Input tokens sent with each call: <span style="color:var(--lda)">&#9632;</span> fixed prompt s &nbsp; <span style="color:var(--cB)">&#9632;</span> history so far &nbsp; hatched: billed at the cached rate.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="bu-cost" aria-label="Running cost against step"></canvas></div><figcaption>Running cost: <span style="color:var(--qda)">&#9644;</span> no caching &nbsp; <span style="color:var(--cA)">&#9644;</span> with caching.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="bu-n">Steps n</label><output id="bu-n-o"></output></div><input type="range" id="bu-n" min="1" max="100" step="1" value="30"></div>
+        <div class="ctrl"><div class="top"><label for="bu-s">Fixed prompt s (tokens)</label><output id="bu-s-o"></output></div><input type="range" id="bu-s" min="500" max="20000" step="500" value="3000"></div>
+        <div class="ctrl"><div class="top"><label for="bu-m">Added per step m</label><output id="bu-m-o"></output></div><input type="range" id="bu-m" min="50" max="3000" step="50" value="500"></div>
+        <div class="ctrl"><div class="top"><label for="bu-o">Output per step o</label><output id="bu-o-o"></output></div><input type="range" id="bu-o" min="20" max="1000" step="10" value="150"></div>
+        <div class="ctrl"><div class="top"><label for="bu-ci">Example input price, $ per million</label><output id="bu-ci-o"></output></div><input type="range" id="bu-ci" min="0.25" max="15" step="0.25" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="bu-co">Example output price, $ per million</label><output id="bu-co-o"></output></div><input type="range" id="bu-co" min="1" max="75" step="1" value="15"></div>
+        <div class="seg" role="group" aria-label="Prompt caching"><button type="button" data-buc="0">No caching</button><button type="button" data-buc="1" aria-pressed="true">Cache at &kappa; = 0.1</button></div>
+        <div class="ctrl"><div class="top"><label for="bu-l">Waiting per step &ell; (s)</label><output id="bu-l-o"></output></div><input type="range" id="bu-l" min="0.2" max="10" step="0.1" value="1.5"></div>
+        <div class="ctrl"><div class="top"><label for="bu-r">Output speed r (tokens/s)</label><output id="bu-r-o"></output></div><input type="range" id="bu-r" min="20" max="300" step="10" value="60"></div>
+        <div class="stats"><div class="stat"><div class="v" id="bu-ti"></div><div class="k">input tokens, whole run</div></div><div class="stat"><div class="v" id="bu-c"></div><div class="k">cost of the run</div></div><div class="stat"><div class="v" id="bu-tm"></div><div class="k">wall-clock time</div></div><div class="stat"><div class="v" id="bu-x"></div><div class="k">last call vs first, tokens</div></div></div>
+        <p class="note" id="bu-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- AUTONOMY -->
+<section class="chap" id="autonomy">
+  <div class="wrap">
+    <div class="tag">Who decides?</div>
+    <h2>Levels of autonomy</h2>
+    <div class="prose"><p>How much should an agent do without asking? Engineers have described automation in levels for decades, from the machine merely suggesting to the machine acting alone (Sheridan &amp; Verplank, 1978; Parasuraman, Sheridan &amp; Wickens, 2000), and cars have SAE&rsquo;s levels 0 to 5. For a software agent a practical ladder has five rungs. <b>L1</b>: it only suggests; a person acts. <b>L2</b>: it acts, but a person approves every action. <b>L3</b>: it asks for approval only before risky actions. <b>L4</b>: it acts alone while a person watches and can stop it. <b>L5</b>: it acts alone, unwatched. Each rung up saves human time and lets more mistakes through. The task below is <i>invented</i>, with made-up numbers, to show the trade: twelve actions of an agent handling a refund request, each with a chance of being wrong and a cost if a wrong one goes through. <strong>Pick a level, or slide the approval threshold yourself</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbb{E}[\text{cost}] = {} & \sum_{i} \big(1 - g_i\,r\big)\, e_i\, h_i \\ & + c_H \sum_i g_i \end{aligned} \]</div><div class="read"><b>Read it as:</b> action i goes wrong with probability e<sub>i</sub> and costs h<sub>i</sub> if the mistake goes through. g<sub>i</sub> = 1 if a person must approve it first; a reviewer catches a share r of the wrong actions they see; each approval costs c<sub>H</sub> of a person&rsquo;s time. The threshold rule gates action i when its expected harm e<sub>i</sub>h<sub>i</sub> is at least &theta;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Expected cost is the sum of the harm that slips past review plus the price of every approval.&rdquo;</em></div><div class="eq-run" id="run-au"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10 autall"><canvas id="au-cv" aria-label="Expected harm of each action and which ones need approval"></canvas></div><figcaption>Expected harm e<sub>i</sub>h<sub>i</sub> of each action (log scale). <span style="color:var(--cB)">&#9632;</span> gated: a person approves it &nbsp; <span style="color:var(--qda)">&#9632;</span> runs unreviewed. The dashed line is &theta;.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1 aucurve"><canvas id="au-curve" aria-label="Total expected cost against the approval threshold"></canvas></div><figcaption>Total expected cost per task against &theta;: <span style="color:var(--cB)">&#9644;</span> approvals &nbsp; <span style="color:var(--qda)">&#9644;</span> harm let through &nbsp; <span style="color:var(--ink)">&#9644;</span> total. The ring is your setting.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Autonomy level"><button type="button" data-aul="2">L2 approve all</button><button type="button" data-aul="3" aria-pressed="true">L3 approve risky</button><button type="button" data-aul="5">L4&ndash;L5 none</button></div>
+        <div class="ctrl"><div class="top"><label for="au-t">Approval threshold &theta; ($ of expected harm)</label><output id="au-t-o"></output></div><input type="range" id="au-t" min="0" max="100" step="1" value="50"></div>
+        <div class="ctrl"><div class="top"><label for="au-c">Cost of one approval c<sub>H</sub> ($)</label><output id="au-c-o"></output></div><input type="range" id="au-c" min="0.1" max="10" step="0.1" value="1"></div>
+        <div class="ctrl"><div class="top"><label for="au-r">Reviewer catches, r</label><output id="au-r-o"></output></div><input type="range" id="au-r" min="0" max="1" step="0.05" value="0.9"></div>
+        <div class="stats"><div class="stat"><div class="v" id="au-g"></div><div class="k">approvals per task</div></div><div class="stat"><div class="v" id="au-h"></div><div class="k">expected harm let through</div></div><div class="stat"><div class="v" id="au-hc"></div><div class="k">cost of approvals</div></div><div class="stat"><div class="v" id="au-tot"></div><div class="k">total expected cost</div></div></div>
+        <p class="note" id="au-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- WHEN -->
+<section class="chap" id="when">
+  <div class="wrap">
+    <div class="tag">Judgement</div>
+    <h2>When to use an agent, and when not to</h2>
+    <div class="prose"><p>An agent is not the default answer. Anthropic&rsquo;s advice to builders (Schluntz &amp; Zhang, 2024) is to find the simplest solution that works and add complexity only when it clearly pays: agents trade latency and cost for better performance on hard, open-ended tasks. The three options line up like this.</p></div>
+    <div class="uses">
+      <div><div class="which" style="color:var(--cA)">One model call</div><h4>Everything needed is in the prompt</h4><p>Summarise, classify, draft, answer from retrieved passages. Cheapest, fastest, easiest to test.</p></div>
+      <div><div class="which" style="color:var(--lda)">Workflow</div><h4>The steps are known in advance</h4><p>A fixed chain or branch of model calls written in code: extract, then check, then format. Predictable cost and behaviour.</p></div>
+      <div><div class="which" style="color:var(--qda)">Agent</div><h4>The path depends on what you find</h4><p>Debugging, research, multi-step tool use. Worth it when there are many steps, the next one cannot be known in advance, and success can be checked.</p></div>
+    </div>
+    <div class="prose" style="margin-top:18px"><p>Putting this chapter&rsquo;s formulas together gives a rough expected value for handing a task to an agent, to set against doing it by hand. <strong>Describe a task with the sliders</strong> and see which way the sum tips, and how the answer changes with the number of steps.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbb{E}[\text{agent}] &= P\,V - (1-P)\,F - n\,c \\ P &= p_{\text{eff}}^{\,n} \end{aligned} \]</div><div class="read"><b>Read it as:</b> V is what a successful run is worth, F what a failed one costs (clean-up, or harm), n the steps it needs, c the cost per step (tokens, time, and the checks), and P the success probability from the compounding section. Doing the task by hand is worth V minus the human cost H, assuming a person always succeeds.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The agent is worth P times V, minus one minus P times F, minus n times c, where P is p-effective to the n.&rdquo;</em></div><div class="eq-run" id="run-wn"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="wn-cv" aria-label="Expected value of an agent run against task length, compared with doing it by hand"></canvas></div><figcaption><span style="color:var(--qda)">&#9644;</span> agent, no checks &nbsp; <span style="color:var(--cA)">&#9644;</span> agent with checks (costlier steps) &nbsp; <span style="color:var(--muted)">- -</span> by hand. The ring is your task.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="wn-n">Steps n</label><output id="wn-n-o"></output></div><input type="range" id="wn-n" min="1" max="60" step="1" value="12"></div>
+        <div class="ctrl"><div class="top"><label for="wn-p">Step reliability p</label><output id="wn-p-o"></output></div><input type="range" id="wn-p" min="0.8" max="0.999" step="0.001" value="0.97"></div>
+        <div class="ctrl"><div class="top"><label for="wn-v">Errors caught by checks, v</label><output id="wn-v-o"></output></div><input type="range" id="wn-v" min="0" max="0.99" step="0.01" value="0.8"></div>
+        <div class="ctrl"><div class="top"><label for="wn-V">Value of success V ($)</label><output id="wn-V-o"></output></div><input type="range" id="wn-V" min="1" max="200" step="1" value="50"></div>
+        <div class="ctrl"><div class="top"><label for="wn-F">Cost of a failure F ($)</label><output id="wn-F-o"></output></div><input type="range" id="wn-F" min="0" max="500" step="5" value="20"></div>
+        <div class="ctrl"><div class="top"><label for="wn-c">Cost per step c ($), checks double it</label><output id="wn-c-o"></output></div><input type="range" id="wn-c" min="0" max="2" step="0.01" value="0.1"></div>
+        <div class="ctrl"><div class="top"><label for="wn-H">Human cost H ($)</label><output id="wn-H-o"></output></div><input type="range" id="wn-H" min="0" max="200" step="1" value="30"></div>
+        <div class="stats"><div class="stat"><div class="v" id="wn-P"></div><div class="k">success P, with checks</div></div><div class="stat"><div class="v" id="wn-a"></div><div class="k">agent, no checks</div></div><div class="stat"><div class="v" id="wn-b"></div><div class="k">agent with checks</div></div><div class="stat"><div class="v" id="wn-h"></div><div class="k">by hand</div></div></div>
+        <p class="note" id="wn-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: an agent loop over 2,000 real words</h2>
+    <div class="prose">
+      <p>The environment is real. The word list is the 2,000 most frequent five-letter words in the English subtitles of the <strong>OpenSubtitles 2018</strong> corpus (the frequency lists of H. Dave&rsquo;s FrequencyWords project, CC BY-SA 4.0) that are also in the <strong>ENABLE</strong> word list (public domain), after removing by hand 163 offensive words, words used mostly as names, and subtitle artefacts. The feedback follows Wordle&rsquo;s rules exactly, repeated letters included: greens are marked first, then yellows from left to right while unmatched copies of the letter remain in the secret. The controller is the <b>transparent stand-in</b> of the sections above, not an LLM: it keeps the words that fit and guesses the one with the most expected information. Everything below runs in your browser: the 4,000,000 feedback patterns between every pair of words, every one of the 2,000 games, and the fallible versions of the controller.</p>
+    </div>
+
+    <h3>1 &middot; Play every game</h3>
+    <div class="btns block"><button type="button" class="btn primary" id="pj-all">Play all 2,000 games</button><span class="note" id="pj-prog" style="align-self:center"></span></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-board"></table></div>
+    <figure class="block" style="max-width:860px"><div class="plot boardplot"><canvas id="pj-cv" aria-label="Number of games needing each number of guesses"></canvas></div><figcaption>Games by number of guesses needed, careful stand-in. <span style="color:var(--qda)">&#9632;</span> more than six: lost in the real game.</figcaption></figure>
+    <p class="note block" style="max-width:72ch" id="pj-say"></p>
+
+    <h3>2 &middot; Trace any game</h3>
+    <div class="askrow block" style="max-width:520px"><input type="text" id="pj-w" class="qin" value="watch" maxlength="5" aria-label="Secret word for the trace"><button type="button" class="btn primary" id="pj-go">Trace</button></div>
+    <div class="tbl-wrap block"><table class="hand trace" id="pj-trace"></table></div>
+    <p class="note" style="max-width:72ch" id="pj-tsay"></p>
+
+    <h3>3 &middot; A fallible controller</h3>
+    <div class="prose"><p>Now let the controller misread: with probability &epsilon; per observation it changes one tile&rsquo;s colour in its notes (one tile at random, to one of the other two colours at random). A <b>verifier</b> re-reads the raw transcript and catches a share v of those slips, at the price of one extra model call each. Because a slip always crosses out the true secret, an uncaught slip is always fatal, and the exact chance of winning is</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} P(\text{win}) &= \frac{1}{N}\sum_{w:\,K_w \le 6} q^{\,K_w - 1} \\ q &= 1 - \varepsilon(1-v) \end{aligned} \]</div><div class="read"><b>Read it as:</b> a game won in K<sub>w</sub> guesses involves K<sub>w</sub> &minus; 1 readings of feedback (the last one is the win itself, announced by the game). Each reading must avoid an uncaught slip, which it does with probability q: this is p<sup>n</sup> with a different n for every word. Games the careful agent cannot win within six guesses stay lost.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The win rate is the average, over winnable words, of q to the power K minus one, where q is one minus epsilon times one minus v.&rdquo;</em></div><div class="eq-run" id="run-pj"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pf-cv" aria-label="Win rate against misread rate: formula and simulation"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> formula above, at your v &nbsp; <span style="color:var(--muted)">- -</span> formula with no verifier &nbsp; <span style="color:var(--ink)">&#9679;</span> simulated, all 2,000 games per point (seed 2024). The ring is your setting.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pf-e">Misread rate &epsilon;</label><output id="pf-e-o"></output></div><input type="range" id="pf-e" min="0" max="0.3" step="0.01" value="0.05"></div>
+        <div class="ctrl"><div class="top"><label for="pf-v">Verifier catches, v</label><output id="pf-v-o"></output></div><input type="range" id="pf-v" min="0" max="1" step="0.05" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pf-w"></div><div class="k">won, simulated</div></div><div class="stat"><div class="v" id="pf-f"></div><div class="k">won, formula</div></div><div class="stat"><div class="v" id="pf-s"></div><div class="k">answer crossed out</div></div><div class="stat"><div class="v" id="pf-c"></div><div class="k">claimed a win falsely</div></div><div class="stat"><div class="v" id="pf-o"></div><div class="k">out of guesses</div></div><div class="stat"><div class="v" id="pf-x"></div><div class="k">model calls, all games</div></div></div>
+        <p class="note" id="pf-say"></p>
+      </div></div>
+    </div>
+
+    <h3>4 &middot; The bill</h3>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-bill"></table></div>
+    <p class="note" style="max-width:72ch" id="pj-bsay"></p>
+
+    <h3>The same agent in Python</h3>
+<pre class="code"><code>import json, math
+words = json.load(open("wa-data.json", encoding="utf8"))["words"].split()
+N = len(words)
+
+def fb(g, s):                                 # Wordle feedback: 2 green, 1 yellow, 0 grey, as one base-3 number
+    r, left = [0] * 5, {}
+    for i in range(5):
+        if g[i] == s[i]: r[i] = 2
+        else: left[s[i]] = left.get(s[i], 0) + 1
+    for i in range(5):
+        if r[i] == 0 and left.get(g[i], 0) &gt; 0: r[i] = 1; left[g[i]] -= 1
+    return r[0] + 3 * r[1] + 9 * r[2] + 27 * r[3] + 81 * r[4]
+PM = [bytes(fb(g, s) for s in words) for g in words]          # all 4,000,000 patterns
+
+def entropy(g, C):
+    n = len(C)
+    if n &lt;= 1: return 0.0
+    b = [0] * 243
+    for s in C: b[PM[g][s]] += 1
+    return math.log2(n) - sum(c * math.log2(c) for c in b if c &gt; 1) / n
+ROOT = [entropy(g, range(N)) for g in range(N)]
+def scores(C): return ROOT if len(C) == N else [entropy(g, C) for g in C]
+def best(C):                                  # the stand-in: most informative word that still fits, ties alphabetical
+    H, b = scores(C), 0
+    for k in range(1, len(C)):
+        if H[k] &gt; H[b] + 1e-9: b = k
+    return C[b], H[b]
+
+def mulberry32(a):                            # the same seeded generator as the page
+    a &amp;= 0xFFFFFFFF
+    def rnd():
+        nonlocal a
+        a = (a + 0x6D2B79F5) &amp; 0xFFFFFFFF
+        t = ((a ^ (a &gt;&gt; 15)) * (1 | a)) &amp; 0xFFFFFFFF
+        t = ((t + (((t ^ (t &gt;&gt; 7)) * (61 | t)) &amp; 0xFFFFFFFF)) &amp; 0xFFFFFFFF) ^ t
+        return ((t ^ (t &gt;&gt; 14)) &amp; 0xFFFFFFFF) / 4294967296
+    return rnd
+
+def corrupt(f, rnd):                          # one tile changes to one of the other two colours
+    d = [(f // 3 ** i) % 3 for i in range(5)]; i = math.floor(rnd() * 5)
+    d[i] = (d[i] + 1 + math.floor(rnd() * 2)) % 3
+    return sum(d[j] * 3 ** j for j in range(5))
+
+def play(secret, policy="best", tau=1.0, eps=0.0, v=0.0, T=6, rnd=None):
+    C, calls = list(range(N)), 0
+    for t in range(1, T + 1):
+        if policy == "best": g = best(C)[0]
+        elif policy == "random": g = C[math.floor(rnd() * len(C))]
+        else:                                 # softmax over information scores
+            H = scores(C); m = max(H); e = [math.exp((h - m) / tau) for h in H]
+            u, k = rnd() * sum(e), 0
+            while k &lt; len(H) - 1 and u &gt;= e[k]: u -= e[k]; k += 1
+            g = C[k]
+        calls += 1
+        f = PM[g][secret]
+        if f == 242: return "won", t, calls
+        read = f
+        if eps &gt; 0 and rnd() &lt; eps:
+            read = corrupt(f, rnd)
+            if v &gt; 0 and rnd() &lt; v: read = f; calls += 1
+        if read == 242: return "claimed", t, calls
+        C = [w for w in C if PM[g][w] == read]
+        if not C: return "stuck", t, calls
+    return "out", T, calls
+
+o, h = best(list(range(N)))
+top = sorted(range(N), key=lambda g: -ROOT[g])[:5]
+print(f"{N} words; best opener {words[o]} H = {h:.6f} bits; top 5:", ", ".join(f"{words[g]} {ROOT[g]:.4f}" for g in top))
+K = [play(s, T=20)[1] for s in range(N)]
+dist = {k: K.count(k) for k in sorted(set(K))}
+print("careful stand-in, guesses needed:", dist, f"mean {sum(K) / N:.4f}, won within 6: {sum(k &lt;= 6 for k in K)}")
+print("needs more than 6:", " ".join(words[s] for s in range(N) if K[s] &gt; 6))
+rnd = mulberry32(7); R = [play(s, "random", T=30, rnd=rnd)[1] for s in range(N)]
+print("careless (seed 7):", {k: R.count(k) for k in sorted(set(R))}, f"mean {sum(R) / N:.4f}, won within 6: {sum(k &lt;= 6 for k in R)}")
+sub = range(0, N, 5)
+for tau in (0.1, 0.5, 2.0):
+    rnd = mulberry32(11); S = [play(s, "soft", tau=tau, T=30, rnd=rnd)[1] for s in sub]
+    print(f"softmax tau {tau}: mean {sum(S) / len(S):.4f} over {len(S)} words, won within 6: {sum(k &lt;= 6 for k in S)}")
+for eps, v in ((0.05, 0.0), (0.1, 0.0), (0.1, 0.9), (0.2, 0.5)):
+    rnd = mulberry32(2024); out = [play(s, eps=eps, v=v, rnd=rnd) for s in range(N)]
+    c = {k: sum(x[0] == k for x in out) for k in ("won", "stuck", "claimed", "out")}
+    pred = sum((1 - eps * (1 - v)) ** (k - 1) for k in K if k &lt;= 6) / N
+    print(f"eps {eps} v {v}: {c}, calls {sum(x[2] for x in out)}, simulated {c['won'] / N:.4f}, formula {pred:.4f}")</code></pre>
+<pre class="code out"><code>2000 words; best opener tears H = 6.187820 bits; top 5: tears 6.1878, rates 6.1481, tales 6.1360, slate 6.1135, tries 6.0787
+careful stand-in, guesses needed: {1: 1, 2: 161, 3: 954, 4: 694, 5: 146, 6: 31, 7: 11, 8: 2} mean 3.4850, won within 6: 1987
+needs more than 6: joker mates pipes pound stung walls watch wears wills wines woods wound years
+careless (seed 7): {1: 2, 2: 91, 3: 557, 4: 793, 5: 404, 6: 114, 7: 32, 8: 6, 9: 1} mean 4.0060, won within 6: 1961
+softmax tau 0.1: mean 3.4350 over 400 words, won within 6: 400
+softmax tau 0.5: mean 3.7800 over 400 words, won within 6: 397
+softmax tau 2.0: mean 3.9350 over 400 words, won within 6: 397
+eps 0.05 v 0.0: {'won': 1754, 'stuck': 234, 'claimed': 4, 'out': 8}, calls 6669, simulated 0.8770, formula 0.8764
+eps 0.1 v 0.0: {'won': 1545, 'stuck': 440, 'claimed': 7, 'out': 8}, calls 6390, simulated 0.7725, formula 0.7693
+eps 0.1 v 0.9: {'won': 1945, 'stuck': 42, 'claimed': 0, 'out': 13}, calls 7347, simulated 0.9725, formula 0.9693
+eps 0.2 v 0.5: {'won': 1521, 'stuck': 473, 'claimed': 4, 'out': 2}, calls 6804, simulated 0.7605, formula 0.7693</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>An agent is a model in a loop: observe the history, choose an action, let the environment answer, append, repeat until the goal or the budget is reached.</li>
+      <li>The loop is what lets an agent solve tasks whose information only arrives as you act; a better controller then shortens the path.</li>
+      <li>Weak choices cost steps; uncaught errors cost the task. With independent steps, success is p<sup>n</sup>, so long tasks need checks that catch errors before they compound.</li>
+      <li>Each step re-sends the history: tokens grow with the square of the number of steps, and time adds up call by call. Budget both.</li>
+      <li>Choose the least autonomy and the simplest design that does the job: one call, then a workflow, then an agent, with approvals placed where the expected harm is high.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>What is the difference between a workflow and an agent?</summary><p>In a workflow the programmer fixes the sequence of model calls and tools in code; the model fills in steps. In an agent the model itself decides, from the history, which action comes next and when to stop. A workflow&rsquo;s path is predictable; an agent&rsquo;s depends on what it observes.</p></details>
+      <details class="q"><summary>Why can a player with no feedback win only k out of 2,000 games with k guesses, while the loop wins almost all of them in six?</summary><p>Without feedback each guess eliminates one word. With feedback a guess sorts all remaining words into up to 243 groups and keeps only one group, so a good guess cuts 2,000 words to a few dozen. The observation, not the cleverness of the guess, carries most of the information.</p></details>
+      <details class="q"><summary>Each step of an agent is right 98% of the time. Roughly how long can a task be before it fails more often than it succeeds?</summary><p>The half-life is ln 2 / &minus;ln 0.98 &asymp; 34 steps. At 34 steps success is about 50%; at 68 steps about 25%. A check that catches half of the errors makes p<sub>eff</sub> = 0.99 and doubles the half-life to about 69 steps.</p></details>
+      <details class="q"><summary>Why does the total input of a long agent run grow faster than the number of steps?</summary><p>Each call re-sends the whole history, and the history grows by m tokens per step, so call t sends s + (t &minus; 1)m tokens. Summed over n calls that is n s + m n(n &minus; 1)/2: quadratic in n. Caching lowers the price of the repeated part but not the number of tokens processed.</p></details>
+      <details class="q"><summary>Where should a person approve an agent&rsquo;s actions?</summary><p>Where the expected harm of a mistake that slips through, chance times cost, exceeds the cost of the review: typically irreversible or external actions such as payments, deletions and messages to customers. Approving every read-only lookup wastes human time and trains people to click &ldquo;yes&rdquo; without looking.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../tool-use/">Next chapter: Tool Use &amp; Function Calling &rarr;</a>
+      <a class="btn" href="../evaluating-llms/">&larr; Previous: Evaluating LLMs</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Russell, S. &amp; Norvig, P. (2020). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed. Pearson, ch. 2 &ldquo;Intelligent agents&rdquo;.</li>
+      <li>Wooldridge, M. &amp; Jennings, N. (1995). Intelligent agents: theory and practice. <em>The Knowledge Engineering Review</em> 10(2).</li>
+      <li>Yao, S. et al. (2023). ReAct: synergizing reasoning and acting in language models. <em>ICLR 2023</em>.</li>
+      <li>Schluntz, E. &amp; Zhang, B. (2024). Building effective agents. Anthropic engineering blog, 19 December 2024.</li>
+      <li>Yao, S., Shinn, N., Razavi, P. &amp; Narasimhan, K. (2024). &tau;-bench: a benchmark for tool-agent-user interaction in real-world domains. arXiv:2406.12045 (introduces pass<sup>k</sup>).</li>
+      <li>Ord, T. (2025). Is there a half-life for the success rates of AI agents? arXiv:2505.05115.</li>
+      <li>Kwa, T. et al. (2025). Measuring AI ability to complete long tasks. arXiv:2503.14499.</li>
+      <li>Sheridan, T. &amp; Verplank, W. (1978). <em>Human and Computer Control of Undersea Teleoperators</em>. MIT Man-Machine Systems Laboratory technical report.</li>
+      <li>Parasuraman, R., Sheridan, T. &amp; Wickens, C. (2000). A model for types and levels of human interaction with automation. <em>IEEE Transactions on Systems, Man, and Cybernetics, Part A</em> 30(3).</li>
+      <li>Shannon, C. (1948). A mathematical theory of communication. <em>Bell System Technical Journal</em> 27(3).</li>
+      <li>Lison, P. &amp; Tiedemann, J. (2016). OpenSubtitles2016: extracting large parallel corpora from movie and TV subtitles. <em>Proc. LREC 2016</em>; word counts from H. Dave, FrequencyWords (github.com/hermitdave/FrequencyWords), CC BY-SA 4.0. ENABLE word list, public domain.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated. Word frequencies from FrequencyWords (OpenSubtitles 2018), CC BY-SA 4.0.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- word-game environment and the stand-in controller (shared core) ---------- */
+const WAC = (() => {
+  let W = [], N = 0, LET = null, PM = null, ROOT = null;
+  const ALL = () => { const a = new Int32Array(N); for (let i = 0; i < N; i++) a[i] = i; return a; };
+  const WIN = 242; // all five tiles green
+  /* feedback with the real duplicate-letter rule: greens first, then yellows left to right while unmatched copies remain */
+  const cnt = new Int8Array(26), r = new Int8Array(5);
+  function fbIdx(g, s) {
+    const gb = g * 5, sb = s * 5;
+    for (let i = 0; i < 5; i++) { const x = LET[sb + i]; if (LET[gb + i] === x) r[i] = 2; else { r[i] = 0; cnt[x]++; } }
+    for (let i = 0; i < 5; i++) if (r[i] === 0) { const x = LET[gb + i]; if (cnt[x] > 0) { r[i] = 1; cnt[x]--; } }
+    for (let i = 0; i < 5; i++) cnt[LET[sb + i]] = 0;
+    return r[0] + 3 * r[1] + 9 * r[2] + 27 * r[3] + 81 * r[4];
+  }
+  function fbStr(g, s) { // any two five-letter strings
+    const r = [0, 0, 0, 0, 0], c = {};
+    for (let i = 0; i < 5; i++) { if (g[i] === s[i]) r[i] = 2; else c[s[i]] = (c[s[i]] || 0) + 1; }
+    for (let i = 0; i < 5; i++) if (r[i] !== 2 && c[g[i]] > 0) { r[i] = 1; c[g[i]]--; }
+    return r[0] + 3 * r[1] + 9 * r[2] + 27 * r[3] + 81 * r[4];
+  }
+  const digits = code => { const d = []; for (let i = 0; i < 5; i++) { d.push(code % 3); code = Math.floor(code / 3); } return d; };
+  const undigits = d => d[0] + 3 * d[1] + 9 * d[2] + 27 * d[3] + 81 * d[4];
+  function init(words) {
+    W = words; N = W.length; LET = new Uint8Array(N * 5);
+    for (let i = 0; i < N; i++) for (let j = 0; j < 5; j++) LET[i * 5 + j] = W[i].charCodeAt(j) - 97;
+    PM = new Uint8Array(N * N);
+    for (let g = 0; g < N; g++) { const o = g * N; for (let s = 0; s < N; s++) PM[o + s] = fbIdx(g, s); }
+    ROOT = null;
+  }
+  const fb = (g, s) => PM[g * N + s];
+  /* bucket sizes of guess g over candidate set C */
+  const bk = new Int32Array(243);
+  function buckets(g, C) { bk.fill(0); const o = g * N; for (let k = 0; k < C.length; k++) bk[PM[o + C[k]]]++; return bk; }
+  function entropy(g, C) {
+    const n = C.length; if (n <= 1) return 0; const b = buckets(g, C); let S = 0;
+    for (let f = 0; f < 243; f++) { const c = b[f]; if (c > 1) S += c * Math.log2(c); }
+    return Math.log2(n) - S / n;
+  }
+  function expLeft(g, C) { const b = buckets(g, C); let s = 0; for (let f = 0; f < 243; f++) s += b[f] * b[f]; return s / C.length; }
+  function scores(C) { const H = new Float64Array(C.length); for (let k = 0; k < C.length; k++) H[k] = entropy(C[k], C); return H; }
+  /* the stand-in policy: among the words that still fit, the one whose feedback is expected to tell the most (ties: first alphabetically) */
+  function best(C, H) {
+    if (C.length === N && ROOT) return ROOT;
+    H = H || (C.length === N ? rootScores() : scores(C)); let b = 0;
+    for (let k = 1; k < C.length; k++) if (H[k] > H[b] + 1e-9) b = k;
+    const r = { g: C[b], h: H[b], k: b };
+    if (C.length === N) ROOT = r;
+    return r;
+  }
+  function filter(C, g, f) { const o = g * N, out = []; for (let k = 0; k < C.length; k++) if (PM[o + C[k]] === f) out.push(C[k]); return Int32Array.from(out); }
+  /* the greedy agent on every secret at once: a decision tree, since the policy is deterministic */
+  function tree() {
+    const depth = new Int8Array(N); let nodes = 0;
+    const rec = (C, d) => { nodes++; const H = C.length === N && ROOT ? null : scores(C), b = best(C, H); depth[b.g] = d;
+      const parts = new Map(), o = b.g * N; for (let k = 0; k < C.length; k++) { const s = C[k]; if (s === b.g) continue; const f = PM[o + s]; if (!parts.has(f)) parts.set(f, []); parts.get(f).push(s); }
+      [...parts.keys()].sort((a, c) => a - c).forEach(f => rec(Int32Array.from(parts.get(f)), d + 1)); };
+    rec(ALL(), 1);
+    return { depth, nodes };
+  }
+  /* corrupt a reading: one tile's colour changes to one of the other two */
+  function corrupt(f, rng) { const d = digits(f), i = Math.floor(rng() * 5); d[i] = (d[i] + 1 + Math.floor(rng() * 2)) % 3; return undigits(d); }
+  /* one episode. opts: policy 'best' | 'random' | 'soft' (tau), eps misread rate, v verifier catch rate, T guess limit, rng, trace */
+  function play(secret, o) {
+    o = Object.assign({ policy: 'best', tau: 1, eps: 0, v: 0, T: 6, rng: Math.random, trace: false }, o || {});
+    let C = ALL(); const steps = []; let calls = 0, status = 'out';
+    for (let t = 1; t <= o.T; t++) {
+      if (!C.length) { status = 'stuck'; break; }
+      let g, h = null, H = null;
+      if (o.policy === 'best') { const b = best(C); g = b.g; h = b.h; }
+      else if (o.policy === 'random') g = C[Math.floor(o.rng() * C.length)];
+      else { H = C.length === N ? rootScores() : scores(C); let m = -Infinity; for (let k = 0; k < H.length; k++) m = Math.max(m, H[k]); let Z = 0; const e = new Float64Array(H.length); for (let k = 0; k < H.length; k++) { e[k] = Math.exp((H[k] - m) / o.tau); Z += e[k]; } let u = o.rng() * Z, k = 0; while (k < H.length - 1 && u >= e[k]) { u -= e[k]; k++; } g = C[k]; h = H[k]; }
+      calls++;
+      const f = fb(g, secret), st = { t, n: C.length, g, h, f };
+      if (f === WIN) { if (o.trace) steps.push(Object.assign(st, { read: f, left: 1 })); status = 'won'; return { status, k: t, steps, calls }; }
+      let read = f, slip = false, caught = false;
+      if (o.eps > 0 && o.rng() < o.eps) { slip = true; read = corrupt(f, o.rng); if (o.v > 0 && o.rng() < o.v) { caught = true; read = f; calls++; } }
+      if (read === WIN) { if (o.trace) steps.push(Object.assign(st, { read, slip, caught, left: 0 })); status = 'claimed'; return { status, k: t, steps, calls }; }
+      C = filter(C, g, read);
+      if (o.trace) steps.push(Object.assign(st, { read, slip, caught, left: C.length, C: o.keepC ? C : null }));
+      if (!C.length) { status = 'stuck'; return { status, k: t, steps, calls }; }
+    }
+    return { status, k: o.T, steps, calls };
+  }
+  let RS = null; function rootScores() { if (!RS) RS = scores(ALL()); return RS; }
+  return { init, fb, fbStr, fbIdx, digits, undigits, entropy, expLeft, buckets, scores, best, filter, tree, play, corrupt, rootScores, ALL, WIN, get N() { return N; }, get W() { return W; } };
+})();
+
+
+const WA = {"words":"abbey abbot abide abode abort about above abuse abyss aches acres acted actor acute adapt added adieu adios admit adopt adore adult after again agent aging agony agree ahead ahold aimed aisle alarm album alert algae alias alibi alien alike alive alley allow aloha alone along aloud alpha altar alter amaze amber among ample amuse angel anger angle angry ankle annoy apart apple apply apron areas arena argue arise armed armor aroma array arrow arson ashes aside asked aspen asset atlas atoms atone attic audio audit aunts avoid await awake award aware awful awoke backs bacon badge badly bagel baked baker baldy balls bands bangs banjo banks barge barks baron based bases basic basil basin basis batch bates bathe baths baton beach beads beams beans beard bears beast beats beeps beers began begin begun beige being belle bells belly below belts bench bends berry bible biker bikes bills bingo birch birds birth bites black blade blame bland blank blast blaze bleak bleed bleep blend bless blind blink bliss blitz block bloke blond blood bloom blown blows blues bluff blunt blush board boast boats bogus boils bolts bombs bonds bones bonus books boost booth boots booze bored borne bosom bossy bound bowel bowls boxed boxer boxes brace brain brake brand brass brats brave bravo brawl bread break breed bribe brick bride brief bring brink broad brock broke brook broom broth brown brush brute bucks buddy budge buggy bugle build built bulbs bulls bully bumps bumpy bunch bunny burns burnt burps burst buses buyer cabin cable caddy cadet cages cakes calls calms camel camps canal candy canoe canon cards cared cares cargo carry carts carve cases caste casts catch cause caves cease cedar cello cells cents chain chair chalk champ chant chaos chaps charm chart chase cheap cheat check cheek cheer chefs chemo chess chest chick chief child chile chili chill chime chimp chino chips choir choke chops chord chose chump chunk chute cider cigar cinch civic civil claim clamp clams clang clank clans claps clash class claws clean clear clerk click cliff climb cling clink clips cloak clock clone close cloth cloud clown clubs clues coach coast coats cobra cocky cocoa coded codes coins colon color combo comes comet comfy comic condo cones cooks coral cords corny corps costs couch cough could count court cover crabs crack craft cramp crane crank crash crate crave crawl crazy cream creed creek creep crest crews cried cries crime crisp croft crook crops cross crowd crown crows crude cruel crush crust crypt cubes cubic cuffs cupid cured cures curls curly curry curse curve cuter cutie cycle daddy daffy daily dairy dames dance dandy dared dares darts dated dates deals dealt death debts debut decaf decay decks decoy deeds deity delay delta demon dense depot depth derby desks deuce devil diary diner dingo dings dirty disco ditch ditto diver dizzy docks dodge dodgy doggy doing dolls dolly donor donut doors doses doubt dough doves downs dowry dozen draft drags drain drake drama drank drawn draws dread dream dress dried dries drift drill drink drive drone drool drops drove drown drums drunk dryer ducks ducky dudes dummy dumps dunes dusty dwarf dwell dying eager eagle early earns earth eaten eater edges eerie eight elbow elder elect elite elope elves emery empty ended enemy enjoy enter entry envoy equal erase error essay ether euros evade event every evils exact exams exile exist exits expel extra faced faces facts faded fades fails faint fairy faith faked fakes falls false fancy fangs farce farms fatal fates fault favor fears feast feeds feels fella felon fence ferry fetch fetus fever fewer fiber field fiend fiery fifth fifty fight filed files filet fills films filth final finch finds finer fines fired fires firms first fishy fists fixed fixes flack flags flair flake flame flank flaps flare flash flask flats flaws fleas fleet flesh flick flies fling flint flirt float flock flood floor flora floss flour flown flows fluid fluke flush flute flyer focus foggy folds folks folly foods fools force forge forks forms forth forty forum found fours foxes frail frame fraud freak freed fresh friar fried fries frogs front frost frown froze fruit fudge fully fumes funds funky funny furry fussy fuzzy gains games gamma gangs gases gasps gates gator gauge gauze gavel gears geeks geese genes genie genre gents germs ghost giant giddy gifts girls girly given gives glare glass glide gloat globe gloom glory gloss glove glued gnome goals goats going golly goner goods goody goofy goons goose gorge gowns grabs grade graft grail grain grams grand grant grape grasp grass grave gravy great greed green greet grief grill grind groan groin groom gross group grove growl grown grows grunt guard guess guest guide guild guilt gulps habit hades hairs hairy halls hands handy hangs happy hardy harsh haste hasty hatch hated hates haunt havoc hawks hazel heads heals heard hears heart heath heave heavy hedge heels heirs heist hello helps hence herbs herds hides hills hints hippo hired hitch hobby hoist holds holed holes homes honey honks honor hooks hoops hoped hopes horns horse hosts hotel hound hours house hover howdy howls hubby human humor hunch hunts hurry hurts hutch hydra icing ideal ideas idiot idols image imply index inner input intro irons irony isles issue itchy items ivory jacks jeans jelly jerks jerky jewel jiffy joins joint joker jokes jolly judge juice juicy jumbo jumps jumpy juror kappa karma kebab keeps kicks kills kilos kinds kings knack kneel knees knife knock knots known knows label labor lacks laden lakes lambs lamps lands lanes large laser lasts latch later latex latte laugh layer leads leaks learn lease leash least leave ledge leech lefty legal legit lemon level lever liars lifts light liked likes limbo limbs limit lined linen lines links lions lists liter lived liver lives loads loans lobby local locks lodge logic loner looks loony loose lords lorry loser loses lotus lousy loved lover loves lower lowly loyal lucid lucky lumps lumpy lunar lunch lungs lurch lured lying macho madam madly mafia magic magma maids major maker makes males mambo mango manic manly manor maple march marks marry marsh masks match mater mates maths maxim maybe mayor meals means meant medal media medic meets melon melts menus meows mercy merge merit merle merry messy metal meter metre metro midst might miles milky mills minds miner mines minor mints minus misty mixed mixer moans model moist mondo money monks monte month moods moody moons moose moral morse motel moths motor motto mould mound mount mourn mouse mouth moved moves movie muddy mules mummy munch music myths nails naive naked named names nanny nasal nasty naval necks needs needy nerds nerve nests never newly nicer niece night ninja ninth noble noise noisy noose north noses notch noted notes novel nurse nutty oasis occur ocean oddly offer often older olive omega onion opens opera orbit order organ other ought ounce outer owing owned owner paces packs paddy pagan paged pager pages pains paint pairs palms panda panel panic pants papal paper parks parts party pasha pasta paste patch paths patio patsy pause paved peace peach peaks pearl pears pedal peers penal pence peril perks pesos petty phase phone phony photo piano picks picky piece piggy piled piles pilot pinch pines pinky pints pious piper pipes pitch pizza place plain plane plank plans plant plate plays plaza plead plots pluck plugs poems poets point poked poker polar poles polka polls pools poppy porch porky ports posed poses posse posts potty pouch pound pours power prank press price pride prime print prior privy prize probe prone proof props proud prove proxy psych puffs puffy puked pulls pulse pumps punch punks pupil puppy purge purse pushy quack quake quark queen quest queue quick quiet quill quite quits quota quote rabbi rabid raced racer races radar radio raids rails rains rainy raise rally ranch range ranks rapid rated rates ratio raven razor reach react reads ready realm rebel recon reeks refer rehab reign reins relax relay relic renew rents repay reply reset rests retro rhino rhyme rider rides ridge rifle right rigid rigor rings rinse riots risen rises risks risky rites rival river roach roads roars roast robes robot rocks rocky rodeo rogue roles rolls roman roofs rooms roots roper ropes roses rouge rough round route rover rowdy royal rugby ruins ruled ruler rules rumor rural rusty saber sacks sadly safer sails saint salad sales salon salsa salts salty samba sands sassy satin sauce sauna saved saves scale scalp scans scare scarf scars scary scene scent scold scoop scoot scope score scots scout scram scrap screw scrub scuba seals seats sedan seeds seeks seems seize sells sends sense serge serum serve setup seven sever sewed sewer shack shade shady shaft shake shaky shall shalt shame shape share shark sharp shave shawl sheep sheer sheet sheik shelf shell shift shine shiny ships shirt shits shock shoes shook shoot shops shore short shots shout shove shown shows shred shush shuts sides siege sighs sight signs silly since sings sinks siren sites sixth sixty sizes skate skies skill skins skips skirt skull skunk slack slain slams slang slaps slash slate sleep sleet slept slice slick slide slime slimy sling slips slope slows slugs slums smack small smart smash smear smell smile smoke snack snail snake snaps sneak sniff snoop snore snort snowy snuck snuff sober socks solar solid solve sonar songs sonic sorry sorts souls sound south space spade spare spark spawn speak spear speck specs speed spell spend spent spice spicy spies spike spill spine spins spite spits split spoil spoke spook spoon sport spots spray spree spurs squad squat squid stack staff stage stain stake stale stalk stall stamp stand stare stark stars start stash state stats stays steak steal steam steed steel steep steer stein steps stern stick stiff still sting stink stock stole stomp stone stood stool stoop stops store storm story stove strap straw stray strip stuck study stuff stump stung stunt style sucks sugar suing suite suits sully sunny super surge sushi swain swamp swans swarm swear sweat sweep sweet swell swept swift swine swing swipe swoop sword swore sworn swung syrup table taboo tacky tacos tails taken takes tales talks tally tango tanks taped tapes tarts tasks taste tasty taxes taxis teach teams tears tease teens teeth tells telly tempo tempt tends tense tenth tents terms terra tests texts thank theft their theme there these theta thick thief thigh thine thing think third thorn those three threw throw thuds thugs thumb thump tiara ticks tidal tides tiger tight tiles timed timer times timid tired tires titan title toast today token tolls tombs tones tonic tools tooth toots topic torch torso total touch tough tours towed towel tower towns toxic toxin trace track trade trail train trait tramp trans traps trash tread treat trees trend triad trial tribe trick tried tries trips troll troop trout truce truck truly trump trunk trust truth tubes tulip tummy tumor tuned tunes turbo turns tutor twain tweet twice twins twist tying typed types tyres ulcer ultra uncle under unfit union unite units unity untie until upper upset urban urged urges users usher using usual utter vague valet valid value valve vault vegan veins venom vents venue verge verse vibes vicar video views villa vines viola viper viral virus visit vista vital vivid vocal vodka vogue voice voila volts vomit voted votes vouch vowed wacky wager wages wagon wails waist waits wakes wales walks walls waltz wants waste watch water watts waved waves wears weary weave weber wedge weeds weeks weigh weird wells whack whale wharf wheat wheel where which whiff while whine whips whirl whirs white whole whoop whose wider widow wield wills winds windy wines wings wiped wipes wired wires wiser witch witty wives woken woman women woods woody words works world worms worry worse worst worth would wound wraps wrath wreck wrist write wrong wrote yacht yahoo yanks yards yawns yearn years yells yelps yield yikes young yours youse youth yummy zebra zones","meta":{"enable5":8636,"freq5":6536,"both":3791,"dropped":163,"lastCount":935,"firstCount":3148528,"first":"there","last":"pears"}};
+const WORDS = WA.words.split(' '), N = WORDS.length, IDX = new Map(WORDS.map((w, i) => [w, i]));
+const t0 = performance.now();
+WAC.init(WORDS);
+const TREE = WAC.tree(), K = TREE.depth, OPEN = WAC.best(WAC.ALL()), tInit = performance.now() - t0;
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), ink: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const nf = n => Math.round(n).toLocaleString('en-GB');
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const sum = a => a.reduce((s, v) => s + v, 0);
+const UP = w => w.toUpperCase();
+const DIG = f => WAC.digits(f);
+const patStr = f => DIG(f).map(d => d === 2 ? 'G' : d === 1 ? 'Y' : '.').join('');
+const tilesHTML = (w, f) => { const d = f == null ? null : DIG(f); return `<span class="tiles">${[...w].map((ch, i) => `<i${d ? (d[i] === 2 ? ' class="g"' : d[i] === 1 ? ' class="y"' : '') : ' class="p"'}>${ch}</i>`).join('')}</span>`; };
+const log2 = Math.log2;
+function txt(c, s, x, y, o) { o = o || {}; c.save(); c.font = (o.w ? o.w + ' ' : '') + (o.px || 11) + 'px ' + css(o.f || '--f-mono'); c.fillStyle = o.col || css('--muted'); c.textAlign = o.al || 'left'; c.textBaseline = o.bl || 'middle'; c.fillText(s, x, y); c.restore(); }
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+/* one row of tiles on a canvas */
+function drawTiles(c, x, y, sz, w, f, C, ghost) {
+  const d = f == null ? null : DIG(f), gap = Math.max(2, sz * 0.1);
+  for (let i = 0; i < 5; i++) {
+    const X = x + i * (sz + gap); rrect(c, X, y, sz, sz, Math.max(2, sz * 0.12));
+    if (d) { c.fillStyle = d[i] === 2 ? C.a : d[i] === 1 ? C.b : C.soft; c.fill(); }
+    else { c.fillStyle = C.surf; c.fill(); c.strokeStyle = ghost ? C.bad : C.line; c.lineWidth = ghost ? 1.6 : 1; if (ghost) c.setLineDash([3, 2]); c.stroke(); c.setLineDash([]); }
+    if (w) txt(c, w[i].toUpperCase(), X + sz / 2, y + sz / 2 + 1, { px: Math.round(sz * 0.52), w: '600', col: d ? (d[i] ? C.surf : C.ink) : (ghost ? C.bad : C.ink), al: 'center' });
+  }
+}
+const tilesW = sz => 5 * sz + 4 * Math.max(2, sz * 0.1);
+/* a small 5-square pattern glyph */
+function glyph(c, x, y, s, f, C) { const d = DIG(f); for (let i = 0; i < 5; i++) { c.fillStyle = d[i] === 2 ? C.a : d[i] === 1 ? C.b : C.line; c.fillRect(x + i * (s + 1), y, s, s); } }
+const promptHead = T => `System: You are playing a word game. Find the hidden five-letter English word in at most ${T} guesses. After each guess you get one symbol per letter: G = right letter, right place; Y = in the word, wrong place; . = not in the word (or no more copies of it). Reply with one guess and nothing else.\nUser: Begin. You have ${T} guesses.`;
+function promptText(steps, t, T, status) {
+  let s = promptHead(T);
+  for (let i = 0; i < t; i++) { const st = steps[i], left = T - st.t; s += `\nAssistant: ${st.g === undefined ? '' : WORDS[st.g]}\nUser: ${patStr(st.f)}  ` + (st.f === WAC.WIN ? 'Solved.' : left > 0 ? `(${left} guess${left === 1 ? '' : 'es'} left)` : 'No guesses left. The game is over.'); }
+  return s;
+}
+const toks = s => Math.ceil(s.length / 4);
+const trace = (s, T) => WAC.play(s, { trace: true, keepC: true, T });
+const before = (steps, t) => t <= 1 ? WAC.ALL() : steps[t - 2].C; // candidates before step t
+
+/* careless controller: any word that still fits, uniformly at random (seed 7) */
+const RCARE = (() => { const rng = mulberry32(7), k = new Int8Array(N); for (let s = 0; s < N; s++) k[s] = WAC.play(s, { policy: 'random', T: 30, rng }).k; return k; })();
+const within = (arr, k) => { let c = 0; for (let i = 0; i < arr.length; i++) if (arr[i] <= k) c++; return c; };
+const meanOf = arr => sum(Array.from(arr)) / arr.length;
+const HARD = WORDS.filter((w, i) => K[i] > 6);
+
+/* ---------- hero ---------- */
+const HERO = { s: IDX.get('magic'), steps: null, status: '', t: 1, ph: 0, timer: 0 };
+function heroSet(s) { HERO.s = s; const r = trace(s, 6); HERO.steps = r.steps; HERO.status = r.status; HERO.t = 1; HERO.ph = 0; heroStop(); drawHero(); }
+const heroLast = () => HERO.t === HERO.steps.length && HERO.ph === 2;
+function heroStep() { if (heroLast()) { heroSet(Math.floor(Math.random() * N)); return; } if (HERO.ph < 2) HERO.ph++; else { HERO.t++; HERO.ph = 0; } drawHero(); if (heroLast()) heroStop(); }
+function heroStop() { if (HERO.timer) { clearInterval(HERO.timer); HERO.timer = 0; } $('#hero-run').textContent = 'Play to the end'; }
+function heroLayout(w, h) {
+  if (w >= 520) return { ring: [0, 0, w * 0.44, h], board: [w * 0.46, 8, w * 0.52, h * 0.54], dots: [w * 0.46, h * 0.6, w * 0.52, h * 0.38] };
+  return { ring: [0, 0, w * 0.52, h * 0.54], board: [w * 0.52, 8, w * 0.46, h * 0.52], dots: [10, h * 0.6, w - 20, h * 0.38] };
+}
+function drawHero() {
+  const cv = $('#hero-cv'), C = C0(), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, { w, h } = v, L = heroLayout(w, h);
+  const st = HERO.steps, t = HERO.t, ph = HERO.ph, cur = st[t - 1], Cb = before(st, t), done = heroLast();
+  const filled = ph === 2 ? t : t - 1, candSet = ph === 2 ? (cur.C || (cur.f === WAC.WIN ? Int32Array.of(cur.g) : new Int32Array(0))) : Cb;
+  /* ring */
+  const [rx, ry, rw, rh] = L.ring, cx = rx + rw / 2, cy = ry + rh / 2 + 4, R = Math.min(rw, rh) * 0.33, sr = Math.max(17, R * 0.34);
+  const ang = [-Math.PI / 2, Math.PI / 6, Math.PI * 5 / 6], names = ['Observe', 'Think', 'Act'];
+  c.save(); c.strokeStyle = C.line; c.lineWidth = 2; c.beginPath(); c.arc(cx, cy, R, 0, 7); c.stroke();
+  for (let k = 0; k < 3; k++) { // arrowheads half-way between stations, clockwise
+    const a = ang[k] + Math.PI / 3, x = cx + R * Math.cos(a), y = cy + R * Math.sin(a), dx = -Math.sin(a), dy = Math.cos(a), on = k === ph;
+    c.fillStyle = on ? C.bad : C.muted; c.beginPath(); c.moveTo(x + dx * 7, y + dy * 7); c.lineTo(x - dx * 4 + Math.cos(a) * 5, y - dy * 4 + Math.sin(a) * 5); c.lineTo(x - dx * 4 - Math.cos(a) * 5, y - dy * 4 - Math.sin(a) * 5); c.closePath(); c.fill(); }
+  ang.forEach((a, k) => { const x = cx + R * Math.cos(a), y = cy + R * Math.sin(a), on = k === ph && !(done && k !== 2);
+    c.beginPath(); c.arc(x, y, sr, 0, 7); c.fillStyle = on ? C.bad : C.surf; c.fill(); c.strokeStyle = on ? C.bad : C.line; c.lineWidth = 1.5; c.stroke();
+    txt(c, names[k], x, y + 1, { px: sr > 24 ? 13 : 11, w: '600', f: '--f-body', col: on ? C.surf : C.ink, al: 'center' }); });
+  txt(c, done ? (HERO.status === 'won' ? 'solved' : 'out of guesses') : `step ${t} of 6`, cx, cy - 7, { px: 12, f: '--f-body', col: C.ink, al: 'center', w: '600' });
+  txt(c, `${nf(candSet.length)} fit`, cx, cy + 11, { px: 11, col: C.muted, al: 'center' });
+  c.restore();
+  /* board */
+  const [bx, by, bw, bh] = L.board, sz = Math.floor(Math.min((bw - 8) / 5.5, (bh - 26) / 6.7)), tw = tilesW(sz), x0 = bx + (bw - tw) / 2;
+  txt(c, 'environment: the game', bx + bw / 2, by + 7, { px: 10.5, al: 'center' });
+  for (let r = 0; r < 6; r++) { const y = by + 20 + r * (sz + Math.max(3, sz * 0.14));
+    if (r < filled) drawTiles(c, x0, y, sz, WORDS[st[r].g], st[r].f, C);
+    else if (r === t - 1 && ph === 1) drawTiles(c, x0, y, sz, WORDS[cur.g], null, C, true);
+    else drawTiles(c, x0, y, sz, '', null, C); }
+  /* dots: the 2,000 words, alphabetical */
+  const [dx, dy0, dw, dh0] = L.dots, dy = dy0 + 14, dh = dh0 - 14; let s = 12; while (s > 2 && Math.floor(dw / s) * Math.floor(dh / s) < N) s -= 0.25;
+  const cols = Math.floor(dw / s), inC = new Uint8Array(N); candSet.forEach(i => { inC[i] = 1; });
+  txt(c, `${nf(candSet.length)} of 2,000 words still fit`, dx, dy0 + 5, { px: 10.5 });
+  c.save(); for (let i = 0; i < N; i++) { const X = dx + (i % cols) * s, Y = dy + Math.floor(i / cols) * s; c.fillStyle = inC[i] ? C.ink : C.line; c.globalAlpha = inC[i] ? 0.85 : 0.6; c.fillRect(X, Y, s - 1, s - 1); }
+  c.globalAlpha = 1; if (ph >= 1 || done) { const g = cur.g, X = dx + (g % cols) * s, Y = dy + Math.floor(g / cols) * s; c.strokeStyle = C.bad; c.lineWidth = 2; c.strokeRect(X - 2, Y - 2, s + 3, s + 3); } c.restore();
+  /* caption */
+  let cap;
+  const prev = t > 1 ? st[t - 2] : null;
+  if (ph === 0) cap = t === 1 ? `<b>Observe.</b> The history holds only the task: find the word in six guesses. Nothing has been seen yet, so all ${tip('2,000', 'the whole word list: every word is still possible')} words could be the secret.`
+    : `<b>Observe.</b> The game answered ${tilesHTML(WORDS[prev.g], prev.f)}. Of the ${nf(prev.n)} words that fitted before, ${tip(nf(prev.left), `words w with fb(${UP(WORDS[prev.g])}, w) = ${patStr(prev.f)}\nkept out of ${prev.n}`)} would have produced exactly this feedback; the rest are crossed out.`;
+  else if (ph === 1) cap = Cb.length === 1 ? `<b>Think.</b> Only one word fits everything seen so far: ${UP(WORDS[cur.g])}.` : `<b>Think.</b> The stand-in scores each of the ${nf(Cb.length)} words that fit by how much its feedback would tell. ${UP(WORDS[cur.g])} scores highest: ${tip(fmt(cur.h, 2) + ' bits', `H = −Σ (n_f/n) log2(n_f/n) over the feedback groups\nn = ${Cb.length}; ${fmt(log2(Cb.length), 2)} bits are still unknown`)} expected, of the ${fmt(log2(Cb.length), 2)} bits still unknown.`;
+  else cap = `<b>Act.</b> It guesses ${UP(WORDS[cur.g])}; the environment answers ${tilesHTML(WORDS[cur.g], cur.f)}. ` + (cur.f === WAC.WIN ? `Solved in ${t} guess${t === 1 ? '' : 'es'}. Press Step for a new secret word.` : done ? `That was the sixth guess: out of guesses. The secret was ${UP(WORDS[HERO.s])}, one of ${cur.left} words that still fitted. Press Step for a new one.` : 'Round the loop again.');
+  $('#hero-cap').innerHTML = cap;
+}
+$('#hero-step').addEventListener('click', () => { heroStop(); heroStep(); });
+$('#hero-run').addEventListener('click', () => { if (HERO.timer) return heroStop(); if (heroLast()) heroSet(Math.floor(Math.random() * N)); HERO.timer = setInterval(heroStep, 700); $('#hero-run').textContent = 'Pause'; });
+$('#hero-new').addEventListener('click', () => heroSet(Math.floor(Math.random() * N)));
+heroSet(HERO.s);
+fig($('#hero-cv'), drawHero);
+
+/* ---------- 1. from answers to actions ---------- */
+const WY = { k: 4 };
+function drawWY() {
+  const C = C0(), k = WY.k, cv = $('#wy-cv'), v = frame(cv, [0.5, 10.5], [0, 1.04], { l: 44, b: 30 });
+  axes(v, 'guess limit k', 'won within k', { sx: 1, sy: 0.2, fy: y => pct(y, 0) }); clip(v);
+  const series = [[k2 => k2 / N, C.muted, [5, 4]], [k2 => within(RCARE, k2) / N, C.b], [k2 => within(K, k2) / N, C.a]];
+  series.forEach(([f, col, dash]) => { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = 2.4; if (dash) c.setLineDash(dash); c.beginPath(); for (let i = 1; i <= 10; i++) i === 1 ? c.moveTo(v.X(i), v.Y(f(i))) : c.lineTo(v.X(i), v.Y(f(i))); c.stroke(); c.restore(); for (let i = 1; i <= 10; i++) dot(v, i, f(i), col, i === k ? 5.5 : 3); });
+  seg(v, k, 0, k, 1.04, C.ink, 1, [3, 3], 0.5); v.ctx.restore();
+  const hv = frame($('#wy-hist'), [0.4, 10.6], [0, 1000], { l: 44, b: 26 }); axes(hv, 'guesses needed', 'games', { sx: 1, sy: 250 });
+  const hc = hv.ctx; hc.save(); hc.fillStyle = C.soft; hc.globalAlpha = 0.7; hc.fillRect(hv.X(k + 0.5), hv.pad.t, hv.X(10.6) - hv.X(k + 0.5), hv.ph); hc.restore();
+  for (let g = 1; g <= 10; g++) { const nr = RCARE.filter(x => x === g).length, nc = K.filter(x => x === g).length, bw = (hv.X(1) - hv.X(0)) * 0.36;
+    hc.fillStyle = C.b; hc.fillRect(hv.X(g) - bw, hv.Y(nr), bw - 1, hv.Y(0) - hv.Y(nr)); hc.fillStyle = C.a; hc.fillRect(hv.X(g) + 1, hv.Y(nc), bw - 1, hv.Y(0) - hv.Y(nc)); }
+  const pb = k / N, nr = within(RCARE, k), nc = within(K, k), lost = WORDS.filter((w, i) => K[i] > k);
+  $('#wy-k-o').textContent = k;
+  $('#wy-b').innerHTML = tip(pct(pb, 2), `k / N = ${k} / ${N}`);
+  $('#wy-r').innerHTML = tip(pct(nr / N, 1), `${nr} of ${N} secret words found within ${k} guesses\n(random fitting word, seed 7)`);
+  $('#wy-c').innerHTML = tip(pct(nc / N, 1), `${nc} of ${N} secret words found within ${k} guesses`);
+  $('#wy-m').innerHTML = tip(fmt(meanOf(K), 3), `mean of K_w over all ${N} games\n(careless: ${fmt(meanOf(RCARE), 3)})`);
+  $('#run-wy').innerHTML = `<b>Running example</b>: no feedback, ${k}/${nf(N)} = ${tip(pct(pb, 2), 'k / N')}; careless loop ${nr}/${nf(N)} = ${pct(nr / N, 1)}; careful loop ${nc}/${nf(N)} = ${tip('<b>' + pct(nc / N, 1) + '</b>', 'count of words w with K_w ≤ k, divided by N')}.`;
+  $('#wy-say').innerHTML = k === 1 ? `With a single guess nobody can use feedback, so all three players are simply guessing. The careful agent always opens with ${UP(WORDS[OPEN.g])}, so it wins only if that is the secret: 1 game in 2,000. The careless one happened to win ${nr}.`
+    : k < 6 ? `With ${k} guesses, guessing blind wins ${pct(pb, 2)} of games; the loop wins ${pct(nr / N, 0)} with the careless controller and ${pct(nc / N, 0)} with the careful one. Each piece of feedback cuts the list of possible words down to a small group, so the loop itself does most of the work. A better controller then gets there sooner: ${fmt(meanOf(K), 2)} guesses on average against ${fmt(meanOf(RCARE), 2)}.`
+    : lost.length ? `Within ${k} guesses the careful agent wins ${nc} of 2,000 games and loses ${lost.length}: ${lost.join(', ')}. These words have many near-twins in the list (batch, catch, hatch, latch, match, patch, watch), and each guess that fits can rule out only one or two of them. Guessing blind would win ${pct(pb, 2)}.`
+    : `Within ${k} guesses the careful agent wins every one of the 2,000 games; the careless one still loses ${N - nr}. The worst case for the careful agent is ${Math.max(...K)} guesses.`;
+}
+$('#wy-k').addEventListener('input', e => { WY.k = +e.target.value; drawWY(); });
+fig($('#wy-cv'), drawWY); fig($('#wy-hist'), drawWY);
+
+/* ---------- 2. the agent loop ---------- */
+const LP = { s: IDX.get('river'), T: 6, t: 2, steps: null, status: '' };
+$('#lp-chips').innerHTML = ['river', 'watch', 'quick', 'crane', 'sound'].map((w, i) => `<button type="button" data-lpw="${w}"${i === 0 ? ' aria-pressed="true"' : ''}>${w}</button>`).join('');
+function lpRun() { const r = trace(LP.s, LP.T); LP.steps = r.steps; LP.status = r.status; LP.t = Math.min(LP.t, LP.steps.length); }
+function drawLP() {
+  const C = C0(), st = LP.steps, t = LP.t, T = LP.T, end = t === st.length, cur = t ? st[t - 1] : null;
+  const nfit = t === 0 ? N : cur.f === WAC.WIN ? 1 : cur.left, status = !end ? (t ? 'running' : 'ready') : LP.status === 'won' ? `won in ${t}` : 'out of guesses';
+  const pr = promptText(st, t, T, LP.status), tk = toks(pr);
+  $('#lp-prompt').textContent = pr; $('#lp-prompt').scrollTop = 1e6;
+  const v = frame($('#lp-cv'), [-0.6, Math.max(T, st.length) + 0.6], [0, Math.log10(2000) * 1.3], { l: 54, b: 26 });
+  axes(v, 'step t', 'words that fit', { sx: 1, sy: 1, fy: y => nf(Math.pow(10, y)) });
+  const c = v.ctx, bw = (v.X(1) - v.X(0)) * 0.55, vals = [N].concat(st.slice(0, t).map(x => x.f === WAC.WIN ? 1 : x.left));
+  vals.forEach((n, i) => { const y = Math.log10(Math.max(1, n)), hgt = Math.max(2, v.Y(0) - v.Y(y)); c.fillStyle = i === vals.length - 1 ? C.bad : C.lda; c.globalAlpha = i === vals.length - 1 ? 0.95 : 0.6; c.fillRect(v.X(i) - bw / 2, v.Y(0) - hgt, bw, hgt); c.globalAlpha = 1; txt(c, nf(n), v.X(i), v.Y(0) - hgt - 8, { col: C.ink, al: 'center' }); });
+  seg(v, T + 0.5, 0, T + 0.5, Math.log10(2000) * 1.3, C.bad, 1.2, [4, 3]); txt(c, 'T', v.X(T + 0.5) + 4, v.pad.t + 10, { col: C.bad });
+  $('#lp-T-o').textContent = T;
+  $('#lp-t').innerHTML = `${t} / ${T}`;
+  $('#lp-n').innerHTML = tip(nf(nfit), t ? `words consistent with all ${t} observations` : 'nothing observed yet');
+  $('#lp-tok').innerHTML = tip('≈ ' + nf(tk), `${nf(pr.length)} characters ÷ 4\n(a common rule of thumb for English text)`);
+  $('#lp-st').textContent = status;
+  const gl = st.slice(0, t).map(x => UP(WORDS[x.g]));
+  $('#run-lp').innerHTML = t === 0 ? `<b>Running example</b>: h<sub>1</sub> = the task alone (${tip('≈ ' + toks(promptHead(T)), 'characters ÷ 4')} tokens); a<sub>1</sub> = &pi;(h<sub>1</sub>) is still to be chosen.`
+    : `<b>Running example</b>: h<sub>${t + 1}</sub> = h<sub>${t}</sub> &oplus; (${gl[t - 1]}, ${patStr(cur.f)}); the history now holds the task and ${t} action&ndash;observation pair${t === 1 ? '' : 's'}, ${tip('≈ ' + nf(tk) + ' tokens', `${pr.length} characters ÷ 4`)}. Words that fit: ${vals.map(nf).join(' &rarr; ')}.`;
+  $('#lp-say').innerHTML = t === 0 ? `Nothing has happened yet: the history is just the task, and all 2,000 words fit. Press <b>Step</b> to let the controller read it and act.`
+    : !end ? `After ${t} guess${t === 1 ? '' : 'es'} the prompt holds the task plus ${t} action&ndash;observation pair${t === 1 ? '' : 's'}, and ${nf(nfit)} word${nfit === 1 ? '' : 's'} still fit: about ${fmt(log2(nfit), 1)} bits left to learn. Every turn the whole transcript is sent again; the controller has no other memory.`
+    : LP.status === 'won' ? `Solved in ${t} guess${t === 1 ? '' : 'es'}. The prompt grew from ${toks(promptHead(T))} to about ${nf(tk)} tokens while the words that fit fell from 2,000 to 1. The environment, not the agent, decides that the goal is reached: it returned GGGGG.`
+    : `The budget ran out: after ${T} guess${T === 1 ? '' : 'es'}, ${nf(nfit)} word${nfit === 1 ? '' : 's'} still fit${nfit <= 8 ? ' (' + Array.from(cur.C).map(i => WORDS[i]).join(', ') + ')' : ''}. A step limit is how an agent stops when it is not converging. ${K[LP.s] <= 8 ? `This secret needs ${K[LP.s]} guesses; raise T to ${K[LP.s]}.` : ''}`;
+}
+function lpSet(w, keepT) { w = (w || '').trim().toLowerCase(); if (!IDX.has(w)) { $('#lp-say').innerHTML = `&ldquo;${esc(w)}&rdquo; is not one of the 2,000 words. Try another.`; return; } LP.s = IDX.get(w); LP.t = 0; $('#lp-w').value = w; $$('[data-lpw]').forEach(b => b.setAttribute('aria-pressed', b.dataset.lpw === w ? 'true' : 'false')); lpRun(); drawLP(); }
+$('#lp-go').addEventListener('click', () => lpSet($('#lp-w').value)); $('#lp-w').addEventListener('keydown', e => { if (e.key === 'Enter') lpSet($('#lp-w').value); });
+$$('[data-lpw]').forEach(b => b.addEventListener('click', () => lpSet(b.dataset.lpw)));
+$('#lp-step').addEventListener('click', () => { if (LP.t < LP.steps.length) LP.t++; drawLP(); });
+$('#lp-back').addEventListener('click', () => { if (LP.t > 0) LP.t--; drawLP(); });
+$('#lp-all').addEventListener('click', () => { LP.t = LP.steps.length; drawLP(); });
+$('#lp-T').addEventListener('input', e => { LP.T = +e.target.value; lpRun(); drawLP(); });
+lpRun(); fig($('#lp-cv'), drawLP);
+
+/* ---------- 3. thinking ---------- */
+const TH = { s: IDX.get('quick'), a: 1, g: null };
+$('#th-sec').innerHTML = ['quick', 'river', 'magic', 'watch'].map((w, i) => `<button type="button" data-ths="${w}"${i === 0 ? ' aria-pressed="true"' : ''}>${w}</button>`).join('');
+function thState() {
+  const r = trace(TH.s, 10), st = r.steps, a = Math.min(TH.a, st.length - 1), Cs = a === 0 ? WAC.ALL() : st[a - 1].C;
+  const H = Cs.length === N ? WAC.rootScores() : WAC.scores(Cs), ord = Array.from(Cs.keys()).sort((x, y) => H[y] - H[x] || x - y);
+  return { st, a, Cs, H, ord, best: Cs[ord[0]], bestH: H[ord[0]] };
+}
+function drawTH() {
+  const C = C0(), S = thState(), Cs = S.Cs, n = Cs.length, g = TH.g == null || !IDX.has(WORDS[TH.g]) ? S.best : TH.g, inC = Cs.includes(g);
+  $$('[data-tha]').forEach(b => { b.setAttribute('aria-pressed', +b.dataset.tha === S.a ? 'true' : 'false'); });
+  $('#th-top').innerHTML = S.ord.slice(0, 6).map(k => `<button type="button" data-thg="${Cs[k]}"${Cs[k] === g ? ' aria-pressed="true"' : ''}>${WORDS[Cs[k]]} ${fmt(S.H[k], 2)}</button>`).join('');
+  $$('[data-thg]').forEach(b => b.addEventListener('click', () => { TH.g = +b.dataset.thg; drawTH(); }));
+  const b = WAC.buckets(g, Cs), groups = []; for (let f = 0; f < 243; f++) if (b[f]) groups.push([f, b[f]]); groups.sort((x, y) => y[1] - x[1] || x[0] - y[0]);
+  const h = WAC.entropy(g, Cs), el = WAC.expLeft(g, Cs), secF = WAC.fb(g, TH.s), mx = groups[0][1];
+  const v = frame($('#th-cv'), [-0.5, Math.max(groups.length, 8) - 0.5], [0, mx * 1.32], { l: 44, b: 12 });
+  axes(v, '', 'words in group', { sy: Math.max(1, niceStep(mx * 1.32, 5)), fx: () => '', sx: 1e9 });
+  const c = v.ctx, bw = Math.max(1, (v.X(1) - v.X(0)) * 0.8);
+  groups.forEach(([f, cnt], i) => { c.fillStyle = f === secF ? C.a : f === WAC.WIN ? C.b : C.lda; c.globalAlpha = f === secF ? 1 : 0.7; c.fillRect(v.X(i) - bw / 2, v.Y(cnt), bw, v.Y(0) - v.Y(cnt)); c.globalAlpha = 1;
+    if (bw >= 14 && i < 30) { const gs = Math.min(5, (bw - 4) / 5.6); glyph(c, v.X(i) - (5 * gs + 4) / 2, v.Y(cnt) - gs - 5, gs, f, C); if (bw >= 22) txt(c, String(cnt), v.X(i), v.Y(cnt) - gs - 13, { col: C.ink, al: 'center', px: 10 }); }
+    else if (i < 3) txt(c, String(cnt), v.X(i) + bw / 2 + 3, v.Y(cnt) + 6, { col: C.ink, px: 10 }); });
+  $('#th-cap').innerHTML = `${UP(WORDS[g])} would split the ${nf(n)} word${n === 1 ? '' : 's'} that fit into ${groups.length} feedback group${groups.length === 1 ? '' : 's'}. <span style="color:var(--cA)">&#9632;</span> the group the real secret falls into (feedback ${tilesHTML(WORDS[g], secF)})${inC ? '; <span style="color:var(--cB)">&#9632;</span> GGGGG, the guess itself is the secret' : ''}. Small coloured squares show each group&rsquo;s pattern.`;
+  $('#th-h').innerHTML = tip(fmt(h, 3) + ' bits', `−Σ (n_f/${n}) log2(n_f/${n}) over ${groups.length} groups\nof log2 ${n} = ${fmt(log2(n), 3)} bits still unknown`);
+  $('#th-e').innerHTML = tip(fmt(el, 1), `Σ n_f² / |C| = ${nf(sum(groups.map(x => x[1] * x[1])))} / ${n}\nthe average size of the group you land in`);
+  $('#th-g').innerHTML = tip(String(groups.length), 'distinct feedback patterns among the words that fit (at most 243)');
+  $('#th-l').innerHTML = tip(nf(mx), `worst case: feedback ${patStr(groups[0][0])} leaves ${mx} words`);
+  const terms = groups.slice(0, 3).map(([, cnt]) => `${cnt}/${n}&middot;log<sub>2</sub>(${cnt}/${n})`).join(' &minus; ');
+  $('#run-th').innerHTML = `<b>Running example</b>: |C<sub>t</sub>| = ${nf(n)}; H(${UP(WORDS[g])}) = &minus;${terms}${groups.length > 3 ? ' &minus; &hellip;' : ''} = ${tip('<b>' + fmt(h, 3) + ' bits</b>', `${groups.length} groups in all`)}, of ${fmt(log2(n), 2)} bits still unknown.`;
+  $('#th-say').innerHTML = n === 1 ? `Only ${UP(WORDS[Cs[0]])} fits: nothing left to learn, so the stand-in simply guesses it.`
+    : g === S.best ? `This is the stand-in&rsquo;s choice: of the ${nf(n)} words that fit, ${UP(WORDS[g])} spreads them most evenly, ${fmt(h, 2)} bits, leaving ${fmt(el, 1)} words on average and ${mx} at worst. Click another candidate to compare.`
+    : inC ? `${UP(WORDS[g])} also fits, but scores ${fmt(h, 2)} bits against ${fmt(S.bestH, 2)} for ${UP(WORDS[S.best])}: its groups are more uneven, so on average ${fmt(el, 1)} words would remain.`
+    : `${UP(WORDS[g])} does not fit the feedback so far, so it cannot be the secret and cannot win this turn. ${h > S.bestH + 1e-9 ? `Yet it would teach more, ${fmt(h, 2)} bits against ${fmt(S.bestH, 2)}: a probe word built from untested letters. Solvers that may guess any word use this trick; the stand-in sticks to words that fit, so that every guess could also win.` : `It also teaches less: ${fmt(h, 2)} bits against ${fmt(S.bestH, 2)} for ${UP(WORDS[S.best])}.`}`;
+}
+$$('[data-ths]').forEach(b => b.addEventListener('click', () => { TH.s = IDX.get(b.dataset.ths); TH.g = null; $$('[data-ths]').forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); drawTH(); }));
+$$('[data-tha]').forEach(b => b.addEventListener('click', () => { TH.a = +b.dataset.tha; TH.g = null; drawTH(); }));
+function thTry() { const w = $('#th-w').value.trim().toLowerCase(); if (!IDX.has(w)) { $('#th-say').innerHTML = `&ldquo;${esc(w)}&rdquo; is not one of the 2,000 words.`; return; } TH.g = IDX.get(w); drawTH(); }
+$('#th-go').addEventListener('click', thTry); $('#th-w').addEventListener('keydown', e => { if (e.key === 'Enter') thTry(); });
+fig($('#th-cv'), drawTH);
+
+/* ---------- 4. an LLM as the controller ---------- */
+const CT = { x: 45, cache: {}, grid: [0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 5], timer: 0 };
+const tauOf = x => 0.02 * Math.pow(250, x / 100);
+const SUB = Array.from({ length: N / 5 }, (_, i) => i * 5);
+function ctSim(tau) { const key = tau.toFixed(5); if (CT.cache[key]) return CT.cache[key]; const rng = mulberry32(11), ks = SUB.map(s => WAC.play(s, { policy: 'soft', tau, T: 30, rng }).k), m = sum(ks) / ks.length, sd = Math.sqrt(sum(ks.map(k => (k - m) ** 2)) / (ks.length - 1)); return (CT.cache[key] = { m, w6: ks.filter(k => k <= 6).length, se: sd / Math.sqrt(ks.length) }); }
+const SUBG = sum(SUB.map(s => K[s])) / SUB.length, SUBR = (() => { const rng = mulberry32(11); return sum(SUB.map(s => WAC.play(s, { policy: 'random', T: 30, rng }).k)) / SUB.length; })();
+function ctGridStep() { const tau = CT.grid.find(t => !CT.cache[t.toFixed(5)]); if (tau == null) return; ctSim(tau); drawCT(); setTimeout(ctGridStep, 20); }
+function drawCT() {
+  const C = C0(), tau = tauOf(CT.x), R = WAC.rootScores(), ord = Array.from(R.keys()).sort((a, b) => R[b] - R[a] || a - b), mx = R[ord[0]];
+  let Z = 0; const e = new Float64Array(N); for (let i = 0; i < N; i++) { e[i] = Math.exp((R[i] - mx) / tau); Z += e[i]; }
+  const P = Array.from(e, x => x / Z), top = ord.slice(0, 12), rest = 1 - sum(top.map(i => P[i])), Hpi = -sum(P.map(p => p > 0 ? p * log2(p) : 0)), eff = Math.pow(2, Hpi);
+  const rows = top.map(i => [WORDS[i] + ' ' + fmt(R[i], 2), P[i], i === OPEN.g]).concat([[`other ${nf(N - 12)}`, rest, false]]);
+  const cv = $('#ct-cv'), narrow = cv.getBoundingClientRect().width < 480, v = frame(cv, [0, 1.15], [0, rows.length], { l: narrow ? 92 : 112, r: 10, t: 8, b: 26 }); axes(v, 'probability', '', { sx: 0.2, sy: 100, fy: () => '', fx: x => pct(x, 0) });
+  const c = v.ctx, rh = v.ph / rows.length;
+  rows.forEach(([lab, p, isB], r) => { const y = v.pad.t + r * rh; txt(c, lab, v.pad.l - 6, y + rh / 2, { al: 'right', col: isB ? C.ink : C.muted, px: narrow ? 10 : 11 }); c.fillStyle = r === 12 ? C.muted : isB ? C.bad : C.lda; c.globalAlpha = r === 12 ? 0.45 : 0.85; c.fillRect(v.X(0), y + rh * 0.18, Math.max(1, v.X(p) - v.X(0)), rh * 0.64); c.globalAlpha = 1; txt(c, pct(p, p < 0.01 ? 2 : 1), v.X(p) + 4, y + rh / 2, { col: C.ink, px: 10 }); });
+  const cur = ctSim(tau), lx = [Math.log10(0.02), Math.log10(5)], ys = [3.3, 4.2];
+  const u = frame($('#ct-curve'), [lx[0] - 0.05, lx[1] + 0.05], ys, { l: 44, b: 26 }); axes(u, 'temperature τ', 'guesses', { sx: 1, sy: 0.2, fx: x => fmt(Math.pow(10, x), x < -0.5 ? 2 : x < 0 ? 1 : 0) });
+  clip(u); seg(u, u.xl[0], SUBG, u.xl[1], SUBG, C.a, 1.5, [5, 4]); seg(u, u.xl[0], SUBR, u.xl[1], SUBR, C.b, 1.5, [5, 4]);
+  const pts = CT.grid.filter(t => CT.cache[t.toFixed(5)]).map(t => [Math.log10(t), CT.cache[t.toFixed(5)].m]); const cc = u.ctx; cc.save(); cc.strokeStyle = C.lda; cc.lineWidth = 2; cc.beginPath(); pts.forEach(([x, y], i) => i ? cc.lineTo(u.X(x), u.Y(y)) : cc.moveTo(u.X(x), u.Y(y))); cc.stroke(); cc.restore(); pts.forEach(([x, y]) => dot(u, x, y, C.lda, 3.5));
+  dot(u, Math.log10(tau), cur.m, C.ink, 7, true); u.ctx.restore();
+  $('#ct-t-o').textContent = fmt(tau, tau < 0.1 ? 3 : 2);
+  $('#ct-p').innerHTML = tip(pct(P[OPEN.g], 1), `e^(H(${WORDS[OPEN.g]})/τ) / Σ e^(H(a)/τ) over all ${N} words\nτ = ${fmt(tau, 3)}`);
+  $('#ct-x').innerHTML = tip(fmt(eff, eff < 10 ? 2 : 0), `2^(entropy of π) = 2^${fmt(Hpi, 3)}\nthe number of equally likely words with the same spread`);
+  $('#ct-m').innerHTML = tip(fmt(cur.m, 3), `mean guesses over ${SUB.length} games, ± ${fmt(cur.se, 3)} (standard error)\ngreedy on the same words: ${fmt(SUBG, 3)}; careless: ${fmt(SUBR, 3)}`);
+  $('#ct-w').innerHTML = tip(`${cur.w6} / ${SUB.length}`, 'games won within six guesses');
+  const z = top.slice(0, 2).map(i => `e<sup>${fmt(R[i], 2)}/${fmt(tau, 2)}</sup>`).join(' + ');
+  $('#run-ct').innerHTML = `<b>Running example</b>: at the start, &pi;<sub>&tau;</sub>(${UP(WORDS[OPEN.g])}) = e<sup>${fmt(mx, 2)}/${fmt(tau, 2)}</sup> / (${z} + &hellip; over ${nf(N)} words) = ${tip('<b>' + pct(P[OPEN.g], 1) + '</b>', 'computed with the scores shifted by the maximum, which cancels')}.`;
+  $('#ct-say').innerHTML = tau < 0.08 ? `At &tau; = ${fmt(tau, 3)} the controller is almost greedy: it opens with ${UP(WORDS[OPEN.g])} ${pct(P[OPEN.g], 0)} of the time, and the games take ${fmt(cur.m, 2)} guesses on average (greedy: ${fmt(SUBG, 2)} on the same 400 words). Differences of about ${fmt(2 * cur.se, 2)} are sampling noise.`
+    : `At &tau; = ${fmt(tau, 2)} the controller spreads its first guess over about ${fmt(eff, 0)} words and picks ${UP(WORDS[OPEN.g])} only ${pct(P[OPEN.g], 1)} of the time. The games take ${fmt(cur.m, 2)} guesses on average, ${fmt(cur.m - SUBG, 2)} more than greedy (${fmt(SUBG, 2)}), yet ${cur.w6} of 400 are still won within six: the loop absorbs weaker choices, because every guess still returns feedback. At very high &tau; it approaches the careless player (${fmt(SUBR, 2)}).`;
+}
+$('#ct-t').addEventListener('input', e => { CT.x = +e.target.value; clearTimeout(CT.timer); CT.timer = setTimeout(drawCT, 60); });
+fig($('#ct-cv'), drawCT); fig($('#ct-curve'), drawCT);
+
+/* ---------- 5. compounding error ---------- */
+const CP = { p: 0.95, v: 0, n: 20, k: 5, seed: 1 };
+function drawCP() {
+  const C = C0(), { p, v: vv, n, k } = CP, pe = 1 - (1 - p) * (1 - vv), P = Math.pow(pe, n), hl = Math.log(2) / -Math.log(pe), rng = mulberry32(CP.seed);
+  const rv = frame($('#cp-runs'), [0, n], [0, 20], { l: 34, r: 8, t: 6, b: 22 }), c = rv.ctx, cw = rv.pw / n, rh = rv.ph / 20; let ok = 0;
+  for (let r = 0; r < 20; r++) { let dead = false; const y = rv.pad.t + r * rh;
+    for (let s = 0; s < n; s++) { const x = rv.pad.l + s * cw; let col;
+      if (dead) col = null; else if (rng() < p) col = C.a; else if (rng() < vv) col = C.b; else { col = C.bad; dead = true; }
+      c.fillStyle = col || C.soft; c.globalAlpha = col === C.a ? 0.55 : 1; c.fillRect(x + (cw > 4 ? 0.5 : 0), y + 1, Math.max(1, cw - (cw > 4 ? 1 : 0)), rh - 2); c.globalAlpha = 1; }
+    if (!dead) ok++; txt(c, dead ? '✗' : '✓', rv.pad.l - 8, y + rh / 2, { al: 'right', col: dead ? C.bad : C.a }); }
+  txt(c, `step 1 … ${n}`, rv.pad.l, rv.h - 9, {});
+  txt(c, `${ok} of 20 runs succeeded`, rv.w - 8, rv.h - 9, { al: 'right', col: C.ink });
+  const u = frame($('#cp-cv'), [0, 100], [0, 1.04], { l: 44, b: 26 }); axes(u, 'steps n', 'success', { sx: 20, sy: 0.25, fy: y => pct(y, 0) }); clip(u);
+  seg(u, 0, 0.5, 100, 0.5, C.muted, 1, [2, 4], 0.7);
+  curve(u, x => Math.pow(p, Math.max(0, x)), C.muted, 2, [5, 4]); curve(u, x => Math.pow(pe, Math.max(0, x)), C.a, 2.6); dot(u, n, P, C.ink, 6, true); u.ctx.restore();
+  ['p', 'v', 'n', 'k'].forEach(id => { $('#cp-' + id + '-o').textContent = id === 'p' ? fmt(p, 3) : id === 'v' ? pct(vv, 0) : CP[id]; });
+  const pa = 1 - Math.pow(1 - P, k), pk = Math.pow(P, k);
+  $('#cp-s').innerHTML = tip(pct(P, 1), `p_eff^n = ${fmt(pe, 4)}^${n}\nno checks: ${fmt(p, 3)}^${n} = ${pct(Math.pow(p, n), 1)}`);
+  $('#cp-h').innerHTML = tip(isFinite(hl) ? fmt(hl, 1) : '∞', `ln 2 / −ln ${fmt(pe, 4)}`);
+  $('#cp-a').innerHTML = tip(pct(pa, 1), `1 − (1 − ${fmt(P, 3)})^${k}`);
+  $('#cp-b').innerHTML = tip(pct(pk, 1), `${fmt(P, 3)}^${k}`);
+  $('#run-cp').innerHTML = `<b>Running example</b>: p<sub>eff</sub> = 1 &minus; (1 &minus; ${fmt(p, 3)})(1 &minus; ${fmt(vv, 2)}) = ${fmt(pe, 4)}; P = ${fmt(pe, 4)}<sup>${n}</sup> = ${tip('<b>' + fmt(P, 3) + '</b>', 'success of one run')}; n<sub>1/2</sub> = ln 2 / &minus;ln ${fmt(pe, 4)} = ${fmt(hl, 1)} steps; pass@${k} = 1 &minus; (1 &minus; ${fmt(P, 3)})<sup>${k}</sup> = ${fmt(pa, 3)}; pass<sup>${k}</sup> = ${fmt(P, 3)}<sup>${k}</sup> = ${fmt(pk, 3)}.`;
+  $('#cp-say').innerHTML = (vv === 0 ? `Every step is right ${pct(p, 1)} of the time, yet all ${n} together succeed only ${pct(P, 0)} of the time` : `The check catches ${pct(vv, 0)} of the errors, so each step now fails unrepaired only ${pct(1 - pe, 2)} of the time instead of ${pct(1 - p, 1)}, and ${n} steps succeed ${pct(P, 0)} of the time (${pct(Math.pow(p, n), 0)} without checks)`)
+    + `; ${ok} of the 20 simulated runs made it. The half-life is ${fmt(hl, 1)} steps: ${n > hl ? 'this task is longer than that, so most runs fail.' : 'this task is shorter than that.'} `
+    + `Run it ${k} times: at least one success ${pct(pa, 0)}, but all ${k} succeed only ${pct(pk, pk < 0.1 ? 1 : 0)}. ${pk < 0.5 && P > 0.5 ? 'An agent that usually works can still be one that users cannot rely on.' : ''}`;
+}
+[['p', 0], ['v', 0], ['n', 1], ['k', 1]].forEach(([id]) => $('#cp-' + id).addEventListener('input', e => { CP[id] = +e.target.value; drawCP(); }));
+$('#cp-re').addEventListener('click', () => { CP.seed++; drawCP(); });
+fig($('#cp-runs'), drawCP); fig($('#cp-cv'), drawCP);
+
+/* ---------- 6. budgets ---------- */
+const BU = { n: 30, s: 3000, m: 500, o: 150, ci: 3, co: 15, cache: 1, l: 1.5, r: 60, kap: 0.1 };
+function buCalc(B) {
+  const per = []; let tin = 0, cNo = 0, cCa = 0;
+  for (let t = 1; t <= B.n; t++) { const inp = B.s + (t - 1) * B.m, cached = t === 1 ? 0 : B.s + (t - 2) * B.m, nw = inp - cached;
+    const a = (B.ci * inp + B.co * B.o) / 1e6, b = (B.ci * (nw + B.kap * cached) + B.co * B.o) / 1e6; tin += inp; cNo += a; cCa += b; per.push({ t, inp, cached, a, b, cumA: cNo, cumB: cCa }); }
+  return { per, tin, cNo, cCa, time: B.n * (B.l + B.o / B.r) };
+}
+const money = x => x === 0 ? '$0' : x >= 100 ? '$' + nf(x) : x >= 1 ? '$' + fmt(x, 2) : x >= 0.01 ? '$' + fmt(x, 3) : '$' + fmt(x, 4);
+const dur = s => s >= 3600 ? fmt(s / 3600, 1) + ' h' : s >= 90 ? fmt(s / 60, 1) + ' min' : fmt(s, 0) + ' s';
+function drawBU() {
+  const C = C0(), B = BU, R = buCalc(B), mx = B.s + (B.n - 1) * B.m;
+  const v = frame($('#bu-cv'), [0.4, B.n + 0.6], [0, mx * 1.1], { l: 54, b: 28 }); axes(v, 'step (call)', 'input tokens', { fy: y => y >= 1000 ? fmt(y / 1000, 0) + 'k' : fmt(y, 0), nx: 6 });
+  const c = v.ctx, bw = Math.max(1, (v.X(1) - v.X(0)) * 0.8);
+  R.per.forEach(q => { const x = v.X(q.t) - bw / 2, yS = v.Y(B.s), y0 = v.Y(0), yT = v.Y(q.inp);
+    c.fillStyle = C.lda; c.globalAlpha = 0.75; c.fillRect(x, yS, bw, y0 - yS); c.fillStyle = C.b; c.fillRect(x, yT, bw, yS - yT); c.globalAlpha = 1;
+    if (B.cache && q.cached > 0) { const yc = v.Y(q.cached); c.save(); c.beginPath(); c.rect(x, yc, bw, y0 - yc); c.clip(); c.strokeStyle = C.surf; c.globalAlpha = 0.7; c.lineWidth = 1; for (let k = -40; k < (y0 - yc) + bw; k += 5) { c.beginPath(); c.moveTo(x, yc + k); c.lineTo(x + bw, yc + k - bw); c.stroke(); } c.restore(); } });
+  const cm = Math.max(R.cNo, 1e-9) * 1.1, u = frame($('#bu-cost'), [0, B.n + 0.5], [0, cm], { l: 54, b: 26 }); axes(u, 'step', 'running cost', { fy: y => money(y), ny: 3 }); clip(u);
+  [[C.bad, 'cumA'], [C.a, 'cumB']].forEach(([col, key]) => { const cc = u.ctx; cc.save(); cc.strokeStyle = col; cc.lineWidth = 2.4; cc.beginPath(); cc.moveTo(u.X(0), u.Y(0)); R.per.forEach(q => cc.lineTo(u.X(q.t), u.Y(q[key]))); cc.stroke(); cc.restore(); }); u.ctx.restore();
+  ['n', 's', 'm', 'o'].forEach(id => $('#bu-' + id + '-o').textContent = nf(B[id])); $('#bu-ci-o').textContent = '$' + fmt(B.ci, 2); $('#bu-co-o').textContent = '$' + fmt(B.co, 0); $('#bu-l-o').textContent = fmt(B.l, 1) + ' s'; $('#bu-r-o').textContent = nf(B.r);
+  const cost = B.cache ? R.cCa : R.cNo, first = R.per[0], last = R.per[R.per.length - 1], fc = B.cache ? first.b : first.a, lc = B.cache ? last.b : last.a, hist = B.m * B.n * (B.n - 1) / 2;
+  $('#bu-ti').innerHTML = tip(nf(R.tin), `n·s + m·n(n−1)/2\n= ${nf(B.n)}·${nf(B.s)} + ${nf(B.m)}·${nf(B.n * (B.n - 1) / 2)}\n= ${nf(B.n * B.s)} + ${nf(hist)}`);
+  $('#bu-c').innerHTML = tip(money(cost), B.cache ? `cached prefix billed at κ = ${B.kap} of the input price\nwithout caching: ${money(R.cNo)}` : `input ${money(B.ci * R.tin / 1e6)} + output ${money(B.co * B.n * B.o / 1e6)}\nwith caching: ${money(R.cCa)}`);
+  $('#bu-tm').innerHTML = tip(dur(R.time), `n·(ℓ + o/r) = ${B.n}·(${fmt(B.l, 1)} + ${B.o}/${B.r}) s`);
+  $('#bu-x').innerHTML = tip(fmt(last.inp / first.inp, 1) + '×', `last call ${nf(last.inp)} input tokens, first ${nf(first.inp)}
+cost: last ${money(lc)}, first ${money(fc)}`);
+  $('#run-bu').innerHTML = `<b>Running example</b>: T<sub>in</sub> = ${nf(B.n)}&times;${nf(B.s)} + ${nf(B.m)}&times;${nf(B.n)}&times;${nf(B.n - 1)}/2 = ${tip('<b>' + nf(R.tin) + '</b>', 'input tokens over the whole run')}; cost = $${fmt(B.ci, 2)}/M &times; ${nf(R.tin)} + $${fmt(B.co, 0)}/M &times; ${nf(B.n * B.o)} = ${money(R.cNo)}${B.cache ? ` (${money(R.cCa)} with caching)` : ''}; time = ${B.n}&times;(${fmt(B.l, 1)} + ${B.o}/${B.r}) = ${dur(R.time)}.`;
+  const R2 = buCalc(Object.assign({}, B, { n: B.n * 2 }));
+  $('#bu-say').innerHTML = `The history makes up ${pct(hist / R.tin, 0)} of all input tokens: the step-${B.n} call sends ${nf(last.inp)} tokens against ${nf(first.inp)} for the first. Doubling the task to ${B.n * 2} steps multiplies the input by ${fmt(R2.tin / R.tin, 2)}, not 2. ${B.cache ? `Caching brings the bill from ${money(R.cNo)} to ${money(R.cCa)}, ${pct(1 - R.cCa / R.cNo, 0)} less, but` : `Prompt caching would bring ${money(R.cNo)} down to ${money(R.cCa)}, but`} the ${dur(R.time)} of waiting stays: ${pct(B.n * B.l / R.time, 0)} of it is per-call delay, the rest is writing output. Shorter histories (summaries, dropping old observations) help both; that is chapter 5.4&rsquo;s subject.`;
+}
+['n', 's', 'm', 'o', 'ci', 'co', 'l', 'r'].forEach(id => $('#bu-' + id).addEventListener('input', e => { BU[id] = +e.target.value; drawBU(); }));
+seg1('[data-buc]', 'data-buc', x => { BU.cache = +x; drawBU(); });
+fig($('#bu-cv'), drawBU); fig($('#bu-cost'), drawBU);
+
+/* ---------- 7. autonomy ---------- */
+const ACTS = [['Read the customer’s message', 0.02, 1], ['Look up the order', 0.02, 1], ['Search past tickets', 0.03, 1], ['Check the refund policy', 0.05, 5], ['Draft a reply', 0.1, 2], ['Update the ticket status', 0.02, 3], ['Issue an $80 refund', 0.03, 80], ['Apply a discount code', 0.04, 20], ['Email the customer', 0.05, 40], ['Delete the duplicate ticket', 0.02, 30], ['Close the ticket', 0.02, 5], ['Log a summary', 0.01, 0.5]];
+const AU = { x: 50, cH: 1, r: 0.9 };
+const thOf = x => 0.001 * Math.pow(10, x / 25);
+function auCost(x, cH, r) { const th = thOf(x); let harm = 0, g = 0; ACTS.forEach(([, e, h]) => { const gate = e * h >= th; if (gate) g++; harm += (1 - (gate ? r : 0)) * e * h; }); return { harm, g, hc: g * cH, tot: harm + g * cH }; }
+function drawAU() {
+  const C = C0(), th = thOf(AU.x), R = auCost(AU.x, AU.cH, AU.r), cv = $('#au-cv'), narrow = cv.getBoundingClientRect().width < 520;
+  const lx = [-3, 1], v = frame(cv, lx, [0, ACTS.length], { l: narrow ? 10 : 190, r: 52, t: 8, b: 26 }); axes(v, 'expected harm e·h ($, log)', '', { sx: 1, sy: 100, fy: () => '', fx: x => '$' + (x < 0 ? fmt(Math.pow(10, x), -x) : nf(Math.pow(10, x))) });
+  const c = v.ctx, rh = v.ph / ACTS.length;
+  ACTS.forEach(([name, e, h], i) => { const y = v.pad.t + i * rh, eh = e * h, gate = eh >= th, xe = v.X(Math.log10(eh));
+    if (narrow) txt(c, name, v.pad.l + 2, y + rh * 0.28, { col: C.ink, f: '--f-body', px: 10.5 }); else txt(c, name, v.pad.l - 8, y + rh / 2, { al: 'right', col: C.ink, f: '--f-body', px: 12 });
+    const by = narrow ? y + rh * 0.52 : y + rh * 0.2, bh = narrow ? rh * 0.38 : rh * 0.6;
+    c.fillStyle = gate ? C.b : C.bad; c.globalAlpha = 0.85; c.fillRect(v.X(lx[0]), by, Math.max(1, xe - v.X(lx[0])), bh); c.globalAlpha = 1;
+    txt(c, '$' + fmt(eh, eh < 0.1 ? 3 : 2), xe + 4, by + bh / 2, { col: C.muted, px: 10 }); });
+  const tx = clamp(Math.log10(th), lx[0], lx[1]); seg(v, tx, 0, tx, ACTS.length, C.ink, 1.4, [4, 3]); txt(c, 'θ', v.X(tx) + 4, v.h - v.pad.b - 8, { col: C.ink });
+  const xs = Array.from({ length: 101 }, (_, i) => i), cs = xs.map(x => auCost(x, AU.cH, AU.r)), ymax = Math.max(...cs.map(q => q.tot)) * 1.1;
+  const u = frame($('#au-curve'), [0, 100], [0, ymax], { l: 44, b: 26 }); axes(u, 'threshold θ', 'cost per task', { sx: 25, fx: x => '$' + fmt(thOf(x), thOf(x) < 0.1 ? 3 : thOf(x) < 1 ? 2 : 0), fy: y => y === 0 ? '' : '$' + fmt(y, 1), ny: 4 }); clip(u);
+  [[C.b, 'hc'], [C.bad, 'harm'], [C.ink, 'tot']].forEach(([col, key]) => { const cc = u.ctx; cc.save(); cc.strokeStyle = col; cc.lineWidth = key === 'tot' ? 2.6 : 1.8; cc.beginPath(); xs.forEach((x, i) => i ? cc.lineTo(u.X(x), u.Y(cs[i][key])) : cc.moveTo(u.X(x), u.Y(cs[i][key]))); cc.stroke(); cc.restore(); });
+  dot(u, AU.x, R.tot, C.ink, 6, true); u.ctx.restore();
+  const bestI = cs.reduce((b, q, i) => q.tot < cs[b].tot - 1e-12 ? i : b, 0), bq = cs[bestI];
+  $('#au-t-o').textContent = '$' + fmt(th, th < 0.1 ? 3 : 2); $('#au-c-o').textContent = '$' + fmt(AU.cH, 1); $('#au-r-o').textContent = pct(AU.r, 0);
+  const gl = ACTS.filter(([, e, h]) => e * h >= th);
+  $('#au-g').innerHTML = tip(`${R.g} of ${ACTS.length}`, gl.length ? 'gated: ' + gl.map(a => a[0]).join('; ') : 'nothing gated');
+  $('#au-h').innerHTML = tip('$' + fmt(R.harm, 2), `Σ (1 − g_i·r)·e_i·h_i\nungated actions at full e·h, gated ones at ${pct(1 - AU.r, 0)} of it`);
+  $('#au-hc').innerHTML = tip('$' + fmt(R.hc, 2), `${R.g} approvals × $${fmt(AU.cH, 1)}`);
+  $('#au-tot').innerHTML = tip('$' + fmt(R.tot, 2), `harm $${fmt(R.harm, 2)} + approvals $${fmt(R.hc, 2)}`);
+  const ungated = sum(ACTS.map(([, e, h]) => e * h));
+  $('#run-au').innerHTML = `<b>Running example</b>: E[cost] = ${ACTS.filter(([, e, h]) => e * h >= 0.2).map(([, e, h]) => `(1 &minus; ${e * h >= th ? fmt(AU.r, 2) : 0})&times;${fmt(e, 2)}&times;$${fmt(h, 0)}`).join(' + ')} + &hellip; + $${fmt(AU.cH, 1)}&times;${R.g} = ${tip('<b>$' + fmt(R.tot, 2) + '</b>', 'all twelve actions; the five with expected harm below $0.20 are elided')}.`;
+  const lvl = R.g === ACTS.length ? 'L2: every action waits for a person' : R.g === 0 ? 'L4 or L5: nothing waits for a person' : `L3: ${R.g} risky action${R.g === 1 ? '' : 's'} wait${R.g === 1 ? 's' : ''} for a person`;
+  $$('[data-aul]').forEach(b => b.setAttribute('aria-pressed', (b.dataset.aul === '2' && R.g === ACTS.length) || (b.dataset.aul === '5' && R.g === 0) || (b.dataset.aul === '3' && R.g > 0 && R.g < ACTS.length) ? 'true' : 'false'));
+  $('#au-say').innerHTML = `This is ${lvl}. Expected cost per task: $${fmt(R.tot, 2)} ($${fmt(R.harm, 2)} of harm let through, $${fmt(R.hc, 2)} of human time). With no approvals at all the harm would be $${fmt(ungated, 2)}. `
+    + (Math.abs(R.tot - bq.tot) < 0.005 ? `That is the cheapest setting for these numbers: ` : `The cheapest threshold here is about $${fmt(thOf(bestI), thOf(bestI) < 0.1 ? 3 : 2)}, costing $${fmt(bq.tot, 2)}: `) + `${bq.g === 0 ? 'no action is risky enough to be worth a review' : bq.g === ACTS.length ? 'every action is worth a review' : `review the ${bq.g} action${bq.g === 1 ? '' : 's'} whose mistakes cost more than a review, and let the rest run`}. Approvals cost time, and a person asked to approve everything soon stops reading what they approve, which no formula here captures.`;
+}
+$('#au-t').addEventListener('input', e => { AU.x = +e.target.value; drawAU(); });
+$('#au-c').addEventListener('input', e => { AU.cH = +e.target.value; drawAU(); });
+$('#au-r').addEventListener('input', e => { AU.r = +e.target.value; drawAU(); });
+$$('[data-aul]').forEach(b => b.addEventListener('click', () => { AU.x = b.dataset.aul === '2' ? 0 : b.dataset.aul === '5' ? 100 : 67; $('#au-t').value = AU.x; drawAU(); }));
+fig($('#au-cv'), drawAU); fig($('#au-curve'), drawAU);
+
+/* ---------- 8. when to use an agent ---------- */
+const WN = { n: 12, p: 0.97, v: 0.8, V: 50, F: 20, c: 0.1, H: 30 };
+function wnVals(n, W) { const pe = 1 - (1 - W.p) * (1 - W.v), P0 = Math.pow(W.p, n), P1 = Math.pow(pe, n); return { P0, P1, a: P0 * W.V - (1 - P0) * W.F - n * W.c, b: P1 * W.V - (1 - P1) * W.F - n * 2 * W.c, h: W.V - W.H }; }
+function drawWN() {
+  const C = C0(), W = WN, R = wnVals(W.n, W), xs = Array.from({ length: 60 }, (_, i) => i + 1), vs = xs.map(n => wnVals(n, W));
+  const lo = Math.min(-W.F - 60 * 2 * W.c, ...vs.map(q => Math.min(q.a, q.b, q.h))), hi = Math.max(W.V, ...vs.map(q => q.h));
+  const v = frame($('#wn-cv'), [0, 61], [lo - (hi - lo) * 0.05, hi + (hi - lo) * 0.08], { l: 50, b: 28 }); axes(v, 'steps n', 'expected value', { sx: 10, fy: y => (y < 0 ? '−$' : '$') + fmt(Math.abs(y), 0), ny: 5 }); clip(v);
+  seg(v, 0, 0, 61, 0, C.muted, 1, null, 0.6); seg(v, 0, R.h, 61, R.h, C.muted, 2, [5, 4]);
+  [[C.bad, 'a'], [C.a, 'b']].forEach(([col, key]) => { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = 2.4; c.beginPath(); xs.forEach((n, i) => i ? c.lineTo(v.X(n), v.Y(vs[i][key])) : c.moveTo(v.X(n), v.Y(vs[i][key]))); c.stroke(); c.restore(); });
+  dot(v, W.n, R.a, C.bad, 5.5, true); dot(v, W.n, R.b, C.a, 6.5, true); v.ctx.restore();
+  ['n', 'V', 'F', 'H'].forEach(id => $('#wn-' + id + '-o').textContent = id === 'n' ? W.n : '$' + nf(W[id])); $('#wn-p-o').textContent = fmt(W.p, 3); $('#wn-v-o').textContent = pct(W.v, 0); $('#wn-c-o').textContent = '$' + fmt(W.c, 2);
+  const m = s => (s < 0 ? '&minus;$' : '$') + fmt(Math.abs(s), 2);
+  $('#wn-P').innerHTML = tip(pct(R.P1, 1), `(1 − (1 − ${W.p})(1 − ${W.v}))^${W.n}\nwithout checks: ${W.p}^${W.n} = ${pct(R.P0, 1)}`);
+  $('#wn-a').innerHTML = tip(m(R.a), `${fmt(R.P0, 3)}×${W.V} − ${fmt(1 - R.P0, 3)}×${W.F} − ${W.n}×${fmt(W.c, 2)}`);
+  $('#wn-b').innerHTML = tip(m(R.b), `${fmt(R.P1, 3)}×${W.V} − ${fmt(1 - R.P1, 3)}×${W.F} − ${W.n}×${fmt(2 * W.c, 2)}\n(checks double the cost per step)`);
+  $('#wn-h').innerHTML = tip(m(R.h), `V − H = ${W.V} − ${W.H}`);
+  $('#run-wn').innerHTML = `<b>Running example</b>: with checks, P = ${fmt(1 - (1 - W.p) * (1 - W.v), 4)}<sup>${W.n}</sup> = ${fmt(R.P1, 3)}; E = ${fmt(R.P1, 3)}&times;$${W.V} &minus; ${fmt(1 - R.P1, 3)}&times;$${W.F} &minus; ${W.n}&times;$${fmt(2 * W.c, 2)} = ${tip('<b>' + m(R.b) + '</b>', 'expected value of one checked agent run')}; by hand: $${W.V} &minus; $${W.H} = ${m(R.h)}.`;
+  const best = [['the agent with checks', R.b], ['the agent without checks', R.a], ['doing it by hand', R.h]].sort((x, y) => y[1] - x[1]);
+  const cross = xs.find(n => wnVals(n, W).b < R.h);
+  $('#wn-say').innerHTML = (best[0][1] <= 0 ? `Nothing pays here: even the best option, ${best[0][0]}, is worth ${m(best[0][1])}. Some tasks are not worth automating or doing.` : `For a ${W.n}-step task the best option is <b>${best[0][0]}</b> (${m(best[0][1])}), ahead of ${best[1][0]} (${m(best[1][1])}).`)
+    + ` ${R.b > R.a ? `Checks pay for themselves: they lift success from ${pct(R.P0, 0)} to ${pct(R.P1, 0)} for twice the per-step cost.` : `Here the checks cost more than they save.`}`
+    + (cross ? ` Beyond about ${cross} steps the checked agent falls below doing it by hand, because success decays as p<sub>eff</sub><sup>n</sup> while a person&rsquo;s does not (in this model).` : ` Across all lengths up to 60 steps, the checked agent beats doing it by hand.`);
+}
+['n', 'p', 'v', 'V', 'F', 'c', 'H'].forEach(id => $('#wn-' + id).addEventListener('input', e => { WN[id] = +e.target.value; drawWN(); }));
+fig($('#wn-cv'), drawWN);
+
+/* ---------- project ---------- */
+const PY = { opener: 'tears', H: 6.187820, dist: { 1: 1, 2: 161, 3: 954, 4: 694, 5: 146, 6: 31, 7: 11, 8: 2 }, mean: 3.4850, w6: 1987, hard: 'joker mates pipes pound stung walls watch wears wills wines woods wound years',
+  care: { dist: { 1: 2, 2: 91, 3: 557, 4: 793, 5: 404, 6: 114, 7: 32, 8: 6, 9: 1 }, mean: 4.0060, w6: 1961 },
+  soft: [[0.1, 3.4350, 400], [0.5, 3.7800, 397], [2.0, 3.9350, 397]],
+  mis: [[0.05, 0, { won: 1754, stuck: 234, claimed: 4, out: 8 }, 6669], [0.1, 0, { won: 1545, stuck: 440, claimed: 7, out: 8 }, 6390], [0.1, 0.9, { won: 1945, stuck: 42, claimed: 0, out: 13 }, 7347], [0.2, 0.5, { won: 1521, stuck: 473, claimed: 4, out: 2 }, 6804]] };
+const distOf = arr => { const d = {}; for (const k of arr) d[k] = (d[k] || 0) + 1; return d; };
+let PJ = null;
+function pjAll() {
+  const t = performance.now(), ks = new Int8Array(N), games = [];
+  for (let s = 0; s < N; s++) { const r = WAC.play(s, { T: 10, trace: true }); ks[s] = r.k; games.push(r.steps); }
+  PJ = { ks, games, ms: performance.now() - t }; drawPJ(); pjBill();
+}
+function drawPJ() {
+  if (!PJ) return; const C = C0(), d = distOf(PJ.ks), dc = distOf(RCARE), cols = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const row = (name, D, mean, w6, cls) => `<tr${cls ? ' class="' + cls + '"' : ''}><td><b>${name}</b></td>${cols.map(k => `<td class="num">${D[k] || 0}</td>`).join('')}<td class="num">${fmt(mean, 4)}</td><td class="num">${w6}</td></tr>`;
+  $('#pj-board').innerHTML = `<thead><tr><th>controller</th>${cols.map(k => `<th>${k}</th>`).join('')}<th>mean</th><th>won &le; 6</th></tr></thead><tbody>`
+    + row('careful, browser', d, meanOf(PJ.ks), within(PJ.ks, 6), 'win') + row('careful, Python', PY.dist, PY.mean, PY.w6)
+    + row('careless (seed 7), browser', dc, meanOf(RCARE), within(RCARE, 6)) + row('careless, Python', PY.care.dist, PY.care.mean, PY.care.w6) + '</tbody>';
+  $('#pj-prog').innerHTML = `Played ${nf(N)} games in ${fmt(PJ.ms, 0)} ms, after building the ${tip('4,000,000', '2,000 × 2,000 feedback patterns, one byte each')} feedback table in ${fmt(tInit, 0)} ms when the page loaded.`;
+  const v = frame($('#pj-cv'), [0.4, 8.6], [0, 1050], { l: 44, b: 26 }); axes(v, 'guesses needed', 'games', { sx: 1, sy: 250 }); const c = v.ctx, bw = (v.X(1) - v.X(0)) * 0.7;
+  for (let k = 1; k <= 8; k++) { const n = d[k] || 0; c.fillStyle = k > 6 ? C.bad : C.a; c.fillRect(v.X(k) - bw / 2, v.Y(n), bw, v.Y(0) - v.Y(n)); txt(c, String(n), v.X(k), v.Y(n) - 8, { al: 'center', col: C.ink }); }
+  const hard = WORDS.filter((w, i) => PJ.ks[i] > 6);
+  $('#pj-say').innerHTML = `The careful stand-in opens with ${UP(WORDS[OPEN.g])} (${fmt(OPEN.h, 3)} bits), solves the average game in ${fmt(meanOf(PJ.ks), 3)} guesses, and wins ${within(PJ.ks, 6)} of 2,000 within six. It loses ${hard.length}: ${hard.join(', ')}, the families of near-twins (-atch, -ound, -ills, -ines, -ears) where only one word can be ruled out per guess unless you spend a guess on a probe that does not fit. The careless controller, with the same loop, wins ${within(RCARE, 6)}.`;
+}
+function pjTrace() {
+  const w = $('#pj-w').value.trim().toLowerCase(); if (!IDX.has(w)) { $('#pj-tsay').innerHTML = `&ldquo;${esc(w)}&rdquo; is not one of the 2,000 words.`; return; }
+  const s = IDX.get(w), r = trace(s, 10), st = r.steps;
+  const rows = st.map((x, i) => { const Cb = before(st, x.t), H = Cb.length === N ? WAC.rootScores() : WAC.scores(Cb), ord = Array.from(Cb.keys()).sort((a, b) => H[b] - H[a] || a - b).slice(0, 3), pr = promptText(st, i, 6, r.status);
+    return `<tr${x.t > 6 ? ' class="over"' : ''}><td class="num">${x.t}</td><td class="num">${nf(Cb.length)}</td><td>${ord.map(k => `${WORDS[Cb[k]]} ${tip(fmt(H[k], 2), `expected bits over the ${Cb.length} words that fit`)}`).join(', ')}</td><td>${tilesHTML(WORDS[x.g], x.f)}</td><td class="num">${x.f === WAC.WIN ? 'won' : nf(x.left)}</td><td class="num">${tip('≈ ' + nf(toks(pr)), pr.length + ' characters ÷ 4')}</td></tr>`; }).join('');
+  $('#pj-trace').innerHTML = '<thead><tr><th>step</th><th>words that fit</th><th>top 3 options (bits)</th><th>action &rarr; observation</th><th>left</th><th>prompt tokens</th></tr></thead><tbody>' + rows + '</tbody>';
+  $('#pj-tsay').innerHTML = r.k <= 6 ? `${UP(w)} takes ${r.k} guess${r.k === 1 ? '' : 'es'}. Each row is one trip round the loop: the controller sees the words that fit, scores them, acts, and the observation shrinks the list. The prompt grows by about ${toks('\nAssistant: tears\nUser: .Y..G  (5 guesses left)')} tokens a step.`
+    : `${UP(w)} takes ${r.k} guesses, more than the game allows: the shaded rows are beyond six. Look at the &ldquo;left&rdquo; column: once the list is down to a family of near-twins, each fitting guess can remove only itself.`;
+}
+/* fallible controller */
+const PF = { e: 0.05, v: 0, cache: {}, grid: Array.from({ length: 16 }, (_, i) => i * 0.02), timer: 0 };
+function pfSim(e, v) { const key = e.toFixed(3) + '|' + v.toFixed(3); if (PF.cache[key]) return PF.cache[key]; const rng = mulberry32(2024), c = { won: 0, stuck: 0, claimed: 0, out: 0 }; let calls = 0, g = 0; for (let s = 0; s < N; s++) { const r = WAC.play(s, { eps: e, v, rng }); c[r.status]++; calls += r.calls; g += r.k; } c.calls = calls; c.extra = calls - g; return (PF.cache[key] = c); }
+const pfForm = (e, v) => { let p = 0; for (let s = 0; s < N; s++) if (K[s] <= 6) p += Math.pow(1 - e * (1 - v), K[s] - 1); return p / N; };
+function pfGridStep() { const e = PF.grid.find(x => !PF.cache[x.toFixed(3) + '|' + PF.v.toFixed(3)]); if (e == null) return; pfSim(e, PF.v); drawPF(); PF.timer = setTimeout(pfGridStep, 15); }
+function drawPF() {
+  const C = C0(), { e, v: vv } = PF, R = pfSim(e, vv), f = pfForm(e, vv);
+  const u = frame($('#pf-cv'), [0, 0.3], [0.3, 1.02], { l: 44, b: 28 }); axes(u, 'misread rate ε', 'games won', { sx: 0.05, sy: 0.1, fy: y => pct(y, 0), fx: x => fmt(x, 2) }); clip(u);
+  curve(u, x => pfForm(x, 0), C.muted, 1.8, [5, 4]); curve(u, x => pfForm(x, vv), C.a, 2.6);
+  PF.grid.forEach(x => { const q = PF.cache[x.toFixed(3) + '|' + vv.toFixed(3)]; if (q) dot(u, x, q.won / N, C.ink, 3.2); });
+  dot(u, e, R.won / N, C.ink, 7, true); u.ctx.restore();
+  $('#pf-e-o').textContent = fmt(e, 2); $('#pf-v-o').textContent = pct(vv, 0);
+  $('#pf-w').innerHTML = tip(pct(R.won / N, 2), `${R.won} of ${N} games, seed 2024`);
+  $('#pf-f').innerHTML = tip(pct(f, 2), `(1/N) Σ (1 − ε(1 − v))^(K_w − 1) over the ${within(K, 6)} winnable words`);
+  $('#pf-s').innerHTML = tip(nf(R.stuck), 'no word fits the (mis-read) notes any more: the true secret was crossed out');
+  $('#pf-c').innerHTML = tip(nf(R.claimed), 'a misread turned the feedback into GGGGG: the agent stopped and declared victory, but the game was not won');
+  $('#pf-o').innerHTML = tip(nf(R.out), 'six guesses used without finding the secret');
+  $('#pf-x').innerHTML = tip(nf(R.calls), `one per guess plus one per caught slip\n${fmt(R.calls / N, 3)} per game`);
+  const q = 1 - e * (1 - vv), dist = distOf(Array.from(K).filter(k => k <= 6));
+  $('#run-pj').innerHTML = `<b>Running example</b>: q = 1 &minus; ${fmt(e, 2)}&times;(1 &minus; ${fmt(vv, 2)}) = ${fmt(q, 4)}; P(win) = (${Object.keys(dist).map(k => `${dist[k]}&middot;q<sup>${k - 1}</sup>`).join(' + ')}) / ${nf(N)} = ${tip('<b>' + fmt(f, 4) + '</b>', 'exact under the slip model')}; simulated ${fmt(R.won / N, 4)}.`;
+  $('#pf-say').innerHTML = e === 0 ? `With a perfect reader the agent wins ${R.won} of 2,000, as in part 1. Raise &epsilon; to make it fallible.`
+    : `Misreading ${pct(e, 0)} of observations${vv ? `, with ${pct(vv, 0)} of slips caught,` : ''} cuts the wins to ${pct(R.won / N, 1)} (formula ${pct(f, 1)}; the gap is sampling noise). ${nf(R.stuck)} games ended with the agent&rsquo;s notes ruling out every word: it had crossed out the answer itself. ${R.claimed ? `In ${R.claimed} game${R.claimed === 1 ? '' : 's'} a misread made the feedback look like GGGGG and the agent stopped, claiming a win the environment never gave: trust the environment&rsquo;s signal of success, not the agent&rsquo;s.` : ''} ${vv ? `The verifier caught ${nf(R.extra)} slips, at one extra model call each.` : 'Add a verifier to see how much checking buys back.'}`;
+}
+function pjBill() {
+  if (!PJ) return; let calls = 0, tin = 0, tout = 0, cached = 0;
+  PJ.games.forEach(st => { st.forEach((x, i) => { const pr = promptText(st, i, 6, ''), tk = toks(pr); calls++; tin += tk; tout += toks(WORDS[x.g]); if (i) cached += toks(promptText(st, i - 1, 6, '')); }); });
+  const B = BU, cNo = (B.ci * tin + B.co * tout) / 1e6, cCa = (B.ci * (tin - cached + B.kap * cached) + B.co * tout) / 1e6, time = calls * (B.l + 2 / B.r);
+  $('#pj-bill').innerHTML = `<thead><tr><th>quantity</th><th>all 2,000 games</th><th>per game</th></tr></thead><tbody>`
+    + `<tr><td>model calls</td><td class="num">${nf(calls)}</td><td class="num">${fmt(calls / N, 3)}</td></tr>`
+    + `<tr><td>input tokens (&asymp; characters &divide; 4)</td><td class="num">${tip(nf(tin), 'every call re-sends the system prompt and the whole history')}</td><td class="num">${nf(tin / N)}</td></tr>`
+    + `<tr><td>output tokens</td><td class="num">${nf(tout)}</td><td class="num">${fmt(tout / N, 1)}</td></tr>`
+    + `<tr><td>cost at the example prices of section 6, no caching</td><td class="num">${tip(money(cNo), `$${fmt(B.ci, 2)}/M input, $${fmt(B.co, 0)}/M output`)}</td><td class="num">${money(cNo / N)}</td></tr>`
+    + `<tr><td>with caching (&kappa; = ${B.kap})</td><td class="num">${money(cCa)}</td><td class="num">${money(cCa / N)}</td></tr>`
+    + `<tr><td>wall-clock time, one game after another</td><td class="num">${tip(dur(time), `${nf(calls)} calls × (${fmt(B.l, 1)} s + 2 tokens / ${B.r} per s)`)}</td><td class="num">${fmt(time / N, 1)} s</td></tr></tbody>`;
+  $('#pj-bsay').innerHTML = `If an LLM were the controller, the 2,000 games would take ${nf(calls)} calls and about ${nf(tin)} input tokens, almost all of it the instructions and history sent again on every turn; the guesses themselves are ${nf(tout)} tokens. A real LLM would also write some reasoning before each guess (ReAct style), which would multiply the output and the history. Change the prices and delays in section 6 and press &ldquo;Play all 2,000 games&rdquo; to redo the bill.`;
+}
+function pjHonest() {
+  const chk = [];
+  chk.push(['opener and its score', WORDS[OPEN.g] === PY.opener && Math.abs(OPEN.h - PY.H) < 5e-7]);
+  const d = distOf(K); chk.push(['careful distribution', Object.keys(PY.dist).every(k => d[k] === PY.dist[k]) && Object.keys(d).length === Object.keys(PY.dist).length]);
+  chk.push(['games lost', WORDS.filter((w, i) => K[i] > 6).join(' ') === PY.hard]);
+  const dc = distOf(RCARE); chk.push(['careless distribution', Object.keys(PY.care.dist).every(k => dc[k] === PY.care.dist[k])]);
+  PY.soft.forEach(([tau, m, w6]) => { const q = ctSim(tau); chk.push([`softmax τ = ${tau}`, Math.abs(q.m - m) < 5e-5 && q.w6 === w6]); });
+  PY.mis.forEach(([e, v, c, calls]) => { const q = pfSim(e, v); chk.push([`ε = ${e}, v = ${v}`, ['won', 'stuck', 'claimed', 'out'].every(k => q[k] === c[k]) && q.calls === calls]); });
+  const bad = chk.filter(x => !x[1]);
+  $('#pj-honest').innerHTML = (bad.length ? `<b>Check:</b> the browser differs from Python on ${bad.map(x => x[0]).join(', ')}. ` : `<b>Checked on this page:</b> all ${chk.length} comparisons with the Python output above agree exactly: the opener and its score, the full distribution of guesses for both controllers, the 13 lost words, the three softmax runs and every count of the four fallible runs (the random draws use the same mulberry32 generator in both). `)
+    + `The browser is a separate JavaScript implementation, not a translation of the listing: it precomputes all 4,000,000 feedback patterns into one byte array, which is why it plays 2,000 games in milliseconds. Honest caveats: the controller is a stand-in for an LLM, chosen because its decisions can be inspected and checked; a real LLM would not compute entropies, could reason in words, and would make mistakes of kinds this model does not have. The misread model (one tile, independent slips) is a deliberately simple way to make errors that compound, not a measurement of any LLM. The token counts use the characters &divide; 4 rule of thumb, not a real tokenizer, and the prices are examples.`;
+}
+$('#pj-all').addEventListener('click', pjAll);
+$('#pj-go').addEventListener('click', pjTrace); $('#pj-w').addEventListener('keydown', e => { if (e.key === 'Enter') pjTrace(); });
+$('#pf-e').addEventListener('input', e => { PF.e = +e.target.value; drawPF(); });
+$('#pf-v').addEventListener('input', e => { PF.v = +e.target.value; clearTimeout(PF.timer); drawPF(); PF.timer = setTimeout(pfGridStep, 30); });
+fig($('#pj-cv'), drawPJ); fig($('#pf-cv'), drawPF);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+redrawAll();
+pjAll(); pjTrace();
+setTimeout(() => { ctGridStep(); pfGridStep(); }, 50);
+setTimeout(pjHonest, 400);
+window.__waDebug = { WAC, WORDS, K, RCARE, ctSim, pfSim, pfForm, HERO, LP, TH, CT, CP, BU, AU, WN, PF, PY, get PJ() { return PJ; }, pjHonest, buCalc, auCost, wnVals };
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

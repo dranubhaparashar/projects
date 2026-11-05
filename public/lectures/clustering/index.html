@@ -1,0 +1,1574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture: k-means step by step, k-means++, the elbow and silhouette, hierarchical clustering and dendrograms, DBSCAN, Gaussian mixtures and EM, and a real customer-segmentation project checked against scikit-learn.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Clustering</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+:root { --k6: #6E8B1E; --k7: #B0477F; --k8: #8A6A3C; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --k6: #A9CF58; --k7: #E989BD; --k8: #C9A36E; } }
+:root[data-theme="dark"] { --k6: #A9CF58; --k7: #E989BD; --k8: #C9A36E; }
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+table.zoo td, table.zoo th { font-size: 0.88rem; vertical-align: top; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+table.race td.ok { color: var(--cA); font-weight: 600; }
+.quad { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.quad > div { min-width: 0; }
+.quad .mini-h b { color: var(--ink); font-family: var(--f-mono); font-weight: 600; letter-spacing: 0; }
+table.prof td.cell { text-align: center; font-family: var(--f-mono); font-size: 0.85rem; }
+table.prof th { text-align: center; }
+table.prof th:first-child, table.prof td:first-child { text-align: left; }
+.coefs .cf .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+@media (max-width: 560px) { .quad { gap: 8px; } .quad .mini-h { font-size: 0.66rem; letter-spacing: 0.04em; } }
+table.zoo { min-width: 760px; }
+.plot.trc { aspect-ratio: 4 / 1; }
+@media (max-width: 560px) { .plot.trc { aspect-ratio: 2.3 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Clustering <span>&middot; groups without labels</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">No answer key</a>
+      <a href="#kmeans">k-means</a>
+      <a href="#init">k-means++</a>
+      <a href="#choosek">Choosing k</a>
+      <a href="#hier">Hierarchical</a>
+      <a href="#dbscan">DBSCAN</a>
+      <a href="#gmm">Gaussian mixtures</a>
+      <a href="#compare">Compare</a>
+      <a href="#project">Customer project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.12 · clustering</div>
+      <h1>Clustering</h1>
+      <div class="sub">Finding groups that nobody labelled</div>
+      <p class="lead">Every model so far learned from an answer key. Clustering has none: just points, and the question &ldquo;which of these belong together?&rdquo; There is no single right answer, because there is no single meaning of &ldquo;together&rdquo;. Close to the same centre? Joined by a chain of neighbours? Drawn from the same bell curve? Each idea gives a different algorithm, and they disagree. On the right, <strong>pick an algorithm</strong> and watch it carve up the same 190 points.</p>
+      <dl class="facts">
+        <div><dt>The task</dt><dd>Group similar points with no labels to learn from</dd></div>
+        <div><dt>Four ideas</dt><dd>Centres, family trees, dense crowds and bell curves</dd></div>
+        <div><dt>In practice</dt><dd>Customer segments, image regions, gene families, anomaly flags</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="fig-head"><div class="seg" role="group" aria-label="Algorithm"><button type="button" data-ha="km" aria-pressed="true">k-means</button><button type="button" data-ha="ward">Hierarchical</button><button type="button" data-ha="db">DBSCAN</button><button type="button" data-ha="gmm">Gaussian mixture</button></div></div>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Two crescent moons and a round blob, coloured by the chosen clustering algorithm"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Groups without an answer key</a></li>
+    <li><a href="#kmeans"><i>02</i>k-means: assign, update, repeat</a></li>
+    <li><a href="#init"><i>03</i>Bad starts and k-means++</a></li>
+    <li><a href="#choosek"><i>04</i>How many clusters?</a></li>
+    <li><a href="#hier"><i>05</i>A family tree of points</a></li>
+    <li><a href="#dbscan"><i>06</i>DBSCAN: clusters as crowds</a></li>
+    <li><a href="#gmm"><i>07</i>Gaussian mixtures: soft clusters</a></li>
+    <li><a href="#compare"><i>08</i>Four ideas, side by side</a></li>
+    <li><a href="#project"><i>09</i>Segmenting real customers</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Groups without an answer key</h2>
+    <div class="prose">
+      <p>A shop with ten thousand customers can't design ten thousand offers, but it can design four, if it can find four kinds of customer. Nobody has labelled them; the groups have to come out of the data itself. That is <em class="term">unsupervised learning</em>, and clustering is its most common form. To make &ldquo;good groups&rdquo; precise, the oldest approach gives each group a <em class="term">centre</em> and charges every point the squared distance to its nearest centre. Good centres make the bill small. <strong>Click to drop centres</strong> on the points below, drag them around, and try to beat the computer.</p>
+    </div>
+    <div class="eq"><div class="m">\[ W = \sum_{i=1}^{n}\ \min_{k}\ \lVert \mathbf{x}_i - \boldsymbol{\mu}_k \rVert^2 \]</div><div class="read"><b>Read it as:</b> each point x<sub>i</sub> walks to its nearest centre &mu;<sub>k</sub> and pays the squared distance. W, the <b>within-cluster sum of squares</b> (scikit-learn calls it <i>inertia</i>), is the total bill. Each centre's customers form its cluster. More centres always lower W, so W can compare placements for the same number of centres, but not choose how many.</div><div class="eq-say"><b>Say it</b><em>&ldquo;W is the sum over all points of the squared distance to the nearest centre.&rdquo;</em></div><div class="eq-run" id="run-wy"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="wy-cv" aria-label="Unlabelled points; click to add centres, drag them to move"></canvas></div><figcaption>Click empty space to add a centre (up to 6); drag a star to move it. Thin lines join each point to its nearest centre. Hollow stars: k-means&rsquo; answer for the same number of centres.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="wy-best">Show k-means&rsquo; answer</button><button type="button" class="btn" id="wy-undo">Remove last centre</button><button type="button" class="btn" id="wy-clear">Clear</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="wy-you"></div><div class="k">your bill W</div></div><div class="stat"><div class="v" id="wy-km"></div><div class="k">k-means&rsquo; bill, same k</div></div></div>
+        <p class="note" id="wy-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- K-MEANS -->
+<section class="chap" id="kmeans">
+  <div class="wrap">
+    <div class="tag">The workhorse</div>
+    <h2>k-means: assign, update, repeat</h2>
+    <div class="prose"><p>Finding the very best centres is a hard problem (NP-hard, in fact), but Stuart Lloyd's 1957 recipe gets a good answer fast. Start with k centres anywhere. Then repeat two steps: <b>assign</b> every point to its nearest centre, and <b>update</b> every centre to the mean of its points. Each step can only lower W, so the loop must stop, usually after a handful of rounds. <strong>Press Step</strong> and watch the stars walk; drag a star to restart from somewhere else.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \text{assign:}\quad c_i = \arg\min_{k}\ \lVert \mathbf{x}_i - \boldsymbol{\mu}_k \rVert^2 \]</div><div class="read"><b>Read it as:</b> point i joins the cluster c<sub>i</sub> whose centre is nearest. With the centres fixed, this is the cheapest possible choice for every point, so W can only fall. The borders between clusters are straight lines, halfway between neighbouring centres.</div><div class="eq-say"><b>Say it</b><em>&ldquo;c-i is the k that makes the squared distance from x-i to mu-k smallest.&rdquo;</em></div><div class="eq-run" id="run-ka"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \text{update:}\quad \boldsymbol{\mu}_k = \frac{1}{|C_k|}\sum_{i \in C_k} \mathbf{x}_i \]</div><div class="read"><b>Read it as:</b> move each centre to the average of the points it owns. With the clusters fixed, the mean is the single point with the smallest total squared distance to them, so W falls again. This is why k-means uses <i>squared</i> distances.</div><div class="eq-say"><b>Say it</b><em>&ldquo;mu-k is one over the size of cluster k, times the sum of its points.&rdquo;</em></div><div class="eq-run" id="run-ku"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="km-cv" aria-label="k-means step by step; drag the centres"></canvas></div>
+        <div class="plot trc" style="margin-top:10px"><canvas id="km-tr" aria-label="W after every step"></canvas></div>
+        <figcaption>Stars: centres, with the path each has walked. Shading: the region each centre owns. Below: W after every step. Click any point to follow it in the running examples.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="km-k">Number of clusters k</label><output id="km-k-o"></output></div><input type="range" id="km-k" min="2" max="6" step="1" value="4"></div>
+        <div class="btns"><button type="button" class="btn primary" id="km-step">Step</button><button type="button" class="btn" id="km-run">Run to the end</button><button type="button" class="btn" id="km-new">New random start</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="km-it"></div><div class="k">steps taken</div></div><div class="stat"><div class="v" id="km-j"></div><div class="k">W now</div></div></div>
+        <p class="note" id="km-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- INIT -->
+<section class="chap" id="init">
+  <div class="wrap">
+    <div class="tag">A known weakness</div>
+    <h2>Bad starts and k-means++</h2>
+    <div class="prose"><p>Lloyd's loop always stops, but not always at the best answer. If two starting centres land in the same group, one of them may stay stuck there while another centre is left to cover two groups. That's a <em class="term">local minimum</em>: no single assign or update step can fix it. The cure has two parts. Start more cleverly: <em class="term">k-means++</em> (Arthur &amp; Vassilvitskii, 2007) picks each new starting centre with a probability that grows with its distance from the centres chosen so far. And start several times, keeping the run with the lowest W. <strong>Run 100 starts of each kind</strong> and compare.</p></div>
+    <div class="eq"><div class="m">\[ P(\text{pick } \mathbf{x}_i) =\frac{D(\mathbf{x}_i)^2}{\sum_{j} D(\mathbf{x}_j)^2} \]</div><div class="read"><b>Read it as:</b> D(x) is the distance from x to the nearest centre picked so far. A point far from every existing centre has a big D(x)&sup2; and is likely to be chosen; a point next to one has almost no chance. The first centre is a point picked uniformly at random. Arthur and Vassilvitskii proved that this start alone, before Lloyd's loop even begins, has an expected W at most 8(ln&nbsp;k + 2) times the best possible.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The chance that x-i is the next centre is D of x-i squared, over the sum of all the D squareds.&rdquo;</em></div><div class="eq-run" id="run-in"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="in-cv" aria-label="Six groups of points and the latest k-means run"></canvas></div>
+        <div class="plot trc" style="margin-top:10px"><canvas id="in-tr" aria-label="Final W of every run, by starting method"></canvas></div>
+        <figcaption>Top: the latest run. Hollow stars: where it started; filled stars: where it ended. Below: every run's final W; the dashed line is the best W found.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="How to start"><button type="button" data-im="rand" aria-pressed="true">Random points</button><button type="button" data-im="pp">k-means++</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="in-one">One start</button><button type="button" class="btn" id="in-100">100 starts</button><button type="button" class="btn" id="in-clr">Forget runs</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="in-r"></div><div class="k">random starts that found the best</div></div><div class="stat"><div class="v" id="in-p"></div><div class="k">k-means++ starts that found the best</div></div></div>
+        <p class="note" id="in-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CHOOSE K -->
+<section class="chap" id="choosek">
+  <div class="wrap">
+    <div class="tag">The hardest question</div>
+    <h2>How many clusters? The elbow and the silhouette</h2>
+    <div class="prose"><p>W always falls as k grows (with one centre per point it reaches zero), so its value alone can't choose k. Two habits help. The <em class="term">elbow</em>: plot W against k and look for the bend where extra centres stop paying off. The <em class="term">silhouette</em> (Rousseeuw, 1987): for each point, compare how close it is to its own cluster with how close it is to the next-nearest one. <strong>Move the k slider</strong>, click points to see their silhouettes, then <strong>loosen the groups</strong> and watch both signals fade.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} a(i) &= \bar d(i, C_{\text{own}}) \\ b(i) &= \min_{C \ne C_{\text{own}}} \bar d(i, C) \\ s(i) &= \frac{b(i) - a(i)}{\max\{a(i),\, b(i)\}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> d&#772;(i, C) is the mean distance from point i to the points of cluster C (not counting i itself). So a(i) says how far i is from its own cluster-mates, and b(i) how far from the nearest other cluster. s(i) is near +1 when point i sits snugly inside its cluster, far from the rest; near 0 when it lies on a border; negative when it would fit better next door. The <b>silhouette score</b> is the average of s(i) over all points. Unlike W, it can go down when k grows, so you can pick the k with the highest score. Points alone in their cluster get s = 0.</div><div class="eq-say"><b>Say it</b><em>&ldquo;s of i is b minus a, over the larger of a and b.&rdquo;</em></div><div class="eq-run" id="run-ck"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="ck-cv" aria-label="k-means result; click a point to see its silhouette"></canvas></div>
+        <div class="two" style="gap:10px;margin-top:10px">
+          <div class="plot" style="aspect-ratio:1.7/1"><canvas id="ck-el" aria-label="W against k"></canvas></div>
+          <div class="plot" style="aspect-ratio:1.7/1"><canvas id="ck-si" aria-label="Silhouette score against k"></canvas></div>
+        </div>
+        <figcaption>Each point is drawn with a halo whose size shows its own s(i); red rings mark negative ones. Bottom left: the elbow plot. Bottom right: the silhouette score for every k; the dark dot is the k you chose.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ck-k">Number of clusters k</label><output id="ck-k-o"></output></div><input type="range" id="ck-k" min="2" max="8" step="1" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="ck-s">Spread of each group</label><output id="ck-s-o"></output></div><input type="range" id="ck-s" min="0.25" max="1.4" step="0.05" value="0.45"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ck-sc"></div><div class="k">silhouette score</div></div><div class="stat"><div class="v" id="ck-best"></div><div class="k">best k by silhouette</div></div></div>
+        <p class="note" id="ck-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- HIERARCHICAL -->
+<section class="chap" id="hier">
+  <div class="wrap">
+    <div class="tag">A different idea</div>
+    <h2>Hierarchical clustering: a family tree of points</h2>
+    <div class="prose"><p>Instead of fixing k first, build every clustering at once. Start with each point in a cluster of its own. Repeatedly <em>merge the two closest clusters</em>, until only one is left. The record of merges is a tree, the <em class="term">dendrogram</em>: the height of each join says how far apart the two groups were. Cut the tree at any height and you get a clustering. The whole method rests on one choice: how to measure the distance between two <em>groups</em> of points, the <em class="term">linkage</em>. <strong>Switch linkage, cut the tree</strong>, and drag points to see the tree rebuild.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} d_{\text{single}}(A,B) &= \min_{\mathbf{a},\,\mathbf{b}} \lVert \mathbf{a}-\mathbf{b} \rVert \\ d_{\text{complete}}(A,B) &= \max_{\mathbf{a},\,\mathbf{b}} \lVert \mathbf{a}-\mathbf{b} \rVert \end{aligned} \]</div><div class="read"><b>Read it as:</b> here and on the right, <b>a</b> runs over the points of cluster A and <b>b</b> over the points of B. Single linkage measures the two closest members, so a chain of near neighbours can join anything (long, snaking clusters). Complete linkage measures the two farthest members, which favours compact, round groups.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Single: the smallest distance between a point of A and a point of B. Complete: the largest.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} d_{\text{avg}}(A,B) &= \tfrac{1}{|A||B|}\textstyle\sum_{\mathbf{a}}\sum_{\mathbf{b}} \lVert \mathbf{a}-\mathbf{b} \rVert \\ d_{\text{Ward}}(A,B) &= \sqrt{\tfrac{2|A||B|}{|A|+|B|}}\, \lVert \boldsymbol{\mu}_A-\boldsymbol{\mu}_B \rVert \end{aligned} \]</div><div class="read"><b>Read it as:</b> average linkage takes the mean of all the cross distances, a compromise. Ward's linkage (1963) is k-means' cousin: half its square, &frac12;d&sup2;, is exactly how much W grows when A and B merge, so Ward always makes the merge that adds the least spread. For two single points it is just their distance.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Average: the mean distance over all pairs. Ward: the distance between the centres, scaled by the root of two A B over A plus B.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-hc" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="hc-cv" aria-label="Lettered points coloured by cluster; drag them"></canvas></div>
+        <div class="plot" style="aspect-ratio:2.2/1;margin-top:10px"><canvas id="hc-dg" aria-label="Dendrogram with a cut line"></canvas></div>
+        <figcaption>Top: points, coloured by the clusters below the cut; drag any point. Bottom: the dendrogram. Each join is drawn at the height where its two groups merged; the dashed line is the cut.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Linkage"><button type="button" data-hl="single">Single</button><button type="button" data-hl="complete">Complete</button><button type="button" data-hl="average">Average</button><button type="button" data-hl="ward" aria-pressed="true">Ward</button></div>
+        <div class="ctrl"><div class="top"><label for="hc-k">Cut the tree into k clusters</label><output id="hc-k-o"></output></div><input type="range" id="hc-k" min="1" max="16" step="1" value="3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="hc-h"></div><div class="k">height of the cut</div></div><div class="stat"><div class="v" id="hc-gap"></div><div class="k">gap to the next merge</div></div></div>
+        <p class="note" id="hc-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- DBSCAN -->
+<section class="chap" id="dbscan">
+  <div class="wrap">
+    <div class="tag">Density</div>
+    <h2>DBSCAN: clusters as crowds</h2>
+    <div class="prose"><p>k-means looks for round groups around centres, so it slices a crescent in half. DBSCAN (Ester, Kriegel, Sander &amp; Xu, 1996) has a different picture: a cluster is a <em>crowd</em>, a region where points are packed densely, separated from other crowds by emptier space. Draw a circle of radius &epsilon; around each point. A point with at least <i>minPts</i> points in its circle (itself included) is a <b>core</b> point. Core points that sit in each other's circles join the same cluster, and so do the non-core <b>border</b> points in their circles. Everything else is <b>noise</b>. You never choose k; it comes out. <strong>Set &epsilon; and minPts</strong>, and hover over points to see their circles.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} N_\varepsilon(\mathbf{x}) &= \{\, \mathbf{y} : \lVert \mathbf{x}-\mathbf{y} \rVert \le \varepsilon \,\} \\ \mathbf{x} \text{ is core} &\iff |N_\varepsilon(\mathbf{x})| \ge \text{minPts} \end{aligned} \]</div><div class="read"><b>Read it as:</b> N<sub>&epsilon;</sub>(x) is x's neighbourhood, every point within distance &epsilon; (x included). Clusters grow outwards from core points through their neighbourhoods; a border point belongs to a cluster without extending it. Points in nobody's neighbourhood of a core point are labelled noise, which makes DBSCAN a natural outlier detector.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The epsilon-neighbourhood of x is every y within epsilon of x; x is a core point if that set has at least minPts points.&rdquo;</em></div><div class="eq-run" id="run-db"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Data"><button type="button" data-dd="moons" aria-pressed="true">Moons</button><button type="button" data-dd="rings">Rings</button><button type="button" data-dd="uneven">Uneven density</button><button type="button" data-dd="noisy">Blobs + noise</button></div></div>
+        <div class="plot ar-16x10"><canvas id="db-cv" aria-label="DBSCAN result; hover to see a point's neighbourhood"></canvas></div>
+        <figcaption>Large dots: core points. Small dots: border points. Grey crosses: noise. The circle shows the hovered point's &epsilon;-neighbourhood.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="db-e">&epsilon;, the radius</label><output id="db-e-o"></output></div><input type="range" id="db-e" min="0.1" max="1.6" step="0.02" value="0.54"></div>
+        <div class="ctrl"><div class="top"><label for="db-m">minPts</label><output id="db-m-o"></output></div><input type="range" id="db-m" min="2" max="15" step="1" value="5"></div>
+        <div class="stats"><div class="stat"><div class="v" id="db-k"></div><div class="k">clusters found</div></div><div class="stat"><div class="v" id="db-n"></div><div class="k">noise points</div></div></div>
+        <p class="note" id="db-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- GMM -->
+<section class="chap" id="gmm">
+  <div class="wrap">
+    <div class="tag">Soft clusters</div>
+    <h2>Gaussian mixtures: clusters as bell curves</h2>
+    <div class="prose"><p>k-means gives each point exactly one cluster and treats every cluster as a round ball of the same size. A <em class="term">Gaussian mixture model</em> is more honest about both. It imagines the data was made by k bell curves, each with its own centre, its own shape and tilt (a covariance matrix), and its own share of the points. Fitting it is the <em class="term">EM algorithm</em> (Dempster, Laird &amp; Rubin, 1977), a soft version of k-means: the <b>E-step</b> works out how much each bell curve is responsible for each point, and the <b>M-step</b> refits each bell curve to the points, weighted by those responsibilities. <strong>Step through EM</strong>, and click a point to see its responsibilities.</p></div>
+    <div class="eq"><div class="m">\[ p(\mathbf{x}) = \sum_{k=1}^{K} \pi_k\, \mathcal{N}(\mathbf{x} \mid \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) \]</div><div class="read"><b>Read it as:</b> to make a point, first roll a K-sided die with probabilities &pi;<sub>k</sub> (the mixing weights) to pick a bell curve, then draw the point from that bell curve, a Gaussian with centre &mu;<sub>k</sub> and covariance &Sigma;<sub>k</sub>. The model's density is the weighted sum of the K bells.</div><div class="eq-say"><b>Say it</b><em>&ldquo;p of x is the sum over k of pi-k times the normal density of x with mean mu-k and covariance sigma-k.&rdquo;</em></div><div class="eq-run" id="run-gp"></div></div>
+    <div class="two">
+      <div class="eq"><div class="m">\[ \text{E:}\quad r_{ik} = \frac{\pi_k\, \mathcal{N}_k(\mathbf{x}_i)}{\sum_{j} \pi_j\, \mathcal{N}_j(\mathbf{x}_i)} \]</div><div class="read"><b>Read it as:</b> Bayes' rule, writing N<sub>k</sub>(x) for bell k's density N(x | &mu;<sub>k</sub>, &Sigma;<sub>k</sub>). r<sub>ik</sub>, the <b>responsibility</b>, is the probability that point i came from bell k, given where it is. Each point's responsibilities add up to 1. k-means would round them to 0 or 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;r-i-k is pi-k times bell k's density at x-i, divided by the same for all the bells added up.&rdquo;</em></div><div class="eq-run" id="run-ge"></div></div>
+      <div class="eq"><div class="m">\[ \begin{aligned} \text{M:}\quad N_k &= \textstyle\sum_i r_{ik}, \quad \pi_k = N_k / n \\ \boldsymbol{\mu}_k &= \tfrac{1}{N_k}\textstyle\sum_i r_{ik}\, \mathbf{x}_i \\ \boldsymbol{\Sigma}_k &= \tfrac{1}{N_k}\textstyle\sum_i r_{ik}\, \mathbf{d}_{ik}\mathbf{d}_{ik}^{\top} \end{aligned} \]</div><div class="read"><b>Read it as:</b> d<sub>ik</sub> = x<sub>i</sub> &minus; &mu;<sub>k</sub> is point i's offset from bell k's new centre. N<sub>k</sub> is how many points bell k owns, counting fractions. Its weight is its share; its centre and covariance are the weighted mean and weighted spread of the points. Each E-then-M round never lowers the likelihood of the data.</div><div class="eq-say"><b>Say it</b><em>&ldquo;N-k is the total responsibility of bell k; pi-k is N-k over n; mu-k and sigma-k are the responsibility-weighted mean and covariance.&rdquo;</em></div><div class="eq-run" id="run-gm"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Colouring"><button type="button" data-gv="soft" aria-pressed="true">Soft colours</button><button type="button" data-gv="hard">Hard labels</button><button type="button" data-gv="km">k-means, for contrast</button></div></div>
+        <div class="plot ar-16x10"><canvas id="gm-cv" aria-label="Gaussian mixture fitted by EM; click a point"></canvas></div>
+        <div class="plot trc" style="margin-top:10px"><canvas id="gm-tr" aria-label="Mean log-likelihood after every EM round"></canvas></div>
+        <figcaption>Ellipses: each bell curve at 1 and 2 standard deviations. Soft colours mix the bells' colours by responsibility. Below: the mean log-likelihood after every round.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="gm-step">E-step</button><button type="button" class="btn" id="gm-run">Run to convergence</button><button type="button" class="btn" id="gm-new">New random start</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="gm-it"></div><div class="k">EM rounds</div></div><div class="stat"><div class="v" id="gm-ll"></div><div class="k">mean log-likelihood</div></div></div>
+        <div class="coefs" id="gm-resp"></div>
+        <p class="note" id="gm-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARE -->
+<section class="chap" id="compare">
+  <div class="wrap">
+    <div class="tag">Playground</div>
+    <h2>Four ideas of a cluster, side by side</h2>
+    <div class="prose"><p>Each algorithm carries its own idea of what a cluster is, and wins when the data matches that idea. Below, each dataset was generated with known groups, so we can score each answer against the truth with the <em class="term">adjusted Rand index</em> (ARI): 1 for a perfect match, about 0 for a clustering no better than random. Each algorithm gets fair settings: k-means, hierarchical clustering and the mixture are told the true number of groups; DBSCAN gets an &epsilon; tuned for each dataset. <strong>Switch datasets</strong> and see which idea fits which shape.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{ARI} &= \frac{\sum_{ij}\binom{n_{ij}}{2} - E}{\tfrac12\big[\sum_i \binom{a_i}{2} + \sum_j \binom{b_j}{2}\big] - E} \\ E &= \frac{\sum_i \binom{a_i}{2}\,\sum_j \binom{b_j}{2}}{\binom{n}{2}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> count the <i>pairs</i> of points. n<sub>ij</sub> is how many points are in true group i and found cluster j; a<sub>i</sub> and b<sub>j</sub> are the group and cluster sizes. The top counts pairs that both labellings put together, minus E, the number expected by pure chance; the bottom is the most that count could be. The cluster numbers themselves don't matter, only who is grouped with whom.</div><div class="eq-say"><b>Say it</b><em>&ldquo;ARI is the together-pairs both agree on, minus what chance would give, over the maximum minus what chance would give.&rdquo;</em></div><div class="eq-run" id="run-cp"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Dataset"><button type="button" data-cd="blobs" aria-pressed="true">Blobs</button><button type="button" data-cd="aniso">Stretched</button><button type="button" data-cd="moons">Moons</button><button type="button" data-cd="rings">Rings</button><button type="button" data-cd="uneven">Uneven</button><button type="button" data-cd="none">No structure</button></div></div>
+        <div class="quad">
+          <div><div class="mini-h" id="cp-h0">k-means</div><div class="plot" style="aspect-ratio:4/3"><canvas id="cp-0" aria-label="k-means result"></canvas></div></div>
+          <div><div class="mini-h" id="cp-h1">Hierarchical</div><div class="plot" style="aspect-ratio:4/3"><canvas id="cp-1" aria-label="Hierarchical clustering result"></canvas></div></div>
+          <div><div class="mini-h" id="cp-h2">DBSCAN</div><div class="plot" style="aspect-ratio:4/3"><canvas id="cp-2" aria-label="DBSCAN result"></canvas></div></div>
+          <div><div class="mini-h" id="cp-h3">Gaussian mixture</div><div class="plot" style="aspect-ratio:4/3"><canvas id="cp-3" aria-label="Gaussian mixture result"></canvas></div></div>
+        </div>
+        <figcaption id="cp-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Linkage for the hierarchical panel"><button type="button" data-cl="ward" aria-pressed="true">Ward</button><button type="button" data-cl="single">Single</button><button type="button" data-cl="average">Average</button><button type="button" data-cl="complete">Complete</button></div>
+        <div class="seg" role="group" aria-label="Explain the ARI of"><button type="button" data-ce="0" aria-pressed="true">k-means</button><button type="button" data-ce="1">Hier.</button><button type="button" data-ce="2">DBSCAN</button><button type="button" data-ce="3">GMM</button></div>
+        <div class="tbl-wrap"><table class="hand" id="cp-tbl"></table></div>
+        <p class="note" id="cp-say"></p>
+      </div></div>
+    </div>
+    <div class="tbl-wrap block"><table class="zoo">
+      <thead><tr><th>Method</th><th>A cluster is&hellip;</th><th>You choose</th><th>Shapes</th><th>Noise</th><th>Scales to</th><th>Reach for it when</th></tr></thead>
+      <tbody>
+        <tr><td><b>k-means</b></td><td>the points nearest a centre</td><td>k</td><td>round, similar sizes</td><td>every point is assigned</td><td>millions (mini-batch)</td><td>you want a fast, simple segmentation into roughly equal blobs</td></tr>
+        <tr><td><b>Hierarchical</b></td><td>a branch of the merge tree</td><td>linkage, then where to cut</td><td>depends on linkage: chains (single) to blobs (Ward)</td><td>every point is assigned</td><td>a few thousand (needs all pairwise distances)</td><td>you want the whole family tree, or a dendrogram to show people</td></tr>
+        <tr><td><b>DBSCAN</b></td><td>a dense crowd</td><td>&epsilon; and minPts</td><td>any shape</td><td>labelled as noise</td><td>large, with a spatial index</td><td>clusters of odd shapes, outliers to flag, unknown k</td></tr>
+        <tr><td><b>Gaussian mixture</b></td><td>one bell curve</td><td>k (or let BIC choose)</td><td>ellipses of any tilt and size</td><td>soft: low responsibility everywhere</td><td>large, if the dimension is modest</td><td>you need probabilities, overlapping groups, or a density</td></tr>
+      </tbody></table></div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: segmenting a wholesaler's customers</h2>
+    <div class="prose">
+      <p>A food wholesaler in Portugal recorded what each of its <strong>440</strong> client businesses spent in a year, in six categories: <b>fresh</b> food, <b>milk</b> products, <b>grocery</b>, <b>frozen</b>, <b>detergents &amp; paper</b>, and <b>delicatessen</b> (Abreu, 2011; UCI repository &ldquo;Wholesale customers&rdquo;). The file also says each client's channel: 298 are hotels, restaurants and caf&eacute;s (<b>HoReCa</b>) and 142 are <b>retailers</b>. We hide the channel from every algorithm and use it only at the end, to ask whether the segments found on their own mean something real. At the end, a second real dataset, Old Faithful's eruptions, shows a Gaussian mixture in the wild.</p>
+    </div>
+
+    <h3>1 &middot; Tame the skew</h3>
+    <div class="prose"><p>Spending is wildly lopsided: most clients spend a few thousand, a few spend a hundred times more. Distances on raw spend would be ruled by those few giants and by whichever category has the biggest numbers. So take logs (which turn &ldquo;ten times more&rdquo; into &ldquo;a fixed step more&rdquo;), then standardise each category to mean 0 and standard deviation 1. <strong>Switch category and scale</strong> to see the difference.</p></div>
+    <div class="eq"><div class="m">\[ z_{ij} = \frac{\ln x_{ij} - m_j}{s_j} \]</div><div class="read"><b>Read it as:</b> x<sub>ij</sub> is client i's spend in category j. Take its natural log, subtract that category's mean log spend m<sub>j</sub>, and divide by the standard deviation s<sub>j</sub> of the log spends. Every category now has the same weight in every distance.</div><div class="eq-say"><b>Say it</b><em>&ldquo;z-i-j is log x-i-j minus m-j, over s-j.&rdquo;</em></div><div class="eq-run" id="run-pz"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Category" id="pz-cats"></div></div>
+        <div class="plot" style="aspect-ratio:2.4/1"><canvas id="pz-cv" aria-label="Histogram of one category's annual spend"></canvas></div>
+        <figcaption id="pz-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Scale"><button type="button" data-ps="raw">Raw spend</button><button type="button" data-ps="log" aria-pressed="true">Log, standardised</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pz-sk"></div><div class="k">skewness</div></div><div class="stat"><div class="v" id="pz-top"></div><div class="k">share spent by the top 10% of clients</div></div></div>
+        <p class="note" id="pz-say"></p>
+      </div></div>
+    </div>
+
+    <h3>2 &middot; How many segments?</h3>
+    <div class="prose"><p>Run k-means for k = 2 to 8. To make every run reproducible and comparable with scikit-learn, each starts from the same k-means++ centres that scikit-learn picks with <span class="mono">random_state=0</span> (the page stores their row numbers). The last column peeks at the hidden channel: how well do the segments line up with HoReCa versus retail?</p></div>
+    <div class="btns block"><button type="button" class="btn primary" id="pk-run">Run k-means for every k</button><span class="note" id="pk-prog" style="align-self:center"></span></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pk-race"></table></div>
+    <div class="two block">
+      <figure><div class="plot" style="aspect-ratio:1.7/1"><canvas id="pk-el" aria-label="Elbow plot for the customers"></canvas></div><figcaption>The elbow plot. Where is the elbow? Honest answer: there isn't a sharp one, which is typical of real data.</figcaption></figure>
+      <figure><div class="plot" style="aspect-ratio:1.7/1"><canvas id="pk-si" aria-label="Silhouette score for the customers"></canvas></div><figcaption>Silhouette score by k. It peaks at k = 2, and every score is modest: the segments overlap.</figcaption></figure>
+    </div>
+
+    <h3>3 &middot; Meet the segments</h3>
+    <div class="prose"><p>A segment is only useful if you can describe it. Each cell of the table below compares a segment's typical spend (the geometric mean, which is what averaging logs gives you) with the typical client's. The map is the plane of the data's two main directions of spread, its first two <em>principal components</em> (chapter 1.13 explains them); every dot is one client.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Colour by"><button type="button" data-pc="km" aria-pressed="true">k-means segments</button><button type="button" data-pc="ch">True channel (hidden from k-means)</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pm-cv" aria-label="Clients on the plane of the first two principal components"></canvas></div>
+        <figcaption id="pm-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pm-k">Number of segments k</label><output id="pm-k-o"></output></div><input type="range" id="pm-k" min="2" max="8" step="1" value="2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pm-si"></div><div class="k">silhouette score</div></div><div class="stat"><div class="v" id="pm-ar"></div><div class="k">ARI vs the hidden channel</div></div></div>
+        <p class="note" id="pm-say"></p>
+      </div></div>
+    </div>
+    <div class="tbl-wrap block"><table class="hand prof" id="pm-prof"></table></div>
+
+    <h3>4 &middot; Second opinions: Ward and DBSCAN</h3>
+    <div class="prose"><p>Ward's hierarchical clustering builds the full tree of 439 merges; cutting it gives segments to compare with k-means'. DBSCAN asks a different question: are there separate dense crowds at all? <strong>Slide &epsilon;</strong>: on these clients DBSCAN sees one big crowd and a scatter of unusual clients around it, which is useful in its own right, as an outlier detector.</p></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pw-race"></table></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pd-cv" aria-label="DBSCAN on the clients: noise points ringed"></canvas></div><figcaption>Same map. Crosses: clients DBSCAN calls noise, with minPts = 8 in the six standardised dimensions.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pd-e">&epsilon;</label><output id="pd-e-o"></output></div><input type="range" id="pd-e" min="0.8" max="2.4" step="0.05" value="1.5"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pd-k"></div><div class="k">dense crowds</div></div><div class="stat"><div class="v" id="pd-n"></div><div class="k">unusual clients</div></div></div>
+        <div class="tbl-wrap"><table class="hand" id="pd-tbl"></table></div>
+        <p class="note" id="pd-say"></p>
+      </div></div>
+    </div>
+
+    <h3>5 &middot; Old Faithful: a mixture in the wild</h3>
+    <div class="prose"><p>The geyser Old Faithful in Yellowstone erupts every hour or so. R&rsquo;s classic <span class="mono">faithful</span> data (H&auml;rdle, 1991) records 272 eruptions: how long each lasted, and the wait until the next one. The scatter shows two kinds of eruption, short ones followed by short waits and long ones followed by long waits, each a tilted cloud: a natural job for a two-component Gaussian mixture. EM is started from a deliberately <b>crossed</b> guess: each bell pairs one group's eruption length with the other group's waiting time. <strong>Run EM with both tolerances</strong>: EM can crawl for a while before it finds its way, and a loose stopping rule can mistake a slow stretch for the finish.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="pf-cv" aria-label="Old Faithful eruptions with the fitted mixture"></canvas></div>
+        <div class="plot trc" style="margin-top:10px"><canvas id="pf-tr" aria-label="Mean log-likelihood by EM round"></canvas></div>
+        <figcaption id="pf-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Starting guess"><button type="button" data-fs="cross" aria-pressed="true">Crossed start</button><button type="button" data-fs="good">Sensible start</button></div>
+        <div class="seg" role="group" aria-label="Stopping tolerance"><button type="button" data-ft="3" aria-pressed="true">tol = 10&#8315;&sup3; (default)</button><button type="button" data-ft="6">tol = 10&#8315;&#8310;</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="pf-step">One EM round</button><button type="button" class="btn" id="pf-run">Run until it stops</button><button type="button" class="btn" id="pf-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pf-it"></div><div class="k">EM rounds</div></div><div class="stat"><div class="v" id="pf-ll"></div><div class="k">mean log-likelihood</div></div></div>
+        <p class="note" id="pf-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>Why two components and not three? More bells always fit the data at least as well, so, as with W, the likelihood alone can't choose. The <em class="term">Bayesian information criterion</em> charges for every parameter; the lowest BIC wins.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{BIC} &= -2 \ln \hat{L} + p \ln n \\ p &= 6K - 1 \ \text{ in 2-D} \end{aligned} \]</div><div class="read"><b>Read it as:</b> ln L&#770; is the log-likelihood of all n points under the fitted model; p counts its free parameters: per bell, 2 for the centre and 3 for the covariance, plus K &minus; 1 free mixing weights. Lower is better. The penalty p ln n grows with each bell, so a new bell must buy a real gain in fit.</div><div class="eq-say"><b>Say it</b><em>&ldquo;BIC is minus two times the log-likelihood, plus the number of parameters times the log of n.&rdquo;</em></div><div class="eq-run" id="run-pb"></div></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pb-race"></table></div>
+
+    <h3>The same project in scikit-learn</h3>
+<pre class="code"><code>import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans, kmeans_plusplus, AgglomerativeClustering, DBSCAN
+from sklearn.mixture import GaussianMixture
+from sklearn.metrics import silhouette_score, adjusted_rand_score
+
+D = np.loadtxt("wholesale.csv", delimiter=",", skiprows=1)      # UCI "Wholesale customers"
+channel, spend = D[:, 0].astype(int), D[:, 2:]                   # channel 1 = hotel/restaurant/café, 2 = retail
+Z = StandardScaler().fit_transform(np.log(spend))                 # tame the skew, then one scale for all six
+
+for k in range(2, 9):
+    _, start = kmeans_plusplus(Z, k, random_state=0)              # fixed starting centres; the page uses the same
+    km = KMeans(k, init=Z[start], n_init=1).fit(Z)
+    print(f"k-means k={k}: inertia {km.inertia_:7.2f}  silhouette {silhouette_score(Z, km.labels_):.4f}"
+          f"  ARI vs channel {adjusted_rand_score(channel, km.labels_):.4f}  ({km.n_iter_} iterations)")
+for k in (2, 3):
+    w = AgglomerativeClustering(k, linkage="ward").fit(Z).labels_
+    print(f"Ward     k={k}: sizes {np.bincount(w).tolist()}  silhouette {silhouette_score(Z, w):.4f}"
+          f"  ARI vs channel {adjusted_rand_score(channel, w):.4f}")
+db = DBSCAN(eps=1.5, min_samples=8).fit(Z).labels_
+print(f"DBSCAN eps=1.5, min_samples=8: {db.max() + 1} cluster, {(db == -1).sum()} customers flagged as noise")
+
+F = np.loadtxt("faithful.csv", delimiter=",", skiprows=1, usecols=(1, 2))   # eruption length, wait (minutes)
+for tol in (1e-3, 1e-6):
+    gm = GaussianMixture(2, means_init=[[2, 80], [4.5, 55]], weights_init=[0.5, 0.5],
+                         precisions_init=[np.diag([1, 0.01])] * 2, tol=tol, max_iter=500).fit(F)
+    print(f"EM from the crossed start, tol={tol:g}: {gm.n_iter_} iterations, mean log-likelihood {gm.score(F):.6f},"
+          f" weights {gm.weights_.round(4).tolist()}, means {gm.means_.round(3).tolist()}")
+for k in range(1, 5):
+    gm = GaussianMixture(k, n_init=10, random_state=0).fit(F)
+    print(f"{k} component{'s' if k > 1 else ' '}: BIC {gm.bic(F):.2f}")</code></pre>
+<pre class="code out"><code id="pj-out">k-means k=2: inertia 1848.05  silhouette 0.2902  ARI vs channel 0.5200  (7 iterations)
+k-means k=3: inertia 1558.44  silhouette 0.2601  ARI vs channel 0.3665  (7 iterations)
+k-means k=4: inertia 1396.95  silhouette 0.1891  ARI vs channel 0.2847  (24 iterations)
+k-means k=5: inertia 1283.35  silhouette 0.1918  ARI vs channel 0.2374  (20 iterations)
+k-means k=6: inertia 1206.00  silhouette 0.1909  ARI vs channel 0.2326  (17 iterations)
+k-means k=7: inertia 1098.95  silhouette 0.1999  ARI vs channel 0.1917  (18 iterations)
+k-means k=8: inertia 1056.79  silhouette 0.1840  ARI vs channel 0.1794  (24 iterations)
+Ward     k=2: sizes [206, 234]  silhouette 0.2629  ARI vs channel 0.4152
+Ward     k=3: sizes [234, 90, 116]  silhouette 0.2350  ARI vs channel 0.4118
+DBSCAN eps=1.5, min_samples=8: 1 cluster, 44 customers flagged as noise
+EM from the crossed start, tol=0.001: 4 iterations, mean log-likelihood -4.729050, weights [0.5351, 0.4649], means [[3.608, 75.194], [3.349, 65.951]]
+EM from the crossed start, tol=1e-06: 28 iterations, mean log-likelihood -4.155382, weights [0.6441, 0.3559], means [[4.29, 79.968], [2.036, 54.479]]
+1 component : BIC 2607.62
+2 components: BIC 2322.19
+3 components: BIC 2334.90
+4 components: BIC 2359.82</code></pre>
+    <p class="note" id="pj-par" style="max-width:72ch;margin-top:12px"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Clustering groups points with no labels, and there is no single right answer: each algorithm brings its own idea of what a cluster is.</li>
+      <li>k-means alternates assign-to-nearest and move-to-the-mean, lowering W every step; it finds round groups, needs k, and should be started several times with k-means++.</li>
+      <li>W always falls as k grows; choose k with the elbow, the silhouette score, BIC for mixtures, and above all with what the segments are for.</li>
+      <li>Hierarchical clustering records every merge in a dendrogram (the linkage decides the shapes); DBSCAN finds dense crowds of any shape and labels the rest as noise.</li>
+      <li>Gaussian mixtures give soft, elliptical clusters fitted by EM; like k-means, EM can stall at a poor start, so watch the tolerance and use several starts.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why can neither step of Lloyd's algorithm increase W?</summary><p>The assign step gives every point its nearest centre, the cheapest choice with the centres fixed. The update step moves each centre to the mean of its points, and the mean minimises the sum of squared distances to a fixed set of points. Each step is a minimisation over one half of the unknowns, so W never goes up.</p></details>
+      <details class="q"><summary>You run k-means twice on the same data and get different clusters. Is that a bug?</summary><p>No. Different starting centres can lead to different local minima. Use k-means++ starts, run several times (scikit-learn's <span class="mono">n_init</span>), and keep the run with the lowest W; fix the random seed if you need reproducibility.</p></details>
+      <details class="q"><summary>One feature is annual income in pounds, another is age in years. What happens if you cluster without scaling?</summary><p>Distances are dominated by income, whose numbers are thousands of times larger, so the clusters are essentially income bands and age is ignored. Standardise (and for skewed amounts like spending, take logs first).</p></details>
+      <details class="q"><summary>Your data are two interlocking crescents with a few stray points. Which method do you reach for, and why?</summary><p>DBSCAN: it follows dense regions of any shape and labels stray points as noise. k-means and Ward look for compact blobs and cut the crescents; single linkage follows shapes but a stray point can chain two crescents together.</p></details>
+      <details class="q"><summary>A Gaussian mixture says a point has responsibilities 0.55 and 0.45. What does k-means say about the same point, and which answer is more useful?</summary><p>k-means just assigns it to one cluster, with no hint that it is a borderline case. The mixture's responsibilities say it is nearly a coin flip, which matters if decisions depend on it (target it with both offers, or flag it for review).</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../dimensionality-reduction/">Next chapter: Dimensionality Reduction &rarr;</a>
+      <a class="btn" href="../feature-engineering/">&larr; Previous: Feature Engineering</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Lloyd, S. P. (1982). Least squares quantization in PCM. <em>IEEE Transactions on Information Theory</em> 28(2): the k-means algorithm, first written up at Bell Labs in 1957.</li>
+      <li>Arthur, D. &amp; Vassilvitskii, S. (2007). k-means++: the advantages of careful seeding. <em>Proc. ACM-SIAM Symposium on Discrete Algorithms (SODA)</em>.</li>
+      <li>Rousseeuw, P. J. (1987). Silhouettes: a graphical aid to the interpretation and validation of cluster analysis. <em>Journal of Computational and Applied Mathematics</em> 20.</li>
+      <li>Ward, J. H. (1963). Hierarchical grouping to optimize an objective function. <em>Journal of the American Statistical Association</em> 58(301).</li>
+      <li>Ester, M., Kriegel, H.-P., Sander, J. &amp; Xu, X. (1996). A density-based algorithm for discovering clusters in large spatial databases with noise. <em>Proc. KDD-96</em>.</li>
+      <li>Dempster, A. P., Laird, N. M. &amp; Rubin, D. B. (1977). Maximum likelihood from incomplete data via the EM algorithm. <em>Journal of the Royal Statistical Society B</em> 39(1).</li>
+      <li>Hubert, L. &amp; Arabie, P. (1985). Comparing partitions. <em>Journal of Classification</em> 2: the adjusted Rand index.</li>
+      <li>Abreu, N. (2011). <em>Análise do perfil do cliente Recheio e desenvolvimento de um sistema promocional</em>. Master's thesis, ISCTE-IUL, Lisbon; data: UCI Machine Learning Repository, &ldquo;Wholesale customers&rdquo;.</li>
+      <li>H&auml;rdle, W. (1991). <em>Smoothing Techniques with Implementation in S</em>. Springer: the 272 Old Faithful eruptions of R's <span class="mono">faithful</span> dataset. See also Azzalini, A. &amp; Bowman, A. W. (1990). A look at some data on the Old Faithful geyser. <em>Applied Statistics</em> 39(3).</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- clustering algorithms shared by every lab (ports of scikit-learn's behaviour) ---------- */
+const d2 = (a, b) => { let s = 0; for (let j = 0; j < a.length; j++) { const t = a[j] - b[j]; s += t * t; } return s; };
+const dist = (a, b) => Math.sqrt(d2(a, b));
+function nearestC(x, C) { let bk = 0, bd = Infinity; for (let k = 0; k < C.length; k++) { const d = d2(x, C[k]); if (d < bd) { bd = d; bk = k; } } return [bk, bd]; }
+function assignC(X, C) { const L = new Int32Array(X.length); let J = 0; for (let i = 0; i < X.length; i++) { const [k, d] = nearestC(X[i], C); L[i] = k; J += d; } return { L, J }; }
+function meansOf(X, L, K, old) {
+  const d = X[0].length, S = Array.from({ length: K }, () => new Float64Array(d)), n = new Array(K).fill(0);
+  for (let i = 0; i < X.length; i++) { const k = L[i]; n[k]++; for (let j = 0; j < d; j++) S[k][j] += X[i][j]; }
+  return S.map((s, k) => n[k] ? Array.from(s, v => v / n[k]) : old[k].slice());
+}
+const sameL = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+const inertiaOf = (X, C, L) => { let J = 0; for (let i = 0; i < X.length; i++) J += d2(X[i], C[L[i]]); return J; };
+// Lloyd's algorithm exactly as scikit-learn's KMeans(init=C0, n_init=1): tol is relative to the mean feature variance
+function kmeans(X, C0, o) {
+  o = o || {}; const n = X.length, d = X[0].length, maxIt = o.maxIt || 300;
+  let tol = 0; for (let j = 0; j < d; j++) { let m = 0; for (const x of X) m += x[j]; m /= n; let v = 0; for (const x of X) v += (x[j] - m) ** 2; tol += v / n; }
+  tol = tol / d * (o.tol == null ? 1e-4 : o.tol);
+  let C = C0.map(c => c.slice()), Lold = null, L = null, it, strict = false; const path = [C];
+  for (it = 0; it < maxIt; it++) {
+    L = assignC(X, C).L; const Cn = meansOf(X, L, C.length, C); let sh = 0; C.forEach((c, k) => { sh += d2(c, Cn[k]); }); C = Cn; path.push(C);
+    if (Lold && sameL(L, Lold)) { strict = true; break; }
+    if (sh <= tol) break;
+    Lold = L;
+  }
+  if (!strict) L = assignC(X, C).L;
+  return { C, L, J: inertiaOf(X, C, L), it: it + 1, path };
+}
+// k-means++ seeding (Arthur & Vassilvitskii 2007): each new centre is a data point drawn with probability D(x)² / Σ D²
+function kmppInit(X, K, r) {
+  const n = X.length, idx = [Math.floor(r() * n)], D = X.map(x => d2(x, X[idx[0]])), steps = [];
+  while (idx.length < K) {
+    const tot = D.reduce((s, v) => s + v, 0); let u = r() * tot, i = 0; while (i < n - 1 && u >= D[i]) { u -= D[i]; i++; }
+    steps.push({ i, D: D.slice(), tot }); idx.push(i);
+    for (let j = 0; j < n; j++) D[j] = Math.min(D[j], d2(X[j], X[i]));
+  }
+  return { idx, C: idx.map(i => X[i].slice()), steps };
+}
+function randInit(X, K, r) { const idx = []; while (idx.length < K) { const i = Math.floor(r() * X.length); if (!idx.includes(i)) idx.push(i); } return { idx, C: idx.map(i => X[i].slice()), steps: [] }; }
+function bestKmeans(X, K, seed, tries) { const r = mulberry32(seed); let best = null; for (let t = 0; t < (tries || 5); t++) { const m = kmeans(X, kmppInit(X, K, r).C); if (!best || m.J < best.J - 1e-12) best = m; } return best; }
+
+// silhouette (as sklearn.metrics.silhouette_score; points in singleton clusters score 0)
+function silhouette(X, L, withPer) {
+  const n = X.length, K = Math.max(...L) + 1, cnt = new Array(K).fill(0); for (const l of L) cnt[l]++;
+  const per = new Float64Array(n), A = new Float64Array(n), B = new Float64Array(n); let s = 0;
+  for (let i = 0; i < n; i++) {
+    const S = new Float64Array(K); for (let j = 0; j < n; j++) if (j !== i) S[L[j]] += dist(X[i], X[j]);
+    const own = L[i]; if (cnt[own] < 2) { per[i] = 0; continue; }
+    const a = S[own] / (cnt[own] - 1); let b = Infinity; for (let k = 0; k < K; k++) if (k !== own && cnt[k]) b = Math.min(b, S[k] / cnt[k]);
+    A[i] = a; B[i] = b; per[i] = isFinite(b) ? (b - a) / Math.max(a, b) : 0; s += per[i];
+  }
+  return withPer ? { s: s / n, per, A, B } : s / n;
+}
+// adjusted Rand index (Hubert & Arabie 1985), as sklearn.metrics.adjusted_rand_score
+function ariParts(a, b) {
+  const n = a.length, M = new Map(), A = new Map(), B = new Map(), c2 = x => x * (x - 1) / 2;
+  for (let i = 0; i < n; i++) { const k = a[i] + '|' + b[i]; M.set(k, (M.get(k) || 0) + 1); A.set(a[i], (A.get(a[i]) || 0) + 1); B.set(b[i], (B.get(b[i]) || 0) + 1); }
+  let sij = 0, sa = 0, sb = 0; M.forEach(v => { sij += c2(v); }); A.forEach(v => { sa += c2(v); }); B.forEach(v => { sb += c2(v); });
+  const exp = sa * sb / c2(n), mx = (sa + sb) / 2;
+  const ari = (A.size === B.size && (A.size === 1 || A.size === n)) ? 1 : (mx === exp ? 0 : (sij - exp) / (mx - exp));
+  return { ari, sij, sa, sb, exp, mx, pairs: c2(n), nA: A.size, nB: B.size };
+}
+const ari = (a, b) => ariParts(a, b).ari;
+
+// agglomerative clustering with the Lance–Williams updates (Ward on squared distances, as scipy / sklearn)
+function agglo(X, link) {
+  const n = X.length, D = new Float64Array(n * n), size = new Array(n).fill(1), id = Array.from({ length: n }, (_, i) => i), act = Array.from({ length: n }, (_, i) => i);
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const v = link === 'ward' ? d2(X[i], X[j]) : dist(X[i], X[j]); D[i * n + j] = D[j * n + i] = v; }
+  const merges = []; let next = n;
+  while (act.length > 1) {
+    let bi = -1, bj = -1, bd = Infinity;
+    for (let p = 0; p < act.length; p++) { const i = act[p]; for (let q = p + 1; q < act.length; q++) { const v = D[i * n + act[q]]; if (v < bd) { bd = v; bi = p; bj = q; } } }
+    const i = act[bi], j = act[bj], ni = size[i], nj = size[j];
+    for (const k of act) { if (k === i || k === j) continue; const dik = D[i * n + k], djk = D[j * n + k], nk = size[k]; let v;
+      if (link === 'single') v = Math.min(dik, djk); else if (link === 'complete') v = Math.max(dik, djk);
+      else if (link === 'average') v = (ni * dik + nj * djk) / (ni + nj);
+      else v = ((ni + nk) * dik + (nj + nk) * djk - nk * bd) / (ni + nj + nk);
+      D[i * n + k] = D[k * n + i] = v; }
+    merges.push({ a: id[i], b: id[j], h: link === 'ward' ? Math.sqrt(bd) : bd, n: ni + nj });
+    size[i] = ni + nj; id[i] = next++; act.splice(bj, 1);
+  }
+  return merges;
+}
+// flat labels for K clusters: replay the first n−K merges with union–find
+function cutTree(n, merges, K) {
+  const par = Array.from({ length: 2 * n }, (_, i) => i), f = x => { while (par[x] !== x) x = par[x] = par[par[x]]; return x; };
+  for (let m = 0; m < n - K; m++) { const node = n + m; par[f(merges[m].a)] = node; par[f(merges[m].b)] = node; }
+  const map = new Map(), L = new Int32Array(n); for (let i = 0; i < n; i++) { const r = f(i); if (!map.has(r)) map.set(r, map.size); L[i] = map.get(r); }
+  return L;
+}
+
+// DBSCAN, the same sweep as scikit-learn's dbscan_inner (neighbourhoods include the point itself)
+function dbscan(X, eps, minPts) {
+  const n = X.length, e2 = eps * eps, N = X.map(x => { const r = []; for (let j = 0; j < n; j++) if (d2(x, X[j]) <= e2) r.push(j); return r; });
+  const core = N.map(r => r.length >= minPts), L = new Int32Array(n).fill(-1); let c = 0;
+  for (let i = 0; i < n; i++) { if (L[i] !== -1 || !core[i]) continue; const st = []; let p = i;
+    for (;;) { if (L[p] === -1) { L[p] = c; if (core[p]) for (const v of N[p]) if (L[v] === -1) st.push(v); } if (!st.length) break; p = st.pop(); }
+    c++; }
+  return { L, core, N, k: c, noise: L.filter(l => l < 0).length };
+}
+
+// Gaussian mixtures in 2-D with full covariances: EM as in sklearn.mixture.GaussianMixture (reg_covar = 1e-6)
+const LOG2PI = Math.log(2 * Math.PI);
+function gLogPdf(x, m, S) { const det = S[0] * S[2] - S[1] * S[1], dx = x[0] - m[0], dy = x[1] - m[1], q = (S[2] * dx * dx - 2 * S[1] * dx * dy + S[0] * dy * dy) / det; return -LOG2PI - 0.5 * Math.log(det) - 0.5 * q; }
+function gmmE(X, P) {
+  const K = P.w.length, R = [], lw = P.w.map(Math.log); let ll = 0;
+  for (const x of X) { const l = P.m.map((m, k) => lw[k] + gLogPdf(x, m, P.S[k])), mx = Math.max(...l); let s = 0; for (const v of l) s += Math.exp(v - mx); const lpn = mx + Math.log(s); ll += lpn; R.push(l.map(v => Math.exp(v - lpn))); }
+  return { R, ll: ll / X.length };
+}
+function gmmM(X, R, reg) {
+  reg = reg == null ? 1e-6 : reg; const K = R[0].length, n = X.length, eps10 = 10 * 2.220446049250313e-16;
+  const nk = new Array(K).fill(eps10); R.forEach(r => r.forEach((v, k) => { nk[k] += v; }));
+  const m = nk.map((t, k) => { let a = 0, b = 0; X.forEach((x, i) => { a += R[i][k] * x[0]; b += R[i][k] * x[1]; }); return [a / t, b / t]; });
+  const S = nk.map((t, k) => { let a = 0, b = 0, c = 0; X.forEach((x, i) => { const r = R[i][k], dx = x[0] - m[k][0], dy = x[1] - m[k][1]; a += r * dx * dx; b += r * dx * dy; c += r * dy * dy; }); return [a / t + reg, b / t, c / t + reg]; });
+  const tot = nk.reduce((s, v) => s + v, 0);
+  return { w: nk.map(v => v / tot), m, S, nk };
+}
+// run EM from parameters P with sklearn's stopping rule |Δ mean log-likelihood| < tol; returns every iterate
+function gmmFit(X, P, tol, maxIt) {
+  tol = tol == null ? 1e-3 : tol; maxIt = maxIt || 300; let lb = -Infinity, it = 0, conv = false; const hist = [{ P, ll: null }];
+  for (it = 1; it <= maxIt; it++) { const prev = lb, E = gmmE(X, P); P = gmmM(X, E.R); lb = E.ll; hist.push({ P, ll: E.ll }); if (Math.abs(lb - prev) < tol) { conv = true; break; } }
+  const E = gmmE(X, P);
+  return { P, it: Math.min(it, maxIt), conv, R: E.R, ll: E.ll, hist };
+}
+const hardOf = R => Int32Array.from(R, r => r.indexOf(Math.max(...r)));
+function gmmFromLabels(X, L, K) { const R = Array.from(L, l => Array.from({ length: K }, (_, k) => k === l ? 1 : 0)); return gmmM(X, R); }
+// ellipse axes of a 2×2 covariance [a, b, c]: eigenvalues and the angle of the first eigenvector
+function eig2(S) { const [a, b, c] = S, t = (a + c) / 2, r = Math.sqrt(((a - c) / 2) ** 2 + b * b); return { l1: t + r, l2: Math.max(0, t - r), th: 0.5 * Math.atan2(2 * b, a - c) }; }
+
+// symmetric eigen-decomposition (cyclic Jacobi), for the PCA map of the project
+function jacobi(A) {
+  const n = A.length; A = A.map(r => r.slice()); const V = A.map((_, i) => A.map((_, j) => i === j ? 1 : 0));
+  for (let sweep = 0; sweep < 60; sweep++) { let off = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += A[i][j] ** 2; if (off < 1e-22) break;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) { if (Math.abs(A[p][q]) < 1e-300) continue;
+      const th = (A[q][q] - A[p][p]) / (2 * A[p][q]), t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < n; k++) { const akp = A[k][p], akq = A[k][q]; A[k][p] = c * akp - s * akq; A[k][q] = s * akp + c * akq; }
+      for (let k = 0; k < n; k++) { const apk = A[p][k], aqk = A[q][k]; A[p][k] = c * apk - s * aqk; A[q][k] = s * apk + c * aqk; }
+      for (let k = 0; k < n; k++) { const vkp = V[k][p], vkq = V[k][q]; V[k][p] = c * vkp - s * vkq; V[k][q] = s * vkp + c * vkq; } } }
+  const ev = A.map((r, i) => r[i]), ord = ev.map((_, i) => i).sort((a, b) => ev[b] - ev[a]);
+  return { val: ord.map(i => ev[i]), vec: ord.map(i => V.map(r => r[i])) };
+}
+
+
+const C0 = () => ({ ink: css('--ink'), muted: css('--muted'), line: css('--line'), surf: css('--surface'), bad: css('--qda'), lda: css('--lda'), a: css('--cA'), b: css('--cB') });
+const KV = ['--cA', '--cB', '--lda', '--cC', '--qda', '--k6', '--k7', '--k8'];
+const KC = () => KV.map(css);
+const sw = k => k < 0 ? '<span style="color:var(--muted)">&#10005;</span>' : `<span style="color:var(${KV[k % 8]})">&#9679;</span>`;
+const sum = a => { let s = 0; for (const v of a) s += v; return s; };
+const pct = (p, d) => fmt(p * 100, d == null ? 0 : d) + '%';
+const sub = n => String(n).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch] || ch).join('');
+const P2 = (p, d) => `(${fmt(p[0], d == null ? 2 : d)}, ${fmt(p[1], d == null ? 2 : d)})`;
+const big = v => Math.round(v).toLocaleString('en-GB');
+const plural = (n, w, ws) => `${n} ${n === 1 ? w : (ws || w + 's')}`;
+function rgb(h) { h = h.trim().replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function mixCol(cols, w) { let r = 0, g = 0, b = 0; w.forEach((t, k) => { const c = rgb(cols[k]); r += t * c[0]; g += t * c[1]; b += t * c[2]; }); return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`; }
+
+/* ---------- drawing helpers ---------- */
+const view = (cv, pad) => frame(cv, [0, 10], [0, 6.25], pad, true);
+function starO(v, x, y, col, r, lw) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 9; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.strokeStyle = col; c.lineWidth = lw || 1.6; c.stroke(); c.restore(); }
+function cross(v, x, y, col, s) { const c = v.ctx, px = v.X(x), py = v.Y(y); s = s || 3.5; c.save(); c.strokeStyle = col; c.lineWidth = 1.4; c.beginPath(); c.moveTo(px - s, py - s); c.lineTo(px + s, py + s); c.moveTo(px + s, py - s); c.lineTo(px - s, py + s); c.stroke(); c.restore(); }
+function ring(v, x, y, col, r, lw) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 8, 0, 7); c.strokeStyle = col; c.lineWidth = lw || 1.7; c.stroke(); }
+function regions(v, C, cols, alpha, step) { step = step || 7; const c = v.ctx; c.save(); c.globalAlpha = alpha; for (let py = v.pad.t; py < v.pad.t + v.ph; py += step) for (let px = v.pad.l; px < v.pad.l + v.pw; px += step) { c.fillStyle = cols[nearestC([v.iX(px + step / 2), v.iY(py + step / 2)], C)[0] % cols.length]; c.fillRect(px, py, step, step); } c.restore(); }
+function ellipse(v, m, S, r, col, lw, dash) { const e = eig2(S), c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); c.beginPath(); for (let t = 0; t <= 72; t++) { const a = t / 72 * 2 * Math.PI, u = r * Math.sqrt(e.l1) * Math.cos(a), w = r * Math.sqrt(e.l2) * Math.sin(a), x = m[0] + u * Math.cos(e.th) - w * Math.sin(e.th), y = m[1] + u * Math.sin(e.th) + w * Math.cos(e.th); t ? c.lineTo(v.X(x), v.Y(y)) : c.moveTo(v.X(x), v.Y(y)); } c.stroke(); c.restore(); }
+function pick(v, P, cv, e, rad) { const [px, py] = evPos(cv, e); let best = -1, bd = (rad || 16) ** 2; P.forEach((p, i) => { const d = (v.X(p[0]) - px) ** 2 + (v.Y(p[1]) - py) ** 2; if (d < bd) { bd = d; best = i; } }); return best; }
+// a small line chart of one sequence (W or log-likelihood by step)
+function trace(cv, ys, o) {
+  o = o || {}; const n = Math.max(ys.length, 2), lo0 = ys.length ? Math.min(...ys) : 0, hi0 = ys.length ? Math.max(...ys) : 1, padY = hi0 > lo0 ? (hi0 - lo0) * 0.12 : 0.5;
+  const v = frame(cv, [o.x0 == null ? 0 : o.x0, Math.max(o.xmax || 0, n - 1 + (o.x0 || 0))], [lo0 - padY, hi0 + padY], { l: 54, b: 24, t: 10 }); axes(v, o.xl || '', o.yl || '', { ny: 3, nx: 6, fy: o.fy });
+  if (!ys.length) return v;
+  clip(v); const c = v.ctx, col = o.col || css('--ink'); c.save(); c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); ys.forEach((y, i) => { const X = v.X(i + (o.x0 || 0)), Y = v.Y(y); i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); c.restore();
+  ys.forEach((y, i) => dot(v, i + (o.x0 || 0), y, o.dotCol ? o.dotCol(i) : col, 3)); v.ctx.restore(); return v;
+}
+// recolour clusters so each takes the colour of the true group it overlaps most (only for display)
+function alignTo(T, L) {
+  const ids = [...new Set(L)].filter(l => l >= 0), size = l => L.filter(x => x === l).length; ids.sort((a, b) => size(b) - size(a));
+  const used = new Set(), map = new Map();
+  ids.forEach(l => { const cnt = new Map(); L.forEach((x, i) => { if (x === l && T[i] >= 0) cnt.set(T[i], (cnt.get(T[i]) || 0) + 1); });
+    const opts = [...cnt.entries()].filter(([t]) => !used.has(t)).sort((a, b) => b[1] - a[1]); let c = opts.length ? opts[0][0] : -1;
+    if (c < 0) { c = 0; while (used.has(c)) c++; } used.add(c); map.set(l, c); });
+  return Int32Array.from(L, l => l < 0 ? -1 : map.get(l));
+}
+
+/* ---------- synthetic datasets (seeded, so every reader sees the same points) ---------- */
+function gen(seed, parts) {
+  const r = mulberry32(seed), P = [], T = [];
+  parts.forEach((q, li) => { const lab = q.label == null ? li : q.label;
+    for (let i = 0; i < q.n; i++) { let x, y;
+      if (q.t === 'blob') { const u = q.s[0] * gaussOf(r), w = q.s[1] * gaussOf(r), a = (q.rot || 0) * Math.PI / 180; x = q.c[0] + u * Math.cos(a) - w * Math.sin(a); y = q.c[1] + u * Math.sin(a) + w * Math.cos(a); }
+      else if (q.t === 'moon') { const t = Math.PI * r(); x = q.up ? Math.cos(t) : 1 - Math.cos(t); y = q.up ? Math.sin(t) : 0.5 - Math.sin(t); x = q.o[0] + q.s * x + q.e * gaussOf(r); y = q.o[1] + q.s * y + q.e * gaussOf(r); }
+      else if (q.t === 'ring') { const t = 2 * Math.PI * r(), rr = q.r + q.e * gaussOf(r); x = q.c[0] + rr * Math.cos(t); y = q.c[1] + rr * Math.sin(t); }
+      else { x = q.b[0] + (q.b[1] - q.b[0]) * r(); y = q.b[2] + (q.b[3] - q.b[2]) * r(); }
+      P.push([+clamp(x, 0.08, 9.92).toFixed(3), +clamp(y, 0.08, 6.17).toFixed(3)]); T.push(lab); } });
+  return { P, T };
+}
+
+/* ---------- hero: one dataset, four algorithms ---------- */
+const HERO = gen(21, [{ t: 'moon', up: true, o: [2.3, 2.5], s: 2.1, e: 0.15, n: 70 }, { t: 'moon', up: false, o: [2.3, 2.5], s: 2.1, e: 0.15, n: 70 }, { t: 'blob', c: [8.4, 3.0], s: [0.5, 0.5], n: 50 }]);
+const HR = {}, HH = { a: 'km', f: 0, timer: 0 };
+function heroRes(a) {
+  if (HR[a]) return HR[a]; const X = HERO.P; let res;
+  if (a === 'km') { const m = bestKmeans(X, 3, 7, 6); res = { L: m.L, frames: m.path.map(C => ({ C, L: assignC(X, C).L })), J: m.J, it: m.it }; }
+  else if (a === 'ward') res = { L: cutTree(X.length, agglo(X, 'ward'), 3) };
+  else if (a === 'db') { const d = dbscan(X, 0.5, 5); res = { L: d.L, core: d.core, k: d.k, noise: d.noise }; }
+  else { const km = bestKmeans(X, 3, 7, 6), g = gmmFit(X, gmmFromLabels(X, km.L, 3), 1e-5, 300); res = { L: hardOf(g.R), frames: g.hist.slice(1).map(h => ({ P: h.P })), it: g.it }; res.frames.forEach(f => { f.L = hardOf(gmmE(X, f.P).R); }); }
+  res.ari = ari(HERO.T, res.L);
+  const col = alignTo(HERO.T, res.L), map = new Map(); res.L.forEach((l, i) => { if (l >= 0) map.set(l, col[i]); }); res.cmap = l => l < 0 ? -1 : map.has(l) ? map.get(l) : l;
+  return HR[a] = res;
+}
+function drawHero() {
+  const Cc = C0(), K = KC(), X = HERO.P, a = HH.a, R = heroRes(a), fr = R.frames ? R.frames[Math.min(HH.f, R.frames.length - 1)] : null, L = fr ? fr.L : R.L;
+  const v = view($('#hero-cv')); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  const cm = l => { const c = R.cmap(l); return c < 0 ? Cc.muted : K[c]; };
+  if (a === 'km') regions(v, fr.C, [0, 1, 2].map(l => cm(l)), 0.08, 7);
+  if (a === 'db') X.forEach((p, i) => { if (L[i] < 0) cross(v, p[0], p[1], Cc.muted, 3.6); else dot(v, p[0], p[1], cm(L[i]), R.core[i] ? 4.6 : 3); });
+  else X.forEach((p, i) => dot(v, p[0], p[1], cm(L[i]), 4.4));
+  if (a === 'km') fr.C.forEach((c, k) => star(v, c[0], c[1], cm(k), 11));
+  if (a === 'gmm') fr.P.m.forEach((m, k) => { ellipse(v, m, fr.P.S[k], 1, cm(k), 2); ellipse(v, m, fr.P.S[k], 2, cm(k), 1.2, [4, 4]); });
+  v.ctx.restore();
+  const done = !R.frames || HH.f >= R.frames.length - 1, A = tip(fmt(R.ari, 2), 'adjusted Rand index against the three\ngroups the points were drawn from\n(1 = perfect, 0 = chance)');
+  $('#hero-cap').innerHTML = a === 'km' ? (done ? `<b>k-means</b>, k = 3, converged in ${R.it} steps. It draws straight borders halfway between its centres, so it can&rsquo;t follow a crescent: it cuts the moons into the wrong pieces. Agreement with the true groups: ARI ${A}.` : `<b>k-means</b>, step ${HH.f} of ${R.frames.length - 1}: the stars move to the mean of their points, the points re-join the nearest star&hellip;`)
+    : a === 'ward' ? `<b>Hierarchical clustering</b> (Ward linkage), cut into 3 clusters. Ward always makes the merge that adds the least spread, so it builds compact groups, and the crescents&rsquo; tips end up in the wrong ones. ARI ${A}.`
+    : a === 'db' ? `<b>DBSCAN</b> (&epsilon; = 0.5, minPts = 5) follows each crescent from neighbour to neighbour and finds ${plural(R.k, 'cluster')} on its own, nobody told it k${R.noise ? `, plus ${plural(R.noise, 'noise point')}` : ''}. ARI ${A}: density is the right idea for these shapes.`
+    : (done ? `<b>Gaussian mixture</b>, 3 bell curves fitted by EM in ${R.it} rounds (ellipses: 1 and 2 standard deviations). Ellipses can tilt and stretch but not bend, so the crescents still defeat it. ARI ${A}.` : `<b>Gaussian mixture</b>, EM round ${HH.f + 1}: the ellipses stretch and tilt to fit their points&hellip;`);
+}
+function heroPlay(a) {
+  clearInterval(HH.timer); HH.a = a; HH.f = 0; const R = heroRes(a);
+  if (R.frames && R.frames.length > 1) { const dt = a === 'km' ? 420 : 110; HH.timer = setInterval(() => { HH.f++; if (HH.f >= R.frames.length - 1) clearInterval(HH.timer); drawHero(); }, dt); }
+  drawHero();
+}
+seg1('[data-ha]', 'data-ha', heroPlay);
+fig($('#hero-cv'), drawHero);
+
+/* ---------- 1 · place your own centres ---------- */
+const WYD = gen(5, [{ t: 'blob', c: [2.5, 4.3], s: [0.62, 0.62], n: 25 }, { t: 'blob', c: [7.3, 4.6], s: [0.62, 0.62], n: 25 }, { t: 'blob', c: [4.9, 1.6], s: [0.62, 0.62], n: 25 }]);
+const WY = { C: [[3.4, 3.2], [6.2, 3.0]], best: false, km: {} };
+let wyV = null;
+const wyKm = k => WY.km[k] || (WY.km[k] = bestKmeans(WYD.P, k, 3, 12));
+function drawWY() {
+  const Cc = C0(), K = KC(), P = WYD.P, k = WY.C.length, v = wyV = view($('#wy-cv')); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  const A = k ? assignC(P, WY.C) : null;
+  if (k) { regions(v, WY.C, K, 0.06, 7); P.forEach((p, i) => seg(v, p[0], p[1], WY.C[A.L[i]][0], WY.C[A.L[i]][1], K[A.L[i]], 0.9, null, 0.4)); }
+  P.forEach((p, i) => dot(v, p[0], p[1], k ? K[A.L[i]] : Cc.muted, 4.3));
+  ring(v, P[0][0], P[0][1], Cc.ink, 8, 1.5);
+  if (WY.best && k) wyKm(k).C.forEach(c => starO(v, c[0], c[1], Cc.ink, 10, 1.6));
+  WY.C.forEach((c, j) => star(v, c[0], c[1], K[j], 11));
+  v.ctx.restore();
+  const km = k ? wyKm(k) : null;
+  $('#wy-you').innerHTML = k ? tip(fmt(A.J, 1), `the sum of ${P.length} squared distances,\neach point to its nearest star`) : '—';
+  $('#wy-km').innerHTML = !k ? '—' : WY.best ? tip(fmt(km.J, 1), `best of 12 k-means++ runs with k = ${k}`) : '?';
+  $('#wy-best').textContent = WY.best ? 'Hide k-means’ answer' : 'Show k-means’ answer';
+  if (!k) { $('#run-wy').innerHTML = ''; $('#wy-say').innerHTML = 'No centres yet: click anywhere on the plot to drop one.'; return; }
+  const x = P[0], ds = WY.C.map(c => d2(x, c)), j = A.L[0];
+  $('#run-wy').innerHTML = `<b>Running example</b>: the ringed point x = ${P2(x)}. Its squared distances to the ${k === 1 ? 'centre' : k + ' centres'}: ${ds.map((d, i) => `${sw(i)} ${tip(fmt(d, 2), `(${fmt(x[0], 2)} − ${fmt(WY.C[i][0], 2)})² + (${fmt(x[1], 2)} − ${fmt(WY.C[i][1], 2)})²`)}`).join(', ')}. The smallest is ${sw(j)}, so it pays ${fmt(ds[j], 2)}. Add up all ${P.length} bills: W = ${tip(fmt(A.J, 1), 'the number in “your bill W”')}.`;
+  const r = WY.best ? A.J / km.J : null;
+  $('#wy-say').innerHTML = !WY.best ? `${plural(k, 'centre')}, W = ${fmt(A.J, 1)}. Drag the stars to shrink the bill, then press the button to compare with k-means.${k < 3 ? ' (The points were drawn from three groups. What happens to W with a third centre?)' : ''}`
+    : (r < 1.005 ? `You matched k-means (within ${pct(Math.max(0, r - 1), 1)}). ` : `Your bill is ${pct(r - 1, r < 1.1 ? 1 : 0)} higher than k-means&rsquo; for k = ${k}: compare your stars with the hollow ones. `)
+      + (k > 3 ? `Notice that k-means&rsquo; W keeps falling as k grows (${[3, 4, 5, 6].filter(q => q <= k).map(q => `k = ${q}: ${fmt(wyKm(q).J, 1)}`).join(', ')}) though the data has only three groups. W can rank placements for a fixed k, but it can&rsquo;t choose k.` : k < 3 ? 'Now add a third centre and watch the bill drop.' : '');
+}
+$('#wy-cv').addEventListener('click', e => { if (!wyV) return; if (pick(wyV, WY.C, $('#wy-cv'), e, 16) >= 0) return; if (WY.C.length >= 6) return; const [px, py] = evPos($('#wy-cv'), e); WY.C.push([clamp(wyV.iX(px), 0, 10), clamp(wyV.iY(py), 0, 6.25)]); drawWY(); });
+$('#wy-cv').style.cursor = 'crosshair';
+draggable($('#wy-cv'), () => wyV, () => WY.C, drawWY);
+$('#wy-best').addEventListener('click', () => { WY.best = !WY.best; drawWY(); });
+$('#wy-undo').addEventListener('click', () => { WY.C.pop(); drawWY(); });
+$('#wy-clear').addEventListener('click', () => { WY.C = []; drawWY(); });
+fig($('#wy-cv'), drawWY);
+
+/* ---------- 2 · Lloyd's algorithm, step by step ---------- */
+const KMD = gen(8, [{ t: 'blob', c: [2.3, 4.5], s: [.6, .6], n: 30 }, { t: 'blob', c: [7.5, 4.8], s: [.7, .7], n: 30 }, { t: 'blob', c: [3.0, 1.5], s: [.6, .6], n: 30 }, { t: 'blob', c: [7.1, 1.6], s: [.65, .65], n: 30 }]);
+const KM = { k: 4, seed: 1, C: null, L: null, phase: 'assign', W: [], trail: [], steps: 0, done: false, sel: 0, timer: 0, changed: null, Cprev: null };
+function kmStart() { clearInterval(KM.timer); const r = mulberry32(100 + KM.seed); KM.C = randInit(KMD.P, KM.k, r).C; KM.L = null; KM.phase = 'assign'; KM.W = []; KM.trail = [KM.C.map(c => c.slice())]; KM.steps = 0; KM.done = false; KM.changed = null; KM.Cprev = null; }
+function kmStep() {
+  if (KM.done) return false; const P = KMD.P;
+  if (KM.phase === 'assign') { const a = assignC(P, KM.C); KM.changed = KM.L ? a.L.filter((l, i) => l !== KM.L[i]).length : P.length; KM.L = a.L; KM.W.push(a.J); KM.steps++; KM.phase = 'update'; if (KM.changed === 0) KM.done = true; }
+  else { KM.Cprev = KM.C; KM.C = meansOf(P, KM.L, KM.k, KM.C); KM.W.push(inertiaOf(P, KM.C, KM.L)); KM.trail.push(KM.C.map(c => c.slice())); KM.steps++; KM.phase = 'assign'; }
+  return !KM.done;
+}
+let kmV = null;
+function drawKM() {
+  const Cc = C0(), K = KC(), P = KMD.P, v = kmV = view($('#km-cv')); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  regions(v, KM.C, K, 0.06, 7);
+  P.forEach((p, i) => dot(v, p[0], p[1], KM.L ? K[KM.L[i]] : Cc.muted, 4.2));
+  ring(v, P[KM.sel][0], P[KM.sel][1], Cc.ink, 8.5, 1.6);
+  for (let k = 0; k < KM.k; k++) { const c = v.ctx; c.save(); c.strokeStyle = K[k]; c.lineWidth = 1.6; c.setLineDash([3, 3]); c.beginPath(); KM.trail.forEach((C, t) => { const x = v.X(C[k][0]), y = v.Y(C[k][1]); t ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); KM.trail.slice(0, -1).forEach(C => dot(v, C[k][0], C[k][1], K[k], 2.2)); }
+  KM.C.forEach((c, k) => star(v, c[0], c[1], K[k], 11));
+  v.ctx.restore();
+  trace($('#km-tr'), KM.W, { x0: 1, xl: 'step', yl: 'W', xmax: 8, dotCol: i => (i % 2 === 0) ? Cc.ink : Cc.lda });
+  $('#km-k-o').textContent = KM.k;
+  $('#km-it').innerHTML = tip(String(KM.steps), `${Math.ceil(KM.steps / 2)} assign + ${Math.floor(KM.steps / 2)} update steps`);
+  $('#km-j').innerHTML = KM.W.length ? tip(fmt(KM.W[KM.W.length - 1], 2), 'Σ ‖xᵢ − μ of its cluster‖²\nover all 120 points') : '—';
+  const st = $('#km-step'); st.textContent = KM.done ? 'Converged' : KM.phase === 'assign' ? 'Step: assign' : 'Step: update'; st.disabled = KM.done; $('#km-run').disabled = KM.done;
+  // running examples
+  const x = P[KM.sel], ds = KM.C.map(c => d2(x, c)), j = ds.indexOf(Math.min(...ds));
+  $('#run-ka').innerHTML = `<b>Running example</b>: the ringed point x = ${P2(x)}: ${ds.map((d, k) => `&Vert;x &minus; &mu;${sub(k + 1)}&Vert;&sup2; = ${tip(fmt(d, 2), `(${fmt(x[0], 2)} − ${fmt(KM.C[k][0], 2)})² + (${fmt(x[1], 2)} − ${fmt(KM.C[k][1], 2)})²`)} ${sw(k)}`).join(', ')}, so its nearest centre is ${sw(j)} &mu;${sub(j + 1)}${KM.L ? (KM.L[KM.sel] === j ? ', the cluster it is in now.' : `, but it is still coloured ${sw(KM.L[KM.sel])}: the next assign step will move it.`) : '.'}`;
+  if (!KM.L) $('#run-ku').innerHTML = '<b>Running example</b>: nothing to average yet. Press Step to assign the points first.';
+  else { const c = KM.L[KM.sel], mem = P.filter((_, i) => KM.L[i] === c), sx = sum(mem.map(p => p[0])), sy = sum(mem.map(p => p[1])), m = [sx / mem.length, sy / mem.length];
+    $('#run-ku').innerHTML = `<b>Running example</b>: the ringed point is in cluster ${sw(c)}, with ${mem.length} points. Their mean is (${tip(fmt(sx, 2), 'sum of their x₁')} / ${mem.length}, ${tip(fmt(sy, 2), 'sum of their x₂')} / ${mem.length}) = ${P2(m)}. ${KM.phase === 'update' && !KM.done ? `The next update moves &mu;${sub(c + 1)} there from ${P2(KM.C[c])}.` : `That is exactly where &mu;${sub(c + 1)} is now.`}`; }
+  $('#km-say').innerHTML = !KM.L ? `The ${KM.k} stars start on ${KM.k} randomly chosen points, and every point is still grey. Press <b>Step</b> to assign each point to its nearest star.`
+    : KM.done ? `Converged after ${KM.steps} steps: the last assign step moved no point, so the centres can&rsquo;t move again. W = ${fmt(KM.W[KM.W.length - 1], 2)}, and the trace below never went up. Try <b>New random start</b>: does every start end at the same W?`
+    : KM.phase === 'update' ? (KM.changed === P.length ? `Every point now belongs to its nearest star. Next: move each star to the mean of its points.` : `${plural(KM.changed, 'point')} switched cluster in that assign step. Next: move each star to the mean of its points.`)
+    : `The stars moved to their clusters&rsquo; means and W fell to ${fmt(KM.W[KM.W.length - 1], 2)}. Some points may now be closer to a different star; the next assign step will tell.`;
+}
+$('#km-step').addEventListener('click', () => { clearInterval(KM.timer); kmStep(); drawKM(); });
+$('#km-run').addEventListener('click', () => { clearInterval(KM.timer); KM.timer = setInterval(() => { const more = kmStep(); drawKM(); if (!more || KM.steps > 200) clearInterval(KM.timer); }, 280); });
+$('#km-new').addEventListener('click', () => { KM.seed++; kmStart(); drawKM(); });
+$('#km-k').addEventListener('input', e => { KM.k = +e.target.value; kmStart(); drawKM(); });
+$('#km-cv').addEventListener('click', e => { if (!kmV || pick(kmV, KM.C, $('#km-cv'), e, 14) >= 0) return; const i = pick(kmV, KMD.P, $('#km-cv'), e, 14); if (i >= 0) { KM.sel = i; drawKM(); } });
+draggable($('#km-cv'), () => kmV, () => KM.C, () => { clearInterval(KM.timer); const a = assignC(KMD.P, KM.C); KM.L = a.L; KM.W = [a.J]; KM.trail = [KM.C.map(c => c.slice())]; KM.steps = 1; KM.phase = 'update'; KM.done = false; KM.changed = KMD.P.length; drawKM(); });
+kmStart();
+fig($('#km-cv'), drawKM);
+
+/* ---------- 3 · bad starts and k-means++ ---------- */
+const IND = gen(13, [{ t: 'blob', c: [1.6, 4.6], s: [.42, .42], n: 40 }, { t: 'blob', c: [5.0, 4.9], s: [.42, .42], n: 12 }, { t: 'blob', c: [8.4, 4.6], s: [.42, .42], n: 30 }, { t: 'blob', c: [1.7, 1.6], s: [.42, .42], n: 12 }, { t: 'blob', c: [5.0, 1.4], s: [.42, .42], n: 40 }, { t: 'blob', c: [8.3, 1.6], s: [.42, .42], n: 16 }]);
+const NG = 6, GS = [40, 12, 30, 12, 40, 16];
+const IN = { mode: 'rand', runs: { rand: [], pp: [] }, last: null, r: mulberry32(77), best: bestKmeans(IND.P, NG, 5, 30).J };
+const comb = (n, k) => { let c = 1; for (let i = 0; i < k; i++) c = c * (n - i) / (i + 1); return c; };
+const P_COVER = GS.reduce((p, g) => p * g, 1) / comb(IND.P.length, NG);
+const okRun = J => J <= IN.best * (1 + 1e-6);
+function inRun(mode) { const init = (mode === 'pp' ? kmppInit : randInit)(IND.P, NG, IN.r), res = kmeans(IND.P, init.C); IN.runs[mode].push(res.J); IN.last = { mode, init, res }; if (res.J < IN.best) IN.best = res.J; }
+function drawIN() {
+  const Cc = C0(), K = KC(), P = IND.P, v = view($('#in-cv')); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  const last = IN.last;
+  if (last) { regions(v, last.res.C, K, 0.06, 7); P.forEach((p, i) => dot(v, p[0], p[1], K[last.res.L[i]], 3.8)); last.init.C.forEach((c, k) => starO(v, c[0], c[1], K[k], 9, 1.5)); last.res.C.forEach((c, k) => star(v, c[0], c[1], K[k], 11)); }
+  else P.forEach(p => dot(v, p[0], p[1], Cc.muted, 3.8));
+  v.ctx.restore();
+  // strip plot of final W by method
+  const all = [...IN.runs.rand, ...IN.runs.pp], hi = all.length ? Math.max(...all, IN.best * 1.3) : IN.best * 3, lo = IN.best * 0.9;
+  const t = frame($('#in-tr'), [lo, hi * 1.04], [0, 2], { l: 92, b: 24, t: 6 }); axes(t, 'final W', '', { nx: 5, sy: 10, fy: () => '' });
+  const c = t.ctx; c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = Cc.muted; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillText('random', t.pad.l - 8, t.Y(1.5)); c.fillText('k-means++', t.pad.l - 8, t.Y(0.5)); c.restore();
+  clip(t); seg(t, IN.best, 0, IN.best, 2, Cc.ink, 1.2, [4, 3]);
+  const jr = mulberry32(3);
+  IN.runs.rand.forEach(J => dot(t, J, 1.5 + 0.6 * (jr() - 0.5), okRun(J) ? Cc.a : Cc.b, 3));
+  IN.runs.pp.forEach(J => dot(t, J, 0.5 + 0.6 * (jr() - 0.5), okRun(J) ? Cc.a : Cc.b, 3));
+  t.ctx.restore();
+  const st = m => { const R = IN.runs[m], g = R.filter(okRun).length; return R.length ? tip(`${g} of ${R.length}`, `${pct(g / R.length)} of the runs ended at the best W\n(${fmt(IN.best, 2)}, the lowest seen)`) : '—'; };
+  $('#in-r').innerHTML = st('rand'); $('#in-p').innerHTML = st('pp');
+  if (!last) { $('#run-in').innerHTML = `<b>Running example</b>: a random start picks 6 of the ${P.length} points uniformly. The chance that it puts exactly one centre in each of the six groups (sizes ${GS.join(', ')}) is ${GS.join(' &times; ')} / C(${P.length}, 6) = ${tip(pct(P_COVER, 2), `${GS.reduce((p, g) => p * g, 1).toLocaleString('en-GB')} ways to pick one point per group\n÷ ${Math.round(comb(P.length, 6)).toLocaleString('en-GB')} ways to pick any 6 points`)}.`; }
+  else if (last.mode === 'pp') { const s = last.init.steps[0], i = s.i, p = s.D[i] / s.tot, g0 = IND.T[last.init.idx[0]], pNew = sum(s.D.filter((_, j) => IND.T[j] !== g0)) / s.tot, cov = new Set(last.init.idx.map(j => IND.T[j])).size;
+    $('#run-in').innerHTML = `<b>Running example</b>, the last k-means++ start: the first centre fell in group ${g0 + 1}. For the second, &Sigma; D&sup2; = ${tip(fmt(s.tot, 1), `squared distance of all ${P.length} points\nto that first centre, added up`)}; the point chosen had D&sup2; = ${fmt(s.D[i], 2)}, a ${tip(pct(p, 2), `${fmt(s.D[i], 2)} / ${fmt(s.tot, 1)}`)} chance. The chance that the second centre landed in a <i>new</i> group was ${tip(pct(pNew, 1), 'sum of D² over points outside the first centre’s group,\ndivided by Σ D²')}. In the end the six starting centres covered ${cov} of the 6 groups.`; }
+  else { const cov = new Set(last.init.idx.map(j => IND.T[j])).size; $('#run-in').innerHTML = `<b>Running example</b>, the last random start: every point had the same 1/${P.length} chance of being each centre, so the six started in ${cov} of the 6 groups. A random start covers all six only ${tip(pct(P_COVER, 2), 'one point per group: Π group sizes / C(n, 6)')} of the time.`; }
+  if (!last) { $('#in-say').innerHTML = 'Press <b>One start</b> to run k-means once from six randomly chosen points.'; return; }
+  const R = last.res, bad = !okRun(R.J);
+  let shared = 0, straddle = 0; if (bad) { const cnt = R.C.map(() => new Array(NG).fill(0)); P.forEach((_, i) => cnt[R.L[i]][IND.T[i]]++); straddle = cnt.filter(r => r.filter(x => x >= 3).length >= 2).length; shared = [...Array(NG).keys()].filter(g => cnt.filter(r => r[g] >= 3).length >= 2).length; }
+  const rr = IN.runs.rand, pp = IN.runs.pp, fr = a => a.length ? pct(a.filter(okRun).length / a.length) : null;
+  $('#in-say').innerHTML = (bad ? `This run is stuck at W = ${fmt(R.J, 1)}, ${pct(R.J / IN.best - 1)} above the best: ${shared ? `${plural(shared, 'group')} ${shared === 1 ? 'is' : 'are'} split between two centres` : 'centres share a group'}${straddle ? ` while ${plural(straddle, 'centre')} ${straddle === 1 ? 'straddles' : 'straddle'} two groups` : ''}. Lloyd's loop can't escape: moving one centre alone would only raise W first.` : `This run found the best answer, W = ${fmt(R.J, 1)}: one centre per group.`)
+    + (rr.length && pp.length ? ` So far: random starts found it ${fr(rr)} of the time, k-means++ ${fr(pp)}.` : ' Run many starts of both kinds to compare.');
+}
+seg1('[data-im]', 'data-im', m => { IN.mode = m; });
+$('#in-one').addEventListener('click', () => { inRun(IN.mode); drawIN(); });
+$('#in-100').addEventListener('click', () => { for (let t = 0; t < 100; t++) inRun('rand'); for (let t = 0; t < 100; t++) inRun('pp'); inRun(IN.mode); drawIN(); });
+$('#in-clr').addEventListener('click', () => { IN.runs = { rand: [], pp: [] }; IN.last = null; drawIN(); });
+fig($('#in-cv'), drawIN);
+
+/* ---------- 4 · choosing k ---------- */
+const CKU = (() => { const r = mulberry32(31), M = [[2.3, 4.5], [7.6, 4.7], [3.1, 1.5], [7.2, 1.5]], U = []; M.forEach((m, g) => { for (let i = 0; i < 30; i++) U.push([m, g, gaussOf(r), gaussOf(r)]); }); return U; })();
+const CK = { k: 3, s: 0.45, sel: 0, cache: null, key: null };
+function ckFit() {
+  if (CK.key === CK.s) return CK.cache;
+  const X = CKU.map(([m, g, a, b]) => [clamp(m[0] + CK.s * a, 0.08, 9.92), clamp(m[1] + CK.s * b, 0.08, 6.17)]), res = [];
+  for (let k = 1; k <= 8; k++) { const m = bestKmeans(X, k, 9, 6); res[k] = { m, sil: k > 1 ? silhouette(X, m.L, true) : null }; }
+  CK.cache = { X, res }; CK.key = CK.s; return CK.cache;
+}
+let ckV = null;
+function drawCK() {
+  const Cc = C0(), K = KC(), { X, res } = ckFit(), R = res[CK.k], L = R.m.L, S = R.sil, v = ckV = view($('#ck-cv')); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  const i0 = CK.sel, own = L[i0];
+  // nearest other cluster of the selected point
+  const n = X.length, cnt = new Array(CK.k).fill(0), sm = new Array(CK.k).fill(0); L.forEach(l => cnt[l]++); X.forEach((x, j) => { if (j !== i0) sm[L[j]] += dist(X[i0], x); });
+  let bk = -1, bb = Infinity; for (let k = 0; k < CK.k; k++) if (k !== own && cnt[k] && sm[k] / cnt[k] < bb) { bb = sm[k] / cnt[k]; bk = k; }
+  X.forEach((x, j) => { if (L[j] === own && j !== i0) seg(v, X[i0][0], X[i0][1], x[0], x[1], K[own], 0.8, null, 0.35); if (L[j] === bk) seg(v, X[i0][0], X[i0][1], x[0], x[1], K[bk], 0.8, [2, 3], 0.3); });
+  X.forEach((x, j) => { const s = S.per[j]; if (s > 0) { const c = v.ctx; c.save(); c.globalAlpha = 0.22; c.fillStyle = K[L[j]]; c.beginPath(); c.arc(v.X(x[0]), v.Y(x[1]), 3 + 7 * s, 0, 7); c.fill(); c.restore(); } dot(v, x[0], x[1], K[L[j]], 3.4); if (s < 0) ring(v, x[0], x[1], Cc.bad, 6, 1.6); });
+  ring(v, X[i0][0], X[i0][1], Cc.ink, 9, 1.8);
+  R.m.C.forEach((c, k) => star(v, c[0], c[1], K[k], 9));
+  v.ctx.restore();
+  // elbow and silhouette plots
+  const Ws = [1, 2, 3, 4, 5, 6, 7, 8].map(k => res[k].m.J), Ss = [2, 3, 4, 5, 6, 7, 8].map(k => res[k].sil.s), best = 2 + Ss.indexOf(Math.max(...Ss));
+  const e = frame($('#ck-el'), [0.5, 8.5], [0, Math.max(...Ws) * 1.08], { l: 46, b: 24, t: 8 }); axes(e, 'k', 'W', { sx: 1, ny: 3 }); clip(e);
+  curveLine(e, Ws.map((w, i) => [i + 1, w]), Cc.ink); Ws.forEach((w, i) => dot(e, i + 1, w, i + 1 === CK.k ? Cc.ink : Cc.muted, i + 1 === CK.k ? 5 : 3.2)); e.ctx.restore();
+  const s = frame($('#ck-si'), [1.5, 8.5], [0, 1], { l: 46, b: 24, t: 8 }); axes(s, 'k', 'silhouette', { sx: 1, sy: 0.2 }); clip(s);
+  curveLine(s, Ss.map((w, i) => [i + 2, w]), Cc.a); Ss.forEach((w, i) => dot(s, i + 2, w, i + 2 === CK.k ? Cc.ink : Cc.a, i + 2 === CK.k ? 5 : 3.2)); s.ctx.restore();
+  $('#ck-k-o').textContent = CK.k; $('#ck-s-o').textContent = fmt(CK.s, 2);
+  $('#ck-sc').innerHTML = tip(fmt(S.s, 3), `mean of s(i) over all ${n} points\n${S.per.filter(x => x < 0).length} of them negative`);
+  $('#ck-best').innerHTML = tip(String(best), Ss.map((w, i) => `k = ${i + 2}: ${fmt(w, 3)}`).join('\n'));
+  const a = S.A[i0], b = S.B[i0], si = S.per[i0];
+  $('#run-ck').innerHTML = cnt[own] < 2 ? `<b>Running example</b>: the ringed point is alone in its cluster, so s = 0 by convention.`
+    : `<b>Running example</b>: the ringed point is in cluster ${sw(own)} with ${cnt[own] - 1} others. a = ${tip(fmt(a, 3), `sum of ${cnt[own] - 1} distances (solid lines) = ${fmt(sm[own], 2)}\n÷ ${cnt[own] - 1}`)}. The nearest other cluster is ${sw(bk)}: b = ${tip(fmt(b, 3), `sum of ${cnt[bk]} distances (dashed lines) = ${fmt(sm[bk], 2)}\n÷ ${cnt[bk]}`)}. So s = (${fmt(b, 3)} &minus; ${fmt(a, 3)}) / ${fmt(Math.max(a, b), 3)} = <b>${fmt(si, 3)}</b>${si < 0 ? ', negative: it sits closer to its neighbours than to its own cluster' : si < 0.25 ? ', near a border' : ''}.`;
+  const mx = Math.max(...Ss);
+  $('#ck-say').innerHTML = (mx < 0.45 ? `With this much spread the groups run into each other: the best silhouette is only ${fmt(mx, 2)} and the elbow softens into a smooth curve. When the signals are this weak, the &ldquo;right&rdquo; k depends on what you need the clusters for.`
+    : `The silhouette peaks at <b>k = ${best}</b> (${fmt(mx, 2)})${best === 4 && mx >= 0.6 ? ', the four groups the points were drawn from, and the elbow bends at the same place' : ''}.`)
+    + (CK.k !== best ? ` At your k = ${CK.k} the score is ${fmt(S.s, 2)}${S.per.filter(x => x < 0).length ? `, with ${plural(S.per.filter(x => x < 0).length, 'point')} scoring below zero (red rings)` : ''}.` : ' Click points to see their a and b.');
+}
+function curveLine(v, pts, col) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(v.X(x), v.Y(y)) : c.moveTo(v.X(x), v.Y(y))); c.stroke(); c.restore(); }
+$('#ck-k').addEventListener('input', e => { CK.k = +e.target.value; drawCK(); });
+$('#ck-s').addEventListener('input', e => { CK.s = +e.target.value; drawCK(); });
+$('#ck-cv').addEventListener('click', e => { if (!ckV) return; const i = pick(ckV, ckFit().X, $('#ck-cv'), e, 14); if (i >= 0) { CK.sel = i; drawCK(); } });
+$('#ck-cv').style.cursor = 'pointer';
+fig($('#ck-cv'), drawCK);
+
+/* ---------- 5 · hierarchical clustering ---------- */
+const HCP0 = [[1.2, 4.8], [1.8, 5.3], [2.3, 4.6], [1.6, 4.0], [2.7, 5.4], [7.0, 5.0], [7.8, 5.4], [8.3, 4.6], [7.4, 4.2], [4.4, 1.4], [5.2, 1.0], [5.6, 1.8], [4.8, 2.1], [3.4, 3.5], [4.2, 2.9], [9.2, 1.4]];
+const LET = 'ABCDEFGHIJKLMNOP';
+const HC = { P: HCP0.map(p => p.slice()), link: 'ward', k: 3, tree: null };
+function hcTree() { const n = HC.P.length, M = agglo(HC.P, HC.link), mem = []; for (let i = 0; i < n; i++) mem[i] = [i]; M.forEach((m, j) => { mem[n + j] = mem[m.a].concat(mem[m.b]); }); return HC.tree = { M, mem }; }
+const grp = (ids) => '{' + ids.map(i => LET[i]).sort().join(' ') + '}';
+let hcV = null;
+function drawHC() {
+  const Cc = C0(), K = KC(), P = HC.P, n = P.length, { M, mem } = hcTree(), Kc = HC.k, L = cutTree(n, M, Kc);
+  // colour each cluster by the order its first leaf appears in the dendrogram
+  const ord = []; (function go(id) { if (id < n) { ord.push(id); return; } go(M[id - n].a); go(M[id - n].b); })(2 * n - 2);
+  const cmap = new Map(); ord.forEach(i => { if (!cmap.has(L[i])) cmap.set(L[i], cmap.size); });
+  const col = i => K[cmap.get(L[i]) % 8];
+  const v = hcV = view($('#hc-cv')); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  // light hulls: join each point to its cluster's centroid
+  const cen = new Map(); P.forEach((p, i) => { const c = cen.get(L[i]) || [0, 0, 0]; c[0] += p[0]; c[1] += p[1]; c[2]++; cen.set(L[i], c); });
+  P.forEach((p, i) => { const c = cen.get(L[i]); if (c[2] > 1) seg(v, p[0], p[1], c[0] / c[2], c[1] / c[2], col(i), 1, null, 0.35); });
+  const c = v.ctx; c.font = '600 12px ' + css('--f-mono'); c.textBaseline = 'bottom';
+  P.forEach((p, i) => { dot(v, p[0], p[1], col(i), 5.5); c.fillStyle = Cc.ink; c.fillText(LET[i], v.X(p[0]) + 7, v.Y(p[1]) - 4); });
+  v.ctx.restore();
+  // dendrogram
+  const H = M.map(m => m.h), top = H[n - 2] * 1.1, pos = new Array(2 * n - 1), hgt = new Array(2 * n - 1).fill(0);
+  ord.forEach((id, k) => { pos[id] = k; }); M.forEach((m, j) => { pos[n + j] = (pos[m.a] + pos[m.b]) / 2; hgt[n + j] = m.h; });
+  const cutH = Kc >= n ? H[0] / 2 : Kc <= 1 ? top * 0.97 : (H[n - Kc - 1] + H[n - Kc]) / 2;
+  const d = frame($('#hc-dg'), [-0.6, n - 0.4], [0, top], { l: 46, b: 24, t: 10 }); axes(d, '', 'height', { sx: 100, ny: 4, fx: () => '' }); clip(d);
+  M.forEach((m, j) => { const below = j < n - Kc, cc = below ? col(mem[n + j][0]) : Cc.muted, lw = below ? 2.2 : 1.6;
+    seg(d, pos[m.a], hgt[m.a], pos[m.a], m.h, cc, lw); seg(d, pos[m.b], hgt[m.b], pos[m.b], m.h, cc, lw); seg(d, pos[m.a], m.h, pos[m.b], m.h, cc, lw); });
+  seg(d, -1, cutH, n + 1, cutH, Cc.ink, 1.3, [6, 4]); d.ctx.restore();
+  const dc = d.ctx; dc.save(); dc.font = '600 11px ' + css('--f-mono'); dc.textAlign = 'center'; dc.textBaseline = 'top'; ord.forEach((id, k) => { dc.fillStyle = col(id); dc.fillText(LET[id], d.X(k), d.h - d.pad.b + 5); }); dc.restore();
+  $('#hc-k-o').textContent = Kc;
+  $('#hc-h').innerHTML = Kc <= 1 ? tip('above all', `the last merge is at ${fmt(H[n - 2], 2)}`) : Kc >= n ? tip('below all', `the first merge is at ${fmt(H[0], 2)}`) : tip(fmt(cutH, 2), `anywhere between ${fmt(H[n - Kc - 1], 2)} (merge ${n - Kc} of ${n - 1})\nand ${fmt(H[n - Kc], 2)} (merge ${n - Kc + 1}) gives the same ${Kc} clusters`);
+  $('#hc-gap').innerHTML = Kc <= 1 ? '—' : tip(fmt(Kc >= n ? H[0] : H[n - Kc] - H[n - Kc - 1], 2), 'how far you can move the cut\nwithout changing the clusters');
+  // running example: the merge that would reduce K by one (or the last merge when K = 1)
+  const mi = Kc <= 1 ? n - 2 : n - Kc, m = M[mi], A = mem[m.a], B = mem[m.b];
+  let how;
+  if (HC.link === 'ward') { const mA = [sum(A.map(i => P[i][0])) / A.length, sum(A.map(i => P[i][1])) / A.length], mB = [sum(B.map(i => P[i][0])) / B.length, sum(B.map(i => P[i][1])) / B.length], dd = dist(mA, mB), f = Math.sqrt(2 * A.length * B.length / (A.length + B.length));
+    how = `&mu;<sub>A</sub> = ${P2(mA)}, &mu;<sub>B</sub> = ${P2(mB)}, &Vert;&mu;<sub>A</sub> &minus; &mu;<sub>B</sub>&Vert; = ${fmt(dd, 3)}; &radic;(2&middot;${A.length}&middot;${B.length}/${A.length + B.length}) = ${fmt(f, 3)}; d<sub>Ward</sub> = ${tip(fmt(f * dd, 3), `${fmt(f, 3)} × ${fmt(dd, 3)}\nW grows by ½d² = ${fmt(f * f * dd * dd / 2, 3)}`)}`; }
+  else { const pr = []; A.forEach(i => B.forEach(j => pr.push([i, j, dist(P[i], P[j])]))); const ex = HC.link === 'single' ? pr.reduce((a, b) => b[2] < a[2] ? b : a) : HC.link === 'complete' ? pr.reduce((a, b) => b[2] > a[2] ? b : a) : null;
+    how = ex ? `the ${HC.link === 'single' ? 'closest' : 'farthest'} of the ${pr.length} cross pairs is ${LET[ex[0]]}&ndash;${LET[ex[1]]}: d = ${tip(fmt(ex[2], 3), `‖${LET[ex[0]]} − ${LET[ex[1]]}‖ = √((${fmt(P[ex[0]][0], 2)} − ${fmt(P[ex[1]][0], 2)})² + (${fmt(P[ex[0]][1], 2)} − ${fmt(P[ex[1]][1], 2)})²)`)}`
+      : `the mean of all ${pr.length} cross distances: ${tip(fmt(sum(pr.map(q => q[2])) / pr.length, 3), `${fmt(sum(pr.map(q => q[2])), 3)} / ${pr.length}`)}`; }
+  $('#run-hc').innerHTML = `<b>Running example</b>: ${Kc <= 1 ? 'the final merge joined' : `the next merge (going from ${Kc} to ${Kc - 1} clusters) joins`} A = ${grp(A)} and B = ${grp(B)}. ${HC.link[0].toUpperCase() + HC.link.slice(1)} linkage: ${how}, the height of that join in the dendrogram.`;
+  let gapK = 2, gap = -1; for (let q = 2; q <= n - 1; q++) { const gq = H[n - q] - H[n - q - 1]; if (gq > gap) { gap = gq; gapK = q; } }
+  const groups = [...new Set(ord.map(i => L[i]))].map(l => grp(P.map((_, i) => i).filter(i => L[i] === l)));
+  const pj = M.findIndex(mm => mm.a === 15 || mm.b === 15);
+  const char = { single: 'Single linkage follows chains of near neighbours: watch N and O act as a bridge.', complete: 'Complete linkage judges a group by its two farthest members, so it keeps clusters compact.', average: 'Average linkage sits between single and complete.', ward: 'Ward merges whatever adds the least spread, so clusters come out round and of similar size, like k-means.' }[HC.link];
+  $('#hc-say').innerHTML = `${char} At k = ${Kc}: ${Kc <= 6 ? groups.join(', ') : plural(Kc, 'cluster')}. The biggest jump in merge height comes just before ${gapK} clusters merge into ${gapK - 1}, so this tree&rsquo;s most natural cut is <b>k = ${gapK}</b>. The lone point P joins at merge ${pj + 1} of ${n - 1}.`;
+}
+seg1('[data-hl]', 'data-hl', k => { HC.link = k; drawHC(); });
+$('#hc-k').addEventListener('input', e => { HC.k = +e.target.value; drawHC(); });
+draggable($('#hc-cv'), () => hcV, () => HC.P, drawHC);
+fig($('#hc-cv'), drawHC);
+
+/* ---------- 6 · DBSCAN ---------- */
+const DBD = {
+  moons: gen(41, [{ t: 'moon', up: true, o: [2.9, 2.6], s: 2.2, e: 0.12, n: 80 }, { t: 'moon', up: false, o: [2.9, 2.6], s: 2.2, e: 0.12, n: 80 }, { t: 'unif', b: [0.3, 9.7, 0.3, 5.95], n: 10, label: -1 }]),
+  rings: gen(42, [{ t: 'ring', c: [5, 3.1], r: 0.9, e: 0.1, n: 60 }, { t: 'ring', c: [5, 3.1], r: 2.4, e: 0.1, n: 140 }]),
+  uneven: gen(43, [{ t: 'blob', c: [3.0, 3.6], s: [.3, .3], n: 60 }, { t: 'blob', c: [6.9, 2.9], s: [1.0, 1.0], n: 60 }]),
+  noisy: gen(44, [{ t: 'blob', c: [2.4, 4.4], s: [.45, .45], n: 45 }, { t: 'blob', c: [7.4, 4.5], s: [.45, .45], n: 45 }, { t: 'blob', c: [5, 1.6], s: [.45, .45], n: 45 }, { t: 'unif', b: [.3, 9.7, .3, 5.95], n: 40, label: -1 }]),
+};
+const DB = { d: 'moons', eps: 0.54, mp: 5, sel: 0 };
+let dbV = null;
+function drawDB() {
+  const Cc = C0(), K = KC(), D = DBD[DB.d], X = D.P, R = dbscan(X, DB.eps, DB.mp), L = alignTo(D.T, R.L), v = dbV = view($('#db-cv')); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  const s = X[DB.sel], c = v.ctx; c.save(); c.fillStyle = Cc.ink; c.globalAlpha = 0.07; c.beginPath(); c.arc(v.X(s[0]), v.Y(s[1]), v.X(DB.eps) - v.X(0), 0, 7); c.fill(); c.globalAlpha = 0.8; c.strokeStyle = Cc.ink; c.lineWidth = 1.2; c.stroke(); c.restore();
+  X.forEach((p, i) => { if (L[i] < 0) cross(v, p[0], p[1], Cc.muted, 3.4); else dot(v, p[0], p[1], K[L[i]], R.core[i] ? 4.6 : 2.8); });
+  ring(v, s[0], s[1], Cc.ink, 8, 1.6);
+  v.ctx.restore();
+  $('#db-e-o').textContent = fmt(DB.eps, 2); $('#db-m-o').textContent = DB.mp;
+  const nc = R.core.filter(Boolean).length;
+  $('#db-k').innerHTML = tip(String(R.k), `${nc} core points, ${X.length - nc - R.noise} border points`); $('#db-n').innerHTML = tip(`${R.noise} of ${X.length}`, 'in no core point’s ε-neighbourhood');
+  const i = DB.sel, cntN = R.N[i].length, coreNb = R.N[i].find(j => R.core[j] && j !== i);
+  $('#run-db').innerHTML = `<b>Running example</b>: the ringed point has |N<sub>&epsilon;</sub>| = ${tip(String(cntN), `points within ε = ${fmt(DB.eps, 2)} of it, itself included`)} ${cntN >= DB.mp ? '&ge;' : '&lt;'} minPts = ${DB.mp}, so it ${R.core[i] ? `is a <b>core</b> point of cluster ${sw(L[i])}` : coreNb != null ? `is not core, but core point ${tip('#' + (coreNb + 1), `distance ${fmt(dist(X[i], X[coreNb]), 3)} ≤ ε`)} is within &epsilon; of it: a <b>border</b> point of cluster ${sw(L[i])}` : 'is not core and no core point is within &epsilon; of it: <b>noise</b>'}.`;
+  const truthK = new Set(D.T.filter(t => t >= 0)).size, A = ari(D.T, R.L), sparse = DB.d === 'uneven' ? R.L.filter((l, j) => D.T[j] === 1 && l < 0).length : 0;
+  $('#db-say').innerHTML = R.k === 0 ? 'No point has minPts neighbours within &epsilon;: everything is noise. Raise &epsilon; or lower minPts.'
+    : R.noise > 0.5 * X.length ? `&epsilon; is small for this density: ${pct(R.noise / X.length)} of the points are noise, and the crowds fall apart into ${plural(R.k, 'cluster')}. Raise &epsilon;.`
+    : R.k === 1 && truthK > 1 ? '&epsilon; is so large that neighbourhoods reach across the gaps and every crowd merges into one cluster. Lower &epsilon;.'
+    : DB.d === 'uneven' && sparse > 15 ? `One &epsilon; can&rsquo;t suit both densities: it fits the tight crowd, but ${sparse} of the 60 points of the wide, sparse group are called noise. Raise &epsilon; and the tight crowd starts swallowing its surroundings instead. (OPTICS and HDBSCAN were invented for this.)`
+    : DB.d === 'noisy' && R.k === truthK ? (() => { const caught = R.L.filter((l, j) => D.T[j] < 0 && l < 0).length; return `${R.k} crowds found, and ${plural(R.noise, 'point')} called noise: ${caught} of the 40 scattered points, plus ${R.noise - caught} on the crowds&rsquo; fringes. The other ${40 - caught} scattered points happen to sit inside or beside a crowd, and no density rule can tell them apart from its members.`; })()
+    : A > 0.9 ? `${plural(R.k, 'cluster')} found, matching the groups the data was drawn from (ARI ${fmt(A, 2)})${DB.d === 'moons' || DB.d === 'rings' ? ': shapes that no centre-based method can follow' : ''}${R.noise ? `, and ${plural(R.noise, 'point')} set aside as noise` : ''}. Nobody told DBSCAN how many clusters to find.`
+    : `${plural(R.k, 'cluster')} and ${plural(R.noise, 'noise point')} (ARI ${fmt(A, 2)} against the true groups). ${R.k > truthK ? 'Too many clusters: a crowd has broken up where it thins out; try a larger &epsilon;.' : R.k < truthK ? 'Too few: crowds are touching; try a smaller &epsilon; or a larger minPts.' : 'The right number of clusters, but the borders are off; adjust &epsilon; a little.'}`;
+}
+seg1('[data-dd]', 'data-dd', k => { DB.d = k; DB.sel = 0; drawDB(); });
+$('#db-e').addEventListener('input', e => { DB.eps = +e.target.value; drawDB(); });
+$('#db-m').addEventListener('input', e => { DB.mp = +e.target.value; drawDB(); });
+$('#db-cv').addEventListener('pointermove', e => { if (!dbV) return; const i = pick(dbV, DBD[DB.d].P, $('#db-cv'), e, 18); if (i >= 0 && i !== DB.sel) { DB.sel = i; drawDB(); } });
+$('#db-cv').addEventListener('click', e => { if (!dbV) return; const i = pick(dbV, DBD[DB.d].P, $('#db-cv'), e, 18); if (i >= 0) { DB.sel = i; drawDB(); } });
+fig($('#db-cv'), drawDB);
+
+/* ---------- 7 · Gaussian mixtures and EM ---------- */
+const GMD = gen(51, [{ t: 'blob', c: [2.6, 3.9], s: [1.15, .28], rot: 38, n: 70 }, { t: 'blob', c: [6.6, 4.5], s: [1.3, .3], rot: -18, n: 60 }, { t: 'blob', c: [5.6, 1.6], s: [1.4, .3], rot: 8, n: 60 }]);
+const GM = { P: null, R: null, phase: 'E', it: 0, ll: [], seed: 0, sel: 0, view: 'soft', timer: 0, done: false, km: bestKmeans(GMD.P, 3, 4, 8) };
+function gmStart() { clearInterval(GM.timer); const r = mulberry32(300 + GM.seed), idx = randInit(GMD.P, 3, r).idx; GM.P = { w: [1 / 3, 1 / 3, 1 / 3], m: idx.map(i => GMD.P[i].slice()), S: idx.map(() => [0.6, 0, 0.6]) }; GM.R = null; GM.phase = 'E'; GM.it = 0; GM.ll = []; GM.done = false; }
+function gmStep() {
+  if (GM.done) return false;
+  if (GM.phase === 'E') { const E = gmmE(GMD.P, GM.P); GM.R = E.R; GM.ll.push(E.ll); GM.phase = 'M'; const n = GM.ll.length; if (n > 1 && Math.abs(GM.ll[n - 1] - GM.ll[n - 2]) < 1e-6) GM.done = true; }
+  else { GM.P = gmmM(GMD.P, GM.R); GM.it++; GM.phase = 'E'; }
+  return !GM.done;
+}
+let gmV = null;
+function drawGM() {
+  const Cc = C0(), K = KC(), X = GMD.P, v = gmV = view($('#gm-cv')); axes(v, 'x₁', 'x₂', { sx: 2, sy: 2 }); clip(v);
+  const vw = GM.view, R = GM.R, H = R ? hardOf(R) : null;
+  if (vw === 'km') { regions(v, GM.km.C, K, 0.07, 7); X.forEach((p, i) => dot(v, p[0], p[1], K[GM.km.L[i]], 4)); GM.km.C.forEach((c, k) => star(v, c[0], c[1], K[k], 10)); }
+  else { X.forEach((p, i) => dot(v, p[0], p[1], !R ? Cc.muted : vw === 'soft' ? mixCol(K.slice(0, 3), R[i]) : K[H[i]], 4));
+    GM.P.m.forEach((m, k) => { ellipse(v, m, GM.P.S[k], 1, K[k], 2.2); ellipse(v, m, GM.P.S[k], 2, K[k], 1.2, [4, 4]); dot(v, m[0], m[1], K[k], 4); }); }
+  ring(v, X[GM.sel][0], X[GM.sel][1], Cc.ink, 8.5, 1.7);
+  v.ctx.restore();
+  trace($('#gm-tr'), GM.ll, { xl: 'round', yl: 'mean log-lik.', xmax: 10, fy: y => fmt(y, 2) });
+  const st = $('#gm-step'); st.textContent = GM.done ? 'Converged' : GM.phase === 'E' ? 'E-step' : 'M-step'; st.disabled = GM.done; $('#gm-run').disabled = GM.done;
+  $('#gm-it').innerHTML = tip(String(GM.it), 'one round = an E-step then an M-step');
+  $('#gm-ll').innerHTML = GM.ll.length ? tip(fmt(GM.ll[GM.ll.length - 1], 4), `average over the ${X.length} points of ln p(xᵢ),\nat the parameters of the latest E-step`) : '—';
+  const x = X[GM.sel], P = GM.P, dens = P.m.map((m, k) => P.w[k] * Math.exp(gLogPdf(x, m, P.S[k]))), tot = sum(dens), r = dens.map(d => d / tot);
+  $('#gm-resp').innerHTML = '<span class="mini-h">The ringed point&rsquo;s responsibilities (current bells)</span>' + r.map((q, k) => `<div class="cf"><span>${sw(k)} bell ${k + 1}</span><span class="cf-track one"><i style="left:0;width:${q * 100}%;background:var(${KV[k]})"></i></span><span class="num">${tip(fmt(q, 3), `π${sub(k + 1)}·N = ${fmt(P.w[k], 3)} × ${dens[k] / P.w[k] < 1e-3 ? (dens[k] / P.w[k]).toExponential(2) : fmt(dens[k] / P.w[k], 4)}\n÷ total ${tot < 1e-3 ? tot.toExponential(2) : fmt(tot, 4)}`)}</span></div>`).join('');
+  const e3 = t => t < 1e-3 ? t.toExponential(2) : fmt(t, 4);
+  $('#run-gp').innerHTML = `<b>Running example</b> at the ringed point x = ${P2(x)}: p(x) = ${dens.map((d, k) => `${fmt(P.w[k], 3)} &times; ${tip(e3(d / P.w[k]), `bell ${k + 1}: centre ${P2(P.m[k])}\nN(x | μ, Σ) = exp(−½ Mahalanobis²) / (2π √det Σ)`)}`).join(' + ')} = ${tip(e3(tot), 'the mixture density at x')}.`;
+  $('#run-ge').innerHTML = `<b>Running example</b>: r = ${dens.map((d, k) => `${sw(k)} ${e3(d)} / ${e3(tot)} = <b>${fmt(r[k], 3)}</b>`).join(', ')}. ${Math.max(...r) > 0.99 ? 'One bell owns this point outright.' : Math.max(...r) > 0.7 ? 'Mostly one bell, with a share for another.' : 'Genuinely shared: k-means would have to pick one.'}`;
+  if (!R) $('#run-gm').innerHTML = '<b>Running example</b>: press E-step first; the M-step needs responsibilities.';
+  else { const nk = R.reduce((s, q) => s + q[0], 0), mx = R.reduce((s, q, i) => s + q[0] * X[i][0], 0) / nk, my = R.reduce((s, q, i) => s + q[0] * X[i][1], 0) / nk;
+    $('#run-gm').innerHTML = `<b>Running example</b> for bell ${sw(0)} 1, from the latest responsibilities: N${sub(1)} = ${tip(fmt(nk, 2), `sum of r for bell 1 over all ${X.length} points`)}, &pi;${sub(1)} = ${fmt(nk, 2)} / ${X.length} = ${fmt(nk / X.length, 3)}, &mu;${sub(1)} = ${tip(P2(mx === mx ? [mx, my] : [0, 0]), 'Σ rᵢ₁ xᵢ / N₁')}. ${GM.phase === 'M' ? 'The next M-step moves bell 1 there.' : 'That is where bell 1 is now.'}`; }
+  const aG = R ? ari(GMD.T, H) : null, aK = ari(GMD.T, GM.km.L);
+  $('#gm-say').innerHTML = vw === 'km' ? `k-means on the same points (best of 8 starts): ARI ${tip(fmt(aK, 2), 'against the three groups the points were drawn from')}. Its borders are straight lines halfway between centres, and it has no notion of a stretched cluster, so it tends to hand the tips of the long clusters to the wrong centre${R ? `; the mixture scores ${fmt(aG, 2)}` : ''}.`
+    : !R ? 'Three small round bells start on three random points. Press <b>E-step</b> to work out who is responsible for what.'
+    : GM.done ? `Converged after ${GM.it} rounds: the log-likelihood stopped rising (change below 10&#8315;&#8310;). ARI against the true groups: ${tip(fmt(aG, 2), 'hard labels: each point to its most responsible bell')}; k-means scores ${fmt(aK, 2)}. Try a few random starts: EM, like k-means, can settle in a poorer local optimum.`
+    : GM.phase === 'M' ? `Responsibilities computed (colours mix by them). Next, the <b>M-step</b> refits each bell to its weighted points: watch the ellipses stretch and tilt.`
+    : `Each bell now fits its weighted points. Mean log-likelihood ${fmt(GM.ll[GM.ll.length - 1], 3)} and rising. Press E-step again, or run to convergence.`;
+}
+$('#gm-step').addEventListener('click', () => { clearInterval(GM.timer); gmStep(); drawGM(); });
+$('#gm-run').addEventListener('click', () => { clearInterval(GM.timer); GM.timer = setInterval(() => { let more = gmStep(); if (more && GM.phase === 'M') more = gmStep(); drawGM(); if (!more || GM.it > 400) clearInterval(GM.timer); }, 90); });
+$('#gm-new').addEventListener('click', () => { GM.seed++; gmStart(); drawGM(); });
+seg1('[data-gv]', 'data-gv', k => { GM.view = k; drawGM(); });
+$('#gm-cv').addEventListener('click', e => { if (!gmV) return; const i = pick(gmV, GMD.P, $('#gm-cv'), e, 14); if (i >= 0) { GM.sel = i; drawGM(); } });
+$('#gm-cv').style.cursor = 'pointer';
+gmStart();
+fig($('#gm-cv'), drawGM);
+
+/* ---------- 8 · four ideas side by side ---------- */
+const CPD = {
+  blobs: { d: gen(61, [{ t: 'blob', c: [2.4, 4.3], s: [.55, .55], n: 50 }, { t: 'blob', c: [7.4, 4.6], s: [.55, .55], n: 50 }, { t: 'blob', c: [5.0, 1.6], s: [.55, .55], n: 50 }]), k: 3, eps: 0.6, mp: 5,
+    say: 'Round, well-separated groups of similar size: k-means&rsquo; home ground, and every method does well. DBSCAN only loses a few fringe points to noise.' },
+  aniso: { d: gen(62, [{ t: 'blob', c: [4.49, 2.01], s: [1.5, .22], rot: -25, n: 60 }, { t: 'blob', c: [5.0, 3.1], s: [1.5, .22], rot: -25, n: 60 }, { t: 'blob', c: [5.51, 4.19], s: [1.5, .22], rot: -25, n: 60 }]), k: 3, eps: 0.4, mp: 5,
+    say: 'Long, parallel stripes. k-means and Ward look for round clusters, so they cut across the stripes; the mixture&rsquo;s tilted ellipses fit each stripe. DBSCAN breaks the stripes where they thin out.' },
+  moons: { d: gen(63, [{ t: 'moon', up: true, o: [2.9, 2.6], s: 2.2, e: 0.12, n: 90 }, { t: 'moon', up: false, o: [2.9, 2.6], s: 2.2, e: 0.12, n: 90 }]), k: 2, eps: 0.45, mp: 5,
+    say: 'Interlocking crescents: no centre or ellipse describes a crescent. DBSCAN follows the chains of neighbours, and so does single linkage (try it).' },
+  rings: { d: gen(64, [{ t: 'ring', c: [5, 3.1], r: 0.9, e: 0.1, n: 60 }, { t: 'ring', c: [5, 3.1], r: 2.4, e: 0.1, n: 130 }]), k: 2, eps: 0.6, mp: 5,
+    say: 'A ring around a disc: both groups have the same centre, so every centre-based method fails. Density (DBSCAN) and single linkage follow the rings.' },
+  uneven: { d: gen(65, [{ t: 'blob', c: [3.6, 3.3], s: [.3, .3], n: 50 }, { t: 'blob', c: [6.0, 3.0], s: [1.3, 1.3], n: 120 }]), k: 2, eps: 0.3, mp: 5,
+    say: 'A tight crowd beside a wide, sparse one. k-means and Ward assume clusters of similar spread, so their border lands in the wrong place; the mixture learns that one bell is far wider. No single &epsilon; suits both densities, so DBSCAN keeps the tight crowd and calls much of the sparse one noise.' },
+  none: { d: gen(66, [{ t: 'unif', b: [0.4, 9.6, 0.4, 5.85], n: 160, label: 0 }]), k: 3, eps: 1.0, mp: 5,
+    say: 'Uniform noise: there are no clusters at all. k-means, the tree and the mixture were told k = 3 and dutifully return three tidy-looking clusters anyway (ARI 0). DBSCAN reports a single crowd, which is the right answer here. Always ask whether the clusters are real.' },
+};
+const CP = { d: 'blobs', link: 'ward', ex: 0, cache: {} };
+const CPN = ['k-means', 'Hierarchical', 'DBSCAN', 'Gaussian mixture'], LKN = { ward: 'Ward', single: 'single', average: 'average', complete: 'complete' };
+function cpRes(d, link) {
+  const key = d + '|' + link; if (CP.cache[key]) return CP.cache[key];
+  const c = CPD[d], X = c.d.P, T = c.d.T, base = CP.cache[d] || (CP.cache[d] = (() => { const km = bestKmeans(X, c.k, 7, 6), db = dbscan(X, c.eps, c.mp), g = gmmFit(X, gmmFromLabels(X, km.L, c.k), 1e-5, 300); return { km: km.L, db: db.L, dbk: db.k, dbn: db.noise, gm: hardOf(g.R), gmP: g.P }; })());
+  const hc = cutTree(X.length, agglo(X, link), c.k), Ls = [base.km, hc, base.db, base.gm];
+  return CP.cache[key] = { Ls, A: Ls.map(L => ariParts(T, L)), base };
+}
+function drawCP() {
+  const Cc = C0(), K = KC(), c = CPD[CP.d], X = c.d.P, T = c.d.T, R = cpRes(CP.d, CP.link);
+  R.Ls.forEach((L0, a) => { const L = alignTo(T, L0), v = frame($('#cp-' + a), [0, 10], [0, 6.25], { l: 8, r: 8, t: 8, b: 8 }, true); clip(v);
+    if (a === 3) R.base.gmP.m.forEach((m, k) => ellipse(v, m, R.base.gmP.S[k], 2, Cc.muted, 1, [3, 3]));
+    X.forEach((p, i) => { if (L[i] < 0) cross(v, p[0], p[1], Cc.muted, 2.6); else dot(v, p[0], p[1], K[L[i] % 8], 3); }); v.ctx.restore();
+    const nk = new Set(L0.filter(l => l >= 0)).size;
+    $('#cp-h' + a).innerHTML = `${a === 1 ? `Hierarchical (${LKN[CP.link]})` : CPN[a]} &middot; ARI <b>${fmt(R.A[a].ari, 2)}</b>`;
+    $('#cp-' + a).setAttribute('aria-label', `${CPN[a]}: ${nk} clusters, ARI ${fmt(R.A[a].ari, 2)}`); });
+  $('#cp-tbl').innerHTML = '<thead><tr><th>method</th><th>clusters</th><th>ARI</th></tr></thead><tbody>' + R.Ls.map((L, a) => { const nk = new Set(L.filter(l => l >= 0)).size, nn = L.filter(l => l < 0).length; return `<tr${a === CP.ex ? ' style="background:var(--soft)"' : ''}><td>${a === 1 ? `Hier. (${LKN[CP.link]})` : CPN[a]}</td><td class="num">${nk}${nn ? ` + ${nn} noise` : ''}</td><td class="num">${tip(fmt(R.A[a].ari, 3), 'see the running example above;\npick a method below the plot')}</td></tr>`; }).join('') + '</tbody>';
+  $('#cp-cap').innerHTML = `${X.length} points drawn from ${new Set(T).size === 1 ? 'one uniform cloud (no groups)' : new Set(T).size + ' known groups'}. Settings: k = ${c.k} for k-means, the tree and the mixture; DBSCAN &epsilon; = ${c.eps}, minPts = ${c.mp}. Grey crosses: DBSCAN noise; dashed ellipses: the mixture&rsquo;s bells at 2 standard deviations.`;
+  const P = R.A[CP.ex];
+  $('#run-cp').innerHTML = `<b>Running example</b>, ${CP.ex === 1 ? `hierarchical (${LKN[CP.link]})` : CPN[CP.ex]} on this dataset: &Sigma; C(n<sub>ij</sub>, 2) = ${tip(big(P.sij), 'pairs grouped together by both')}, &Sigma; C(a<sub>i</sub>, 2) = ${tip(big(P.sa), `together-pairs in the ${P.nA} true group${P.nA > 1 ? 's' : ''}`)}, &Sigma; C(b<sub>j</sub>, 2) = ${tip(big(P.sb), `together-pairs in the ${P.nB} found cluster${P.nB > 1 ? 's' : ''}${CP.ex === 2 ? '\n(noise counts as one cluster here, as in sklearn)' : ''}`)}, C(${X.length}, 2) = ${big(P.pairs)}. E = ${big(P.sa)} &times; ${big(P.sb)} / ${big(P.pairs)} = ${fmt(P.exp, 1)}. ${P.nA === P.nB && (P.nA === 1 || P.nA === X.length) ? 'Both labellings have a single group, a perfect match: ARI = 1 by convention.' : `ARI = (${big(P.sij)} &minus; ${fmt(P.exp, 1)}) / (${P.mx.toLocaleString('en-GB', { maximumFractionDigits: 1 })} &minus; ${fmt(P.exp, 1)}) = <b>${fmt(P.ari, 3)}</b>.`}`;
+  const bi = R.A.map(a => a.ari), top = Math.max(...bi), win = bi.map((v, a) => v >= top - 0.005 ? (a === 1 ? `hierarchical (${LKN[CP.link]})` : CPN[a]) : null).filter(Boolean), wj = win.length > 1 ? win.slice(0, -1).join(', ') + ' and ' + win[win.length - 1] : win[0];
+  $('#cp-say').innerHTML = `${c.say} ${CP.d === 'none' ? '' : `Best here: ${wj} (ARI ${fmt(top, 2)}).`}`;
+}
+seg1('[data-cd]', 'data-cd', k => { CP.d = k; drawCP(); });
+seg1('[data-cl]', 'data-cl', k => { CP.link = k; drawCP(); });
+seg1('[data-ce]', 'data-ce', k => { CP.ex = +k; drawCP(); });
+[0, 1, 2, 3].forEach(a => fig($('#cp-' + a), drawCP));
+
+/* ---------- project: wholesale customers ---------- */
+const WS = {"ch":[2,2,2,1,2,2,2,2,1,2,2,2,2,2,2,1,2,1,2,1,2,1,1,2,2,2,1,1,2,1,1,1,1,1,1,2,1,2,2,1,1,1,2,2,2,2,2,2,2,2,1,1,2,2,1,1,2,2,1,1,2,2,2,2,1,2,1,2,1,1,1,1,1,2,2,1,1,2,1,1,1,2,2,1,2,2,2,1,1,1,1,1,2,1,2,1,2,1,1,1,2,2,2,1,1,1,2,2,2,2,1,2,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,2,2,1,2,2,2,1,1,2,2,2,2,1,1,1,2,2,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,1,2,2,1,1,1,2,1,1,1,2,1,1,2,2,1,1,1,2,1,2,1,2,1,2,1,1,2,1,2,1,2,1,1,1,1,2,1,1,2,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,2,1,2,1,2,1,1,1,1,1,1,1,1,1,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,2,1,2,1,2,2,1,2,2,2,2,2,2,2,1,1,2,1,1,2,1,1,2,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,2,1,2,2,2,1,1,1,1,2,2,1,2,1,1,2,2,1,2,1,2,1,2,1,1,1,2,1,1,1,1,1,1,1,2,1,1,1,1,2,1,1,2,1,1,2,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,2,2,1,1,1,1,1,1,2,2,1,2,1,1,2,1,2,2,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1],"reg":[3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],"S":[[12669,9656,7561,214,2674,1338],[7057,9810,9568,1762,3293,1776],[6353,8808,7684,2405,3516,7844],[13265,1196,4221,6404,507,1788],[22615,5410,7198,3915,1777,5185],[9413,8259,5126,666,1795,1451],[12126,3199,6975,480,3140,545],[7579,4956,9426,1669,3321,2566],[5963,3648,6192,425,1716,750],[6006,11093,18881,1159,7425,2098],[3366,5403,12974,4400,5977,1744],[13146,1124,4523,1420,549,497],[31714,12319,11757,287,3881,2931],[21217,6208,14982,3095,6707,602],[24653,9465,12091,294,5058,2168],[10253,1114,3821,397,964,412],[1020,8816,12121,134,4508,1080],[5876,6157,2933,839,370,4478],[18601,6327,10099,2205,2767,3181],[7780,2495,9464,669,2518,501],[17546,4519,4602,1066,2259,2124],[5567,871,2010,3383,375,569],[31276,1917,4469,9408,2381,4334],[26373,36423,22019,5154,4337,16523],[22647,9776,13792,2915,4482,5778],[16165,4230,7595,201,4003,57],[9898,961,2861,3151,242,833],[14276,803,3045,485,100,518],[4113,20484,25957,1158,8604,5206],[43088,2100,2609,1200,1107,823],[18815,3610,11107,1148,2134,2963],[2612,4339,3133,2088,820,985],[21632,1318,2886,266,918,405],[29729,4786,7326,6130,361,1083],[1502,1979,2262,425,483,395],[688,5491,11091,833,4239,436],[29955,4362,5428,1729,862,4626],[15168,10556,12477,1920,6506,714],[4591,15729,16709,33,6956,433],[56159,555,902,10002,212,2916],[24025,4332,4757,9510,1145,5864],[19176,3065,5956,2033,2575,2802],[10850,7555,14961,188,6899,46],[630,11095,23998,787,9529,72],[9670,7027,10471,541,4618,65],[5181,22044,21531,1740,7353,4985],[3103,14069,21955,1668,6792,1452],[44466,54259,55571,7782,24171,6465],[11519,6152,10868,584,5121,1476],[4967,21412,28921,1798,13583,1163],[6269,1095,1980,3860,609,2162],[3347,4051,6996,239,1538,301],[40721,3916,5876,532,2587,1278],[491,10473,11532,744,5611,224],[27329,1449,1947,2436,204,1333],[5264,3683,5005,1057,2024,1130],[4098,29892,26866,2616,17740,1340],[5417,9933,10487,38,7572,1282],[13779,1970,1648,596,227,436],[6137,5360,8040,129,3084,1603],[8590,3045,7854,96,4095,225],[35942,38369,59598,3254,26701,2017],[7823,6245,6544,4154,4074,964],[9396,11601,15775,2896,7677,1295],[4760,1227,3250,3724,1247,1145],[85,20959,45828,36,24231,1423],[9,1534,7417,175,3468,27],[19913,6759,13462,1256,5141,834],[2446,7260,3993,5870,788,3095],[8352,2820,1293,779,656,144],[16705,2037,3202,10643,116,1365],[18291,1266,21042,5373,4173,14472],[4420,5139,2661,8872,1321,181],[19899,5332,8713,8132,764,648],[8190,6343,9794,1285,1901,1780],[20398,1137,3,4407,3,975],[717,3587,6532,7530,529,894],[12205,12697,28540,869,12034,1009],[10766,1175,2067,2096,301,167],[1640,3259,3655,868,1202,1653],[7005,829,3009,430,610,529],[219,9540,14403,283,7818,156],[10362,9232,11009,737,3537,2342],[20874,1563,1783,2320,550,772],[11867,3327,4814,1178,3837,120],[16117,46197,92780,1026,40827,2944],[22925,73498,32114,987,20070,903],[43265,5025,8117,6312,1579,14351],[7864,542,4042,9735,165,46],[24904,3836,5330,3443,454,3178],[11405,596,1638,3347,69,360],[12754,2762,2530,8693,627,1117],[9198,27472,32034,3232,18906,5130],[11314,3090,2062,35009,71,2698],[5626,12220,11323,206,5038,244],[3,2920,6252,440,223,709],[23,2616,8118,145,3874,217],[403,254,610,774,54,63],[503,112,778,895,56,132],[9658,2182,1909,5639,215,323],[11594,7779,12144,3252,8035,3029],[1420,10810,16267,1593,6766,1838],[2932,6459,7677,2561,4573,1386],[56082,3504,8906,18028,1480,2498],[14100,2132,3445,1336,1491,548],[15587,1014,3970,910,139,1378],[1454,6337,10704,133,6830,1831],[8797,10646,14886,2471,8969,1438],[1531,8397,6981,247,2505,1236],[1406,16729,28986,673,836,3],[11818,1648,1694,2276,169,1647],[12579,11114,17569,805,6457,1519],[19046,2770,2469,8853,483,2708],[14438,2295,1733,3220,585,1561],[18044,1080,2000,2555,118,1266],[11134,793,2988,2715,276,610],[11173,2521,3355,1517,310,222],[6990,3880,5380,1647,319,1160],[20049,1891,2362,5343,411,933],[8258,2344,2147,3896,266,635],[17160,1200,3412,2417,174,1136],[4020,3234,1498,2395,264,255],[12212,201,245,1991,25,860],[11170,10769,8814,2194,1976,143],[36050,1642,2961,4787,500,1621],[76237,3473,7102,16538,778,918],[19219,1840,1658,8195,349,483],[21465,7243,10685,880,2386,2749],[140,8847,3823,142,1062,3],[42312,926,1510,1718,410,1819],[7149,2428,699,6316,395,911],[2101,589,314,346,70,310],[14903,2032,2479,576,955,328],[9434,1042,1235,436,256,396],[7388,1882,2174,720,47,537],[6300,1289,2591,1170,199,326],[4625,8579,7030,4575,2447,1542],[3087,8080,8282,661,721,36],[13537,4257,5034,155,249,3271],[5387,4979,3343,825,637,929],[17623,4280,7305,2279,960,2616],[30379,13252,5189,321,51,1450],[37036,7152,8253,2995,20,3],[10405,1596,1096,8425,399,318],[18827,3677,1988,118,516,201],[22039,8384,34792,42,12591,4430],[7769,1936,2177,926,73,520],[9203,3373,2707,1286,1082,526],[5924,584,542,4052,283,434],[31812,1433,1651,800,113,1440],[16225,1825,1765,853,170,1067],[1289,3328,2022,531,255,1774],[18840,1371,3135,3001,352,184],[3463,9250,2368,779,302,1627],[622,55,137,75,7,8],[1989,10690,19460,233,11577,2153],[3830,5291,14855,317,6694,3182],[17773,1366,2474,3378,811,418],[2861,6570,9618,930,4004,1682],[355,7704,14682,398,8077,303],[1725,3651,12822,824,4424,2157],[12434,540,283,1092,3,2233],[15177,2024,3810,2665,232,610],[5531,15726,26870,2367,13726,446],[5224,7603,8584,2540,3674,238],[15615,12653,19858,4425,7108,2379],[4822,6721,9170,993,4973,3637],[2926,3195,3268,405,1680,693],[5809,735,803,1393,79,429],[5414,717,2155,2399,69,750],[260,8675,13430,1116,7015,323],[200,25862,19816,651,8773,6250],[955,5479,6536,333,2840,707],[514,7677,19805,937,9836,716],[286,1208,5241,2515,153,1442],[2343,7845,11874,52,4196,1697],[45640,6958,6536,7368,1532,230],[12759,7330,4533,1752,20,2631],[11002,7075,4945,1152,120,395],[3157,4888,2500,4477,273,2165],[12356,6036,8887,402,1382,2794],[112151,29627,18148,16745,4948,8550],[694,8533,10518,443,6907,156],[36847,43950,20170,36534,239,47943],[327,918,4710,74,334,11],[8170,6448,1139,2181,58,247],[3009,521,854,3470,949,727],[2438,8002,9819,6269,3459,3],[8040,7639,11687,2758,6839,404],[834,11577,11522,275,4027,1856],[16936,6250,1981,7332,118,64],[13624,295,1381,890,43,84],[5509,1461,2251,547,187,409],[180,3485,20292,959,5618,666],[7107,1012,2974,806,355,1142],[17023,5139,5230,7888,330,1755],[30624,7209,4897,18711,763,2876],[2427,7097,10391,1127,4314,1468],[11686,2154,6824,3527,592,697],[9670,2280,2112,520,402,347],[3067,13240,23127,3941,9959,731],[4484,14399,24708,3549,14235,1681],[25203,11487,9490,5065,284,6854],[583,685,2216,469,954,18],[1956,891,5226,1383,5,1328],[1107,11711,23596,955,9265,710],[6373,780,950,878,288,285],[2541,4737,6089,2946,5316,120],[1537,3748,5838,1859,3381,806],[5550,12729,16767,864,12420,797],[18567,1895,1393,1801,244,2100],[12119,28326,39694,4736,19410,2870],[7291,1012,2062,1291,240,1775],[3317,6602,6861,1329,3961,1215],[2362,6551,11364,913,5957,791],[2806,10765,15538,1374,5828,2388],[2532,16599,36486,179,13308,674],[18044,1475,2046,2532,130,1158],[18,7504,15205,1285,4797,6372],[4155,367,1390,2306,86,130],[14755,899,1382,1765,56,749],[5396,7503,10646,91,4167,239],[5041,1115,2856,7496,256,375],[2790,2527,5265,5612,788,1360],[7274,659,1499,784,70,659],[12680,3243,4157,660,761,786],[20782,5921,9212,1759,2568,1553],[4042,2204,1563,2286,263,689],[1869,577,572,950,4762,203],[8656,2746,2501,6845,694,980],[11072,5989,5615,8321,955,2137],[2344,10678,3828,1439,1566,490],[25962,1780,3838,638,284,834],[964,4984,3316,937,409,7],[15603,2703,3833,4260,325,2563],[1838,6380,2824,1218,1216,295],[8635,820,3047,2312,415,225],[18692,3838,593,4634,28,1215],[7363,475,585,1112,72,216],[47493,2567,3779,5243,828,2253],[22096,3575,7041,11422,343,2564],[24929,1801,2475,2216,412,1047],[18226,659,2914,3752,586,578],[11210,3576,5119,561,1682,2398],[6202,7775,10817,1183,3143,1970],[3062,6154,13916,230,8933,2784],[8885,2428,1777,1777,430,610],[13569,346,489,2077,44,659],[15671,5279,2406,559,562,572],[8040,3795,2070,6340,918,291],[3191,1993,1799,1730,234,710],[6134,23133,33586,6746,18594,5121],[6623,1860,4740,7683,205,1693],[29526,7961,16966,432,363,1391],[10379,17972,4748,4686,1547,3265],[31614,489,1495,3242,111,615],[11092,5008,5249,453,392,373],[8475,1931,1883,5004,3593,987],[56083,4563,2124,6422,730,3321],[53205,4959,7336,3012,967,818],[9193,4885,2157,327,780,548],[7858,1110,1094,6818,49,287],[23257,1372,1677,982,429,655],[2153,1115,6684,4324,2894,411],[1073,9679,15445,61,5980,1265],[5909,23527,13699,10155,830,3636],[572,9763,22182,2221,4882,2563],[20893,1222,2576,3975,737,3628],[11908,8053,19847,1069,6374,698],[15218,258,1138,2516,333,204],[4720,1032,975,5500,197,56],[2083,5007,1563,1120,147,1550],[514,8323,6869,529,93,1040],[36817,3045,1493,4802,210,1824],[894,1703,1841,744,759,1153],[680,1610,223,862,96,379],[27901,3749,6964,4479,603,2503],[9061,829,683,16919,621,139],[11693,2317,2543,5845,274,1409],[17360,6200,9694,1293,3620,1721],[3366,2884,2431,977,167,1104],[12238,7108,6235,1093,2328,2079],[49063,3965,4252,5970,1041,1404],[25767,3613,2013,10303,314,1384],[68951,4411,12609,8692,751,2406],[40254,640,3600,1042,436,18],[7149,2247,1242,1619,1226,128],[15354,2102,2828,8366,386,1027],[16260,594,1296,848,445,258],[42786,286,471,1388,32,22],[2708,2160,2642,502,965,1522],[6022,3354,3261,2507,212,686],[2838,3086,4329,3838,825,1060],[3996,11103,12469,902,5952,741],[21273,2013,6550,909,811,1854],[7588,1897,5234,417,2208,254],[19087,1304,3643,3045,710,898],[8090,3199,6986,1455,3712,531],[6758,4560,9965,934,4538,1037],[444,879,2060,264,290,259],[16448,6243,6360,824,2662,2005],[5283,13316,20399,1809,8752,172],[2886,5302,9785,364,6236,555],[2599,3688,13829,492,10069,59],[161,7460,24773,617,11783,2410],[243,12939,8852,799,3909,211],[6468,12867,21570,1840,7558,1543],[17327,2374,2842,1149,351,925],[6987,1020,3007,416,257,656],[918,20655,13567,1465,6846,806],[7034,1492,2405,12569,299,1117],[29635,2335,8280,3046,371,117],[2137,3737,19172,1274,17120,142],[9784,925,2405,4447,183,297],[10617,1795,7647,1483,857,1233],[1479,14982,11924,662,3891,3508],[7127,1375,2201,2679,83,1059],[1182,3088,6114,978,821,1637],[11800,2713,3558,2121,706,51],[9759,25071,17645,1128,12408,1625],[1774,3696,2280,514,275,834],[9155,1897,5167,2714,228,1113],[15881,713,3315,3703,1470,229],[13360,944,11593,915,1679,573],[25977,3587,2464,2369,140,1092],[32717,16784,13626,60869,1272,5609],[4414,1610,1431,3498,387,834],[542,899,1664,414,88,522],[16933,2209,3389,7849,210,1534],[5113,1486,4583,5127,492,739],[9790,1786,5109,3570,182,1043],[11223,14881,26839,1234,9606,1102],[22321,3216,1447,2208,178,2602],[8565,4980,67298,131,38102,1215],[16823,928,2743,11559,332,3486],[27082,6817,10790,1365,4111,2139],[13970,1511,1330,650,146,778],[9351,1347,2611,8170,442,868],[3,333,7021,15601,15,550],[2617,1188,5332,9584,573,1942],[381,4025,9670,388,7271,1371],[2320,5763,11238,767,5162,2158],[255,5758,5923,349,4595,1328],[1689,6964,26316,1456,15469,37],[3043,1172,1763,2234,217,379],[1198,2602,8335,402,3843,303],[2771,6939,15541,2693,6600,1115],[27380,7184,12311,2809,4621,1022],[3428,2380,2028,1341,1184,665],[5981,14641,20521,2005,12218,445],[3521,1099,1997,1796,173,995],[1210,10044,22294,1741,12638,3137],[608,1106,1533,830,90,195],[117,6264,21203,228,8682,1111],[14039,7393,2548,6386,1333,2341],[190,727,2012,245,184,127],[22686,134,218,3157,9,548],[37,1275,22272,137,6747,110],[759,18664,1660,6114,536,4100],[796,5878,2109,340,232,776],[19746,2872,2006,2601,468,503],[4734,607,864,1206,159,405],[2121,1601,2453,560,179,712],[4627,997,4438,191,1335,314],[2615,873,1524,1103,514,468],[4692,6128,8025,1619,4515,3105],[9561,2217,1664,1173,222,447],[3477,894,534,1457,252,342],[22335,1196,2406,2046,101,558],[6211,337,683,1089,41,296],[39679,3944,4955,1364,523,2235],[20105,1887,1939,8164,716,790],[3884,3801,1641,876,397,4829],[15076,6257,7398,1504,1916,3113],[6338,2256,1668,1492,311,686],[5841,1450,1162,597,476,70],[3136,8630,13586,5641,4666,1426],[38793,3154,2648,1034,96,1242],[3225,3294,1902,282,68,1114],[4048,5164,10391,130,813,179],[28257,944,2146,3881,600,270],[17770,4591,1617,9927,246,532],[34454,7435,8469,2540,1711,2893],[1821,1364,3450,4006,397,361],[10683,21858,15400,3635,282,5120],[11635,922,1614,2583,192,1068],[1206,3620,2857,1945,353,967],[20918,1916,1573,1960,231,961],[9785,848,1172,1677,200,406],[9385,1530,1422,3019,227,684],[3352,1181,1328,5502,311,1000],[2647,2761,2313,907,95,1827],[518,4180,3600,659,122,654],[23632,6730,3842,8620,385,819],[12377,865,3204,1398,149,452],[9602,1316,1263,2921,841,290],[4515,11991,9345,2644,3378,2213],[11535,1666,1428,6838,64,743],[11442,1032,582,5390,74,247],[9612,577,935,1601,469,375],[4446,906,1238,3576,153,1014],[27167,2801,2128,13223,92,1902],[26539,4753,5091,220,10,340],[25606,11006,4604,127,632,288],[18073,4613,3444,4324,914,715],[6884,1046,1167,2069,593,378],[25066,5010,5026,9806,1092,960],[7362,12844,18683,2854,7883,553],[8257,3880,6407,1646,2730,344],[8708,3634,6100,2349,2123,5137],[6633,2096,4563,1389,1860,1892],[2126,3289,3281,1535,235,4365],[97,3605,12400,98,2970,62],[4983,4859,6633,17866,912,2435],[5969,1990,3417,5679,1135,290],[7842,6046,8552,1691,3540,1874],[4389,10940,10908,848,6728,993],[5065,5499,11055,364,3485,1063],[660,8494,18622,133,6740,776],[8861,3783,2223,633,1580,1521],[4456,5266,13227,25,6818,1393],[17063,4847,9053,1031,3415,1784],[26400,1377,4172,830,948,1218],[17565,3686,4657,1059,1803,668],[16980,2884,12232,874,3213,249],[11243,2408,2593,15348,108,1886],[13134,9347,14316,3141,5079,1894],[31012,16687,5429,15082,439,1163],[3047,5970,4910,2198,850,317],[8607,1750,3580,47,84,2501],[3097,4230,16483,575,241,2080],[8533,5506,5160,13486,1377,1498],[21117,1162,4754,269,1328,395],[1982,3218,1493,1541,356,1449],[16731,3922,7994,688,2371,838],[29703,12051,16027,13135,182,2204],[39228,1431,764,4510,93,2346],[14531,15488,30243,437,14841,1867],[10290,1981,2232,1038,168,2125],[2787,1698,2510,65,477,52]],"init":{"2":[241,301],"3":[241,301,175],"4":[241,301,175,382],"5":[241,301,175,382,340],"6":[241,301,175,382,340,45],"7":[241,301,175,382,340,45,357],"8":[241,164,383,153,12,369,342,265]},"F":[[3.6,79],[1.8,54],[3.333,74],[2.283,62],[4.533,85],[2.883,55],[4.7,88],[3.6,85],[1.95,51],[4.35,85],[1.833,54],[3.917,84],[4.2,78],[1.75,47],[4.7,83],[2.167,52],[1.75,62],[4.8,84],[1.6,52],[4.25,79],[1.8,51],[1.75,47],[3.45,78],[3.067,69],[4.533,74],[3.6,83],[1.967,55],[4.083,76],[3.85,78],[4.433,79],[4.3,73],[4.467,77],[3.367,66],[4.033,80],[3.833,74],[2.017,52],[1.867,48],[4.833,80],[1.833,59],[4.783,90],[4.35,80],[1.883,58],[4.567,84],[1.75,58],[4.533,73],[3.317,83],[3.833,64],[2.1,53],[4.633,82],[2.0,59],[4.8,75],[4.716,90],[1.833,54],[4.833,80],[1.733,54],[4.883,83],[3.717,71],[1.667,64],[4.567,77],[4.317,81],[2.233,59],[4.5,84],[1.75,48],[4.8,82],[1.817,60],[4.4,92],[4.167,78],[4.7,78],[2.067,65],[4.7,73],[4.033,82],[1.967,56],[4.5,79],[4.0,71],[1.983,62],[5.067,76],[2.017,60],[4.567,78],[3.883,76],[3.6,83],[4.133,75],[4.333,82],[4.1,70],[2.633,65],[4.067,73],[4.933,88],[3.95,76],[4.517,80],[2.167,48],[4.0,86],[2.2,60],[4.333,90],[1.867,50],[4.817,78],[1.833,63],[4.3,72],[4.667,84],[3.75,75],[1.867,51],[4.9,82],[2.483,62],[4.367,88],[2.1,49],[4.5,83],[4.05,81],[1.867,47],[4.7,84],[1.783,52],[4.85,86],[3.683,81],[4.733,75],[2.3,59],[4.9,89],[4.417,79],[1.7,59],[4.633,81],[2.317,50],[4.6,85],[1.817,59],[4.417,87],[2.617,53],[4.067,69],[4.25,77],[1.967,56],[4.6,88],[3.767,81],[1.917,45],[4.5,82],[2.267,55],[4.65,90],[1.867,45],[4.167,83],[2.8,56],[4.333,89],[1.833,46],[4.383,82],[1.883,51],[4.933,86],[2.033,53],[3.733,79],[4.233,81],[2.233,60],[4.533,82],[4.817,77],[4.333,76],[1.983,59],[4.633,80],[2.017,49],[5.1,96],[1.8,53],[5.033,77],[4.0,77],[2.4,65],[4.6,81],[3.567,71],[4.0,70],[4.5,81],[4.083,93],[1.8,53],[3.967,89],[2.2,45],[4.15,86],[2.0,58],[3.833,78],[3.5,66],[4.583,76],[2.367,63],[5.0,88],[1.933,52],[4.617,93],[1.917,49],[2.083,57],[4.583,77],[3.333,68],[4.167,81],[4.333,81],[4.5,73],[2.417,50],[4.0,85],[4.167,74],[1.883,55],[4.583,77],[4.25,83],[3.767,83],[2.033,51],[4.433,78],[4.083,84],[1.833,46],[4.417,83],[2.183,55],[4.8,81],[1.833,57],[4.8,76],[4.1,84],[3.966,77],[4.233,81],[3.5,87],[4.366,77],[2.25,51],[4.667,78],[2.1,60],[4.35,82],[4.133,91],[1.867,53],[4.6,78],[1.783,46],[4.367,77],[3.85,84],[1.933,49],[4.5,83],[2.383,71],[4.7,80],[1.867,49],[3.833,75],[3.417,64],[4.233,76],[2.4,53],[4.8,94],[2.0,55],[4.15,76],[1.867,50],[4.267,82],[1.75,54],[4.483,75],[4.0,78],[4.117,79],[4.083,78],[4.267,78],[3.917,70],[4.55,79],[4.083,70],[2.417,54],[4.183,86],[2.217,50],[4.45,90],[1.883,54],[1.85,54],[4.283,77],[3.95,79],[2.333,64],[4.15,75],[2.35,47],[4.933,86],[2.9,63],[4.583,85],[3.833,82],[2.083,57],[4.367,82],[2.133,67],[4.35,74],[2.2,54],[4.45,83],[3.567,73],[4.5,73],[4.15,88],[3.817,80],[3.917,71],[4.45,83],[2.0,56],[4.283,79],[4.767,78],[4.533,84],[1.85,58],[4.25,83],[1.983,43],[2.25,60],[4.75,75],[4.117,81],[2.15,46],[4.417,90],[1.817,46],[4.467,74]]};
+const CATS = ['fresh', 'milk', 'grocery', 'frozen', 'detergents & paper', 'delicatessen'], CSH = ['fresh', 'milk', 'grocery', 'frozen', 'det. & paper', 'deli.'];
+const NW = WS.S.length, LG = WS.S.map(r => r.map(Math.log));
+const MU = CATS.map((_, j) => sum(LG.map(r => r[j])) / NW), SD = CATS.map((_, j) => Math.sqrt(sum(LG.map(r => (r[j] - MU[j]) ** 2)) / NW));
+const Z = LG.map(r => r.map((v, j) => (v - MU[j]) / SD[j]));
+const RETAIL = WS.ch.map(c => c === 2 ? 1 : 0);
+// scikit-learn's printed numbers (see the output block below)
+const SK = { km: { 2: [1848.05, 0.2902, 0.5200, 7], 3: [1558.44, 0.2601, 0.3665, 7], 4: [1396.95, 0.1891, 0.2847, 24], 5: [1283.35, 0.1918, 0.2374, 20], 6: [1206.00, 0.1909, 0.2326, 17], 7: [1098.95, 0.1999, 0.1917, 18], 8: [1056.79, 0.1840, 0.1794, 24] },
+  ward: { 2: [[206, 234], 0.2629, 0.4152], 3: [[234, 90, 116], 0.2350, 0.4118] }, db: [1, 44],
+  em: { 3: [4, -4.729050, [0.5351, 0.4649], [[3.608, 75.194], [3.349, 65.951]]], 6: [28, -4.155382, [0.6441, 0.3559], [[4.29, 79.968], [2.036, 54.479]]] }, bic: [2607.62, 2322.19, 2334.90, 2359.82] };
+const PJ = { km: {}, ward: null, ready: false, running: false, pc: 'km', k: 2, eps: 1.5, cat: 0, scale: 'log', checks: [] };
+// PCA plane for the maps (orientation: retail clients on the right)
+const PCA = (() => { const cov = CATS.map((_, a) => CATS.map((_, b) => sum(Z.map(z => z[a] * z[b])) / (NW - 1))), e = jacobi(cov), V = e.vec.slice(0, 2);
+  const pr = Z.map(z => V.map(u => sum(u.map((w, j) => w * z[j])))); const s0 = sum(pr.map((p, i) => RETAIL[i] ? p[0] : 0)) > 0 ? 1 : -1, s1 = sum(pr.map(p => p[1] ** 3)) > 0 ? 1 : -1;
+  return { val: e.val, P: pr.map(p => [s0 * p[0], s1 * p[1]]) }; })();
+function pjRun() {
+  if (PJ.running) return; PJ.running = true; $('#pk-run').disabled = true; PJ.km = {}; let k = 2;
+  (function step() {
+    $('#pk-prog').textContent = `Running k = ${k}…`; const t0 = performance.now(), m = kmeans(Z, WS.init[k].map(i => Z[i].slice()));
+    PJ.km[k] = { m, sil: silhouette(Z, m.L), ari: ari(WS.ch, m.L), ms: performance.now() - t0 }; drawRace(); k++;
+    if (k <= 8) return setTimeout(step, 0);
+    $('#pk-prog').textContent = 'Building the Ward tree…';
+    setTimeout(() => { const t1 = performance.now(), M = agglo(Z, 'ward'); PJ.ward = { M, ms: performance.now() - t1 }; PJ.ready = true; PJ.running = false; $('#pk-run').disabled = false; $('#pk-run').textContent = 'Run again'; $('#pk-prog').textContent = '';
+      drawRace(); drawPK(); drawPM(); drawPW(); drawPD(); drawPar(); }, 0);
+  })();
+}
+const okc = b => b ? '<td class="ok">&#10003;</td>' : '<td>&#10007;</td>';
+function drawRace() {
+  $('#pk-race').innerHTML = '<thead><tr><th>k</th><th>W (inertia)</th><th>silhouette</th><th>ARI vs channel</th><th>iterations</th><th>scikit-learn: W &middot; silhouette &middot; ARI &middot; iterations</th><th>match</th></tr></thead><tbody>' + [2, 3, 4, 5, 6, 7, 8].map(k => {
+    const r = PJ.km[k], s = SK.km[k]; if (!r) return `<tr><td>${k}</td><td colspan="4" class="note">&hellip;</td><td class="num">${fmt(s[0], 2)} &middot; ${fmt(s[1], 4)} &middot; ${fmt(s[2], 4)} &middot; ${s[3]}</td><td></td></tr>`;
+    const sz = [...Array(k).keys()].map(c => r.m.L.filter(l => l === c).length).sort((a, b) => b - a), ok = fmt(r.m.J, 2) === fmt(s[0], 2) && fmt(r.sil, 4) === fmt(s[1], 4) && fmt(r.ari, 4) === fmt(s[2], 4) && r.m.it === s[3];
+    return `<tr${k === PJ.k ? ' class="win"' : ''}><td>${tip(String(k), `segment sizes: ${sz.join(', ')}`)}</td><td class="num">${tip(fmt(r.m.J, 2), `Σ squared distance of all 440 clients\nto their segment's centre (6-D, standardised)\ncomputed in ${fmt(r.ms, 0)} ms`)}</td><td class="num">${fmt(r.sil, 4)}</td><td class="num">${tip(fmt(r.ari, 4), 'agreement between the segments and the\nhidden HoReCa / retail labels')}</td><td class="num">${r.m.it}</td><td class="num">${fmt(s[0], 2)} &middot; ${fmt(s[1], 4)} &middot; ${fmt(s[2], 4)} &middot; ${s[3]}</td>${okc(ok)}</tr>`; }).join('') + '</tbody>';
+}
+function drawPK() {
+  const Cc = C0(), ks = [2, 3, 4, 5, 6, 7, 8], ready = ks.every(k => PJ.km[k]);
+  const e = frame($('#pk-el'), [1.5, 8.5], [0, 2000], { l: 50, b: 24, t: 8 }); axes(e, 'k', 'W', { sx: 1, ny: 4 });
+  const s = frame($('#pk-si'), [1.5, 8.5], [0, 0.35], { l: 50, b: 24, t: 8 }); axes(s, 'k', 'silhouette', { sx: 1, sy: 0.1 });
+  if (!ready) return;
+  clip(e); curveLine(e, ks.map(k => [k, PJ.km[k].m.J]), Cc.ink); ks.forEach(k => dot(e, k, PJ.km[k].m.J, k === PJ.k ? Cc.ink : Cc.muted, k === PJ.k ? 5 : 3.2)); e.ctx.restore();
+  clip(s); curveLine(s, ks.map(k => [k, PJ.km[k].sil]), Cc.a); ks.forEach(k => dot(s, k, PJ.km[k].sil, k === PJ.k ? Cc.ink : Cc.a, k === PJ.k ? 5 : 3.2)); s.ctx.restore();
+}
+function mapView(cv) { const xs = PCA.P.map(p => p[0]), ys = PCA.P.map(p => p[1]); const v = frame(cv, [Math.min(...xs) - 0.3, Math.max(...xs) + 0.3], [Math.min(...ys) - 0.3, Math.max(...ys) + 0.3], { b: 30 }, true); axes(v, 'PC 1', 'PC 2', { sx: 2, sy: 2 }); return v; }
+function drawPM() {
+  const Cc = C0(), K = KC(), v = mapView($('#pm-cv')), r = PJ.km[PJ.k]; clip(v);
+  PCA.P.forEach((p, i) => dot(v, p[0], p[1], PJ.pc === 'ch' ? (RETAIL[i] ? Cc.lda : Cc.b) : r ? K[r.m.L[i]] : Cc.muted, 3.4)); v.ctx.restore();
+  $('#pm-k-o').textContent = PJ.k;
+  $('#pm-cap').innerHTML = PJ.pc === 'ch' ? `The hidden truth: <span style="color:var(--lda)">&#9679;</span> retailers (142) and <span style="color:var(--cB)">&#9679;</span> hotels, restaurants and caf&eacute;s (298). The two overlap in the middle, so no clustering can separate them perfectly.` : `Each dot is one client, placed on the first two principal components of the six standardised log-spends (they hold ${pct((PCA.val[0] + PCA.val[1]) / sum(PCA.val))} of the spread). Colours: the k-means segments for k = ${PJ.k}.`;
+  if (!r) { $('#pm-si').textContent = '…'; $('#pm-ar').textContent = '…'; $('#pm-say').textContent = 'Running k-means…'; $('#pm-prof').innerHTML = ''; return; }
+  $('#pm-si').innerHTML = tip(fmt(r.sil, 3), 'mean s(i) over the 440 clients, in 6-D'); $('#pm-ar').innerHTML = tip(fmt(r.ari, 3), '1 = segments are exactly the two channels\n0 = no better than chance');
+  const k = PJ.k, gm = j => Math.exp(MU[j]);
+  const segs = [...Array(k).keys()].map(c => { const I = r.m.L.reduce((a, l, i) => (l === c && a.push(i), a), []), g = CATS.map((_, j) => Math.exp(sum(I.map(i => LG[i][j])) / I.length)); return { c, n: I.length, ret: sum(I.map(i => RETAIL[i])) / I.length, g, lr: g.map((v, j) => Math.log(v / gm(j))) }; }).sort((a, b) => b.n - a.n);
+  const cell = (s, j) => { const x = s.lr[j], w = Math.min(1, Math.abs(x) / 1.6); return `<td class="cell" style="background:color-mix(in srgb, var(${x > 0 ? '--cA' : '--cB'}) ${Math.round(8 + 46 * w)}%, transparent)">${tip((x >= 0 ? '×' : '÷') + fmt(Math.exp(Math.abs(x)), 1), `typical spend in this segment: ${big(s.g[j])} m.u.\ntypical client overall: ${big(gm(j))} m.u.\n(geometric means)`)}</td>`; };
+  $('#pm-prof').innerHTML = `<thead><tr><th>segment</th><th>clients</th><th>retail share</th>${CSH.map(n => `<th>${n}</th>`).join('')}</tr></thead><tbody>` + segs.map(s => `<tr><td>${sw(s.c)} ${s.c + 1}</td><td class="num">${s.n}</td><td class="num">${tip(pct(s.ret), `${Math.round(s.ret * s.n)} of ${s.n} are retailers\n(all clients: 32%)`)}</td>${CATS.map((_, j) => cell(s, j)).join('')}</tr>`).join('') + '</tbody>';
+  const desc = s => { const o = s.lr.map((x, j) => [x, j]).sort((a, b) => b[0] - a[0]); return `buys ${fmt(Math.exp(o[0][0]), 1)}&times; the typical ${CATS[o[0][1]]}${o[1][0] > 0.25 ? ` and ${fmt(Math.exp(o[1][0]), 1)}&times; the ${CATS[o[1][1]]}` : ''}, but ${o[5][0] < 0 ? `only 1/${fmt(Math.exp(-o[5][0]), 1)} of the ${CATS[o[5][1]]}` : `about the typical ${CATS[o[5][1]]}`}`; };
+  const hi = segs.slice().sort((a, b) => b.ret - a.ret);
+  $('#pm-say').innerHTML = k === 2 ? `Segment ${sw(hi[0].c)} (${hi[0].n} clients, ${pct(hi[0].ret)} retail) ${desc(hi[0])}. Segment ${sw(hi[1].c)} (${hi[1].n}, ${pct(hi[1].ret)} retail) ${desc(hi[1])}. k-means never saw the channel, yet one segment is mostly shops and the other mostly caf&eacute;s and restaurants (ARI ${fmt(r.ari, 2)}).`
+    : `The most retail segment, ${sw(hi[0].c)} (${hi[0].n} clients, ${pct(hi[0].ret)} retail), ${desc(hi[0])}. Smaller segments split the clients by size and taste rather than by channel, so the ARI falls to ${fmt(r.ari, 2)}; that doesn&rsquo;t make them useless, just not the same question.`;
+}
+function drawPW() {
+  if (!PJ.ward) { $('#pw-race').innerHTML = ''; return; }
+  const rows = [2, 3].map(k => { const L = cutTree(NW, PJ.ward.M, k), sz = [...Array(k).keys()].map(c => L.filter(l => l === c).length), s = SK.ward[k], si = silhouette(Z, L), a = ari(WS.ch, L), ok = JSON.stringify(sz.slice().sort()) === JSON.stringify(s[0].slice().sort()) && fmt(si, 4) === fmt(s[1], 4) && fmt(a, 4) === fmt(s[2], 4);
+    PJ.checks.push(ok); return `<tr><td>Ward, k = ${k}</td><td class="num">${sz.sort((x, y) => y - x).join(' · ')}</td><td class="num">${fmt(si, 4)}</td><td class="num">${fmt(a, 4)}</td><td class="num">${s[0].slice().sort((x, y) => y - x).join(' · ')} &middot; ${fmt(s[1], 4)} &middot; ${fmt(s[2], 4)}</td>${okc(ok)}</tr>`; });
+  const db = dbscan(Z, 1.5, 8), okd = db.k === SK.db[0] && db.noise === SK.db[1]; PJ.checks.push(okd);
+  $('#pw-race').innerHTML = '<thead><tr><th>method</th><th>sizes</th><th>silhouette</th><th>ARI vs channel</th><th>scikit-learn</th><th>match</th></tr></thead><tbody>' + rows.join('') + `<tr><td>k-means, k = 2</td><td class="num">${[0, 1].map(c => PJ.km[2].m.L.filter(l => l === c).length).sort((x, y) => y - x).join(' · ')}</td><td class="num">${fmt(PJ.km[2].sil, 4)}</td><td class="num">${fmt(PJ.km[2].ari, 4)}</td><td class="num">(table above)</td><td></td></tr><tr><td>DBSCAN, &epsilon; = 1.5, minPts = 8</td><td class="num">${db.k} crowd + ${db.noise} noise</td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="num">${SK.db[0]} cluster, ${SK.db[1]} noise</td>${okc(okd)}</tr></tbody>`;
+}
+function drawPD() {
+  const Cc = C0(), K = KC(), v = mapView($('#pd-cv')), R = dbscan(Z, PJ.eps, 8); clip(v);
+  PCA.P.forEach((p, i) => { if (R.L[i] < 0) cross(v, p[0], p[1], Cc.ink, 3.6); else dot(v, p[0], p[1], K[R.L[i] % 8], R.core[i] ? 3.4 : 2.4); }); v.ctx.restore();
+  $('#pd-e-o').textContent = fmt(PJ.eps, 2);
+  $('#pd-k').innerHTML = tip(String(R.k), `${R.core.filter(Boolean).length} core clients`); $('#pd-n').innerHTML = tip(String(R.noise), `${pct(R.noise / NW)} of the 440 clients`);
+  const odd = R.L.reduce((a, l, i) => (l < 0 && a.push(i), a), []).map(i => { const j = Z[i].map(Math.abs).indexOf(Math.max(...Z[i].map(Math.abs))); return { i, j, z: Z[i][j] }; }).sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+  $('#pd-tbl').innerHTML = odd.length ? '<thead><tr><th>client</th><th>channel</th><th>most unusual</th></tr></thead><tbody>' + odd.slice(0, 5).map(o => `<tr><td>#${o.i + 1}</td><td>${RETAIL[o.i] ? 'retail' : 'HoReCa'}</td><td>${CSH[o.j]}: ${tip(big(WS.S[o.i][o.j]) + ' m.u.', `z = (ln ${WS.S[o.i][o.j]} − ${fmt(MU[o.j], 3)}) / ${fmt(SD[o.j], 3)} = ${fmt(o.z, 2)}\ntypical client: ${big(Math.exp(MU[o.j]))} m.u.`)}</td></tr>`).join('') + '</tbody>' : '';
+  const low = odd.filter(o => o.z < 0).length;
+  $('#pd-say').innerHTML = R.k === 0 ? 'At this &epsilon; no client has 8 neighbours: everyone is noise.' : `${R.k === 1 ? 'One dense crowd' : plural(R.k, 'dense crowd')} and ${plural(R.noise, 'unusual client')}${Math.abs(PJ.eps - 1.5) < 1e-9 ? ` (scikit-learn: ${SK.db[1]})` : ''}. ${odd.length ? `Of those, ${low} stand out for spending <i>tiny</i> amounts in some category, which only the log scale reveals. Worth a phone call: a data error, or a client who buys that elsewhere?` : ''} DBSCAN doesn&rsquo;t find segments here; the customers form one continuous cloud, which is itself worth knowing.`;
+}
+// skew lab
+function skew(a) { const n = a.length, m = sum(a) / n, m2 = sum(a.map(x => (x - m) ** 2)) / n, m3 = sum(a.map(x => (x - m) ** 3)) / n; return m3 / Math.pow(m2, 1.5); }
+function drawPZ() {
+  const Cc = C0(), j = PJ.cat, raw = WS.S.map(r => r[j]), vals = PJ.scale === 'raw' ? raw : Z.map(z => z[j]), lo = Math.min(...vals), hi = Math.max(...vals), nb = 34, bw = (hi - lo) / nb, H = new Array(nb).fill(0);
+  vals.forEach(x => { H[clamp(Math.floor((x - lo) / bw), 0, nb - 1)]++; });
+  const v = frame($('#pz-cv'), [lo, hi], [0, Math.max(...H) * 1.12], { b: 28 }); axes(v, PJ.scale === 'raw' ? `${CATS[j]}, m.u. per year` : `z, standardised log ${CATS[j]}`, 'clients', { nx: 5, ny: 3, fx: PJ.scale === 'raw' ? (x => x >= 1000 ? fmt(x / 1000, 0) + 'k' : fmt(x, 0)) : null }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = Cc.a; c.globalAlpha = 0.8; H.forEach((h, b) => { if (!h) return; const x0 = v.X(lo + b * bw) + 0.5, x1 = v.X(lo + (b + 1) * bw) - 0.5; c.fillRect(x0, v.Y(h), x1 - x0, v.Y(0) - v.Y(h)); }); c.restore();
+  const x1 = vals[0]; seg(v, x1, 0, x1, Math.max(...H) * 1.12, Cc.ink, 1.4, [4, 3]); v.ctx.restore();
+  const sk = skew(vals), srt = raw.slice().sort((a, b) => b - a), top = sum(srt.slice(0, 44)) / sum(raw), med = srt[219] / 2 + srt[220] / 2;
+  $('#pz-sk').innerHTML = tip(fmt(sk, 2), 'mean of (x − mean)³ / sd³\n0 for a symmetric shape');
+  $('#pz-top').innerHTML = tip(pct(top), `the 44 biggest ${CATS[j]} buyers spent ${big(sum(srt.slice(0, 44)))}\nof ${big(sum(raw))} m.u. in all`);
+  $('#pz-cap').innerHTML = `${PJ.scale === 'raw' ? 'Annual spend on' : 'Standardised log spend on'} ${CATS[j]}, all 440 clients. Dashed: client #1.`;
+  $('#run-pz').innerHTML = `<b>Running example</b>: client #1 spent ${big(raw[0])} m.u. on ${CATS[j]}: ln ${raw[0]} = ${fmt(LG[0][j], 3)}; m = ${tip(fmt(MU[j], 3), `mean of 440 log-spends\n(geometric mean ${big(Math.exp(MU[j]))} m.u.)`)}, s = ${fmt(SD[j], 3)}; z = (${fmt(LG[0][j], 3)} &minus; ${fmt(MU[j], 3)}) / ${fmt(SD[j], 3)} = <b>${fmt(Z[0][j], 2)}</b>.`;
+  const mn = Math.min(...raw), ilo = raw.indexOf(mn);
+  $('#pz-say').innerHTML = PJ.scale === 'raw' ? `A long tail to the right (skewness ${fmt(sk, 1)}): the biggest buyer spends ${big(srt[0])} m.u., ${fmt(srt[0] / med, 0)} times the median client&rsquo;s ${big(med)}. In raw units a handful of giants would decide every distance.`
+    : `After logs and standardising, the bulk is roughly symmetric (skewness ${fmt(sk, 2)}). ${Math.abs(sk) > 0.6 ? `The tail now points left: a few clients spend almost nothing here (client #${ilo + 1}: ${big(mn)} m.u.). They will reappear as DBSCAN&rsquo;s outliers.` : 'Ten times more spending is now a fixed step to the right, wherever you start.'}`;
+}
+$('#pz-cats').innerHTML = CSH.map((n, j) => `<button type="button" data-pzc="${j}" aria-pressed="${j === 0}">${n}</button>`).join('');
+seg1('[data-pzc]', 'data-pzc', k => { PJ.cat = +k; drawPZ(); });
+seg1('[data-ps]', 'data-ps', k => { PJ.scale = k; drawPZ(); });
+fig($('#pz-cv'), drawPZ);
+$('#pk-run').addEventListener('click', pjRun);
+fig($('#pk-el'), drawPK); fig($('#pk-si'), drawPK);
+$('#pm-k').addEventListener('input', e => { PJ.k = +e.target.value; drawPM(); drawPK(); drawRace(); });
+seg1('[data-pc]', 'data-pc', k => { PJ.pc = k; drawPM(); });
+fig($('#pm-cv'), drawPM);
+$('#pd-e').addEventListener('input', e => { PJ.eps = +e.target.value; drawPD(); });
+fig($('#pd-cv'), drawPD);
+
+/* Old Faithful */
+const FA = WS.F, PF = { start: 'cross', tol: 3, t: 0, run: null, timer: 0 };
+const PF0 = { cross: { w: [0.5, 0.5], m: [[2, 80], [4.5, 55]], S: [[1, 0, 100], [1, 0, 100]] }, good: { w: [0.5, 0.5], m: [[2.5, 65], [4.0, 70]], S: [[1, 0, 100], [1, 0, 100]] } };
+function pfFit() { const key = PF.start + PF.tol; if (!PF.run || PF.run.key !== key) { PF.run = gmmFit(FA, PF0[PF.start], Math.pow(10, -PF.tol), 500); PF.run.key = key; PF.run.lls = PF.run.hist.map(h => gmmE(FA, h.P).ll); } return PF.run; }
+function drawPF() {
+  const Cc = C0(), K = KC(), g = pfFit(), t = Math.min(PF.t, g.it), P = g.hist[t].P, E = gmmE(FA, P);
+  const v = frame($('#pf-cv'), [1.2, 5.6], [38, 100], { b: 30 }); axes(v, 'eruption (min)', 'wait to the next (min)', { sx: v.w < 520 ? 1 : 0.5, sy: 10 }); clip(v);
+  FA.forEach((p, i) => dot(v, p[0], p[1], mixCol(K.slice(0, 2), E.R[i]), 3.6));
+  P.m.forEach((m, k) => { ellipse(v, m, P.S[k], 1, K[k], 2.2); ellipse(v, m, P.S[k], 2, K[k], 1.2, [4, 4]); star(v, m[0], m[1], K[k], 8); });
+  v.ctx.restore();
+  trace($('#pf-tr'), g.lls.slice(0, t + 1), { xl: 'round', yl: 'mean log-lik.', xmax: Math.max(6, g.it), fy: y => fmt(y, 2) });
+  const ll = g.lls[t], fin = t >= g.it;
+  $('#pf-it').innerHTML = tip(String(t), `of ${g.it} before the stopping rule fires`);
+  $('#pf-ll').innerHTML = tip(fmt(ll, fin ? 6 : 4), 'average over the 272 eruptions of ln p(x)\nunder the current two bells');
+  $('#pf-cap').innerHTML = `272 eruptions, coloured by responsibility. ${P.m.map((m, k) => `${sw(k)} bell ${k + 1}: weight ${fmt(P.w[k], 3)}, centre ${fmt(m[0], 2)} min long after ${fmt(m[1], 1)} min`).join('; ')}.`;
+  $('#pf-step').disabled = fin; $('#pf-run').disabled = fin;
+  const dl = g.hist[g.it].ll - (g.it > 1 ? g.hist[g.it - 1].ll : -Infinity), sk = PF.start === 'cross' ? SK.em[PF.tol] : null;
+  $('#pf-say').innerHTML = !fin ? (t === 0 ? `The starting guess: two round-ish bells (sd 1 min across, 10 min up), ${PF.start === 'cross' ? 'each pairing one kind of eruption&rsquo;s length with the <i>other</i> kind&rsquo;s wait' : 'roughly in the right places'}. Press <b>One EM round</b>.` : `Round ${t}: mean log-likelihood ${fmt(ll, 4)}${t > 0 ? `, up ${fmt(ll - g.lls[t - 1], 4)} on the last round` : ''}.`)
+    : `EM stopped after <b>${g.it} rounds</b>, because the last rise in the log-likelihood (${dl === Infinity ? 'first round' : dl.toExponential(1)}) was below tol = 10<sup>&minus;${PF.tol}</sup>. ${ll < -4.5 ? `But this is not the answer: both bells still straddle the two groups (log-likelihood ${fmt(ll, 4)}). EM was crawling, not finished. Switch to the stricter tolerance.` : `The bells sit on the two kinds of eruption: ${pct(Math.min(...P.w), 0)} short and ${pct(Math.max(...P.w), 0)} long (log-likelihood ${fmt(ll, 4)}).`}${sk ? ` scikit-learn, from the same start: ${sk[0]} iterations, ${fmt(sk[1], 6)}${sk[0] === g.it && fmt(sk[1], 6) === fmt(g.ll, 6) ? ' &#10003;' : ''}.` : ''}`;
+}
+seg1('[data-fs]', 'data-fs', k => { clearInterval(PF.timer); PF.start = k; PF.t = 0; drawPF(); });
+seg1('[data-ft]', 'data-ft', k => { clearInterval(PF.timer); PF.tol = +k; PF.t = 0; drawPF(); });
+$('#pf-step').addEventListener('click', () => { clearInterval(PF.timer); PF.t++; drawPF(); });
+$('#pf-run').addEventListener('click', () => { clearInterval(PF.timer); PF.timer = setInterval(() => { PF.t++; drawPF(); if (PF.t >= pfFit().it) clearInterval(PF.timer); }, 220); });
+$('#pf-reset').addEventListener('click', () => { clearInterval(PF.timer); PF.t = 0; drawPF(); });
+fig($('#pf-cv'), drawPF);
+// BIC for 1–4 bells, best of 10 seeded k-means++ starts each
+let BIC = null;
+function bicRun() {
+  const n = FA.length; BIC = [1, 2, 3, 4].map(K => { let best = null; for (let s = 1; s <= 10; s++) { const km = bestKmeans(FA, K, 40 + s, 1), g = gmmFit(FA, gmmFromLabels(FA, km.L, K), 1e-6, 500); if (!best || g.ll > best.ll) best = g; } const p = 6 * K - 1; return { K, ll: best.ll, p, bic: -2 * best.ll * n + p * Math.log(n) }; });
+  drawPB();
+}
+function drawPB() {
+  if (!BIC) { $('#pb-race').innerHTML = ''; return; }
+  const n = FA.length, best = BIC.reduce((a, b) => b.bic < a.bic ? b : a);
+  $('#pb-race').innerHTML = '<thead><tr><th>bells K</th><th>parameters p</th><th>mean log-likelihood</th><th>BIC (your browser)</th><th>scikit-learn</th></tr></thead><tbody>' + BIC.map(b => `<tr${b === best ? ' class="win"' : ''}><td>${b.K}</td><td class="num">${b.p}</td><td class="num">${fmt(b.ll, 5)}</td><td class="num">${tip(fmt(b.bic, 2), `−2 × ${n} × ${fmt(b.ll, 5)} + ${b.p} × ln ${n}`)}</td><td class="num">${fmt(SK.bic[b.K - 1], 2)}</td></tr>`).join('') + '</tbody>';
+  const b = BIC[1];
+  $('#run-pb').innerHTML = `<b>Running example</b>, K = 2: ln L&#770; = ${n} &times; ${fmt(b.ll, 6)} = ${fmt(n * b.ll, 2)}; p = 6&times;2 &minus; 1 = 11; BIC = ${fmt(-2 * n * b.ll, 2)} + 11 &times; ${tip(fmt(Math.log(n), 4), `ln ${n}`)} = <b>${fmt(b.bic, 2)}</b>, the lowest of the four: two kinds of eruption.`;
+}
+function drawPar() {
+  const ks = [2, 3, 4, 5, 6, 7, 8], kmOk = ks.filter(k => { const r = PJ.km[k], s = SK.km[k]; return r && fmt(r.m.J, 2) === fmt(s[0], 2) && fmt(r.sil, 4) === fmt(s[1], 4) && fmt(r.ari, 4) === fmt(s[2], 4) && r.m.it === s[3]; }).length;
+  const em = [3, 6].filter(t => { const g = gmmFit(FA, PF0.cross, Math.pow(10, -t), 500), s = SK.em[t]; return g.it === s[0] && fmt(g.ll, 6) === fmt(s[1], 6) && g.P.w.every((w, k) => fmt(w, 4) === fmt(s[2][k], 4)); }).length;
+  const bOk = BIC ? BIC.filter(b => fmt(b.bic, 2) === fmt(SK.bic[b.K - 1], 2)).length : 0, wd = PJ.checks.slice(-3).filter(Boolean).length;
+  $('#pj-par').innerHTML = `Checked live against the output above: ${kmOk} of 7 k-means runs match scikit-learn in W, silhouette, ARI and iteration count (the page ports scikit-learn&rsquo;s Lloyd loop, including its stopping rule, and starts from the same k-means++ centres); ${wd} of 3 Ward and DBSCAN rows match; ${em} of 2 EM runs from the crossed start match in iterations, log-likelihood and weights. The page re-implements every algorithm in plain JavaScript; nothing is precomputed except those starting row numbers. ${BIC ? `BIC matches for ${bOk} of 4 rows. ` : ''}${BIC && bOk < 4 ? `Where it differs (3 and 4 bells), the browser&rsquo;s BIC is a little <i>lower</i>: the page runs EM to a tolerance of 10<sup>&minus;6</sup>, while scikit-learn&rsquo;s default of 10<sup>&minus;3</sup> stops slightly short of the optimum. Rerun scikit-learn with <span class="mono">tol=1e-6</span> and it reports 2333.73 for 3 bells and, with 50 starts, 2358.31 for 4; the page has ${BIC.slice(2).map(b => fmt(b.bic, 2)).join(' and ')}. Either way, two bells win.` : ''}`;
+}
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+drawHero(); drawWY(); drawKM(); drawIN(); drawCK(); drawHC(); drawDB(); drawGM(); drawCP(); drawPZ(); drawRace(); drawPK(); drawPM(); drawPW(); drawPD(); drawPF(); drawPB();
+heroPlay('km');
+{ const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { if (!PJ.ready && !PJ.running) pjRun(); if (!BIC) setTimeout(() => { bicRun(); drawPar(); }, 50); io.disconnect(); } }, { rootMargin: '600px' }) : null; if (io) io.observe($('#project')); else { pjRun(); bicRun(); } }
+window.__clDebug = { KM, IN, CK, HC, DB, GM, CP, PJ, PF, Z, PCA, kmeans, agglo, dbscan, gmmFit, ari, silhouette, cpRes, CPD, HERO, heroRes, get BIC() { return BIC; } };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
