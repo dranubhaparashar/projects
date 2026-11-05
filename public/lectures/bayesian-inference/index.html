@@ -1,0 +1,1460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on Bayesian inference: Bayes' rule for a parameter, Beta-Bernoulli updating toss by toss, the posterior predictive, Dirichlet-multinomial and add-k smoothing, Gaussian, Gamma and Normal-Gamma priors, conjugate and noninformative priors, Bayesian vs MAP vs maximum-likelihood learning, a posterior over curves, and a project that shrinks real click-through rates from the Open Bandit Dataset with Beta posteriors, verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Bayesian Inference &amp; Conjugate Priors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.cf-track.one::after { display: none; }
+table.zoo td, table.zoo th { font-size: 0.88rem; vertical-align: top; }
+table.race td:first-child { white-space: nowrap; }
+table.race td.num, table.race th { text-align: right; }
+table.race th:first-child { text-align: left; }
+#di-tbl td, #di-tbl th { padding: 5px 6px; font-size: 0.84rem; }
+#di-tbl td.num, #di-tbl th { text-align: right; } #di-tbl th:first-child, #di-tbl td:first-child { text-align: left; }
+@media (max-width: 640px) { .nf-plot { aspect-ratio: 1 / 1.05; } }
+@media (max-width: 640px) { .tall-m { aspect-ratio: 1 / 0.85; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Bayesian Inference <span>&middot; beliefs that update</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Bayes' rule</a>
+      <a href="#beta">Beta&ndash;Bernoulli</a>
+      <a href="#predict">Predictive</a>
+      <a href="#dirichlet">Dirichlet</a>
+      <a href="#gauss">Gaussian mean</a>
+      <a href="#precision">Gamma &amp; Normal-Gamma</a>
+      <a href="#conjugate">Conjugate &amp; flat priors</a>
+      <a href="#learn">Bayes vs MAP vs ML</a>
+      <a href="#curves">Curves</a>
+      <a href="#project">Click-rate project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Foundations · chapter 0.9 · Bayesian inference</div>
+      <h1>Bayesian Inference &amp; Conjugate Priors</h1>
+      <div class="sub">Beliefs that update, one observation at a time</div>
+      <p class="lead">Maximum likelihood hands you one number. Bayesian inference hands you a whole <strong>distribution of belief</strong> over the unknown, and every new observation reshapes it. For the right choice of prior the reshaping is pure bookkeeping: you add counts. On the right is a coin with a hidden bias. <strong>Click the plot to toss it</strong> and watch the belief curve narrow in on the truth.</p>
+      <dl class="facts">
+        <div><dt>The rule</dt><dd>Posterior &prop; likelihood &times; prior</dd></div>
+        <div><dt>Conjugacy</dt><dd>Beta prior + coin tosses = Beta posterior: the counts simply add</dd></div>
+        <div><dt>In practice</dt><dd>Smoothing, A/B tests, click rates, Thompson-sampling bandits</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="fig-head"><div class="btns"><button type="button" class="btn primary" id="hero-t1">Toss once</button><button type="button" class="btn" id="hero-t10">Toss 10</button><button type="button" class="btn" id="hero-rev">Reveal the bias</button><button type="button" class="btn" id="hero-new">New coin</button></div></div>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Posterior belief about a coin's bias; click to toss the coin"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>11 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Bayes&rsquo; rule for a parameter</a></li>
+    <li><a href="#beta"><i>02</i>Updating a coin, toss by toss</a></li>
+    <li><a href="#predict"><i>03</i>Predicting the next toss</a></li>
+    <li><a href="#dirichlet"><i>04</i>Dirichlet and add-k smoothing</a></li>
+    <li><a href="#gauss"><i>05</i>A Gaussian&rsquo;s unknown mean</a></li>
+    <li><a href="#precision"><i>06</i>Gamma and Normal-Gamma priors</a></li>
+    <li><a href="#conjugate"><i>07</i>Conjugate and flat priors</a></li>
+    <li><a href="#learn"><i>08</i>Bayes vs MAP vs ML</a></li>
+    <li><a href="#curves"><i>09</i>A posterior over curves</a></li>
+    <li><a href="#project"><i>10</i>Click rates that don&rsquo;t overreact</a></li>
+    <li><a href="#summary"><i>11</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Bayes' rule for an unknown parameter</h2>
+    <div class="prose">
+      <p>In everyday statistics a probability is a long-run frequency: toss a coin a million times and count. But we also use probability for things that happen once, or that are simply unknown: whether this coin is bent, what tomorrow's click rate will be. The <em class="term">Bayesian</em> view treats probability as a <em>degree of belief</em> and lets us put a distribution on a parameter itself. Before any data, the <em class="term">prior</em> p(&theta;) says which values of &theta; we find plausible. The data's <em class="term">likelihood</em> p(D | &theta;) says how well each value explains what we saw. Bayes' rule multiplies the two and rescales, giving the <em class="term">posterior</em> p(&theta; | D).</p>
+      <p>The frequentist answer is different in kind: pick an estimator, such as maximum likelihood, and describe its uncertainty by imagining the experiment repeated (the bootstrap does this by resampling the data). Neither view is "wrong", but they can disagree loudly on small data. Toss a coin three times and get three heads: maximum likelihood says &theta; = 1, a coin that can <em>never</em> land tails. Any sensible prior refuses to believe that. <strong>Pick a prior and move the counts</strong> to see the three curves interact.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} \underbrace{p(\theta \mid D)}_{\text{posterior}} &= \frac{\overbrace{p(D \mid \theta)}^{\text{likelihood}}\ \overbrace{p(\theta)}^{\text{prior}}}{\underbrace{p(D)}_{\text{evidence}}} \\ p(D) &= \int p(D \mid \theta)\, p(\theta)\, d\theta \end{aligned} \]</div><div class="read"><b>Read it as:</b> belief after the data equals how well each &theta; explains the data, times how plausible &theta; was beforehand, divided by a constant that makes the result integrate to 1. The constant p(D), the <em>evidence</em>, is the probability of the data averaged over the prior; we will use it in the project to judge priors.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The posterior of theta given D is the likelihood of D given theta, times the prior of theta, over the evidence.&rdquo;</em></div><div class="eq-run" id="run-bayes"></div></div>
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} p(D \mid \theta) &= \theta^{\,h}\,(1-\theta)^{\,t} \\ \hat\theta_{\text{ML}} &= \frac{h}{h+t} \end{aligned} \]</div><div class="read"><b>Read it as:</b> for h heads and t tails in a fixed order, each head contributes a factor &theta; and each tail (1 &minus; &theta;). Seen as a function of &theta; this is not a probability distribution (its area is not 1). Its peak, the maximum-likelihood estimate, is the fraction of heads.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The likelihood is theta to the h times one minus theta to the t; its maximum is h over h plus t.&rdquo;</em></div><div class="eq-run" id="run-lik"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 tall-m"><canvas id="why-cv" aria-label="Prior, likelihood and posterior over the coin's bias"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--muted)"></i>prior p(&theta;)</span><span><i class="sw" style="background:var(--cB)"></i>likelihood, rescaled to the same area</span><span><i class="sw" style="background:var(--cA)"></i>posterior p(&theta; | D)</span><span><i class="sw" style="background:var(--qda)"></i>ML estimate</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Prior"><button type="button" data-wp="flat" aria-pressed="true">Flat</button><button type="button" data-wp="fair">Probably fair</button><button type="button" data-wp="bent">Bent one way or the other</button><button type="button" data-wp="low">Rarely heads</button></div>
+        <div class="ctrl"><div class="top"><label for="why-h">Heads seen, h</label><output id="why-h-o"></output></div><input type="range" id="why-h" min="0" max="40" step="1" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="why-t">Tails seen, t</label><output id="why-t-o"></output></div><input type="range" id="why-t" min="0" max="40" step="1" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="why-ml"></div><div class="k">ML estimate</div></div><div class="stat"><div class="v" id="why-pm"></div><div class="k">posterior mean</div></div><div class="stat"><div class="v" id="why-gt"></div><div class="k">P(&theta; &gt; &frac12; | D)</div></div></div>
+        <p class="note" id="why-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BETA -->
+<section class="chap" id="beta">
+  <div class="wrap">
+    <div class="tag">Conjugacy</div>
+    <h2>Beta&ndash;Bernoulli: updating a coin one toss at a time</h2>
+    <div class="prose">
+      <p>The likelihood is a power of &theta; times a power of (1 &minus; &theta;). If the prior has the <em>same shape</em>, the product does too, and the posterior stays in the same family. That family is the <em class="term">Beta distribution</em>. A prior with this property is called <em class="term">conjugate</em> to the likelihood, and it turns inference into arithmetic: a Beta(a, b) prior plus h heads and t tails gives a Beta(a + h, b + t) posterior. So a and b behave like <em>imaginary tosses</em> you saw before the experiment, a of them heads and b tails.</p>
+      <p>Because each posterior is the prior for the next toss, you can update one toss at a time or all at once; the order never matters. <strong>Set a prior, then toss</strong>: by hand, or ten at a time from a coin whose bias you choose. The faint curves are the earlier posteriors.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} \mathrm{Beta}(\theta \mid a, b) &= \frac{\Gamma(a+b)}{\Gamma(a)\,\Gamma(b)} \\ &\quad \times \theta^{\,a-1} (1-\theta)^{\,b-1} \end{aligned} \]</div><div class="read"><b>Read it as:</b> a density on 0 &le; &theta; &le; 1 with two shape knobs, a and b. The fraction of Gamma functions (&Gamma;(n) = (n &minus; 1)! for whole numbers) only makes the area 1. a = b = 1 is flat; large equal a and b is a narrow bump at &frac12;; a, b &lt; 1 piles the mass at the two ends.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Beta of theta given a and b is gamma of a plus b over gamma a gamma b, times theta to the a minus one, times one minus theta to the b minus one.&rdquo;</em></div><div class="eq-run" id="run-bpdf"></div></div>
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} \mathbb{E}[\theta] &= \frac{a}{a+b} \\ \operatorname{mode}[\theta] &= \frac{a-1}{a+b-2} \\ \operatorname{var}[\theta] &= \frac{ab}{(a+b)^2\,(a+b+1)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the mean is the share of imaginary heads. The mode (the peak, defined when a, b &gt; 1) is the share after removing one head and one tail. The variance shrinks roughly like 1/(a + b): the more tosses, real or imaginary, the narrower the belief.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The mean is a over a plus b; the mode is a minus one over a plus b minus two; the variance is a b over a plus b squared times a plus b plus one.&rdquo;</em></div><div class="eq-run" id="run-bmom"></div></div>
+    </div>
+    <div class="two">
+      <div class="eq"><div class="m">\[ \begin{aligned} p(\theta \mid D) &\propto \theta^{\,h+a-1}(1-\theta)^{\,t+b-1} \\ \theta \mid D &\sim \mathrm{Beta}(a+h,\ b+t) \end{aligned} \]</div><div class="read"><b>Read it as:</b> multiply the likelihood &theta;<sup>h</sup>(1 &minus; &theta;)<sup>t</sup> by the Beta prior and the exponents add. The result is a Beta again, with the real counts added to the imaginary ones. Nothing else about the data matters: h and t are <em>sufficient statistics</em>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Given the data, theta is Beta with a plus h and b plus t.&rdquo;</em></div><div class="eq-run" id="run-bpost"></div></div>
+      <div class="eq"><div class="m">\[ \begin{aligned} \mathbb{E}[\theta \mid D] &= \underbrace{\frac{a+b}{a+b+N}}_{\text{weight on prior}} \cdot \frac{a}{a+b} \\ &\quad + \underbrace{\frac{N}{a+b+N}}_{\text{weight on data}} \cdot \frac{h}{N} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the posterior mean is a weighted average of the prior mean and the ML estimate, with weights in proportion to imaginary tosses (a + b) and real tosses (N = h + t). This pull towards the prior mean is called <em class="term">shrinkage</em>. As N grows the data's weight goes to 1 and Bayes agrees with maximum likelihood.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The posterior mean is the prior mean and the data's mean, weighted by a plus b imaginary tosses and N real ones.&rdquo;</em></div><div class="eq-run" id="run-bshr"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 tall-m"><canvas id="beta-cv" aria-label="Sequence of Beta posteriors as tosses arrive"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--muted)"></i>prior</span><span><i class="sw" style="background:var(--cA)"></i>posterior now (shaded: 95% credible interval)</span><span><i class="sw" style="background:var(--cA);opacity:.35"></i>earlier posteriors</span><span><i class="sw" style="background:var(--cC)"></i>the bias you chose</span></span> The strip along the top is the toss history: up for heads, down for tails.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="beta-a">Prior a (imaginary heads)</label><output id="beta-a-o"></output></div><input type="range" id="beta-a" min="0.5" max="30" step="0.5" value="2"></div>
+        <div class="ctrl"><div class="top"><label for="beta-b">Prior b (imaginary tails)</label><output id="beta-b-o"></output></div><input type="range" id="beta-b" min="0.5" max="30" step="0.5" value="2"></div>
+        <div class="ctrl"><div class="top"><label for="beta-p">True bias for random tosses</label><output id="beta-p-o"></output></div><input type="range" id="beta-p" min="0.02" max="0.98" step="0.01" value="0.25"></div>
+        <div class="btns"><button type="button" class="btn" id="beta-H">Heads</button><button type="button" class="btn" id="beta-T">Tails</button><button type="button" class="btn primary" id="beta-10">10 random tosses</button><button type="button" class="btn" id="beta-undo">Undo</button><button type="button" class="btn" id="beta-clr">Clear</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="beta-post"></div><div class="k">posterior</div></div><div class="stat"><div class="v" id="beta-mean"></div><div class="k">mean &plusmn; sd</div></div><div class="stat"><div class="v" id="beta-ci"></div><div class="k">95% credible interval</div></div></div>
+        <p class="note" id="beta-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:26px"><p>One more property, true for <em>any</em> prior and any model: if you average the posterior mean over all the data sets the prior thinks possible, you get back the prior mean. And on average the posterior is narrower than the prior: the prior variance splits into the average posterior variance plus the spread of the posterior means. Learning cannot be expected to make you <em>more</em> uncertain, though one surprising toss sometimes does.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbb{E}[\theta] &= \mathbb{E}_D\big[\,\mathbb{E}[\theta \mid D]\,\big] \\ \operatorname{var}[\theta] &= \mathbb{E}_D\big[\operatorname{var}[\theta \mid D]\big] \\ &\quad + \operatorname{var}_D\big[\,\mathbb{E}[\theta \mid D]\,\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> the outer expectations run over data sets D drawn the way the prior predicts (first &theta; from the prior, then tosses from &theta;). The second identity says the prior's variance is shared between what the data will leave uncertain and how much the data will move the mean. Both terms are non-negative, so the expected posterior variance is at most the prior variance.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The prior mean is the average posterior mean; the prior variance is the average posterior variance plus the variance of the posterior mean.&rdquo;</em></div><div class="eq-run" id="run-tower"></div></div>
+  </div>
+</section>
+
+<!-- PREDICT -->
+<section class="chap" id="predict">
+  <div class="wrap">
+    <div class="tag">Prediction</div>
+    <h2>The posterior predictive: what happens next?</h2>
+    <div class="prose">
+      <p>Usually we don't want &theta; for its own sake; we want to predict the next toss. The Bayesian answer averages the prediction of every possible &theta;, each weighted by its posterior belief. For the coin this averaging has a neat closed form: the probability of heads next is just the posterior mean. With a flat prior it is (h + 1)/(N + 2), the <em class="term">rule of succession</em> that Laplace used to ask whether the sun will rise tomorrow.</p>
+      <p>Predicting several tosses at once shows the real difference. Plugging in one estimate &theta;&#770; pretends we know &theta; exactly; the <em class="term">posterior predictive</em> keeps our doubt about &theta;, so it spreads its bets wider. <strong>Change the evidence and the number of future tosses</strong>, and compare the two bar charts.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} p(x = 1 \mid D) &= \int_0^1 \theta\, p(\theta \mid D)\, d\theta \\ &= \frac{h + a}{N + a + b} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the chance that the next toss is heads is the average of &theta; over the posterior, which is the posterior mean. It is never exactly 0 or 1 while a and b are positive, however lopsided the data.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The probability the next toss is heads is h plus a over N plus a plus b.&rdquo;</em></div><div class="eq-run" id="run-pnext"></div></div>
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} &p(k \text{ heads in } n \mid D) \\ &\quad = \binom{n}{k} \frac{B(k + a',\ n - k + b')}{B(a',\ b')} \end{aligned} \]</div><div class="read"><b>Read it as:</b> here a&prime; = a + h and b&prime; = b + t are the posterior's parameters and B(x, y) = &Gamma;(x)&Gamma;(y)/&Gamma;(x + y) is the Beta function. This is the <em class="term">beta-binomial</em> distribution: a binomial whose &theta; is itself uncertain. It is always wider than the binomial with &theta; fixed at its mean.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The chance of k heads in n more tosses is n choose k times B of k plus a-prime and n minus k plus b-prime, over B of a-prime and b-prime.&rdquo;</em></div><div class="eq-run" id="run-bb"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 tall-m"><canvas id="pr-cv" aria-label="Posterior predictive against the plug-in binomial"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--cA)"></i>posterior predictive (beta-binomial)</span><span><i class="sw" style="background:var(--qda)"></i>plug-in binomial with &theta;&#770;<sub>ML</sub></span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Prior"><button type="button" data-pp="1,1" aria-pressed="true">Beta(1, 1)</button><button type="button" data-pp="0.5,0.5">Beta(&frac12;, &frac12;)</button><button type="button" data-pp="5,5">Beta(5, 5)</button></div>
+        <div class="ctrl"><div class="top"><label for="pr-h">Heads seen, h</label><output id="pr-h-o"></output></div><input type="range" id="pr-h" min="0" max="30" step="1" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="pr-t">Tails seen, t</label><output id="pr-t-o"></output></div><input type="range" id="pr-t" min="0" max="30" step="1" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="pr-n">Future tosses, n</label><output id="pr-n-o"></output></div><input type="range" id="pr-n" min="1" max="30" step="1" value="10"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pr-pb"></div><div class="k">P(next is heads), Bayes</div></div><div class="stat"><div class="v" id="pr-pm"></div><div class="k">same, plug-in ML</div></div><div class="stat"><div class="v" id="pr-sd"></div><div class="k">sd of k: Bayes vs plug-in</div></div></div>
+        <p class="note" id="pr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- DIRICHLET -->
+<section class="chap" id="dirichlet">
+  <div class="wrap">
+    <div class="tag">More than two outcomes</div>
+    <h2>Dirichlet&ndash;multinomial, and where add-k smoothing comes from</h2>
+    <div class="prose">
+      <p>A die, a word, a product category: many variables have K outcomes, not two. The parameter is now a probability vector &mu; = (&mu;<sub>1</sub>, &hellip;, &mu;<sub>K</sub>) that sums to 1, a point in a triangle when K = 3 (a <em class="term">simplex</em>). The conjugate prior is the <em class="term">Dirichlet</em>, the Beta's big sibling, with one pseudo-count &alpha;<sub>k</sub> per outcome. The posterior again just adds the observed counts m<sub>k</sub>.</p>
+      <p>Its predictive probability is the famous smoothing rule of language models and spam filters: add k to every count. Laplace's add-one is a flat Dirichlet prior; add-&frac12; is the Jeffreys prior; add-nothing is maximum likelihood, which gives every unseen outcome probability zero. <strong>Add observations, roll the die, and turn &alpha;</strong>. The triangle shows the posterior over &mu;: each corner is a die that always shows that face.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} \mathrm{Dir}(\boldsymbol\mu \mid \boldsymbol\alpha) &= \frac{\Gamma(\alpha_0)}{\prod_k \Gamma(\alpha_k)} \prod_{k=1}^{K} \mu_k^{\alpha_k - 1} \\ \alpha_0 &= \textstyle\sum_k \alpha_k \\ p(\boldsymbol\mu \mid D) &= \mathrm{Dir}(\boldsymbol\mu \mid \boldsymbol\alpha + \mathbf{m}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the multinomial likelihood is &prod;&mu;<sub>k</sub><sup>m<sub>k</sub></sup>, a product of powers, and the Dirichlet is a product of powers too, so the posterior adds counts to pseudo-counts. With K = 2 this is exactly the Beta.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Dirichlet of mu given alpha is gamma of alpha-nought over the product of gamma alpha-k, times the product of mu-k to the alpha-k minus one; the posterior is Dirichlet with alpha plus m.&rdquo;</em></div><div class="eq-run" id="run-dir"></div></div>
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} \mathbb{E}[\mu_k] &= \frac{\alpha_k}{\alpha_0} \\ \operatorname{mode}[\mu_k] &= \frac{\alpha_k - 1}{\alpha_0 - K} \\ \operatorname{var}[\mu_k] &= \frac{\alpha_k(\alpha_0 - \alpha_k)}{\alpha_0^2(\alpha_0+1)} \\ \operatorname{cov}[\mu_j, \mu_k] &= -\frac{\alpha_j \alpha_k}{\alpha_0^2(\alpha_0+1)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the same pattern as the Beta. The covariance is negative because the components share a fixed total of 1: if one face is more likely, the others must be less. The mode needs every &alpha;<sub>k</sub> &gt; 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The mean of mu-k is alpha-k over alpha-nought; any two components have negative covariance.&rdquo;</em></div><div class="eq-run" id="run-dmom"></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} p(x = k \mid D) &= \frac{m_k + \alpha}{N + K\alpha} \\ \alpha = 1 &: \ \text{add-one (Laplace)} \\ \alpha = \tfrac12 &: \ \text{add-half (Jeffreys)} \\ \alpha \to 0 &: \ \text{ML, } m_k/N \end{aligned} \]</div><div class="read"><b>Read it as:</b> with a symmetric prior (&alpha;<sub>k</sub> = &alpha; for every k), the probability that the next observation is outcome k is its count plus &alpha;, over the total plus K&alpha;. Smoothing is not a hack: it is the posterior predictive of a Dirichlet prior, and &alpha; is how many imaginary observations of every outcome you believe in.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The chance the next one is k is m-k plus alpha over N plus K alpha.&rdquo;</em></div><div class="eq-run" id="run-addk"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="di-cv" aria-label="Dirichlet posterior density on the triangle of three-outcome probability vectors"></canvas></div>
+        <figcaption>Darker = more posterior belief. <span style="color:var(--cA)">&#9679;</span> posterior mean (add-&alpha; estimate) &nbsp; <span style="color:var(--qda)">&#9679;</span> ML estimate m/N &nbsp; <span style="color:var(--cC)">&#9733;</span> the die's true probabilities (0.6, 0.3, 0.1)</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="di-a">Symmetric prior &alpha; (pseudo-count per face)</label><output id="di-a-o"></output></div><input type="range" id="di-a" min="-1" max="1.3" step="0.01" value="0"></div>
+        <div class="btns"><button type="button" class="btn" id="di-A">+ A</button><button type="button" class="btn" id="di-B">+ B</button><button type="button" class="btn" id="di-C">+ C</button><button type="button" class="btn primary" id="di-10">Roll 10</button><button type="button" class="btn" id="di-clr">Clear</button></div>
+        <div class="tbl-wrap"><table class="hand" id="di-tbl"></table></div>
+        <p class="note" id="di-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- GAUSS -->
+<section class="chap" id="gauss">
+  <div class="wrap">
+    <div class="tag">Continuous data</div>
+    <h2>A Gaussian's unknown mean</h2>
+    <div class="prose">
+      <p>Now the data are real numbers. A thermometer reads a room's true temperature &mu; plus Gaussian noise with a known spread &sigma; = 2&nbsp;&deg;C. Viewed as a function of &mu;, the likelihood of N readings is a Gaussian bump centred on their average, with width &sigma;/&radic;N. So a <em>Gaussian</em> prior on &mu; is conjugate, and the posterior is Gaussian too.</p>
+      <p>The update has a beautiful shape: <em>precisions</em> (one over variances) add, and the posterior mean is a precision-weighted average of the prior guess and the sample mean. Each reading can also be absorbed one at a time, nudging the mean towards it by a step that shrinks as evidence accumulates. <strong>Take readings and drag the prior's width</strong>.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} p(\mu \mid D) &= \mathcal{N}(\mu \mid \mu_N, \sigma_N^2) \\ \frac{1}{\sigma_N^2} &= \frac{1}{\sigma_0^2} + \frac{N}{\sigma^2} \\ \mu_N &= \frac{\sigma^2}{N\sigma_0^2 + \sigma^2}\,\mu_0 \\ &\quad + \frac{N\sigma_0^2}{N\sigma_0^2 + \sigma^2}\,\bar x \end{aligned} \]</div><div class="read"><b>Read it as:</b> prior &mu; ~ N(&mu;<sub>0</sub>, &sigma;<sub>0</sub><sup>2</sup>); readings x<sub>n</sub> ~ N(&mu;, &sigma;<sup>2</sup>) with &sigma; known; x&#772; is their average, the ML estimate. The posterior precision is the prior's precision plus N times one reading's precision. The mean slides from &mu;<sub>0</sub> (no data) to x&#772; (lots of data). A very wide prior, &sigma;<sub>0</sub> &rarr; &infin;, gives back maximum likelihood. One at a time: &mu;<sub>N</sub> = &mu;<sub>N&minus;1</sub> + (&sigma;<sub>N</sub><sup>2</sup>/&sigma;<sup>2</sup>)(x<sub>N</sub> &minus; &mu;<sub>N&minus;1</sub>).</div><div class="eq-say"><b>Say it</b><em>&ldquo;One over sigma-N squared is one over sigma-nought squared plus N over sigma squared; mu-N blends mu-nought and x-bar in proportion to their precisions.&rdquo;</em></div><div class="eq-run" id="run-ga"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 tall-m"><canvas id="ga-cv" aria-label="Prior, likelihood and posterior for a Gaussian mean"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--muted)"></i>prior N(&mu;<sub>0</sub>, &sigma;<sub>0</sub><sup>2</sup>)</span><span><i class="sw" style="background:var(--cB)"></i>likelihood (as a density in &mu;)</span><span><i class="sw" style="background:var(--cA)"></i>posterior</span><span><i class="sw" style="background:var(--cC)"></i>true temperature</span></span> Ticks along the bottom are the readings.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ga-m0">Prior guess &mu;<sub>0</sub></label><output id="ga-m0-o"></output></div><input type="range" id="ga-m0" min="10" max="30" step="0.5" value="16"></div>
+        <div class="ctrl"><div class="top"><label for="ga-s0">Prior width &sigma;<sub>0</sub></label><output id="ga-s0-o"></output></div><input type="range" id="ga-s0" min="0.2" max="10" step="0.1" value="1.5"></div>
+        <div class="btns"><button type="button" class="btn" id="ga-1">Take a reading</button><button type="button" class="btn primary" id="ga-10">10 readings</button><button type="button" class="btn" id="ga-clr">Clear</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ga-n"></div><div class="k">readings</div></div><div class="stat"><div class="v" id="ga-post"></div><div class="k">posterior &mu;<sub>N</sub> &plusmn; &sigma;<sub>N</sub></div></div><div class="stat"><div class="v" id="ga-w"></div><div class="k">weight on the data</div></div></div>
+        <p class="note" id="ga-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRECISION -->
+<section class="chap" id="precision">
+  <div class="wrap">
+    <div class="tag">Uncertain spread</div>
+    <h2>Unknown precision: the Gamma prior, then Normal-Gamma</h2>
+    <div class="prose">
+      <p>Flip the problem: the mean is known but the noise level is not. It is easiest to work with the <em class="term">precision</em> &lambda; = 1/&sigma;<sup>2</sup>. The likelihood in &lambda; is a power of &lambda; times e<sup>&minus;&lambda;&middot;(something)</sup>, so its conjugate prior is the <em class="term">Gamma distribution</em>. Again the update is bookkeeping: each reading adds &frac12; to the shape and half its squared deviation to the rate. <strong>Take readings from the noisy thermometer</strong> and watch the belief about its precision settle.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} \mathrm{Gam}(\lambda \mid a, b) &= \frac{b^{a}}{\Gamma(a)}\, \lambda^{a-1} e^{-b\lambda} \\ \mathbb{E}[\lambda] &= \frac{a}{b}, \quad \operatorname{var}[\lambda] = \frac{a}{b^2} \\ \operatorname{mode}[\lambda] &= \frac{a-1}{b} \end{aligned} \]</div><div class="read"><b>Read it as:</b> a density on &lambda; &gt; 0 with shape a and rate b. Large a with a/b fixed means a confident belief. The mode exists for a &ge; 1. (Some books use the scale 1/b instead of the rate b; the formulas change accordingly.)</div><div class="eq-say"><b>Say it</b><em>&ldquo;Gamma of lambda given a and b is b to the a over gamma of a, times lambda to the a minus one, times e to the minus b lambda.&rdquo;</em></div><div class="eq-run" id="run-gam"></div></div>
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} p(\lambda \mid D) &= \mathrm{Gam}(\lambda \mid a_N, b_N) \\ a_N &= a_0 + \frac{N}{2} \\ b_N &= b_0 + \frac12 \sum_{n=1}^{N} (x_n - \mu)^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> N readings raise the shape by N/2 and the rate by half their total squared deviation from the known mean &mu;. So the prior is worth 2a<sub>0</sub> imaginary readings whose average squared deviation is b<sub>0</sub>/a<sub>0</sub>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;a-N is a-nought plus N over two; b-N is b-nought plus half the sum of squared deviations.&rdquo;</em></div><div class="eq-run" id="run-gpost"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 tall-m"><canvas id="pc-cv" aria-label="Gamma prior and posterior over the noise precision"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--muted)"></i>prior Gam(a<sub>0</sub>, b<sub>0</sub>)</span><span><i class="sw" style="background:var(--cA)"></i>posterior (shaded: 95% interval)</span><span><i class="sw" style="background:var(--cC)"></i>the thermometer's true precision 1/2&sup2; = 0.25</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pc-a">Prior shape a<sub>0</sub></label><output id="pc-a-o"></output></div><input type="range" id="pc-a" min="0.5" max="20" step="0.5" value="2"></div>
+        <div class="ctrl"><div class="top"><label for="pc-b">Prior rate b<sub>0</sub></label><output id="pc-b-o"></output></div><input type="range" id="pc-b" min="0.5" max="40" step="0.5" value="2"></div>
+        <div class="btns"><button type="button" class="btn" id="pc-1">Take a reading</button><button type="button" class="btn primary" id="pc-10">10 readings</button><button type="button" class="btn" id="pc-clr">Clear</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pc-n"></div><div class="k">readings</div></div><div class="stat"><div class="v" id="pc-m"></div><div class="k">E[&lambda; | D] &plusmn; sd</div></div><div class="stat"><div class="v" id="pc-s"></div><div class="k">implied &sigma; = 1/&radic;E[&lambda;]</div></div></div>
+        <p class="note" id="pc-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Both unknown: the Normal-Gamma prior</h3>
+    <div class="prose" style="margin-top:12px"><p>With both &mu; and &lambda; unknown, the likelihood ties them together: the mean's uncertainty scales with the noise. The conjugate prior builds that link in. Draw &lambda; from a Gamma, then &mu; from a Gaussian whose precision is &kappa;<sub>0</sub>&lambda;, so a noisier world also means a vaguer belief about the mean (Bishop writes &beta; for our &kappa;<sub>0</sub>). The result is the <em class="term">Normal-Gamma</em> (or Gaussian-Gamma) distribution over the pair. <strong>Click the strip to add readings where you like</strong>: two readings far apart make the noise look large, a tight cluster makes it look small.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} p(\mu, \lambda) &= \mathcal{N}\big(\mu \mid \mu_0,\ (\kappa_0 \lambda)^{-1}\big) \\ &\quad \times \mathrm{Gam}(\lambda \mid a_0, b_0) \end{aligned} \]</div><div class="read"><b>Read it as:</b> not a Gaussian times an independent Gamma: the Gaussian's width depends on &lambda;, which makes the joint density tilted, with high-precision values pinning &mu; more tightly. &kappa;<sub>0</sub> is how many imaginary readings back the prior guess &mu;<sub>0</sub>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;p of mu and lambda is normal in mu with mean mu-nought and precision kappa-nought lambda, times Gamma of lambda with a-nought and b-nought.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} \kappa_N &= \kappa_0 + N, \qquad a_N = a_0 + \frac{N}{2} \\ \mu_N &= \frac{\kappa_0 \mu_0 + N \bar x}{\kappa_N} \\ b_N &= b_0 + \frac12 \sum_n (x_n - \bar x)^2 \\ &\quad + \frac{\kappa_0 N (\bar x - \mu_0)^2}{2 \kappa_N} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the posterior is Normal-Gamma again. The mean is a count-weighted average. The rate b collects the spread of the readings around their mean <em>plus</em> a penalty for disagreement between the sample mean and the prior guess: a surprise about the mean is evidence that the world is noisier.</div><div class="eq-say"><b>Say it</b><em>&ldquo;kappa-N is kappa-nought plus N; mu-N is the weighted average; b-N adds half the scatter and a disagreement term.&rdquo;</em></div><div class="eq-run" id="run-ng"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 tall-m"><canvas id="ng-cv" aria-label="Normal-Gamma posterior density over mean and precision"></canvas></div>
+        <div class="plot" style="aspect-ratio:7/1;margin-top:8px"><canvas id="ng-strip" aria-label="Click to add a reading at that temperature"></canvas></div>
+        <figcaption>Top: posterior density over (&mu;, &lambda;), darker = more belief, with the prior's contours in grey. <span style="color:var(--cC)">&#9733;</span> the truth used for random readings (20&nbsp;&deg;C, &lambda; = 0.25). Bottom: the readings; click to add one.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ng-k">&kappa;<sub>0</sub>, readings behind the prior mean &mu;<sub>0</sub> = 17</label><output id="ng-k-o"></output></div><input type="range" id="ng-k" min="-1" max="1.5" step="0.05" value="0"></div>
+        <div class="btns"><button type="button" class="btn primary" id="ng-5">5 random readings</button><button type="button" class="btn" id="ng-undo">Undo</button><button type="button" class="btn" id="ng-clr">Clear</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ng-mu"></div><div class="k">&mu;<sub>N</sub></div></div><div class="stat"><div class="v" id="ng-lam"></div><div class="k">E[&lambda;] = a<sub>N</sub>/b<sub>N</sub></div></div><div class="stat"><div class="v" id="ng-n"></div><div class="k">readings</div></div></div>
+        <p class="note" id="ng-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>Integrate &lambda; out of a Normal-Gamma and the belief about &mu; alone is no longer Gaussian but a heavier-tailed <em class="term">Student's t</em>; for a mean <em>vector</em> with an unknown precision <em>matrix</em>, the Gamma becomes a <em class="term">Wishart</em>. Both are the subject of the <a href="../beyond-the-gaussian/">next chapter</a>.</p></div>
+  </div>
+</section>
+
+<!-- CONJUGATE -->
+<section class="chap" id="conjugate">
+  <div class="wrap">
+    <div class="tag">The general pattern</div>
+    <h2>Conjugate priors in general, and priors that say nothing</h2>
+    <div class="prose">
+      <p>Every pair so far is one instance of a single recipe. Bernoulli, categorical, Gaussian, Poisson and Gamma likelihoods all belong to the <em class="term">exponential family</em>: the parameter meets the data only through a dot product &eta;&middot;u(x), where &eta; is the <em>natural parameter</em> and u(x) a <em>sufficient statistic</em>. For any such family there is a conjugate prior of the same form, and its two knobs read as &ldquo;&nu; imaginary observations whose average sufficient statistic is &chi;&rdquo;.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} p(x \mid \boldsymbol\eta) &= h(x)\, g(\boldsymbol\eta)\, e^{\boldsymbol\eta^{\top} \mathbf{u}(x)} \\ p(\boldsymbol\eta \mid \boldsymbol\chi, \nu) &\propto g(\boldsymbol\eta)^{\nu}\, e^{\nu\, \boldsymbol\eta^{\top} \boldsymbol\chi} \\ p(\boldsymbol\eta \mid D) &\propto g(\boldsymbol\eta)^{\nu + N}\, e^{\boldsymbol\eta^{\top} \mathbf{s}_N} \\ \mathbf{s}_N &= \nu \boldsymbol\chi + \textstyle\sum_n \mathbf{u}(x_n) \end{aligned} \]</div><div class="read"><b>Read it as:</b> g(&eta;) only normalises. Multiplying N likelihood terms by the prior raises g's power from &nu; to &nu; + N and adds the data's sufficient statistics to &nu;&chi;, giving s<sub>N</sub>. The posterior is in the same family with &nu; &rarr; &nu; + N and &chi; &rarr; a weighted average of &chi; and the data's mean statistic. That is the pseudo-count story, in general.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The conjugate prior is g of eta to the nu, times e to the nu eta-transpose chi; the posterior has nu plus N and adds up the sufficient statistics.&rdquo;</em></div><div class="eq-run" id="run-ef"></div></div>
+    <div class="tbl-wrap block"><table class="zoo">
+      <thead><tr><th>Likelihood</th><th>Unknown</th><th>Conjugate prior</th><th>Posterior after N observations</th><th>The prior is worth&hellip;</th></tr></thead>
+      <tbody>
+        <tr><td><b>Bernoulli / binomial</b></td><td>&theta;</td><td>Beta(a, b)</td><td>Beta(a + h, b + t)</td><td>a + b tosses, a of them heads</td></tr>
+        <tr><td><b>Categorical / multinomial</b></td><td>&mu;<sub>1..K</sub></td><td>Dirichlet(&alpha;)</td><td>Dirichlet(&alpha; + m)</td><td>&alpha;<sub>k</sub> sightings of each outcome</td></tr>
+        <tr><td><b>Gaussian, &sigma; known</b></td><td>mean &mu;</td><td>N(&mu;<sub>0</sub>, &sigma;<sub>0</sub><sup>2</sup>)</td><td>N(&mu;<sub>N</sub>, &sigma;<sub>N</sub><sup>2</sup>), precisions add</td><td>&sigma;<sup>2</sup>/&sigma;<sub>0</sub><sup>2</sup> readings averaging &mu;<sub>0</sub></td></tr>
+        <tr><td><b>Gaussian, &mu; known</b></td><td>precision &lambda;</td><td>Gam(a, b)</td><td>Gam(a + N/2, b + &frac12;&Sigma;(x &minus; &mu;)<sup>2</sup>)</td><td>2a readings with mean square b/a</td></tr>
+        <tr><td><b>Gaussian, both unknown</b></td><td>&mu;, &lambda;</td><td>Normal-Gamma</td><td>Normal-Gamma (updates above)</td><td>&kappa;<sub>0</sub> readings for &mu;, 2a<sub>0</sub> for &lambda;</td></tr>
+        <tr><td><b>Poisson</b></td><td>rate r</td><td>Gam(a, b)</td><td>Gam(a + &Sigma;x, b + N)</td><td>a events seen in b periods</td></tr>
+        <tr><td><b>Multivariate Gaussian</b></td><td>precision matrix</td><td>Wishart (next chapter)</td><td>Wishart</td><td>&nu; vector readings</td></tr>
+      </tbody></table></div>
+    <div class="prose" style="margin-top:26px">
+      <p>What if you know nothing? A <em class="term">noninformative</em> prior tries to let the data speak alone. For a location parameter such as a mean, nothing should change if you shift the whole axis, which forces a <em>flat</em> prior. Flat over the entire real line has infinite area, so it is <em class="term">improper</em>: not a real distribution, though it often still gives a proper posterior (here, the limit &sigma;<sub>0</sub> &rarr; &infin; of the Gaussian prior). For a scale parameter such as &sigma;, nothing should change if you switch units, which forces p(&sigma;) &prop; 1/&sigma;, flat in log &sigma;.</p>
+      <p>The catch is that &ldquo;flat&rdquo; depends on how you describe the unknown. A uniform prior on a coin's &theta; is far from flat on its log-odds; a prior flat on log-odds piles up near 0 and 1 in &theta;. <strong>Slide the Beta's a = b</strong> and see the same belief in both descriptions.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} p(\sigma) &\propto \frac{1}{\sigma} \\ \int_{A}^{B} \frac{d\sigma}{\sigma} &= \int_{cA}^{cB} \frac{d\sigma}{\sigma} \\ &= \ln\frac{B}{A} \end{aligned} \]</div><div class="read"><b>Read it as:</b> under the 1/&sigma; prior, the belief that &sigma; lies between A and B equals the belief that it lies between cA and cB for any c &gt; 0, so the prior is the same in metres or millimetres. Equivalently p(ln &sigma;) is flat, and for the precision p(&lambda;) &prop; 1/&lambda;, which is the Gamma with a<sub>0</sub> = b<sub>0</sub> = 0.</div><div class="eq-say"><b>Say it</b><em>&ldquo;p of sigma proportional to one over sigma; equal ratios get equal belief.&rdquo;</em></div><div class="eq-run" id="run-scale"></div></div>
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} \phi &= \ln\frac{\theta}{1-\theta} \\ p(\phi) &= p(\theta)\left|\frac{d\theta}{d\phi}\right| \\ &= \frac{\theta^{a}(1-\theta)^{b}}{B(a,b)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> changing variables multiplies a density by the stretch factor d&theta;/d&phi; = &theta;(1 &minus; &theta;). So a Beta(a, b) on &theta; is a different-looking density on the log-odds &phi;. Only as a = b &rarr; 0 (the improper Haldane prior) does it become flat in &phi;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Phi is the log-odds; its density is theta to the a, one minus theta to the b, over B of a and b.&rdquo;</em></div><div class="eq-run" id="run-logit"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 nf-plot"><canvas id="nf-cv" aria-label="A Beta prior seen on the probability scale and on the log-odds scale"></canvas></div>
+        <figcaption>Left: the prior over &theta;. Right: exactly the same belief over the log-odds &phi; = ln(&theta;/(1 &minus; &theta;)). Shaded: the region &theta; between 0.25 and 0.75 (&phi; between &minus;1.1 and 1.1) on both sides.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Named priors"><button type="button" data-nf="1" aria-pressed="true">Uniform, a = b = 1</button><button type="button" data-nf="0.5">Jeffreys, &frac12;</button><button type="button" data-nf="0.05">Near Haldane, 0.05</button></div>
+        <div class="ctrl"><div class="top"><label for="nf-a">a = b</label><output id="nf-a-o"></output></div><input type="range" id="nf-a" min="0.02" max="5" step="0.01" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="nf-mid"></div><div class="k">P(0.25 &lt; &theta; &lt; 0.75)</div></div><div class="stat"><div class="v" id="nf-ext"></div><div class="k">P(&theta; &lt; 0.01 or &gt; 0.99)</div></div></div>
+        <p class="note" id="nf-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- LEARN -->
+<section class="chap" id="learn">
+  <div class="wrap">
+    <div class="tag">Statistical learning</div>
+    <h2>Bayesian, MAP and maximum-likelihood learning</h2>
+    <div class="prose">
+      <p>Russell and Norvig frame learning itself as Bayesian inference over <em>hypotheses</em>. A sweet shop sells five kinds of bag that look identical: h<sub>1</sub> is all cherry, h<sub>2</sub> is 75% cherry and 25% lime, h<sub>3</sub> half and half, h<sub>4</sub> 25% cherry, and h<sub>5</sub> all lime. The shop stocks them in proportions 10%, 20%, 40%, 20%, 10%: that is the prior. You buy a bag and unwrap sweets one by one. There are three ways to predict the next flavour:</p>
+      <p><b>Bayesian learning</b> keeps every hypothesis and averages their predictions, weighted by posterior probability. It is optimal on average, but the sum can be expensive when the hypothesis space is huge. <b>MAP</b> (maximum a posteriori) bets everything on the single most probable hypothesis. <b>Maximum likelihood</b> is MAP with a flat prior: it ignores the shop's stock list. With lots of data all three agree. With little data they don't. <strong>Choose the bag you were sold, then unwrap</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} P(h_i \mid \mathbf{d}) &\propto P(\mathbf{d} \mid h_i)\, P(h_i) \\ P(X \mid \mathbf{d}) &= \sum_i P(X \mid h_i)\, P(h_i \mid \mathbf{d}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> d is the sequence of flavours so far; each sweet is independent given the bag, so P(d | h<sub>i</sub>) is a product of per-sweet probabilities. The prediction for the next sweet X is the posterior-weighted vote of all five bags, the discrete version of the posterior predictive.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The posterior of h-i is proportional to the likelihood times the prior; the prediction is the sum of each hypothesis's prediction times its posterior.&rdquo;</em></div><div class="eq-run" id="run-hyp"></div></div>
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} h_{\text{MAP}} &= \arg\max_{h}\ P(\mathbf{d} \mid h)\, P(h) \\ h_{\text{ML}} &= \arg\max_{h}\ P(\mathbf{d} \mid h) \end{aligned} \]</div><div class="read"><b>Read it as:</b> MAP takes the peak of the posterior; ML takes the peak of the likelihood. Taking logs, MAP maximises log P(d | h) + log P(h): a fit term plus a prior term that charges unlikely (often complex) hypotheses. ML has no such charge, so it jumps to whatever explains the data so far best.</div><div class="eq-say"><b>Say it</b><em>&ldquo;h-MAP maximises the likelihood times the prior; h-ML maximises the likelihood alone.&rdquo;</em></div><div class="eq-run" id="run-map"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="The bag you were sold"><button type="button" data-lb="0">h₁ all cherry</button><button type="button" data-lb="1">h₂</button><button type="button" data-lb="2">h₃</button><button type="button" data-lb="3">h₄</button><button type="button" data-lb="4" aria-pressed="true">h₅ all lime</button></div></div>
+        <div class="plot ar-16x10 tall-m"><canvas id="ln-cv" aria-label="Posterior of each hypothesis as sweets are unwrapped"></canvas></div>
+        <div class="plot ar-3x1" style="margin-top:8px"><canvas id="ln-pr" aria-label="Probability the next sweet is lime under Bayes, MAP and ML"></canvas></div>
+        <figcaption>Top: P(h<sub>i</sub> | d) after each sweet (strip: <span style="color:var(--cA)">&#9679;</span> lime, <span style="color:var(--qda)">&#9679;</span> cherry). Bottom: P(next is lime) under <span style="color:var(--cA)">&#9644;</span> Bayes, <span style="color:var(--lda)">&#9644;</span> MAP and <span style="color:var(--cB)">&#9644;</span> ML.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn" id="ln-1">Unwrap one</button><button type="button" class="btn primary" id="ln-10">Unwrap 10</button><button type="button" class="btn" id="ln-clr">New bag</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ln-b"></div><div class="k">P(lime next), Bayes</div></div><div class="stat"><div class="v" id="ln-m"></div><div class="k">MAP</div></div><div class="stat"><div class="v" id="ln-l"></div><div class="k">ML</div></div></div>
+        <div class="coefs" id="ln-bars"></div>
+        <p class="note" id="ln-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:26px">
+      <p><b>From five hypotheses to a continuum.</b> Russell and Norvig's next step (&ldquo;learning with complete data&rdquo;) lets the lime fraction be any &theta; between 0 and 1. Maximum-likelihood parameter learning then just counts: &theta;&#770; = limes / sweets. <em>Bayesian parameter learning</em> puts a Beta(a, b) prior on &theta;, and the posterior is the Beta&ndash;Bernoulli update of <a href="#beta">section 2</a>: the hyperparameters are virtual counts. In a Bayesian network, each conditional probability (say, the chance that a lime sweet comes in a green wrapper, and separately that a cherry one does) gets its own Beta prior. If the priors are independent and the data are complete, each posterior is updated from its own counts alone, so a network with thousands of parameters is learned by thousands of tiny Beta updates.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &p(\theta_1, \theta_2 \mid D) \\ &\ = \mathrm{Beta}(\theta_1 \mid a_1 + g_1,\ b_1 + r_1) \\ &\ \quad \times \mathrm{Beta}(\theta_2 \mid a_2 + g_2,\ b_2 + r_2) \end{aligned} \]</div><div class="read"><b>Read it as:</b> &theta;<sub>1</sub> = P(green wrapper | cherry), &theta;<sub>2</sub> = P(green wrapper | lime). g<sub>1</sub>, r<sub>1</sub> count green and red wrappers among cherry sweets; g<sub>2</sub>, r<sub>2</sub> among lime ones. The likelihood factorises over the two parameters, so with independent priors so does the posterior: <em>parameter independence</em> is preserved by complete data.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The posterior over theta-one and theta-two is a product of two Betas, each updated by its own counts.&rdquo;</em></div><div class="eq-run" id="run-bn"></div></div>
+  </div>
+</section>
+
+<!-- CURVES -->
+<section class="chap" id="curves">
+  <div class="wrap">
+    <div class="tag">Bayesian modelling</div>
+    <h2>A posterior over whole curves</h2>
+    <div class="prose">
+      <p>The same machinery works for a model with many parameters. Hastie, Tibshirani and Friedman's example is smoothing: write the curve as a sum of smooth basis functions, &mu;(x) = &Sigma;<sub>j</sub> &beta;<sub>j</sub>h<sub>j</sub>(x), and put a Gaussian prior on the coefficients, &beta; ~ N(0, &tau;I). With Gaussian noise the posterior over &beta; is Gaussian again, so every draw from it is a whole curve. The prior variance &tau; is the dial: small &tau; insists on small coefficients and flat curves; as &tau; &rarr; &infin; the prior fades, the posterior mean becomes the least-squares fit, and the spread of posterior curves resembles what the bootstrap would give.</p>
+      <p>Here 30 noisy points (&sigma; = 0.3) are fitted with 12 Gaussian bumps. <strong>Turn &tau;, drag points, and draw new curves from the posterior</strong>.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbb{E}[\boldsymbol\beta \mid \mathbf{y}] &= \Big(\mathbf{H}^{\top}\mathbf{H} + \frac{\sigma^2}{\tau}\mathbf{I}\Big)^{-1} \mathbf{H}^{\top}\mathbf{y} \\ \operatorname{cov}[\boldsymbol\beta \mid \mathbf{y}] &= \sigma^2 \Big(\mathbf{H}^{\top}\mathbf{H} + \frac{\sigma^2}{\tau}\mathbf{I}\Big)^{-1} \end{aligned} \]</div><div class="read"><b>Read it as:</b> H holds the basis functions evaluated at the data points (one row per point). The posterior mean is ridge regression with penalty &sigma;<sup>2</sup>/&tau;, so ridge is MAP under a Gaussian prior. The covariance says how much the coefficients can still wobble. The curve at x has posterior mean h(x)&middot;E[&beta;] and variance h(x)<sup>&top;</sup>cov[&beta;]h(x).</div><div class="eq-say"><b>Say it</b><em>&ldquo;The posterior mean of beta is H-transpose-H plus sigma squared over tau times I, inverted, times H-transpose y; the covariance is sigma squared times that inverse.&rdquo;</em></div><div class="eq-run" id="run-cu"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 tall-m"><canvas id="cu-cv" aria-label="Posterior mean curve, posterior draws and a 95% band; drag the points"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--cA)"></i>posterior mean</span><span><i class="sw" style="background:var(--cA);opacity:.4"></i>8 draws from the posterior</span><span><i class="sw" style="background:var(--muted)"></i>least-squares fit (&tau; = &infin;)</span></span> Shaded: 95% posterior band for &mu;(x).</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cu-t">Prior variance &tau;</label><output id="cu-t-o"></output></div><input type="range" id="cu-t" min="-3" max="3" step="0.05" value="0"></div>
+        <div class="btns"><button type="button" class="btn primary" id="cu-draw">Draw new curves</button><button type="button" class="btn" id="cu-reset">Reset points</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cu-df"></div><div class="k">effective parameters</div></div><div class="stat"><div class="v" id="cu-sd"></div><div class="k">posterior sd of &mu;(1.5)</div></div></div>
+        <p class="note" id="cu-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: click-through rates that don't overreact</h2>
+    <div class="prose">
+      <p>An online shop shows fashion items in three slots and logs whether each impression is clicked. Which items will be clicked next week? The <strong>Open Bandit Dataset</strong> (Saito et al., 2021; CC&nbsp;BY&nbsp;4.0) comes from ZOZOTOWN, Japan's largest fashion e-commerce site. Its public sample holds <b>20,000</b> impressions of <b>80</b> items, half chosen uniformly at random and half by a <em>Bernoulli Thompson sampling</em> bandit, which itself keeps a Beta posterior per item and shows items whose sampled click rate is highest. That is why some items were shown over a thousand times and others a handful.</p>
+      <p>Clicks are rare: about one in 250 impressions. We learn from 24&ndash;27 November 2019 (<span id="pj-ntr"></span>) and test on 28&ndash;30 November (<span id="pj-nte"></span>). Each item gets a Beta prior centred on the pooled training rate, with strength s = a + b imaginary impressions, and its posterior mean is the predicted click rate. <strong>Slide s</strong>: s &rarr; 0 is raw maximum likelihood, s &rarr; &infin; gives every item the pooled rate. Click any item to inspect it below.</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 tall-m"><canvas id="pj-cv" aria-label="Raw click rates shrinking towards the pooled rate; click an item"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw dot" style="background:transparent;border:1.5px solid var(--qda)"></i>raw rate c/n (ML)</span><span><i class="sw dot" style="background:var(--cA)"></i>posterior mean</span><span><i class="sw" style="background:var(--muted)"></i>pooled rate</span></span> Each item is drawn at its number of training impressions (log scale). Items with no clicks sit on the bottom edge.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-s">Prior strength s = a + b</label><output id="pj-s-o"></output></div><input type="range" id="pj-s" min="0" max="5" step="0.05" value="2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-ll"></div><div class="k">held-out log-likelihood</div></div><div class="stat"><div class="v" id="pj-llml"></div><div class="k">same for raw ML rates</div></div><div class="stat"><div class="v" id="pj-ev"></div><div class="k">log evidence log p(train | s)</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Overreaction, measured</h3>
+    <div class="prose"><p>Shrinkage earns its keep where raw rates are most extreme. Group the items by what training said, and compare the number of test clicks each method predicted (its click rate times the item's test impressions, summed) with the clicks that actually came.</p></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-grp"></table></div>
+
+    <h3>What the data say about s</h3>
+    <div class="prose"><p>The evidence p(train | s), the denominator of Bayes' rule, scores each prior strength by how well it predicted the training clicks before seeing them. Choosing s by maximising it is <em class="term">empirical Bayes</em>. Both curves are shown relative to their best value.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-3x1"><canvas id="pj-evcv" aria-label="Log evidence and held-out log-likelihood against prior strength"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--cC)"></i>log evidence on training data</span><span><i class="sw" style="background:var(--cA)"></i>held-out log-likelihood on test data</span><span><i class="sw" style="background:var(--ink)"></i>your s</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp"><p class="note" id="pj-evsay"></p></div></div>
+    </div>
+
+    <h3>Inspect an item</h3>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 tall-m"><canvas id="pj-item" aria-label="One item's Beta prior and posterior over its click rate"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--muted)"></i>prior Beta(sm, s(1 &minus; m))</span><span><i class="sw" style="background:var(--cA)"></i>posterior (shaded: 95% credible interval)</span><span><i class="sw" style="background:var(--qda)"></i>raw rate</span><span><i class="sw" style="background:var(--cC)"></i>test-week rate</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-i">Item (sorted by training impressions)</label><output id="pj-i-o"></output></div><input type="range" id="pj-i" min="0" max="79" step="1" value="0"></div>
+        <div class="btns"><button type="button" class="btn" id="pj-top">Highest raw rate</button><button type="button" class="btn" id="pj-most">Most shown</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-ic"></div><div class="k">training clicks</div></div><div class="stat"><div class="v" id="pj-ip"></div><div class="k">posterior mean</div></div><div class="stat"><div class="v" id="pj-ici"></div><div class="k">95% interval</div></div></div>
+        <p class="note" id="pj-isay"></p>
+      </div></div>
+    </div>
+
+    <h3>The same analysis in Python</h3>
+<pre class="code"><code>import numpy as np, pandas as pd
+from scipy import stats, special
+
+# Open Bandit Dataset, small sample: uniform-random log + Bernoulli Thompson sampling log
+d = pd.concat([pd.read_csv("obd/random/all/all.csv"), pd.read_csv("obd/bts/all/all.csv")])
+day = pd.to_datetime(d.timestamp).dt.day
+tr, te = d[day &lt;= 27], d[day &gt;= 28]            # learn on 24-27 Nov 2019, test on 28-30 Nov
+c  = tr.groupby("item_id").click.sum().reindex(range(80)).values      # training clicks per item
+n  = tr.groupby("item_id").click.size().reindex(range(80)).values     # training impressions
+tc = te.groupby("item_id").click.sum().reindex(range(80)).values
+tn = te.groupby("item_id").click.size().reindex(range(80)).values
+m = c.sum() / n.sum()
+print(f"train: {n.sum()} impressions, {c.sum()} clicks, pooled CTR {m:.5f}; test: {tn.sum()}, {tc.sum()}")
+
+def log_evidence(a, b):                         # log p(all training clicks | Beta(a, b) prior)
+    return np.sum(special.betaln(c + a, n - c + b) - special.betaln(a, b))
+def heldout(a, b):                              # test log-likelihood with the posterior mean
+    p = (c + a) / (n + a + b)
+    return np.sum(tc * np.log(p) + (tn - tc) * np.log1p(-p))
+
+print("ML items with 0 training clicks:", (c == 0).sum(), "| of those clicked in test:", ((c == 0) &amp; (tc &gt; 0)).sum())
+for s in [1, 10, 100, 1000, 10000]:
+    a, b = m * s, (1 - m) * s
+    print(f"s = a+b = {s:&gt;5}: log evidence {log_evidence(a, b):9.3f}   held-out log-lik {heldout(a, b):9.3f}")
+
+for s in [1e5, 1e6, 1e8]:                       # no peak: the evidence creeps up to a ceiling
+    print(f"s = {s:.0e}: log evidence {log_evidence(m * s, (1 - m) * s):.3f}")
+
+a, b = m * 100, (1 - m) * 100                   # a moderate prior: 100 pseudo-impressions
+post = (c + a) / (n + a + b)
+lo, hi = stats.beta.ppf([[0.025], [0.975]], c + a, n - c + b)
+for i in [6, 51, 59, 74]:
+    print(f"item {i:2d}: {c[i]}/{n[i]:&lt;4} ML {c[i]/n[i]:.4f}  posterior mean {post[i]:.4f}"
+          f"  95% interval [{lo[i]:.4f}, {hi[i]:.4f}]  test {tc[i]}/{tn[i]}")
+groups = {"0 training clicks": c == 0, "training CTR above 1%": c / n &gt; 0.01}
+for name, g in groups.items():
+    print(f"{name:22s} ({g.sum():2d} items): test clicks predicted by ML {np.sum(c[g] / n[g] * tn[g]):5.2f},"
+          f" by the posterior {np.sum(post[g] * tn[g]):5.2f}; actual {tc[g].sum()}")
+print("chi-square test that all 80 items share one CTR: p =", round(stats.chi2_contingency(np.c_[c+tc, n+tn-c-tc])[1], 3))</code></pre>
+<pre class="code out"><code id="pj-out">train: 11131 impressions, 51 clicks, pooled CTR 0.00458; test: 8869, 29
+ML items with 0 training clicks: 49 | of those clicked in test: 10
+s = a+b =     1: log evidence  -432.546   held-out log-lik  -246.628
+s = a+b =    10: log evidence  -370.800   held-out log-lik  -220.589
+s = a+b =   100: log evidence  -334.391   held-out log-lik  -202.624
+s = a+b =  1000: log evidence  -326.133   held-out log-lik  -197.391
+s = a+b = 10000: log evidence  -325.580   held-out log-lik  -196.818
+s = 1e+05: log evidence -325.554
+s = 1e+06: log evidence -325.552
+s = 1e+08: log evidence -325.552
+item  6: 2/78   ML 0.0256  posterior mean 0.0138  95% interval [0.0023, 0.0354]  test 0/67
+item 51: 4/851  ML 0.0047  posterior mean 0.0047  95% interval [0.0014, 0.0099]  test 0/367
+item 59: 2/430  ML 0.0047  posterior mean 0.0046  95% interval [0.0008, 0.0119]  test 0/334
+item 74: 0/57   ML 0.0000  posterior mean 0.0029  95% interval [0.0000, 0.0152]  test 0/67
+0 training clicks      (49 items): test clicks predicted by ML  0.00, by the posterior  8.76; actual 12
+training CTR above 1%  (16 items): test clicks predicted by ML 22.54, by the posterior 16.41; actual 7
+chi-square test that all 80 items share one CTR: p = 0.542</code></pre>
+    <p class="note" id="pj-check" style="max-width:72ch"></p>
+    <p class="note" style="max-width:72ch;margin-top:10px">An honest reading. With only 80 clicks spread over 80 items, the data cannot tell the items apart: a chi-square test finds no evidence that their click rates differ (p = 0.54), and the evidence keeps rising as s grows, so empirical Bayes would set every item to the pooled rate. That does <em>not</em> mean the items are identical; it means differences smaller than the noise are invisible in a week of 20,000 impressions. The full Open Bandit Dataset has about 26 million impressions, where the same Beta model would separate items clearly. The split by calendar day uses the logs' UTC timestamps.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Bayes' rule turns a prior belief about a parameter into a posterior: posterior &prop; likelihood &times; prior. The posterior predictive averages predictions over that belief instead of trusting one estimate.</li>
+      <li>A conjugate prior keeps the posterior in the same family, and its parameters act as imaginary data: Beta(a, b) becomes Beta(a + h, b + t); Dirichlet(&alpha;) becomes Dirichlet(&alpha; + m).</li>
+      <li>The posterior mean is a weighted average of the prior mean and the ML estimate, with weights in proportion to imaginary and real counts. That shrinkage is add-k smoothing, and it protects small counts from extreme estimates.</li>
+      <li>For Gaussian data, a Gaussian prior on the mean, a Gamma on the precision, or a Normal-Gamma on both are conjugate; precisions add and counts accumulate. Every exponential-family likelihood has a conjugate prior.</li>
+      <li>Bayesian learning averages all hypotheses; MAP picks the most probable one; ML is MAP with a flat prior. "Flat" depends on the parametrisation, and with little data the choice of prior matters most.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>You start with Beta(2, 2) and see 7 heads and 3 tails. What is the posterior, and what is P(next toss is heads)?</summary><p>Beta(2 + 7, 2 + 3) = Beta(9, 5). The predictive probability of heads is its mean, 9/14 &asymp; 0.643, between the prior mean 0.5 and the ML estimate 0.7.</p></details>
+      <details class="q"><summary>A word never appeared in 10,000 words of training text, in a vocabulary of 20,000 words. What probability does add-one smoothing give it?</summary><p>(0 + 1)/(10,000 + 20,000 &times; 1) = 1/30,000. Add-one is the posterior predictive of a flat Dirichlet prior; with a vocabulary this large, it hands a lot of mass to unseen words, which is why smaller &alpha; often works better for text.</p></details>
+      <details class="q"><summary>Prior &mu; ~ N(20, 1&sup2;), noise &sigma; = 2, and four readings average 23. What is the posterior mean?</summary><p>Prior precision 1, data precision 4/4 = 1, so the two weigh equally: &mu;<sub>N</sub> = (20 + 23)/2 = 21.5, with posterior variance 1/(1 + 1) = 0.5.</p></details>
+      <details class="q"><summary>Why can MAP and the full Bayesian prediction disagree, even when MAP picks the right hypothesis?</summary><p>MAP predicts with one hypothesis as if it were certain; Bayes averages over all of them. Early on, when several hypotheses are still plausible, the Bayesian prediction is a blend and is less extreme. They agree once one hypothesis holds nearly all the posterior mass.</p></details>
+      <details class="q"><summary>Is a uniform prior on a coin's bias "noninformative"?</summary><p>Only relative to that parametrisation. On the log-odds scale the same prior is a bump centred at 0, which does express a preference. Scale parameters call for p(&sigma;) &prop; 1/&sigma;, which is invariant to the choice of units.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../beyond-the-gaussian/">Next chapter: Beyond the Gaussian: t, von Mises, Gamma &amp; Wishart &rarr;</a>
+      <a class="btn" href="../information-theory/">&larr; Previous: Information Theory: Entropy, KL &amp; Mutual Information</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Bishop, C. M. (2006). <em>Pattern Recognition and Machine Learning</em>. Springer. &sect;1.2.3, &sect;2.1&ndash;2.4 and Appendix B.</li>
+      <li>Hastie, T., Tibshirani, R. &amp; Friedman, J. (2009). <em>The Elements of Statistical Learning</em>, 2nd ed. Springer. &sect;8.3, Bayesian methods.</li>
+      <li>Russell, S. &amp; Norvig, P. (2021). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed. Pearson. Chapter 20, Learning probabilistic models.</li>
+      <li>Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A. &amp; Rubin, D. B. (2013). <em>Bayesian Data Analysis</em>, 3rd ed. CRC Press. Chapters 2&ndash;3 and 5 (hierarchical models).</li>
+      <li>Jeffreys, H. (1946). An invariant form for the prior probability in estimation problems. <em>Proceedings of the Royal Society A</em> 186, 453&ndash;461.</li>
+      <li>Efron, B. &amp; Morris, C. (1975). Data analysis using Stein's estimator and its generalizations. <em>Journal of the American Statistical Association</em> 70, 311&ndash;319.</li>
+      <li>Saito, Y., Aihara, S., Matsutani, M. &amp; Narita, Y. (2021). Open Bandit Dataset and Pipeline: towards realistic and reproducible off-policy evaluation. <em>NeurIPS Datasets and Benchmarks</em>. Data: github.com/st-tech/zr-obp (CC BY 4.0).</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- special functions (checked against scipy) ---------- */
+const LG = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+function lgamma(x) {
+  if (x < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - lgamma(1 - x);
+  x -= 1; let a = LG[0]; const t = x + 7.5; for (let i = 1; i < 9; i++) a += LG[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+const betaln = (a, b) => lgamma(a) + lgamma(b) - lgamma(a + b);
+function betaPdf(x, a, b) { if (x <= 0 || x >= 1) { if (x === 0) return a < 1 ? Infinity : a === 1 ? 1 / Math.exp(betaln(a, b)) : 0; if (x === 1) return b < 1 ? Infinity : b === 1 ? 1 / Math.exp(betaln(a, b)) : 0; return 0; } return Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log1p(-x) - betaln(a, b)); }
+function betacf(x, a, b) {
+  const TINY = 1e-300; let qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - qab * x / qap; if (Math.abs(d) < TINY) d = TINY; d = 1 / d; let h = d;
+  for (let m = 1; m <= 400; m++) { const m2 = 2 * m; let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY; c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY; d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2)); d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY; c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY; d = 1 / d; const del = d * c; h *= del; if (Math.abs(del - 1) < 1e-15) break; }
+  return h;
+}
+function betainc(x, a, b) { // regularised incomplete beta I_x(a, b)
+  if (x <= 0) return 0; if (x >= 1) return 1;
+  const lbt = a * Math.log(x) + b * Math.log1p(-x) - betaln(a, b);
+  return x < (a + 1) / (a + b + 2) ? Math.exp(lbt) * betacf(x, a, b) / a : 1 - Math.exp(lbt) * betacf(1 - x, b, a) / b;
+}
+function betaPpf(p, a, b) { let lo = 0, hi = 1; for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; if (betainc(mid, a, b) < p) lo = mid; else hi = mid; if (hi - lo < 1e-15) break; } return (lo + hi) / 2; }
+function gammaPdf(x, a, b) { if (x <= 0) return 0; return Math.exp(a * Math.log(b) + (a - 1) * Math.log(x) - b * x - lgamma(a)); }
+function gammainc(a, x) { // regularised lower incomplete gamma P(a, x)
+  if (x <= 0) return 0;
+  if (x < a + 1) { let s = 1 / a, t = s, ap = a; for (let n = 0; n < 1000; n++) { ap += 1; t *= x / ap; s += t; if (Math.abs(t) < Math.abs(s) * 1e-16) break; } return s * Math.exp(-x + a * Math.log(x) - lgamma(a)); }
+  let b = x + 1 - a, c = 1 / 1e-300, d = 1 / b, h = d;
+  for (let i = 1; i < 1000; i++) { const an = -i * (i - a); b += 2; d = an * d + b; if (Math.abs(d) < 1e-300) d = 1e-300; c = b + an / c; if (Math.abs(c) < 1e-300) c = 1e-300; d = 1 / d; const del = d * c; h *= del; if (Math.abs(del - 1) < 1e-16) break; }
+  return 1 - Math.exp(-x + a * Math.log(x) - lgamma(a)) * h;
+}
+function gammaPpf(p, a, b) { let lo = 0, hi = Math.max(10, a) * 10; while (gammainc(a, hi) < p) hi *= 2; for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; if (gammainc(a, mid) < p) lo = mid; else hi = mid; if (hi - lo < 1e-14 * hi) break; } return (lo + hi) / 2 / b; }
+const normPdf = (x, m, s) => Math.exp(-0.5 * ((x - m) / s) ** 2) / (s * Math.sqrt(2 * Math.PI));
+const lchoose = (n, k) => lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1);
+const betaBinom = (k, n, a, b) => Math.exp(lchoose(n, k) + betaln(k + a, n - k + b) - betaln(a, b));
+const binom = (k, n, p) => p <= 0 ? (k === 0 ? 1 : 0) : p >= 1 ? (k === n ? 1 : 0) : Math.exp(lchoose(n, k) + k * Math.log(p) + (n - k) * Math.log1p(-p));
+/* small dense linear algebra */
+function chol(A) { const n = A.length, L = A.map(() => new Array(n).fill(0)); for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { let s = A[i][j]; for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k]; L[i][j] = i === j ? Math.sqrt(Math.max(s, 1e-300)) : s / L[j][j]; } return L; }
+function cholSolve(L, b) { const n = L.length, y = new Array(n), x = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let k = 0; k < i; k++) s -= L[i][k] * y[k]; y[i] = s / L[i][i]; } for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let k = i + 1; k < n; k++) s -= L[k][i] * x[k]; x[i] = s / L[i][i]; } return x; }
+function inv(A) { const L = chol(A), n = A.length; const cols = []; for (let j = 0; j < n; j++) { const e = new Array(n).fill(0); e[j] = 1; cols.push(cholSolve(L, e)); } return A.map((_, i) => cols.map(c => c[i])); }
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), ink: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sum = a => a.reduce((s, v) => s + v, 0);
+const f2 = v => fmt(v, 2), f3 = v => fmt(v, 3), f4 = v => fmt(v, 4);
+const sup = n => String(n).split('').map(ch => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+ch] || ch).join('');
+const sci = (v, d) => { if (v === 0) return '0'; if (Math.abs(v) >= 1e-3) return fmt(v, d == null ? 4 : d); const e = Math.floor(Math.log10(Math.abs(v))), m = v / Math.pow(10, e); return `${fmt(m, 2)}×10<sup>${e}</sup>`; };
+const sciT = v => { if (v === 0) return '0'; if (Math.abs(v) >= 1e-3) return fmt(v, 4); return v.toExponential(3); };
+const nf = n => n.toLocaleString('en-GB');
+const betaMean = (a, b) => a / (a + b), betaVar = (a, b) => a * b / ((a + b) ** 2 * (a + b + 1));
+const betaCI = (a, b) => [betaPpf(0.025, a, b), betaPpf(0.975, a, b)];
+
+/* a view that shares a canvas without clearing it */
+function subView(v, xl, yl, pad) {
+  const w = v.w, h = v.h, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  return { ctx: v.ctx, w, h, pad, pw, ph, xl, yl, X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph, iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+/* a density curve with optional fill and a shaded sub-range */
+function dens(v, f, col, o) {
+  o = o || {}; const c = v.ctx, N = 320, x0 = o.x0 != null ? o.x0 : v.xl[0], x1 = o.x1 != null ? o.x1 : v.xl[1], P = [];
+  for (let i = 0; i <= N; i++) { const x = x0 + (x1 - x0) * i / N, y = f(x); P.push([x, isFinite(y) ? y : v.yl[1] * 4]); }
+  const yb = v.Y(Math.max(0, v.yl[0]));
+  const fillR = (lo, hi, alpha) => { c.save(); c.globalAlpha = alpha; c.fillStyle = col; c.beginPath(); c.moveTo(v.X(lo), yb); P.filter(p => p[0] >= lo && p[0] <= hi).forEach(p => c.lineTo(v.X(p[0]), clamp(v.Y(p[1]), -50, v.h + 50))); c.lineTo(v.X(hi), clamp(v.Y(f(hi)), -50, v.h + 50)); c.lineTo(v.X(hi), yb); c.closePath(); c.fill(); c.restore(); };
+  if (o.fill) fillR(x0, x1, o.fill);
+  if (o.lo != null) fillR(o.lo, o.hi, o.shade || 0.22);
+  c.save(); c.strokeStyle = col; c.lineWidth = o.lw || 2.4; if (o.dash) c.setLineDash(o.dash); if (o.alpha != null) c.globalAlpha = o.alpha; c.beginPath();
+  P.forEach((p, i) => { const py = clamp(v.Y(p[1]), -50, v.h + 50); i ? c.lineTo(v.X(p[0]), py) : c.moveTo(v.X(p[0]), py); }); c.stroke(); c.restore();
+}
+function peak(fs, x0, x1, cap) { let m = 0; for (const f of fs) for (let i = 1; i < 300; i++) { const y = f(x0 + (x1 - x0) * i / 300); if (isFinite(y) && y > m) m = y; } return Math.min(cap || Infinity, Math.max(m * 1.12, 1e-9)); }
+function vline(v, x, col, lw, dash, label) { const c = v.ctx; seg(v, x, v.yl[0], x, v.yl[1], col, lw || 1.8, dash); if (label) { c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = col; c.textAlign = v.X(x) > v.w - 90 ? 'right' : 'left'; c.textBaseline = 'top'; c.fillText(label, v.X(x) + (c.textAlign === 'right' ? -5 : 5), v.pad.t + 22); c.restore(); } }
+function label(v, x, y, txt, col, align, base) { const c = v.ctx; c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = col; c.textAlign = align || 'left'; c.textBaseline = base || 'middle'; c.fillText(txt, x, y); c.restore(); }
+function tossStrip(v, seq, y, maxN) { // up tick for heads/limes (1), down tick for tails (0)
+  const c = v.ctx, n = Math.min(seq.length, maxN), st = seq.slice(-n), dx = Math.min(9, (v.pw - 10) / Math.max(n, 1)); c.save(); c.lineWidth = Math.max(1.2, Math.min(3, dx * 0.45)); c.lineCap = 'round';
+  st.forEach((s, i) => { const x = v.pad.l + 6 + i * dx; c.strokeStyle = s ? css('--cA') : css('--qda'); c.beginPath(); c.moveTo(x, y); c.lineTo(x, s ? y - 7 : y + 7); c.stroke(); }); c.restore();
+}
+
+/* marching squares on a sampled field (for contours) */
+function field(v, f, step) { const nx = Math.ceil(v.pw / step) + 1, ny = Math.ceil(v.ph / step) + 1, F = new Float64Array(nx * ny); for (let j = 0; j < ny; j++) { const y = v.iY(v.pad.t + j * step); for (let i = 0; i < nx; i++) F[j * nx + i] = f(v.iX(v.pad.l + i * step), y); } return { F, nx, ny, step }; }
+function iso(v, G, lev, col, lw, dash) {
+  const c = v.ctx, { F, nx, ny, step } = G; c.save(); c.strokeStyle = col; c.lineWidth = lw; if (dash) c.setLineDash(dash); c.beginPath();
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const a = F[j * nx + i] - lev, b = F[j * nx + i + 1] - lev, d = F[(j + 1) * nx + i] - lev, e = F[(j + 1) * nx + i + 1] - lev, x0 = v.pad.l + i * step, y0 = v.pad.t + j * step, P = [];
+    if ((a > 0) !== (b > 0)) P.push([x0 + step * a / (a - b), y0]); if ((b > 0) !== (e > 0)) P.push([x0 + step, y0 + step * b / (b - e)]);
+    if ((d > 0) !== (e > 0)) P.push([x0 + step * d / (d - e), y0 + step]); if ((a > 0) !== (d > 0)) P.push([x0, y0 + step * a / (a - d)]);
+    if (P.length >= 2) { c.moveTo(P[0][0], P[0][1]); c.lineTo(P[1][0], P[1][1]); } if (P.length === 4) { c.moveTo(P[2][0], P[2][1]); c.lineTo(P[3][0], P[3][1]); }
+  }
+  c.stroke(); c.restore();
+}
+function heat(v, G, col, gamma) { const c = v.ctx, { F, nx, ny, step } = G; let mx = 0; for (const x of F) if (isFinite(x) && x > mx) mx = x; if (!(mx > 0)) return; c.save(); c.fillStyle = col;
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) { const val = F[j * nx + i] / mx; if (!(val > 0.004)) continue; c.globalAlpha = 0.9 * Math.pow(Math.min(1, val), gamma || 0.7); c.fillRect(v.pad.l + i * step - step / 2, v.pad.t + j * step - step / 2, step + 0.6, step + 0.6); } c.restore(); }
+
+/* ======================= hero: toss a hidden coin ======================= */
+const HERO = { p: 0.7, seq: [], rev: false, r: mulberry32(9) };
+function drawHero() {
+  const C = C0(), h = sum(HERO.seq), t = HERO.seq.length - h, a = 1 + h, b = 1 + t, N = h + t, f = x => betaPdf(x, a, b);
+  const ym = Math.max(2, peak([f], 0, 1, 40)), v = frame($('#hero-cv'), [0, 1], [0, ym], { t: 30, b: 32, l: 40, r: 14 }); axes(v, 'coin bias θ', 'belief', { sx: 0.1 });
+  const [lo, hi] = betaCI(a, b); clip(v);
+  dens(v, () => 1, C.muted, { lw: 1.3, dash: [4, 4], x0: 0.0005, x1: 0.9995 });
+  dens(v, f, C.a, { lw: 2.8, fill: 0.08, lo, hi, shade: 0.24, x0: 0.0005, x1: 0.9995 });
+  if (N) vline(v, h / N, C.bad, 1.6, [5, 4], 'ML');
+  if (HERO.rev) vline(v, HERO.p, C.c, 2.2, null, 'truth ' + f2(HERO.p));
+  v.ctx.restore(); tossStrip(v, HERO.seq, 15, 120);
+  if (!N) label(v, v.pad.l + 6, 15, 'click to toss', C.muted);
+  const mean = a / (a + b), inside = HERO.p >= lo && HERO.p <= hi;
+  $('#hero-cap').innerHTML = !N ? `Before any toss the belief is flat, Beta(1, 1): every bias from 0 to 1 is equally plausible. <b>Click the plot</b> to toss the coin; heads are the teal ticks along the top.`
+    : `After <b>${N}</b> toss${N > 1 ? 'es' : ''} (${h} heads, ${t} tails) the belief is ${tip(`Beta(${a}, ${b})`, `Beta(1 + ${h}, 1 + ${t})\nflat prior plus the counts`)}: the bias is about ${tip(f2(mean), `posterior mean (1 + ${h}) / (2 + ${N})`)}, and 95% likely to lie between ${tip(f2(lo), `2.5% quantile of Beta(${a}, ${b})`)} and ${tip(f2(hi), `97.5% quantile of Beta(${a}, ${b})`)}.` + (HERO.rev ? ` The true bias is <b>${f2(HERO.p)}</b>: ${inside ? 'inside' : 'outside'} the interval.` : ` Keep tossing and the curve narrows like 1/&radic;N.`);
+}
+const heroToss = k => { for (let i = 0; i < k; i++) HERO.seq.push(HERO.r() < HERO.p ? 1 : 0); drawHero(); };
+$('#hero-cv').addEventListener('click', () => heroToss(1)); $('#hero-cv').style.cursor = 'pointer';
+$('#hero-t1').addEventListener('click', () => heroToss(1)); $('#hero-t10').addEventListener('click', () => heroToss(10));
+$('#hero-rev').addEventListener('click', () => { HERO.rev = !HERO.rev; $('#hero-rev').textContent = HERO.rev ? 'Hide the bias' : 'Reveal the bias'; drawHero(); });
+$('#hero-new').addEventListener('click', () => { HERO.p = Math.round((0.1 + 0.8 * HERO.r()) * 100) / 100; HERO.seq = []; HERO.rev = false; $('#hero-rev').textContent = 'Reveal the bias'; drawHero(); });
+fig($('#hero-cv'), drawHero);
+
+/* ======================= 1. Bayes' rule on a grid ======================= */
+const GN = 600, GX = Array.from({ length: GN }, (_, i) => (i + 0.5) / GN), DX = 1 / GN;
+const PRIORS = {
+  flat: { name: 'flat', f: () => 1 },
+  fair: { name: 'probably-fair', f: x => betaPdf(x, 15, 15) },
+  bent: { name: 'bent-coin', f: x => 0.5 * betaPdf(x, 2, 9) + 0.5 * betaPdf(x, 9, 2) },
+  low: { name: 'rarely-heads', f: x => betaPdf(x, 1.5, 6) }
+};
+const WHY = { pr: 'flat', h: 3, t: 0 };
+function whyCalc() {
+  const P = PRIORS[WHY.pr], pr = GX.map(P.f), zp = sum(pr) * DX, prior = pr.map(p => p / zp), { h, t } = WHY;
+  const L = GX.map(x => Math.exp(h * Math.log(x) + t * Math.log1p(-x))), ev = sum(L.map((l, i) => l * prior[i])) * DX;
+  const post = L.map((l, i) => l * prior[i] / ev), zl = sum(L) * DX, lik = L.map(l => l / zl);
+  const pm = sum(post.map((p, i) => p * GX[i])) * DX, gt = sum(post.filter((_, i) => GX[i] > 0.5)) * DX, pc = sum(prior.map((p, i) => p * GX[i])) * DX;
+  return { prior, lik, post, ev, pm, gt, pc };
+}
+function drawWhy() {
+  const C = C0(), R = whyCalc(), { h, t } = WHY, N = h + t, at = a => x => a[clamp(Math.floor(x * GN), 0, GN - 1)];
+  const ym = Math.max(2, peak([at(R.prior), at(R.lik), at(R.post)], 0, 1, 30)), v = frame($('#why-cv'), [0, 1], [0, ym]); axes(v, 'coin bias θ', 'density', { sx: 0.1 }); clip(v);
+  dens(v, at(R.prior), C.muted, { lw: 1.8, dash: [5, 4], x0: 0.001, x1: 0.999 });
+  if (N) dens(v, at(R.lik), C.b, { lw: 1.8, x0: 0.001, x1: 0.999 });
+  dens(v, at(R.post), C.a, { lw: 2.8, fill: 0.12, x0: 0.001, x1: 0.999 });
+  if (N) vline(v, h / N, C.bad, 1.6, [5, 4], 'ML');
+  v.ctx.restore();
+  $('#why-h-o').textContent = h; $('#why-t-o').textContent = t;
+  $('#why-ml').innerHTML = N ? tip(f2(h / N), `h / (h + t) = ${h} / ${N}`) : '—';
+  $('#why-pm').innerHTML = tip(f3(R.pm), 'Σ θ · p(θ | D) · Δθ\nover a grid of 600 values of θ');
+  $('#why-gt').innerHTML = tip(pct(R.gt), 'area of the posterior to the right of θ = ½');
+  const L5 = Math.pow(0.5, N), p5 = PRIORS[WHY.pr].f(0.5) / (sum(GX.map(PRIORS[WHY.pr].f)) * DX);
+  $('#run-bayes').innerHTML = `<b>Running example</b> at &theta; = 0.5 with h = ${h}, t = ${t}: likelihood 0.5${sup(N)} = ${tip(sciT(L5), `0.5^${h} × 0.5^${t}`)}, prior density ${tip(f3(p5), `the ${PRIORS[WHY.pr].name} prior at θ = 0.5`)}, evidence p(D) = ${tip(sci(R.ev), '∫ p(D | θ) p(θ) dθ\nsummed over the 600-point grid')}, so p(0.5 | D) = ${sciT(L5)} &times; ${f3(p5)} &divide; ${sciT(R.ev)} = ${tip(f3(L5 * p5 / R.ev), 'the height of the teal curve at θ = 0.5')}.`;
+  $('#run-lik').innerHTML = N ? `<b>Running example</b>: p(D | &theta;) = &theta;${sup(h)}(1 &minus; &theta;)${sup(t)}. It peaks at &theta;&#770; = ${h}/${N} = ${tip(f3(h / N), 'the fraction of heads')}, where it equals ${tip(sciT(Math.pow(h / N, h) * Math.pow(1 - h / N, t)), `(${f3(h / N)})^${h} × (${f3(1 - h / N)})^${t}`)}; at &theta; = 0.5 it is ${sciT(L5)}.` : '<b>Running example</b>: with no tosses the likelihood is 1 for every &theta;: it says nothing, and the posterior equals the prior.';
+  const pName = { flat: 'flat', fair: '&ldquo;probably fair&rdquo;', bent: '&ldquo;bent&rdquo;', low: '&ldquo;rarely heads&rdquo;' }[WHY.pr];
+  let s;
+  if (!N) s = `No tosses yet: the posterior <i>is</i> the ${pName} prior. Move the sliders to add data.`;
+  else if (t === 0 || h === 0) s = `Every toss came up ${t === 0 ? 'heads' : 'tails'}, so maximum likelihood says &theta; = ${t === 0 ? 1 : 0}: ${t === 0 ? 'tails' : 'heads'} is impossible. The ${pName} prior disagrees: the posterior mean is ${f2(R.pm)}${WHY.pr === 'flat' ? ` (it is Laplace's (h + 1)/(N + 2) = ${h + 1}/${N + 2})` : ''}, and it still leaves room for ${t === 0 ? 'tails' : 'heads'}.`;
+  else if (N >= 40 && Math.abs(R.pm - h / N) < 0.03) s = `With ${N} tosses the likelihood is narrow and dominates: the posterior mean ${f2(R.pm)} is within ${f2(Math.abs(R.pm - h / N))} of the ML estimate. Priors matter most when data are scarce.`;
+  else s = `ML says ${f2(h / N)}; the posterior mean ${f2(R.pm)} is pulled towards the prior's centre (${f2(R.pc)}). The posterior is the likelihood reshaped by the prior: it can only live where the prior allows${WHY.pr === 'bent' ? ', which is why the bent prior gives a lopsided or two-humped posterior' : ''}.`;
+  if (N && WHY.pr === 'flat') s += ' With a flat prior the posterior <i>is</i> the rescaled likelihood, so the orange curve hides under the teal one.';
+  $('#why-say').innerHTML = s;
+}
+seg1('[data-wp]', 'data-wp', k => { WHY.pr = k; drawWhy(); });
+$('#why-h').addEventListener('input', e => { WHY.h = +e.target.value; drawWhy(); });
+$('#why-t').addEventListener('input', e => { WHY.t = +e.target.value; drawWhy(); });
+fig($('#why-cv'), drawWhy);
+
+/* ======================= 2. Beta-Bernoulli ======================= */
+const BE = { a: 2, b: 2, p: 0.25, seq: [], r: mulberry32(21) };
+function drawBeta() {
+  const C = C0(), { a, b, seq } = BE, h = sum(seq), N = seq.length, t = N - h, A = a + h, B = b + t, f = x => betaPdf(x, A, B), pf = x => betaPdf(x, a, b);
+  const ym = Math.max(2, peak([f, pf], 0, 1, 40)), v = frame($('#beta-cv'), [0, 1], [0, ym], { t: 30, b: 32, l: 40, r: 14 }); axes(v, 'θ', 'density', { sx: 0.1 });
+  const [lo, hi] = betaCI(A, B); clip(v);
+  dens(v, pf, C.muted, { lw: 1.6, dash: [5, 4], x0: 0.0005, x1: 0.9995 });
+  if (N > 1) { const ks = [...new Set(Array.from({ length: Math.min(6, N - 1) }, (_, i) => Math.round((i + 1) * N / (Math.min(6, N - 1) + 1))))].filter(k => k > 0 && k < N);
+    ks.forEach(k => { const hk = sum(seq.slice(0, k)); dens(v, x => betaPdf(x, a + hk, b + k - hk), C.a, { lw: 1.2, alpha: 0.3, x0: 0.0005, x1: 0.9995 }); }); }
+  vline(v, BE.p, C.c, 1.6, [2, 3]);
+  dens(v, f, C.a, { lw: 2.8, lo, hi, shade: 0.22, x0: 0.0005, x1: 0.9995 });
+  v.ctx.restore(); tossStrip(v, seq, 15, 120);
+  $('#beta-a-o').textContent = fmt(a, 1); $('#beta-b-o').textContent = fmt(b, 1); $('#beta-p-o').textContent = f2(BE.p);
+  const mean = A / (A + B), sd = Math.sqrt(betaVar(A, B));
+  $('#beta-post').innerHTML = tip(`Beta(${fmt(A, 1)}, ${fmt(B, 1)})`, `a + h = ${fmt(a, 1)} + ${h}\nb + t = ${fmt(b, 1)} + ${t}`);
+  $('#beta-mean').innerHTML = tip(`${f3(mean)} &plusmn; ${f3(sd)}`, `mean = ${fmt(A, 1)} / ${fmt(A + B, 1)}\nsd = √(ab / ((a+b)²(a+b+1)))`);
+  $('#beta-ci').innerHTML = tip(`${f2(lo)}&ndash;${f2(hi)}`, `2.5% and 97.5% quantiles of Beta(${fmt(A, 1)}, ${fmt(B, 1)})\n(inverse regularised incomplete beta)`);
+  const g = lgamma(A + B) - lgamma(A) - lgamma(B), dm = f(mean);
+  $('#run-bpdf').innerHTML = `<b>Running example</b> for the posterior Beta(${fmt(A, 1)}, ${fmt(B, 1)}) at its mean &theta; = ${f3(mean)}: &Gamma;(${fmt(A + B, 1)})/(&Gamma;(${fmt(A, 1)})&Gamma;(${fmt(B, 1)})) = ${tip(sci(Math.exp(g)), `exp(lnΓ(${fmt(A + B, 1)}) − lnΓ(${fmt(A, 1)}) − lnΓ(${fmt(B, 1)}))`)}, times ${f3(mean)}${sup(fmt(A - 1, 1))} &times; ${f3(1 - mean)}${sup(fmt(B - 1, 1))} gives a height of ${tip(f3(dm), 'the teal curve at its mean')}.`;
+  const mode = A > 1 && B > 1 ? (A - 1) / (A + B - 2) : null;
+  $('#run-bmom').innerHTML = `<b>Running example</b>, posterior: mean ${fmt(A, 1)}/${fmt(A + B, 1)} = ${tip(f3(mean), 'a / (a + b)')}, mode ${mode == null ? 'undefined (a or b ≤ 1: the peak is at an edge)' : `${fmt(A - 1, 1)}/${fmt(A + B - 2, 1)} = ${tip(f3(mode), '(a − 1) / (a + b − 2)')}`}, variance ${tip(sciT(sd * sd), `${fmt(A, 1)} × ${fmt(B, 1)} / (${fmt(A + B, 1)}² × ${fmt(A + B + 1, 1)})`)} (sd ${f3(sd)}).`;
+  $('#run-bpost').innerHTML = `<b>Running example</b>: ${N} tosses gave h = ${h}, t = ${t}, so Beta(${fmt(a, 1)}, ${fmt(b, 1)}) &rarr; Beta(${fmt(a, 1)} + ${h}, ${fmt(b, 1)} + ${t}) = ${tip(`Beta(${fmt(A, 1)}, ${fmt(B, 1)})`, 'the same whether you update toss by toss\nor all at once, in any order')}.`;
+  const wp = (a + b) / (a + b + N), wd = N / (a + b + N);
+  $('#run-bshr').innerHTML = N ? `<b>Running example</b>: ${tip(f3(wp), `(a + b) / (a + b + N) = ${fmt(a + b, 1)} / ${fmt(a + b + N, 1)}`)} &times; ${f3(a / (a + b))} + ${tip(f3(wd), `N / (a + b + N) = ${N} / ${fmt(a + b + N, 1)}`)} &times; ${f3(h / N)} = ${tip(f3(mean), 'equals the posterior mean (a + h)/(a + b + N)')}.` : `<b>Running example</b>: with N = 0 all the weight is on the prior, and the posterior mean is the prior mean ${f3(a / (a + b))}.`;
+  // tower rule with 10 future tosses from the prior
+  let Em = 0, Ev = 0, Em2 = 0; for (let k = 0; k <= 10; k++) { const w = betaBinom(k, 10, a, b), m = (a + k) / (a + b + 10); Em += w * m; Em2 += w * m * m; Ev += w * betaVar(a + k, b + 10 - k); }
+  $('#run-tower').innerHTML = `<b>Running example</b> for your prior Beta(${fmt(a, 1)}, ${fmt(b, 1)}) and data sets of 10 tosses (k heads, with the beta-binomial probability of each k): average posterior mean ${tip(f4(Em), 'Σₖ p(k) · (a + k)/(a + b + 10)')} = prior mean ${f4(a / (a + b))}. Average posterior variance ${tip(f4(Ev), 'Σₖ p(k) · var of Beta(a + k, b + 10 − k)')} + variance of the posterior mean ${tip(f4(Em2 - Em * Em), 'Σₖ p(k) · mean² − (Σₖ p(k) · mean)²')} = ${f4(Ev + Em2 - Em * Em)} = prior variance ${tip(f4(betaVar(a, b)), 'ab / ((a+b)²(a+b+1))')}.`;
+  let s;
+  if (!N) s = `No tosses yet. Your prior Beta(${fmt(a, 1)}, ${fmt(b, 1)}) is worth ${fmt(a + b, 1)} imaginary tosses with mean ${f2(a / (a + b))}. Press <b>10 random tosses</b> or toss by hand.`;
+  else { const inside = BE.p >= lo && BE.p <= hi;
+    s = `${N} real tosses against ${fmt(a + b, 1)} imaginary ones: the data carry ${pct(wd, 0)} of the weight, so the posterior mean ${f2(mean)} sits ${wd > 0.5 ? 'closer to' : 'nearer the prior than to'} the ML estimate ${f2(h / N)}${wd > 0.5 ? ` than to the prior mean ${f2(a / (a + b))}` : ''}.`
+      + (a + b > N ? ' Your prior is still worth more tosses than the data, so it dominates.' : '')
+      + ` The 95% interval ${inside ? 'contains' : '<b>misses</b>'} the bias you chose (${f2(BE.p)})${inside ? '' : (a + b > N ? ': a confident, wrong prior needs more data to overcome' : ': it happens to 1 run in 20')}.`; }
+  $('#beta-say').innerHTML = s;
+}
+$('#beta-a').addEventListener('input', e => { BE.a = +e.target.value; drawBeta(); drawEF(); });
+$('#beta-b').addEventListener('input', e => { BE.b = +e.target.value; drawBeta(); drawEF(); });
+$('#beta-p').addEventListener('input', e => { BE.p = +e.target.value; drawBeta(); });
+$('#beta-H').addEventListener('click', () => { BE.seq.push(1); drawBeta(); drawEF(); });
+$('#beta-T').addEventListener('click', () => { BE.seq.push(0); drawBeta(); drawEF(); });
+$('#beta-10').addEventListener('click', () => { for (let i = 0; i < 10; i++) BE.seq.push(BE.r() < BE.p ? 1 : 0); drawBeta(); drawEF(); });
+$('#beta-undo').addEventListener('click', () => { BE.seq.pop(); drawBeta(); drawEF(); });
+$('#beta-clr').addEventListener('click', () => { BE.seq = []; drawBeta(); drawEF(); });
+fig($('#beta-cv'), drawBeta);
+
+/* ======================= 3. posterior predictive ======================= */
+const PR = { a: 1, b: 1, h: 4, t: 0, n: 10 };
+function drawPR() {
+  const C = C0(), { a, b, h, t, n } = PR, N = h + t, A = a + h, B = b + t, th = N ? h / N : null;
+  const bb = Array.from({ length: n + 1 }, (_, k) => betaBinom(k, n, A, B)), bi = th == null ? null : Array.from({ length: n + 1 }, (_, k) => binom(k, n, th));
+  const ym = Math.min(1.05, Math.max(...bb, ...(bi || [0])) * 1.15 + 0.01), v = frame($('#pr-cv'), [-0.7, n + 0.7], [0, ym]); axes(v, 'k heads in the next ' + n, 'probability', { sx: n > 20 ? 5 : n > 10 ? 2 : 1 });
+  const c = v.ctx, bw = Math.max(2, (v.X(1) - v.X(0)) * 0.36); clip(v);
+  bb.forEach((p, k) => { c.fillStyle = C.a; c.globalAlpha = 0.85; c.fillRect(v.X(k) - bw - 1, v.Y(p), bw, v.Y(0) - v.Y(p)); });
+  if (bi) bi.forEach((p, k) => { c.fillStyle = C.bad; c.globalAlpha = 0.55; c.fillRect(v.X(k) + 1, v.Y(p), bw, v.Y(0) - v.Y(p)); });
+  c.globalAlpha = 1; v.ctx.restore();
+  $('#pr-h-o').textContent = h; $('#pr-t-o').textContent = t; $('#pr-n-o').textContent = n;
+  const pb = A / (A + B), sdB = Math.sqrt(n * A * B * (A + B + n) / ((A + B) ** 2 * (A + B + 1))), sdP = th == null ? null : Math.sqrt(n * th * (1 - th));
+  $('#pr-pb').innerHTML = tip(f3(pb), `(h + a) / (N + a + b) = ${fmt(h + a, 1)} / ${fmt(N + a + b, 1)}`);
+  $('#pr-pm').innerHTML = th == null ? '—' : tip(f3(th), `h / N = ${h} / ${N}`);
+  $('#pr-sd').innerHTML = tip(f2(sdB), `√(n a′b′(a′+b′+n) / ((a′+b′)²(a′+b′+1)))\na′ = ${fmt(A, 1)}, b′ = ${fmt(B, 1)}`) + ' vs ' + (sdP == null ? '—' : tip(f2(sdP), `√(n θ̂(1 − θ̂)) = √(${n} × ${f3(th)} × ${f3(1 - th)})`));
+  $('#run-pnext').innerHTML = `<b>Running example</b>: (${h} + ${fmt(a, 1)}) / (${N} + ${fmt(a, 1)} + ${fmt(b, 1)}) = ${tip(f3(pb), 'the posterior mean of θ')}${a === 1 && b === 1 ? `, Laplace's rule (h + 1)/(N + 2)` : ''}. Maximum likelihood would say ${th == null ? 'nothing (0/0)' : f3(th)}.`;
+  const kk = h >= t ? n : 0, pB = bb[kk], pP = bi ? bi[kk] : null;
+  $('#run-bb').innerHTML = `<b>Running example</b>: the chance that all ${n} future tosses are ${kk ? 'heads' : 'tails'} is C(${n}, ${kk}) B(${fmt(kk + A, 1)}, ${fmt(n - kk + B, 1)}) / B(${fmt(A, 1)}, ${fmt(B, 1)}) = ${tip(f4(pB), 'computed with log-gamma functions')}; the plug-in binomial says ${pP == null ? 'nothing' : tip(f4(pP), `θ̂ = ${f3(th)} raised to the ${n}`)}.`;
+  let s;
+  if (th == null) s = `No data: the predictive is the prior's own guess, spread over every k. The plug-in has no estimate to plug in.`;
+  else if (h === 0 || t === 0) s = `${N} ${h ? 'heads' : 'tails'} and no ${h ? 'tails' : 'heads'}: the plug-in sets &theta;&#770; = ${h ? 1 : 0} and is <b>certain</b> all ${n} future tosses will be ${h ? 'heads' : 'tails'}. The posterior predictive gives that ${pct(pB, 0)} and spreads the rest: it remembers that ${N} tosses can't pin &theta; down.`;
+  else s = `The posterior predictive is wider (sd ${f2(sdB)} heads) than the plug-in binomial (sd ${f2(sdP)}). The extra width is our uncertainty about &theta; itself; it shrinks as N grows, so ${N < 30 ? 'try 30 heads and 30 tails' : 'with this much data the two nearly agree'}.`;
+  $('#pr-say').innerHTML = s;
+}
+seg1('[data-pp]', 'data-pp', k => { [PR.a, PR.b] = k.split(',').map(Number); drawPR(); });
+['h', 't', 'n'].forEach(k => $('#pr-' + k).addEventListener('input', e => { PR[k] = +e.target.value; drawPR(); }));
+fig($('#pr-cv'), drawPR);
+
+/* ======================= 4. Dirichlet on the triangle ======================= */
+const DI = { la: 0, m: [3, 1, 0], r: mulberry32(33), truth: [0.6, 0.3, 0.1] };
+const TRI = [[0, 0], [1, 0], [0.5, Math.sqrt(3) / 2]], FACE = ['A', 'B', 'C'];
+const toXY = mu => [mu[0] * TRI[0][0] + mu[1] * TRI[1][0] + mu[2] * TRI[2][0], mu[0] * TRI[0][1] + mu[1] * TRI[1][1] + mu[2] * TRI[2][1]];
+const toMu = (x, y) => { const c = y / TRI[2][1], b = x - 0.5 * c; return [1 - b - c, b, c]; };
+function drawDI() {
+  const C = C0(), al = Math.pow(10, DI.la), m = DI.m, N = sum(m), A = m.map(k => k + al), A0 = sum(A);
+  const v = frame($('#di-cv'), [-0.1, 1.1], [-0.1, 0.96], { l: 10, r: 10, t: 10, b: 10 }, true), c = v.ctx;
+  const lg0 = lgamma(A0) - sum(A.map(lgamma)), step = 4, vals = [];
+  const cells = [];
+  for (let py = v.pad.t; py < v.h - v.pad.b; py += step) for (let px = v.pad.l; px < v.w - v.pad.r; px += step) { const mu = toMu(v.iX(px + step / 2), v.iY(py + step / 2)); if (mu.some(q => q <= 0.002)) continue;
+    const ld = lg0 + sum(A.map((a, k) => (a - 1) * Math.log(mu[k]))); cells.push([px, py, ld]); vals.push(ld); }
+  vals.sort((p, q) => p - q); const ref = vals[Math.floor(vals.length * 0.995)] || 0;
+  c.save(); c.fillStyle = C.a; cells.forEach(([px, py, ld]) => { const r = Math.exp(ld - ref); if (r < 0.004) return; c.globalAlpha = 0.62 * Math.min(1, Math.pow(r, 0.6)); c.fillRect(px, py, step + 0.5, step + 0.5); }); c.restore();
+  c.save(); c.strokeStyle = C.ink; c.lineWidth = 1.4; c.beginPath(); TRI.forEach((p, i) => i ? c.lineTo(v.X(p[0]), v.Y(p[1])) : c.moveTo(v.X(p[0]), v.Y(p[1]))); c.closePath(); c.stroke(); c.restore();
+  label(v, v.X(0) - 4, v.Y(0) + 2, 'A always', C.ink, 'left', 'top'); label(v, v.X(1) + 4, v.Y(0) + 2, 'B always', C.ink, 'right', 'top'); label(v, v.X(0.5), v.Y(TRI[2][1]) - 4, 'C always', C.ink, 'center', 'bottom');
+  label(v, v.X(0.5), v.Y(0.289) + 6, 'fair die', C.muted, 'center', 'top'); { const [x, y] = toXY([1 / 3, 1 / 3, 1 / 3]); c.save(); c.fillStyle = C.muted; c.beginPath(); c.arc(v.X(x), v.Y(y), 2.2, 0, 7); c.fill(); c.restore(); }
+  { const [x, y] = toXY(DI.truth); star(v, x, y, C.c, 8); }
+  const mean = A.map(a => a / A0); { const [x, y] = toXY(mean); dot(v, x, y, C.a, 6); }
+  if (N) { const ml = m.map(k => k / N), [x, y] = toXY(ml); dot(v, x, y, C.bad, 5); }
+  $('#di-a-o').textContent = al < 1 ? f2(al) : fmt(al, 1);
+  const row = (k, nm) => `<tr><td>${nm}</td><td class="num">${m[k]}</td><td class="num">${N ? f3(m[k] / N) : '—'}</td><td class="num">${f3((m[k] + 0.5) / (N + 1.5))}</td><td class="num">${f3((m[k] + 1) / (N + 3))}</td><td class="num">${tip(f3(mean[k]), `(${m[k]} + ${fmt(al, 2)}) / (${N} + 3 × ${fmt(al, 2)})`)}</td></tr>`;
+  $('#di-tbl').innerHTML = `<thead><tr><th>face</th><th>m</th><th>ML</th><th>+&frac12;</th><th>+1</th><th>+&alpha;</th></tr></thead><tbody>${FACE.map((f, k) => row(k, f)).join('')}</tbody>`;
+  $('#run-dir').innerHTML = `<b>Running example</b>: prior Dir(${f2(al)}, ${f2(al)}, ${f2(al)}) plus counts (${m.join(', ')}) gives ${tip(`Dir(${A.map(f2).join(', ')})`, 'α + m, face by face')}, with &alpha;<sub>0</sub> = ${tip(f2(A0), `3 × ${f2(al)} + ${N}`)}.`;
+  const vA = A[0] * (A0 - A[0]) / (A0 * A0 * (A0 + 1)), cAB = -A[0] * A[1] / (A0 * A0 * (A0 + 1)), modeOK = A.every(a => a > 1);
+  $('#run-dmom').innerHTML = `<b>Running example</b>, posterior: E[&mu;<sub>A</sub>] = ${f2(A[0])}/${f2(A0)} = ${tip(f3(mean[0]), 'α_A / α₀')}, var[&mu;<sub>A</sub>] = ${tip(sciT(vA), `${f2(A[0])} × ${f2(A0 - A[0])} / (${f2(A0)}² × ${f2(A0 + 1)})`)}, cov[&mu;<sub>A</sub>, &mu;<sub>B</sub>] = ${tip(sciT(cAB), `−${f2(A[0])} × ${f2(A[1])} / (${f2(A0)}² × ${f2(A0 + 1)})`)}; the mode ${modeOK ? `is (${A.map(a => f3((a - 1) / (A0 - 3))).join(', ')})` : 'is not defined (some α ≤ 1: the peak sits on an edge)'}.`;
+  const k = m.indexOf(Math.min(...m));
+  $('#run-addk').innerHTML = `<b>Running example</b> for face ${FACE[k]}: (${m[k]} + ${f2(al)}) / (${N} + 3 &times; ${f2(al)}) = ${tip(f3(mean[k]), 'the posterior mean of μ_' + FACE[k])}; add-one would give ${f3((m[k] + 1) / (N + 3))} and ML ${N ? f3(m[k] / N) : '0/0'}.`;
+  let s;
+  if (!N) s = `No rolls yet: the posterior is the prior. ${al < 1 ? `&alpha; = ${f2(al)} &lt; 1 pushes belief into the corners and edges: it expects a lopsided die.` : al > 1.05 ? `&alpha; = ${fmt(al, 1)} &gt; 1 pulls belief to the centre: it expects a fair-ish die.` : '&alpha; = 1 is flat over the whole triangle.'}`;
+  else if (m.some(q => q === 0)) { const z = m.map((q, i) => q === 0 ? FACE[i] : null).filter(Boolean); s = `Face ${z.join(' and ')} ${z.length > 1 ? 'have' : 'has'} never come up in ${N} roll${N > 1 ? 's' : ''}. ML gives ${z.length > 1 ? 'them' : 'it'} probability <b>0</b> (the red dot is on an edge); your prior gives ${f3(mean[m.indexOf(0)])}. That is why language models smooth: an unseen word is not an impossible word.`; }
+  else s = `After ${N} rolls the posterior mean (teal) sits between the ML estimate (red) and the centre, pulled by 3&alpha; = ${fmt(3 * al, 1)} imaginary rolls. ${N > 30 * al ? 'With this much data the choice of &alpha; hardly matters.' : 'Turn &alpha; up and the estimate slides towards a fair die.'}`;
+  $('#di-say').innerHTML = s;
+}
+$('#di-a').addEventListener('input', e => { DI.la = +e.target.value; drawDI(); });
+['A', 'B', 'C'].forEach((f, k) => $('#di-' + f).addEventListener('click', () => { DI.m[k]++; drawDI(); }));
+$('#di-10').addEventListener('click', () => { for (let i = 0; i < 10; i++) { const u = DI.r(); DI.m[u < DI.truth[0] ? 0 : u < DI.truth[0] + DI.truth[1] ? 1 : 2]++; } drawDI(); });
+$('#di-clr').addEventListener('click', () => { DI.m = [0, 0, 0]; drawDI(); });
+fig($('#di-cv'), drawDI);
+
+/* ======================= 5. Gaussian mean ======================= */
+const GA = { m0: 16, s0: 1.5, sig: 2, mu: 21, X: [], r: mulberry32(55) };
+function drawGA() {
+  const C = C0(), { m0, s0, sig, X } = GA, N = X.length, xb = N ? sum(X) / N : null, prec = 1 / (s0 * s0) + N / (sig * sig), sN = Math.sqrt(1 / prec);
+  const mN = N ? (sig * sig / (N * s0 * s0 + sig * sig)) * m0 + (N * s0 * s0 / (N * s0 * s0 + sig * sig)) * xb : m0;
+  const fP = x => normPdf(x, m0, s0), fL = N ? x => normPdf(x, xb, sig / Math.sqrt(N)) : null, fQ = x => normPdf(x, mN, sN);
+  const ym = peak([fP, fQ].concat(fL ? [fL] : []), 8, 32), v = frame($('#ga-cv'), [8, 32], [0, ym], { t: 14, b: 32, l: 46, r: 14 }); axes(v, 'temperature μ (°C)', 'density', { sx: 2 }); clip(v);
+  dens(v, fP, C.muted, { lw: 1.8, dash: [5, 4] }); if (fL) dens(v, fL, C.b, { lw: 2 }); dens(v, fQ, C.a, { lw: 2.8, fill: 0.14 });
+  vline(v, GA.mu, C.c, 1.6, [2, 3]);
+  const c = v.ctx; c.save(); c.strokeStyle = C.ink; c.globalAlpha = 0.7; c.lineWidth = 1.3; X.forEach(x => { c.beginPath(); c.moveTo(v.X(x), v.Y(0) - 1); c.lineTo(v.X(x), v.Y(0) - 9); c.stroke(); }); c.restore();
+  v.ctx.restore();
+  $('#ga-m0-o').textContent = fmt(m0, 1) + ' °C'; $('#ga-s0-o').textContent = fmt(s0, 1) + ' °C';
+  const w = N * s0 * s0 / (N * s0 * s0 + sig * sig);
+  $('#ga-n').textContent = N; $('#ga-post').innerHTML = tip(`${f2(mN)} &plusmn; ${f2(sN)}`, `μ_N = ${f3(1 - w)} × ${fmt(m0, 1)} + ${f3(w)} × ${N ? f2(xb) : '—'}\nσ_N = 1/√(1/σ₀² + N/σ²)`);
+  $('#ga-w').innerHTML = tip(pct(w, 0), `Nσ₀² / (Nσ₀² + σ²) = ${N} × ${f2(s0 * s0)} / (${f2(N * s0 * s0)} + 4)`);
+  $('#run-ga').innerHTML = N ? `<b>Running example</b> with N = ${N}, x&#772; = ${tip(f2(xb), `mean of the ${N} readings`)}: 1/&sigma;<sub>N</sub><sup>2</sup> = 1/${f2(s0 * s0)} + ${N}/4 = ${tip(f3(prec), `${f3(1 / (s0 * s0))} + ${f3(N / 4)}`)}, so &sigma;<sub>N</sub> = ${f3(sN)}; &mu;<sub>N</sub> = ${tip(f3(1 - w), `σ² / (Nσ₀² + σ²) = 4 / ${f2(N * s0 * s0 + 4)}`)} &times; ${fmt(m0, 1)} + ${tip(f3(w), `Nσ₀² / (Nσ₀² + σ²) = ${f2(N * s0 * s0)} / ${f2(N * s0 * s0 + 4)}`)} &times; ${f2(xb)} = ${tip(f3(mN), 'the peak of the teal curve')}.` : `<b>Running example</b>: with N = 0, 1/&sigma;<sub>N</sub><sup>2</sup> = 1/&sigma;<sub>0</sub><sup>2</sup> and &mu;<sub>N</sub> = &mu;<sub>0</sub> = ${fmt(m0, 1)}: the posterior is the prior.`;
+  let s;
+  if (!N) s = `No readings yet: the posterior is your prior, ${fmt(m0, 1)} &plusmn; ${fmt(s0, 1)} &deg;C. Take a reading.`;
+  else { const off = Math.abs(mN - GA.mu);
+    s = `The posterior (sd ${f2(sN)}) is narrower than both the prior (${fmt(s0, 1)}) and the likelihood (${f2(sig / Math.sqrt(N))}): precisions add. The data hold ${pct(w, 0)} of the weight.`
+      + (Math.abs(m0 - GA.mu) > 2.5 * s0 && w < 0.8 ? ` Your prior is <b>confident and wrong</b> (the truth is ${fmt(GA.mu, 0)} &deg;C, ${fmt(Math.abs(m0 - GA.mu) / s0, 1)} prior sds away): it takes about &sigma;<sup>2</sup>/&sigma;<sub>0</sub><sup>2</sup> = ${fmt(4 / (s0 * s0), 1)} readings just to match its weight.` : off < 2 * sN ? ` The truth (${fmt(GA.mu, 0)} &deg;C) lies within two posterior sds.` : ''); }
+  $('#ga-say').innerHTML = s;
+}
+const gaRead = k => { for (let i = 0; i < k; i++) GA.X.push(GA.mu + GA.sig * gaussOf(GA.r)); drawGA(); };
+$('#ga-m0').addEventListener('input', e => { GA.m0 = +e.target.value; drawGA(); });
+$('#ga-s0').addEventListener('input', e => { GA.s0 = +e.target.value; drawGA(); });
+$('#ga-1').addEventListener('click', () => gaRead(1)); $('#ga-10').addEventListener('click', () => gaRead(10));
+$('#ga-clr').addEventListener('click', () => { GA.X = []; drawGA(); });
+fig($('#ga-cv'), drawGA);
+
+/* ======================= 6a. Gamma prior on the precision ======================= */
+const PC = { a: 2, b: 2, mu: 20, lam: 0.25, X: [], r: mulberry32(77) };
+function drawPC() {
+  const C = C0(), { a, b, X, mu } = PC, N = X.length, S = sum(X.map(x => (x - mu) ** 2)), aN = a + N / 2, bN = b + S / 2;
+  const fP = x => gammaPdf(x, a, b), fQ = x => gammaPdf(x, aN, bN), xmax = clamp(Math.max(gammaPpf(0.995, a, b), gammaPpf(0.995, aN, bN), 0.6), 0.6, 6);
+  const ym = peak([fP, fQ], 0, xmax, 80), v = frame($('#pc-cv'), [0, xmax], [0, ym]); axes(v, 'precision λ = 1/σ²', 'density'); clip(v);
+  const lo = gammaPpf(0.025, aN, bN), hi = gammaPpf(0.975, aN, bN);
+  dens(v, fP, C.muted, { lw: 1.8, dash: [5, 4], x0: 1e-4 }); dens(v, fQ, C.a, { lw: 2.8, lo, hi, shade: 0.22, x0: 1e-4 });
+  vline(v, PC.lam, C.c, 1.6, [2, 3], 'truth 0.25'); v.ctx.restore();
+  $('#pc-a-o').textContent = fmt(a, 1); $('#pc-b-o').textContent = fmt(b, 1);
+  const E = aN / bN, sd = Math.sqrt(aN) / bN;
+  $('#pc-n').textContent = N; $('#pc-m').innerHTML = tip(`${f3(E)} &plusmn; ${f3(sd)}`, `a_N / b_N = ${fmt(aN, 1)} / ${f2(bN)}\nsd = √a_N / b_N`);
+  $('#pc-s').innerHTML = tip(f2(1 / Math.sqrt(E)) + ' °C', `1 / √${f3(E)}\n(the true σ is 2 °C)`);
+  const mode = aN >= 1 ? (aN - 1) / bN : null;
+  $('#run-gam').innerHTML = `<b>Running example</b>, posterior Gam(${fmt(aN, 1)}, ${f2(bN)}): mean ${tip(f3(E), `${fmt(aN, 1)} / ${f2(bN)}`)}, variance ${tip(f4(aN / (bN * bN)), `${fmt(aN, 1)} / ${f2(bN)}²`)}, mode ${mode == null ? 'at 0 (a &lt; 1)' : tip(f3(mode), `(${fmt(aN, 1)} − 1) / ${f2(bN)}`)}; 95% of the belief lies in ${tip(`[${f3(lo)}, ${f3(hi)}]`, 'quantiles of the Gamma\n(inverse regularised incomplete gamma)')}.`;
+  $('#run-gpost').innerHTML = `<b>Running example</b>: a<sub>N</sub> = ${fmt(a, 1)} + ${N}/2 = ${fmt(aN, 1)}; b<sub>N</sub> = ${fmt(b, 1)} + &frac12; &times; ${tip(f2(S), `Σ (xₙ − 20)² over the ${N} readings`)} = ${f2(bN)}. The prior was worth ${fmt(2 * a, 0)} readings with mean square ${f2(b / a)}.`;
+  let s;
+  if (!N) s = `Prior only: Gam(${fmt(a, 1)}, ${fmt(b, 1)}) guesses &lambda; &asymp; ${f2(a / b)}, a noise of about ${f2(Math.sqrt(b / a))} &deg;C, and is worth ${fmt(2 * a, 0)} readings. The real thermometer is noisier: &sigma; = 2, &lambda; = 0.25.`;
+  else s = `${N} reading${N > 1 ? 's' : ''} with mean square deviation ${f2(S / N)} (&sigma;&#770;&sup2;<sub>ML</sub>). The posterior mean of &lambda; is ${f3(E)}, and the 95% interval ${PC.lam >= lo && PC.lam <= hi ? 'contains' : '<b>misses</b>'} the truth 0.25.` + (2 * a > N ? ` Your prior still counts for more readings (${fmt(2 * a, 0)}) than the data.` : N >= 40 ? ' The prior has been outvoted; the belief narrows like 1/&radic;N.' : '');
+  $('#pc-say').innerHTML = s;
+}
+const pcRead = k => { for (let i = 0; i < k; i++) PC.X.push(PC.mu + 2 * gaussOf(PC.r)); drawPC(); };
+$('#pc-a').addEventListener('input', e => { PC.a = +e.target.value; drawPC(); });
+$('#pc-b').addEventListener('input', e => { PC.b = +e.target.value; drawPC(); });
+$('#pc-1').addEventListener('click', () => pcRead(1)); $('#pc-10').addEventListener('click', () => pcRead(10));
+$('#pc-clr').addEventListener('click', () => { PC.X = []; drawPC(); });
+fig($('#pc-cv'), drawPC);
+
+/* ======================= 6b. Normal-Gamma ======================= */
+const NG = { lk: 0, mu0: 17, a0: 2, b0: 4, X: [], r: mulberry32(88) }, NGX = [12, 28], NGY = [0, 1.2];
+function ngPost() {
+  const k0 = Math.pow(10, NG.lk), { mu0, a0, b0, X } = NG, N = X.length, xb = N ? sum(X) / N : 0, S = sum(X.map(x => (x - xb) ** 2));
+  const kN = k0 + N, mN = (k0 * mu0 + N * xb) / kN, aN = a0 + N / 2, dis = N ? k0 * N * (xb - mu0) ** 2 / (2 * kN) : 0, bN = b0 + S / 2 + dis;
+  return { k0, N, xb, S, kN, mN, aN, bN, dis };
+}
+const ngLog = (mu, lam, m, k, a, b) => lam <= 0 ? -Infinity : 0.5 * Math.log(k * lam / (2 * Math.PI)) - 0.5 * k * lam * (mu - m) ** 2 + a * Math.log(b) - lgamma(a) + (a - 1) * Math.log(lam) - b * lam;
+function drawNG() {
+  const C = C0(), P = ngPost(), v = frame($('#ng-cv'), NGX, NGY, { t: 14, b: 32, l: 46, r: 14 });
+  const G = field(v, (mu, lam) => Math.exp(ngLog(mu, lam, P.mN, P.kN, P.aN, P.bN)), 4); heat(v, G, C.a, 0.8);
+  const Gp = field(v, (mu, lam) => Math.exp(ngLog(mu, lam, NG.mu0, P.k0, NG.a0, NG.b0)), 6); let mx = 0; for (const x of Gp.F) if (x > mx) mx = x;
+  iso(v, Gp, mx * 0.5, C.muted, 1.2, [4, 3]); iso(v, Gp, mx * 0.1, C.muted, 1, [2, 3]);
+  axes(v, 'mean μ (°C)', 'precision λ', { sx: 2, sy: 0.2 }); star(v, 20, 0.25, C.c, 8);
+  // posterior mode
+  const lm = P.aN > 0.5 ? (P.aN - 0.5) / P.bN : 0; if (lm < NGY[1]) dot(v, P.mN, lm, C.ink, 3.5);
+  const sv = frame($('#ng-strip'), NGX, [0, 1], { t: 6, b: 22, l: 46, r: 14 }); axes(sv, '', '', { sx: 2, sy: 5 });
+  NG.X.forEach(x => dot(sv, x, 0.5, C.b, 5)); seg(sv, NG.mu0, 0, NG.mu0, 1, C.muted, 1.4, [3, 3]); label(sv, sv.X(NG.mu0) + 4, sv.Y(0.82), 'μ₀', C.muted);
+  if (!NG.X.length) label(sv, sv.X(22), sv.Y(0.5), 'click here to add a reading', C.muted, 'center');
+  NG.sv = sv;
+  $('#ng-k-o').textContent = P.k0 < 1 ? f2(P.k0) : fmt(P.k0, 1);
+  const E = P.aN / P.bN;
+  $('#ng-mu').innerHTML = tip(f2(P.mN) + ' °C', `(κ₀μ₀ + N x̄) / κ_N = (${f2(P.k0)} × 17 + ${P.N} × ${f2(P.xb)}) / ${f2(P.kN)}`);
+  $('#ng-lam').innerHTML = tip(f3(E), `a_N / b_N = ${fmt(P.aN, 1)} / ${f2(P.bN)}\nimplied σ ≈ ${f2(1 / Math.sqrt(E))} °C`); $('#ng-n').textContent = P.N;
+  $('#run-ng').innerHTML = `<b>Running example</b>: &kappa;<sub>N</sub> = ${f2(P.k0)} + ${P.N} = ${f2(P.kN)}; &mu;<sub>N</sub> = ${tip(f2(P.mN), `(${f2(P.k0)} × 17 + ${P.N} × ${f2(P.xb)}) / ${f2(P.kN)}`)}; a<sub>N</sub> = 2 + ${P.N}/2 = ${fmt(P.aN, 1)}; b<sub>N</sub> = 4 + ${tip(f2(P.S / 2), `½ Σ (xₙ − x̄)², the scatter`)} + ${tip(f2(P.dis), `κ₀N(x̄ − μ₀)² / (2κ_N)\n= ${f2(P.k0)} × ${P.N} × (${f2(P.xb)} − 17)² / (2 × ${f2(P.kN)})`)} = ${f2(P.bN)}, so E[&lambda;] = ${f3(E)} (&sigma; &asymp; ${f2(1 / Math.sqrt(E))} &deg;C).`;
+  let s;
+  if (!P.N) s = `Prior only (grey contours, here filled too): note the tilt. Where &lambda; is small (a noisy world) the belief about &mu; is wide; where &lambda; is large it is tight. Click the strip to add readings.`;
+  else if (P.N === 1) s = `One reading moves the mean to ${f2(P.mN)} but carries no scatter, so b grows only through the disagreement term (${f2(P.dis)}): a single surprising reading already hints that the world is noisy. Add a second.`;
+  else s = `${P.N} readings with scatter &Sigma;(x &minus; x&#772;)&sup2; = ${f2(P.S)}. The belief about the noise says &sigma; &asymp; ${f2(1 / Math.sqrt(E))} &deg;C.` + (P.dis > P.S / 2 ? ` The gap between x&#772; = ${f2(P.xb)} and &mu;<sub>0</sub> = 17 adds more to b (${f2(P.dis)}) than the scatter does (${f2(P.S / 2)}): the prior's error is being read as noise. Lower &kappa;<sub>0</sub> to trust the prior mean less.` : ' Click two readings far apart to see &lambda; drop, or several close together to see it rise.');
+  $('#ng-say').innerHTML = s;
+}
+$('#ng-strip').addEventListener('click', e => { if (!NG.sv) return; const [px] = evPos($('#ng-strip'), e); const x = NG.sv.iX(px); if (x < NGX[0] || x > NGX[1]) return; NG.X.push(Math.round(x * 10) / 10); drawNG(); }); $('#ng-strip').style.cursor = 'crosshair';
+$('#ng-k').addEventListener('input', e => { NG.lk = +e.target.value; drawNG(); });
+$('#ng-5').addEventListener('click', () => { for (let i = 0; i < 5; i++) NG.X.push(Math.round((20 + 2 * gaussOf(NG.r)) * 10) / 10); drawNG(); });
+$('#ng-undo').addEventListener('click', () => { NG.X.pop(); drawNG(); });
+$('#ng-clr').addEventListener('click', () => { NG.X = []; drawNG(); });
+fig($('#ng-cv'), drawNG); fig($('#ng-strip'), drawNG);
+
+/* ======================= 7. conjugate & noninformative ======================= */
+function drawEF() {
+  const { a, b, seq } = BE, h = sum(seq), N = seq.length, nu = a + b, chi = a / (a + b);
+  $('#run-ef').innerHTML = `<b>Running example</b>, the coin from <a href="#beta">section 2</a>: &eta; = ln(&theta;/(1 &minus; &theta;)), u(x) = x and g(&eta;) = 1/(1 + e<sup>&eta;</sup>) = 1 &minus; &theta;. Your Beta(${fmt(a, 1)}, ${fmt(b, 1)}) is this prior with &nu; = a + b = ${fmt(nu, 1)} and &chi; = a/(a + b) = ${tip(f3(chi), 'the average of the imaginary tosses')}. After your ${N} tosses: &nu; + N = ${fmt(nu + N, 1)} and &nu;&chi; + &Sigma;x = ${fmt(a, 1)} + ${h} = ${fmt(a + h, 1)}, which is ${tip(`Beta(${fmt(a + h, 1)}, ${fmt(b + N - h, 1)})`, 'Beta(νχ + Σx, ν + N − νχ − Σx)\n(the change of variable from η to θ\nadds the −1 in each exponent)')}, exactly the Beta update.`;
+}
+const NF = { a: 1 };
+function drawNF() {
+  const C = C0(), a = NF.a, B = Math.exp(betaln(a, a)), v0 = frame($('#nf-cv'), [0, 1], [0, 1]), W = v0.w, mid = W / 2, c = v0.ctx;
+  const fT = x => betaPdf(x, a, a), fP = p => { const s = 1 / (1 + Math.exp(-p)); return Math.exp(a * Math.log(s) + a * Math.log1p(-s)) / B; };
+  const yT = Math.min(5, Math.max(2, peak([fT], 0.01, 0.99))), yP = peak([fP], -8, 8) * 1.05;
+  const H = v0.h, nar = W < 520, vl = nar ? subView(v0, [0, 1], [0, yT], { l: 40, r: 14, t: 22, b: H / 2 + 26 }) : subView(v0, [0, 1], [0, yT], { l: 40, r: W - mid + 14, t: 22, b: 32 }), vr = nar ? subView(v0, [-8, 8], [0, yP], { l: 40, r: 14, t: H / 2 + 22, b: 32 }) : subView(v0, [-8, 8], [0, yP], { l: mid + 40, r: 14, t: 22, b: 32 });
+  axes(vl, 'θ', '', { sx: 0.25 }); axes(vr, 'log-odds φ', '', { sx: 4, ny: 4 });
+  label(vl, vl.pad.l + 4, vl.pad.t - 12, 'p(θ)', C.muted); label(vr, vr.pad.l + 4, vr.pad.t - 12, 'p(φ)', C.muted);
+  clip(vl); dens(vl, fT, C.a, { lw: 2.6, lo: 0.25, hi: 0.75, shade: 0.2, x0: 0.0005, x1: 0.9995 }); vl.ctx.restore();
+  clip(vr); dens(vr, fP, C.a, { lw: 2.6, lo: -Math.log(3), hi: Math.log(3), shade: 0.2 }); vr.ctx.restore();
+  void c;
+  $('#nf-a-o').textContent = f2(a);
+  const pm = betainc(0.75, a, a) - betainc(0.25, a, a), pe = 2 * betainc(0.01, a, a);
+  $('#nf-mid').innerHTML = tip(pct(pm), `I₀.₇₅(a, a) − I₀.₂₅(a, a)\nthe same mass on both panels`); $('#nf-ext').innerHTML = tip(pct(pe), '2 × I₀.₀₁(a, a)\n(φ beyond ±4.6)');
+  const p0 = Math.pow(0.25, a) / B, s3 = 1 / (1 + Math.exp(-3)), p3 = Math.exp(a * Math.log(s3) + a * Math.log1p(-s3)) / B;
+  $('#run-logit').innerHTML = `<b>Running example</b>, a = b = ${f2(a)}: B(a, a) = ${tip(f3(B), `Γ(${f2(a)})² / Γ(${f2(2 * a)})`)}. At &phi; = 0 (&theta; = 0.5), p(&phi;) = 0.5<sup>${f2(a)}</sup> &times; 0.5<sup>${f2(a)}</sup> / B = ${tip(f4(p0), `0.25^${f2(a)} / ${f3(B)}`)}; at &phi; = 3 (&theta; = ${f3(s3)}) it is ${tip(f4(p3), `(${f3(s3)} × ${f3(1 - s3)})^${f2(a)} / ${f3(B)}`)}, a ratio of ${tip(f2(p0 / p3), 'how much the prior prefers φ = 0 over φ = 3')}.`;
+  let s;
+  if (a > 1.5) s = `a = b = ${f2(a)} is informative: it believes the coin is near fair, and on the log-odds scale it is a bump of width about &plusmn;${f2(2 / Math.sqrt(a))}.`;
+  else if (Math.abs(a - 1) < 0.03) s = `Uniform in &theta;, yet on the log-odds scale it is a bump: it says &phi; = 0 is ${f2(p0 / p3)} times as plausible as &phi; = 3. &ldquo;Flat&rdquo; is a statement about one parametrisation.`;
+  else if (Math.abs(a - 0.5) < 0.03) s = `The Jeffreys prior: built so that it gives the same answer whichever smooth parametrisation you start from. It is U-shaped in &theta; and still a gentle bump in &phi;.`;
+  else if (a < 0.2) s = `Nearly flat in log-odds (the ratio p(0)/p(3) is only ${f2(p0 / p3)}), but in &theta; it piles up at the ends: ${pct(pe, 0)} of the belief says the coin is within 0.01 of always heads or always tails. As a &rarr; 0 it becomes the improper Haldane prior; with no tails ever seen, its posterior would be improper too.`;
+  else s = `a = b = ${f2(a)}: ${a < 1 ? 'U-shaped in θ, a bump in φ' : 'a gentle hump in θ and a narrower bump in φ'}. The shaded regions hold the same ${pct(pm, 0)} of belief on both panels; only the stretching of the axis differs.`;
+  $('#nf-say').innerHTML = s;
+}
+seg1('[data-nf]', 'data-nf', k => { NF.a = +k; $('#nf-a').value = k; drawNF(); });
+$('#nf-a').addEventListener('input', e => { NF.a = +e.target.value; $$('[data-nf]').forEach(b => b.setAttribute('aria-pressed', Math.abs(+b.getAttribute('data-nf') - NF.a) < 0.005 ? 'true' : 'false')); drawNF(); });
+fig($('#nf-cv'), drawNF);
+$('#run-scale').innerHTML = `<b>Running example</b>: belief that &sigma; is between 1 and 2 mm: ln(2/1) = ${tip(f3(Math.log(2)), 'ln 2')}; between 10 and 20 mm: ln(20/10) = ${tip(f3(Math.log(2)), 'ln 2 again')}; between 1 and 2 m (1000 to 2000 mm): ${f3(Math.log(2))} too. A flat prior on &sigma; would rate 10&ndash;20 ten times as likely as 1&ndash;2, a preference that depends on the units.`;
+
+/* ======================= 8. Bayes vs MAP vs ML: bags of sweets ======================= */
+const HQ = [0, 0.25, 0.5, 0.75, 1], HPRI = [0.1, 0.2, 0.4, 0.2, 0.1];
+const LN = { bag: 4, seq: [], wrap: [], r: mulberry32(101) };
+function lnTraj() { // posterior after 0..N sweets
+  const out = []; let lp = HPRI.map(Math.log), ll = HQ.map(() => 0);
+  const push = () => { const mx = Math.max(...lp), e = lp.map(x => Math.exp(x - mx)), z = sum(e), post = e.map(x => x / z);
+    const bayes = sum(post.map((p, i) => p * HQ[i])), map = post.indexOf(Math.max(...post)), lmx = Math.max(...ll), mlI = out.length ? ll.indexOf(lmx) : null;
+    out.push({ post, bayes, map, ml: mlI }); };
+  push(); LN.seq.forEach(s => { HQ.forEach((q, i) => { const p = s ? q : 1 - q, l = p > 0 ? Math.log(p) : -Infinity; lp[i] += l; ll[i] += l; }); push(); });
+  return out;
+}
+const HCOL = () => [css('--qda'), css('--cB'), css('--muted'), css('--lda'), css('--cA')];
+function drawLN() {
+  const C = C0(), T = lnTraj(), N = LN.seq.length, xm = Math.max(10, N), HC = HCOL();
+  const v = frame($('#ln-cv'), [0, xm], [0, 1.02], { t: 30, b: 32, l: 46, r: 30 }); axes(v, 'sweets unwrapped', 'P(hᵢ | d)', { sy: 0.2 });
+  clip(v); HQ.forEach((_, i) => { const c = v.ctx; c.save(); c.strokeStyle = HC[i]; c.lineWidth = i === LN.bag ? 2.8 : 1.8; c.beginPath(); T.forEach((o, n) => { const x = v.X(n), y = v.Y(o.post[i]); n ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); if (N <= 25) T.forEach((o, n) => dot(v, n, o.post[i], HC[i], 2.6)); }); v.ctx.restore();
+  { const ys = HQ.map((_, i) => ({ i, y: v.Y(T[N].post[i]) })).sort((p, q) => p.y - q.y); for (let k = 1; k < ys.length; k++) ys[k].y = Math.max(ys[k].y, ys[k - 1].y + 11); const over = ys[ys.length - 1].y - (v.h - v.pad.b - 4); if (over > 0) ys.forEach(o => o.y -= over);
+    ys.forEach(o => label(v, Math.min(v.X(N) + 5, v.w - 22), o.y, 'h' + (o.i + 1), HC[o.i])); }
+  tossStrip(v, LN.seq, 15, 120);
+  const vp = frame($('#ln-pr'), [0, xm], [0, 1.05], { t: 12, b: 28, l: 46, r: 30 }); axes(vp, '', 'P(lime next)', { sy: 0.5 }); clip(vp);
+  const line = (fx, col, lw, dash, from) => { const c = vp.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw; if (dash) c.setLineDash(dash); c.beginPath(); let st = false; T.forEach((o, n) => { if (n < from) return; const y = fx(o); const px = vp.X(n), py = vp.Y(y); st ? c.lineTo(px, py) : c.moveTo(px, py); st = true; }); c.stroke(); c.restore(); };
+  line(o => HQ[o.ml], C.b, 2, [6, 4], 1); line(o => HQ[o.map], C.lda, 2, [2, 3], 0); line(o => o.bayes, C.a, 2.8, null, 0); vp.ctx.restore();
+  const L = T[N];
+  $('#ln-b').innerHTML = tip(f3(L.bayes), 'Σᵢ P(lime | hᵢ) P(hᵢ | d)\n' + L.post.map((p, i) => `h${i + 1}: ${HQ[i]} × ${f3(p)}`).join('\n'));
+  $('#ln-m').innerHTML = tip(f2(HQ[L.map]), `h_MAP = h${L.map + 1}, whose lime fraction is ${HQ[L.map]}`);
+  $('#ln-l').innerHTML = L.ml == null ? '—' : tip(f2(HQ[L.ml]), `h_ML = h${L.ml + 1}, whose lime fraction is ${HQ[L.ml]}`);
+  $('#ln-bars').innerHTML = '<span class="mini-h">Posterior over the five bags</span>' + L.post.map((p, i) => `<div class="cf"><span>h${i + 1} &middot; ${HQ[i] * 100}% lime</span><span class="cf-track one"><i style="left:0;width:${p * 100}%;background:${HC[i]}"></i></span><span class="num">${tip(f3(p), `∝ P(d | h${i + 1}) × P(h${i + 1}) = ${HQ[i]}^${sum(LN.seq)} × ${1 - HQ[i]}^${N - sum(LN.seq)} × ${HPRI[i]}`)}</span></div>`).join('');
+  const lime = sum(LN.seq), top = [...L.post.keys()].sort((p, q) => L.post[q] - L.post[p]).slice(0, 2), lik = i => Math.pow(HQ[i], lime) * Math.pow(1 - HQ[i], N - lime), Z = sum(HQ.map((_, i) => lik(i) * HPRI[i]));
+  $('#run-hyp').innerHTML = `<b>Running example</b> after ${N} sweets (${lime} lime, ${N - lime} cherry): ` + top.map(i => `P(h${i + 1} | d) = ${HQ[i]}${sup(lime)} &times; ${1 - HQ[i]}${sup(N - lime)} &times; ${HPRI[i]} / ${tip(sciT(Z), 'Σᵢ P(d | hᵢ) P(hᵢ), the evidence')} = ${tip(f3(L.post[i]), 'normalised over all five bags')}`).join('; ') + `. The prediction is ${L.post.map((p, i) => `${HQ[i]}&times;${f2(p)}`).join(' + ')} = ${tip(f3(L.bayes), 'the Bayesian P(lime next)')}.`;
+  $('#run-map').innerHTML = `<b>Running example</b>: P(d | h)P(h) is largest for ${tip('h' + (L.map + 1), HQ.map((q, i) => `h${i + 1}: ${sciT(lik(i) * HPRI[i])}`).join('\n'))}, so h<sub>MAP</sub> = h${L.map + 1}; P(d | h) alone is largest for ${L.ml == null ? 'every bag equally (no data yet)' : tip('h' + (L.ml + 1), HQ.map((q, i) => `h${i + 1}: ${sciT(lik(i))}`).join('\n'))}${L.ml == null ? '' : `, so h<sub>ML</sub> = h${L.ml + 1}`}.`;
+  // wrappers: P(green | cherry) = 0.3, P(green | lime) = 0.8; flat Beta(1, 1) priors
+  const g1 = LN.seq.filter((s, i) => !s && LN.wrap[i]).length, r1 = LN.seq.filter((s, i) => !s && !LN.wrap[i]).length, g2 = LN.seq.filter((s, i) => s && LN.wrap[i]).length, r2 = LN.seq.filter((s, i) => s && !LN.wrap[i]).length;
+  $('#run-bn').innerHTML = `<b>Running example</b>: the sweets you unwrapped also had wrappers (in this simulation a cherry sweet is green 30% of the time, a lime one 80%). With flat Beta(1, 1) priors: cherry ${g1} green, ${r1} red &rarr; Beta(${1 + g1}, ${1 + r1}), mean ${tip(f3((1 + g1) / (2 + g1 + r1)), `(1 + ${g1}) / (2 + ${g1 + r1})`)}; lime ${g2} green, ${r2} red &rarr; Beta(${1 + g2}, ${1 + r2}), mean ${tip(f3((1 + g2) / (2 + g2 + r2)), `(1 + ${g2}) / (2 + ${g2 + r2})`)}.${N ? '' : ' Unwrap some sweets to fill the counts.'}`;
+  let s;
+  if (!N) s = `No sweets yet. Bayes predicts lime with the prior average ${f2(L.bayes)}; MAP picks the commonest bag, h<sub>3</sub>, and also says 0.5; ML has no data to go on.`;
+  else { const agree = Math.abs(L.bayes - HQ[L.map]) < 0.02 && L.ml === L.map;
+    s = `After ${N} sweet${N > 1 ? 's' : ''} the favourite is h<sub>${L.map + 1}</sub> with probability ${f2(L.post[L.map])}${L.map === LN.bag ? ' (the right bag)' : ` (you were sold h<sub>${LN.bag + 1}</sub>)`}. `
+      + (agree ? 'All three predictions now agree: with enough data the prior washes out.' : L.ml !== L.map ? `ML ignores the shop's stock list and jumps to h<sub>${L.ml + 1}</sub>; MAP still trusts the prior's h<sub>${L.map + 1}</sub>; Bayes blends them: ${f2(L.bayes)}.` : `MAP and ML pick h<sub>${L.map + 1}</sub> and predict ${f2(HQ[L.map])} as if certain; Bayes hedges with ${f2(L.bayes)} because other bags are still plausible.`); }
+  $('#ln-say').innerHTML = s;
+}
+const lnDraw = k => { for (let i = 0; i < k && LN.seq.length < 100; i++) { const lime = LN.r() < HQ[LN.bag] ? 1 : 0; LN.seq.push(lime); LN.wrap.push(LN.r() < (lime ? 0.8 : 0.3) ? 1 : 0); } drawLN(); };
+seg1('[data-lb]', 'data-lb', k => { LN.bag = +k; LN.seq = []; LN.wrap = []; drawLN(); });
+$('#ln-1').addEventListener('click', () => lnDraw(1)); $('#ln-10').addEventListener('click', () => lnDraw(10));
+$('#ln-clr').addEventListener('click', () => { LN.seq = []; LN.wrap = []; drawLN(); });
+fig($('#ln-cv'), drawLN); fig($('#ln-pr'), drawLN);
+
+/* ======================= 9. posterior over curves (ESL 8.3) ======================= */
+const CU = (() => { const r = mulberry32(5), P = []; for (let i = 0; i < 30; i++) { const x = 3 * (i + 0.2 + 0.6 * r()) / 30; P.push([+x.toFixed(3), +(Math.sin(2.2 * x) + 0.35 * x - 0.4 + 0.3 * gaussOf(r)).toFixed(3)]); } return { P0: P.map(p => p.slice()), P, lt: 0, sig: 0.3, z: null, r: mulberry32(6) }; })();
+const CK = Array.from({ length: 12 }, (_, j) => 3 * j / 11), CW = 0.25, hb = x => CK.map(k => Math.exp(-0.5 * ((x - k) / CW) ** 2));
+function cuFit(tau) {
+  const H = CU.P.map(p => hb(p[0])), J = CK.length, s2 = CU.sig ** 2, A = CK.map((_, i) => CK.map((_, j) => sum(H.map(h => h[i] * h[j])) + (i === j ? s2 / tau : 0)));
+  const Hy = CK.map((_, i) => sum(H.map((h, n) => h[i] * CU.P[n][1]))), L = chol(A), mean = cholSolve(L, Hy), Ai = inv(A), cov = Ai.map(r => r.map(x => x * s2));
+  const HtH = CK.map((_, i) => CK.map((_, j) => sum(H.map(h => h[i] * h[j])))); let df = 0; for (let i = 0; i < J; i++) for (let k = 0; k < J; k++) df += Ai[i][k] * HtH[k][i];
+  return { mean, cov, df, Lc: chol(cov) };
+}
+let cuV = null;
+function drawCU() {
+  const C = C0(), tau = Math.pow(10, CU.lt), F = cuFit(tau), LS = cuFit(1e7), J = CK.length;
+  if (!CU.z) CU.z = Array.from({ length: 8 }, () => Array.from({ length: J }, () => gaussOf(CU.r)));
+  const v = cuV = frame($('#cu-cv'), [0, 3], [-2.2, 2.2]); axes(v, 'x', 'y', { sx: 0.5, sy: 1 }); clip(v);
+  const mu = (b, x) => { const h = hb(x); return sum(h.map((q, j) => q * b[j])); }, sdAt = x => { const h = hb(x); let s = 0; for (let i = 0; i < J; i++) for (let k = 0; k < J; k++) s += h[i] * F.cov[i][k] * h[k]; return Math.sqrt(Math.max(s, 0)); };
+  const c = v.ctx; c.save(); c.fillStyle = C.a; c.globalAlpha = 0.16; c.beginPath(); const NS = 150;
+  for (let i = 0; i <= NS; i++) { const x = 3 * i / NS; c.lineTo(v.X(x), v.Y(mu(F.mean, x) + 1.96 * sdAt(x))); } for (let i = NS; i >= 0; i--) { const x = 3 * i / NS; c.lineTo(v.X(x), v.Y(mu(F.mean, x) - 1.96 * sdAt(x))); } c.closePath(); c.fill(); c.restore();
+  curve(v, x => mu(LS.mean, x), C.muted, 1.4, [5, 4]);
+  CU.z.forEach(z => { const b = F.mean.map((m, i) => m + sum(F.Lc[i].map((l, k) => l * z[k]))); c.save(); c.globalAlpha = 0.45; curve(v, x => mu(b, x), C.a, 1.2); c.restore(); });
+  curve(v, x => mu(F.mean, x), C.a, 2.8);
+  CU.P.forEach(p => dot(v, p[0], p[1], C.b, 4.5)); v.ctx.restore();
+  $('#cu-t-o').textContent = tau < 0.01 ? tau.toExponential(1) : tau < 1 ? f3(tau) : fmt(tau, tau < 10 ? 2 : 0);
+  const m15 = mu(F.mean, 1.5), s15 = sdAt(1.5);
+  $('#cu-df').innerHTML = tip(f2(F.df), 'tr( H (HᵀH + σ²/τ · I)⁻¹ Hᵀ )\n12 for least squares, 0 for τ → 0');
+  $('#cu-sd').innerHTML = tip(f3(s15), '√( h(1.5)ᵀ cov[β | y] h(1.5) )');
+  $('#run-cu').innerHTML = `<b>Running example</b>: &tau; = ${$('#cu-t-o').textContent}, so the penalty is &sigma;<sup>2</sup>/&tau; = 0.09/${$('#cu-t-o').textContent} = ${tip(sciT(0.09 / tau), 'σ² / τ, added to the diagonal of HᵀH')}. At x = 1.5 the posterior mean curve is h(1.5)&middot;E[&beta;] = ${tip(f3(m15), 'Σⱼ hⱼ(1.5) E[βⱼ]')} with sd ${tip(f3(s15), '√(h(1.5)ᵀ cov h(1.5))')}, so the 95% band there is ${f2(m15 - 1.96 * s15)} to ${f2(m15 + 1.96 * s15)}.`;
+  $('#cu-say').innerHTML = tau < 0.03 ? `&tau; = ${$('#cu-t-o').textContent}: the prior insists the coefficients are tiny, so every curve is squashed towards 0 and the band is <b>narrow but wrong</b>. A confident prior beats 30 points.`
+    : tau > 50 ? `The prior has almost faded: the posterior mean is close to the least-squares fit (grey), the model uses ${f2(F.df)} of its 12 parameters, and the draws wiggle wherever points are sparse. This spread is what the bootstrap would also show.`
+    : `A balance: the prior tames the wiggles (${f2(F.df)} effective parameters out of 12), and the band widens where data are sparse, near the edges and in gaps. Drag a point and watch only its neighbourhood react.`;
+}
+draggable($('#cu-cv'), () => cuV, () => CU.P, drawCU);
+$('#cu-t').addEventListener('input', e => { CU.lt = +e.target.value; drawCU(); });
+$('#cu-draw').addEventListener('click', () => { CU.z = null; drawCU(); });
+$('#cu-reset').addEventListener('click', () => { CU.P = CU.P0.map(p => p.slice()); drawCU(); });
+fig($('#cu-cv'), drawCU);
+
+/* ======================= project: Open Bandit Dataset click rates ======================= */
+const OBD = [[0,0,140,0,107],[1,1,108,0,83],[2,0,89,0,59],[3,1,96,0,76],[4,0,77,0,61],[5,0,64,0,56],[6,2,78,0,67],[7,5,444,1,443],[8,0,102,1,85],[9,1,69,0,75],[10,0,72,0,77],[11,0,118,0,79],[12,0,70,0,61],[13,0,74,0,67],[14,0,105,0,78],[15,0,103,0,85],[16,0,66,0,66],[17,0,91,2,59],[18,2,181,1,182],[19,0,90,0,72],[20,0,87,0,56],[21,0,78,1,70],[22,0,97,0,73],[23,0,82,0,59],[24,0,97,0,56],[25,1,88,0,59],[26,0,78,0,63],[27,0,69,0,57],[28,0,158,1,122],[29,0,88,0,53],[30,0,84,0,72],[31,0,94,0,76],[32,0,93,0,82],[33,0,86,0,75],[34,2,175,0,162],[35,0,286,0,182],[36,1,83,1,61],[37,0,98,0,75],[38,1,135,0,100],[39,1,311,3,545],[40,0,65,0,80],[41,1,207,1,251],[42,0,90,2,67],[43,1,127,0,123],[44,1,91,1,71],[45,1,181,1,119],[46,1,115,0,95],[47,1,194,0,204],[48,1,97,0,86],[49,3,375,1,147],[50,1,97,1,82],[51,4,851,0,367],[52,0,154,1,103],[53,1,78,2,58],[54,0,90,0,71],[55,0,92,0,80],[56,0,80,0,66],[57,3,102,0,82],[58,1,252,1,183],[59,2,430,0,334],[60,2,196,0,128],[61,5,546,2,262],[62,0,123,0,107],[63,0,400,1,187],[64,0,85,0,74],[65,1,77,0,81],[66,0,91,0,81],[67,0,67,0,53],[68,0,89,0,67],[69,0,132,1,102],[70,0,83,0,58],[71,0,73,1,77],[72,0,72,0,75],[73,1,102,0,79],[74,0,57,0,67],[75,1,86,0,57],[76,0,81,0,71],[77,0,68,0,55],[78,0,146,1,173],[79,1,185,1,310]];
+const PJ = (() => { const c = OBD.map(o => o[1]), n = OBD.map(o => o[2]), tc = OBD.map(o => o[3]), tn = OBD.map(o => o[4]); const m = sum(c) / sum(n);
+  return { id: OBD.map(o => o[0]), c, n, tc, tn, m, ls: 2, sel: OBD.findIndex(o => o[0] === 6), order: OBD.map((_, i) => i).sort((p, q) => n[p] - n[q] || p - q) }; })();
+const pjPost = s => PJ.c.map((c, i) => (c + PJ.m * s) / (PJ.n[i] + s));
+const pjEv = s => { const a = PJ.m * s, b = (1 - PJ.m) * s, lb = betaln(a, b); return sum(PJ.c.map((c, i) => betaln(c + a, PJ.n[i] - c + b) - lb)); };
+const pjLL = p => sum(p.map((q, i) => (PJ.tc[i] ? PJ.tc[i] * Math.log(q) : 0) + (PJ.tn[i] - PJ.tc[i] ? (PJ.tn[i] - PJ.tc[i]) * Math.log1p(-q) : 0)));
+const EVMAX = pjEv(1e8);
+let pjV = null;
+function drawPJ() {
+  const C = C0(), s = Math.pow(10, PJ.ls), post = pjPost(s), { c, n, m } = PJ;
+  const v = pjV = frame($('#pj-cv'), [Math.log10(40), Math.log10(1400)], [-0.08, Math.max(...c.map((q, i) => q / n[i])) * 108], { t: 14, b: 32, l: 46, r: 14 }); axes(v, 'training impressions', 'click rate (%)', { sx: 10, sy: 0.5 });
+  const cx = v.ctx; cx.save(); cx.font = '11px ' + css('--f-mono'); cx.fillStyle = C.muted; cx.strokeStyle = C.line; cx.textAlign = 'center'; cx.textBaseline = 'top';
+  [50, 100, 200, 500, 1000].forEach(t => { const px = Math.round(v.X(Math.log10(t))) + 0.5; cx.globalAlpha = 0.6; cx.beginPath(); cx.moveTo(px, v.pad.t); cx.lineTo(px, v.h - v.pad.b); cx.stroke(); cx.globalAlpha = 1; cx.fillText(t, px, v.h - v.pad.b + 5); }); cx.restore();
+  clip(v); seg(v, v.xl[0], m * 100, v.xl[1], m * 100, C.muted, 1.4, [5, 4]);
+  PJ.id.forEach((_, i) => { const x = Math.log10(n[i]); seg(v, x, c[i] / n[i] * 100, x, post[i] * 100, C.muted, 1, null, 0.55); });
+  PJ.id.forEach((_, i) => { const x = Math.log10(n[i]); dot(v, x, c[i] / n[i] * 100, C.bad, 3.6, true); });
+  PJ.id.forEach((_, i) => dot(v, Math.log10(n[i]), post[i] * 100, C.a, 3.6));
+  { const i = PJ.sel; const c2 = v.ctx; c2.beginPath(); c2.arc(v.X(Math.log10(n[i])), v.Y(post[i] * 100), 9, 0, 7); c2.strokeStyle = C.ink; c2.lineWidth = 1.8; c2.stroke(); }
+  v.ctx.restore(); label(v, v.w - v.pad.r - 4, v.Y(m * 100) - 8, 'pooled ' + pct(m, 2), C.muted, 'right');
+  $('#pj-s-o').textContent = s < 10 ? f2(s) : nf(Math.round(s));
+  const ll = pjLL(post), ev = pjEv(s), nZ = c.filter((q, i) => q === 0 && PJ.tc[i] > 0).length;
+  $('#pj-ll').innerHTML = tip(f2(ll), `Σ over items of\ntest clicks × ln p + test non-clicks × ln(1 − p)\np = (c + s·m) / (n + s)`);
+  $('#pj-llml').innerHTML = tip('&minus;&infin;', `${nZ} items had 0 training clicks (p = 0)\nbut were clicked in the test days: ln 0 = −∞`);
+  $('#pj-ev').innerHTML = tip(f2(ev), 'Σ over items of\nln B(c + a, n − c + b) − ln B(a, b)\na = s·m, b = s·(1 − m)');
+  const hi = Math.max(...post), lo = Math.min(...post);
+  $('#pj-say').innerHTML = s < 5 ? `s = ${f2(s)}: almost raw rates. An item clicked once in ${n[PJ.order.find(i => c[i] === 1)]} impressions is predicted at ${pct(Math.max(...PJ.c.map((q, i) => q === 1 ? post[i] : 0)), 2)}; the ${c.filter(q => q === 0).length} never-clicked items sit near 0. Held-out log-likelihood: ${f2(ll)}.`
+    : s > 3000 ? `s = ${nf(Math.round(s))}: almost total pooling. Every item is predicted between ${pct(lo, 2)} and ${pct(hi, 2)}. On this data that is the best choice: held-out log-likelihood ${f2(ll)}, and the evidence agrees. Rare clicks can't separate 80 items.`
+    : `s = ${nf(Math.round(s))} imaginary impressions at the pooled ${pct(m, 2)}. Items shown less than ${nf(Math.round(s))} times are pulled at least half way to the pool; heavily shown items barely move. Predictions now range from ${pct(lo, 2)} to ${pct(hi, 2)}. Slide right: the held-out log-likelihood (${f2(ll)}) keeps improving.`;
+  // groups
+  const G = [['0 training clicks', i => c[i] === 0], ['1 training click', i => c[i] === 1], ['training CTR above 1%', i => c[i] / n[i] > 0.01], ['all 80 items', () => true]];
+  const rowsG = G.map(([nm, g]) => { const I = PJ.id.map((_, i) => i).filter(g), tn = sum(I.map(i => PJ.tn[i])), ml = sum(I.map(i => c[i] / n[i] * PJ.tn[i])), po = sum(I.map(i => post[i] * PJ.tn[i])), pool = sum(I.map(i => m * PJ.tn[i])), act = sum(I.map(i => PJ.tc[i]));
+    return `<tr><td>${nm}</td><td class="num">${I.length}</td><td class="num">${nf(tn)}</td><td class="num">${tip(f2(ml), 'Σ (c/n) × test impressions')}</td><td class="num">${tip(f2(po), `Σ posterior mean × test impressions\nat s = ${nf(Math.round(s))}`)}</td><td class="num">${tip(f2(pool), `${pct(m, 3)} × ${nf(tn)}`)}</td><td class="num"><b>${act}</b></td></tr>`; });
+  $('#pj-grp').innerHTML = `<thead><tr><th>training said</th><th>items</th><th>test views</th><th>ML</th><th>posterior, s = ${nf(Math.round(s))}</th><th>pooled</th><th>actual</th></tr></thead><tbody>${rowsG.join('')}</tbody>`;
+  drawPJev(); drawItem();
+}
+function drawPJev() {
+  const C = C0(), xs = Array.from({ length: 121 }, (_, i) => i * 0.05), ev = xs.map(x => pjEv(Math.pow(10, x)) - EVMAX), ll = xs.map(x => pjLL(pjPost(Math.pow(10, x)))), llM = pjLL(pjPost(1e8));
+  const v = frame($('#pj-evcv'), [0, 6], [-60, 4], { t: 12, b: 30, l: 46, r: 14 }); axes(v, 'prior strength s (log scale)', 'nats', { sx: 1, sy: 20, fx: x => x === 0 ? '1' : '10' + sup(x) });
+  clip(v); const ln = (Y, col) => { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = 2.4; c.beginPath(); xs.forEach((x, i) => { const py = clamp(v.Y(Y[i]), -50, v.h + 50); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); }); c.stroke(); c.restore(); };
+  seg(v, 0, 0, 6, 0, C.muted, 1, [3, 3]); ln(ev, C.c); ln(ll.map(y => y - llM), C.a); vline(v, PJ.ls, C.ink, 1.6); v.ctx.restore();
+  const s = Math.pow(10, PJ.ls), e = pjEv(s) - EVMAX, l = pjLL(pjPost(s)) - llM;
+  $('#pj-evsay').innerHTML = `At your s = ${s < 10 ? f2(s) : nf(Math.round(s))}, the log evidence is ${tip(f2(-e), `ln p(train | s) = ${f2(pjEv(s))}\nceiling (s → ∞) = ${f2(EVMAX)}`)} nats below its ceiling and the held-out log-likelihood ${tip(f2(-l), `${f2(pjLL(pjPost(s)))} vs ${f2(llM)} at s = 10⁸`)} nats below. Neither curve has a peak: both keep rising and flatten out beyond s &asymp; 10,000. The training evidence, which never saw the test days, points the same way as the test: here the most honest prior is the pooled rate.`;
+}
+function drawItem() {
+  const C = C0(), s = Math.pow(10, PJ.ls), i = PJ.sel, c = PJ.c[i], n = PJ.n[i], a = PJ.m * s, b = (1 - PJ.m) * s, A = c + a, B = n - c + b, f = x => betaPdf(x / 100, A, B) / 100, fp = x => betaPdf(x / 100, a, b) / 100;
+  const [lo, hi] = betaCI(A, B), xmax = Math.max(1.2, betaPpf(0.999, A, B) * 100, c / n * 100 * 1.15, PJ.tn[i] ? PJ.tc[i] / PJ.tn[i] * 115 : 0), ym = peak([f, fp], 0, xmax, 400);
+  const v = frame($('#pj-item'), [0, xmax], [0, ym]); axes(v, 'click rate (%)', 'density'); clip(v);
+  dens(v, fp, C.muted, { lw: 1.6, dash: [5, 4], x0: xmax / 2000 }); dens(v, f, C.a, { lw: 2.8, lo: lo * 100, hi: hi * 100, shade: 0.22, x0: xmax / 2000 });
+  vline(v, c / n * 100, C.bad, 1.6, [5, 4], 'raw'); const tr = PJ.tn[i] ? PJ.tc[i] / PJ.tn[i] * 100 : null; if (tr != null) vline(v, tr + (Math.abs(tr - c / n * 100) < xmax * 0.01 ? xmax * 0.004 : 0), C.c, 1.6, [2, 3], 'test week'); v.ctx.restore();
+  const k = PJ.order.indexOf(i); $('#pj-i').value = k; $('#pj-i-o').textContent = `item ${PJ.id[i]}, ${n} shown`;
+  $('#pj-ic').innerHTML = `${c} / ${nf(n)}`; $('#pj-ip').innerHTML = tip(pct(A / (A + B), 2), `(c + s·m) / (n + s) = (${c} + ${f3(a)}) / (${n} + ${s < 10 ? f2(s) : nf(Math.round(s))})`);
+  $('#pj-ici').innerHTML = tip(`${pct(lo, 2)}&ndash;${pct(hi, 2)}`, `2.5% and 97.5% quantiles of\nBeta(${f2(A)}, ${f2(B)})`);
+  const eB = A / (A + B) * PJ.tn[i], eM = c / n * PJ.tn[i];
+  $('#pj-isay').innerHTML = `Item ${PJ.id[i]} was shown ${nf(n)} times in training and clicked ${c} time${c === 1 ? '' : 's'}: a raw rate of ${pct(c / n, 2)}${c === 0 ? ', so maximum likelihood says it will <b>never</b> be clicked' : ''}. The posterior says ${pct(A / (A + B), 2)}, ${pct(lo, 2)} to ${pct(hi, 2)} with 95% belief. In the test days it was shown ${nf(PJ.tn[i])} times, so the posterior expected ${tip(f2(eB), `${pct(A / (A + B), 3)} × ${PJ.tn[i]}`)} clicks and ML ${tip(f2(eM), `${pct(c / n, 3)} × ${PJ.tn[i]}`)}; it got <b>${PJ.tc[i]}</b>. With rates this low, one item's test week is mostly luck: judge the methods on the groups above, not on single items.`;
+}
+$('#pj-s').addEventListener('input', e => { PJ.ls = +e.target.value; drawPJ(); });
+$('#pj-i').addEventListener('input', e => { PJ.sel = PJ.order[+e.target.value]; drawPJ(); });
+$('#pj-top').addEventListener('click', () => { let b = 0; PJ.c.forEach((q, i) => { if (q / PJ.n[i] > PJ.c[b] / PJ.n[b]) b = i; }); PJ.sel = b; drawPJ(); });
+$('#pj-most').addEventListener('click', () => { PJ.sel = PJ.n.indexOf(Math.max(...PJ.n)); drawPJ(); });
+$('#pj-cv').addEventListener('click', e => { if (!pjV) return; const [px, py] = evPos($('#pj-cv'), e), post = pjPost(Math.pow(10, PJ.ls)); let best = -1, bd = 18 * 18; PJ.id.forEach((_, i) => { const dx = pjV.X(Math.log10(PJ.n[i])) - px, dy = pjV.Y(post[i] * 100) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); if (best >= 0) { PJ.sel = best; drawPJ(); } });
+$('#pj-cv').style.cursor = 'pointer';
+fig($('#pj-cv'), drawPJ); fig($('#pj-evcv'), drawPJev); fig($('#pj-item'), drawItem);
+$('#pj-ntr').textContent = `${nf(sum(PJ.n))} impressions, ${sum(PJ.c)} clicks`; $('#pj-nte').textContent = `${nf(sum(PJ.tn))} impressions, ${sum(PJ.tc)} clicks`;
+{ const r = [1, 10, 100, 1000, 10000].map(s => `s = ${nf(s)}: ${f3(pjEv(s))} / ${f3(pjLL(pjPost(s)))}`).join('; ');
+  const p = pjPost(100), I = [6, 51, 59, 74].map(id => PJ.id.indexOf(id)), q = I.map(i => { const A = PJ.c[i] + PJ.m * 100, B = PJ.n[i] - PJ.c[i] + (1 - PJ.m) * 100, [lo, hi] = betaCI(A, B); return `item ${PJ.id[i]}: ${f4(p[i])} [${f4(lo)}, ${f4(hi)}]`; }).join('; ');
+  $('#pj-check').innerHTML = `<b>Checked in your browser:</b> log evidence / held-out log-likelihood at ${r}. Posterior means and 95% intervals at s = 100: ${q}. Every figure matches the Python output above to the printed digits; the page's log-gamma, incomplete-beta and Beta-quantile functions agree with scipy to about 10<sup>&minus;12</sup>.`; }
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+for (let i = 0; i < 10; i++) BE.seq.push(BE.r() < BE.p ? 1 : 0);
+for (let i = 0; i < 6; i++) { LN.seq.push(1); LN.wrap.push(LN.r() < 0.8 ? 1 : 0); }
+drawHero(); drawWhy(); drawBeta(); drawPR(); drawDI(); drawGA(); drawPC(); drawNG(); drawEF(); drawNF(); drawLN(); drawCU(); drawPJ();
+window.__biDebug = { PJ, pjEv, pjLL, pjPost, cuFit, CU, LN, lnTraj, BE, NG, ngPost, PC, GA, DI, betaPpf, gammaPpf, betainc, lgamma };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

@@ -1,0 +1,1411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on the foundations of probability: why a rational agent needs degrees of belief and expected utility, sample spaces, events and random variables on two dice, Kolmogorov's axioms and a live Dutch book, the sum and product rules from a diary of counts, inference by enumeration over a full joint table, independence and conditional independence, Bayes' rule with natural frequencies, exact pit probabilities in the Wumpus world, and a full joint table of 48,842 people from the UCI Adult census data queried by counting, with numbers verified against pandas.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Probability: Degrees of Belief, Rules &amp; Counting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: -4px; }
+.seg.sm button { font-size: 0.78rem; padding: 4px 9px; }
+.seg.sm { border-radius: 14px; }
+.seg.sm button { border-radius: 11px; }
+table.jt { max-width: 560px; }
+table.jt td, table.jt th { text-align: center; }
+table.jt th.ctr { text-align: center; }
+table.jt tbody th { text-align: left; text-transform: none; letter-spacing: 0; font-size: 0.9rem; color: var(--ink); }
+table.jt td { font-size: 1.02rem; transition: background .15s, opacity .15s; }
+table.jt td.on-t { background: color-mix(in srgb, var(--cA) 20%, transparent); font-weight: 600; }
+table.jt td.on-f { background: color-mix(in srgb, var(--cB) 22%, transparent); font-weight: 600; }
+table.jt td.on-e { background: color-mix(in srgb, var(--lda) 16%, transparent); font-weight: 600; }
+table.jt td.off { opacity: .35; }
+#db-tbl td, #db-tbl th { font-size: 0.82rem; padding: 6px 8px; }
+.evrow { display: grid; gap: 4px; }
+.evl { font-size: 0.8rem; color: var(--muted); }
+#aq-ev { gap: 8px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.plot.apc { aspect-ratio: 2.2 / 1; }
+@media (max-width: 560px) { .plot.mob { aspect-ratio: 1 / 1; } .plot.apc { aspect-ratio: 1.5 / 1; } }
+@media (max-width: 560px) { .plot.dcm { aspect-ratio: 0.72 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Probability <span>&middot; belief, rules &amp; counting</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Why probability</a>
+      <a href="#events">Worlds &amp; events</a>
+      <a href="#axioms">The axioms</a>
+      <a href="#rules">Sum &amp; product</a>
+      <a href="#joint">The full joint</a>
+      <a href="#indep">Independence</a>
+      <a href="#bayes">Bayes&rsquo; rule</a>
+      <a href="#wumpus">Wumpus world</a>
+      <a href="#project">Census project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Foundations: AI, maths &amp; probability · chapter 0.4 · probability</div>
+      <h1>Probability</h1>
+      <div class="sub">Degrees of belief, two rules, and inference by counting</div>
+      <p class="lead">An agent never sees the whole world. A doctor cannot see the virus, a robot cannot see round the corner, and a spam filter cannot read the sender&rsquo;s mind. Probability is how a rational agent keeps its books on what it does not know: it gives every possible world a weight, and every question becomes a sum of weights. On the right are 1,000 patients, drawn so that <em>area is probability</em>; filled dots have flu. <strong>Click a block of patients</strong> who share symptoms and see what that evidence says about flu.</p>
+      <dl class="facts">
+        <div><dt>The objects</dt><dd>Possible worlds, events, and a weight on each world</dd></div>
+        <div><dt>The rules</dt><dd>The sum rule and the product rule; Bayes&rsquo; rule follows from them</dd></div>
+        <div><dt>The method</dt><dd>Any question answered by adding up entries of the full joint table</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="A thousand patients in four blocks by symptom; click a block to condition on it"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Acting under uncertainty</a></li>
+    <li><a href="#events"><i>02</i>Worlds, events, variables</a></li>
+    <li><a href="#axioms"><i>03</i>The axioms and the Dutch book</a></li>
+    <li><a href="#rules"><i>04</i>Sum and product rules</a></li>
+    <li><a href="#joint"><i>05</i>Inference by enumeration</a></li>
+    <li><a href="#indep"><i>06</i>Independence</a></li>
+    <li><a href="#bayes"><i>07</i>Bayes&rsquo; rule</a></li>
+    <li><a href="#wumpus"><i>08</i>The Wumpus world</a></li>
+    <li><a href="#project"><i>09</i>A census you can query</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Why probability? Acting when you can&rsquo;t be sure</h2>
+    <div class="prose">
+      <p>Try to write a medical rule in logic. &ldquo;Fever implies flu&rdquo; is false: most fevers have other causes. &ldquo;Flu implies fever&rdquo; is false too: plenty of people with flu never run a temperature. To fix the rule you would have to list every exception, and that fails for three reasons. <em class="term">Laziness</em>: the list is far too long to write and use. <em class="term">Theoretical ignorance</em>: medicine does not know every cause. <em class="term">Practical ignorance</em>: even with a perfect theory, we have not run every test on this patient.</p>
+      <p>So the agent keeps a <em class="term">degree of belief</em> instead, a number between 0 (certainly false) and 1 (certainly true). Goodfellow and colleagues name three sources of the uncertainty it summarises: the world may be <b>truly random</b> (a shuffled deck), we may <b>not observe</b> everything (the virus is invisible), or our <b>model is incomplete</b> (we drop details on purpose, as in &ldquo;most birds fly&rdquo;). For repeatable events, like dice, a probability can be read as a long-run <em class="term">frequency</em>. For one-off events, like &ldquo;this patient has flu&rdquo;, it is a <em>belief</em> held by an agent. Remarkably, both readings obey the same rules, and this chapter is about those rules.</p>
+      <p>A belief is about the agent&rsquo;s knowledge, not about the world. Before any test, P(flu) = 0.1 for a new patient; after a fever is found, P(flu | fever) &asymp; 0.44. Both are correct: the patient did not change, the evidence did. And beliefs alone do not choose actions. You also need to know what you <em>want</em>. <em class="term">Decision theory</em> = probability theory + utility theory: pick the action with the highest <b>expected utility</b>. Here is the classic example. You must decide how early to leave for the airport. The journey time is uncertain; arrive late and you miss the plane, arrive early and you wait. <strong>Move your leaving time</strong>, then change how much missing the plane would hurt.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathrm{EU}(a) &= \sum_{s} P(s \mid a)\, U(s) \\ \text{cost}(t) &= t + M\, P(\text{late} \mid t) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the expected utility of an action a is the utility of each outcome s, weighted by how probable that outcome is if you take a. Here the action is &ldquo;leave t minutes before the flight&rdquo;, and P(late | t) is the chance of missing the plane if you do. Every minute spent travelling or waiting costs 1, and missing the plane costs M minutes&rsquo; worth of misery. Minimising expected cost is the same as maximising expected utility.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected utility of a is the sum over outcomes s of P of s given a, times U of s. The cost of leaving t minutes early is t plus M times the probability of being late.&rdquo;</em></div><div class="eq-run" id="run-ap"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot" style="aspect-ratio:3.2/1"><canvas id="ap-pdf" aria-label="The spread of possible journey times, with the late part shaded"></canvas></div>
+        <div class="plot apc" style="margin-top:10px"><canvas id="ap-cost" aria-label="Expected cost against how early you leave"></canvas></div>
+        <figcaption>Top: how long the journey might take (its median is 50 minutes); the shaded tail is P(late). Bottom: <span style="color:var(--cA)">&#9644;</span> expected cost of each leaving time, <span style="color:var(--ink)">&#9679;</span> your choice, <span style="color:var(--cB)">&#9733;</span> the best choice.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ap-t">Leave this long before the flight</label><output id="ap-t-o"></output></div><input type="range" id="ap-t" min="30" max="240" step="1" value="60"></div>
+        <div class="ctrl"><div class="top"><label for="ap-m">Missing the plane feels like losing</label><output id="ap-m-o"></output></div><input type="range" id="ap-m" min="1.5" max="3.6" step="0.02" value="2.7"></div>
+        <div class="ctrl"><div class="top"><label for="ap-s">How unpredictable the traffic is</label><output id="ap-s-o"></output></div><input type="range" id="ap-s" min="0.08" max="0.6" step="0.01" value="0.25"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ap-p"></div><div class="k">P(on time) for your plan</div></div><div class="stat"><div class="v" id="ap-c"></div><div class="k">your expected cost</div></div><div class="stat"><div class="v" id="ap-bt"></div><div class="k">best leaving time</div></div><div class="stat"><div class="v" id="ap-bp"></div><div class="k">P(on time) at the best</div></div></div>
+        <p class="note" id="ap-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- EVENTS -->
+<section class="chap" id="events">
+  <div class="wrap">
+    <div class="tag">The language</div>
+    <h2>Possible worlds, events and random variables</h2>
+    <div class="prose">
+      <p>Start with the <em class="term">sample space</em> &Omega;: the set of every way the world could be. Roll two dice and &Omega; has 36 worlds, from (1, 1) to (6, 6). The worlds are <em>mutually exclusive</em> (only one happens) and <em>exhaustive</em> (one of them must). A <em class="term">probability model</em> gives each world &omega; a weight P(&omega;). A proposition such as &ldquo;the total is 7&rdquo; is true in some worlds and false in others, so it picks out a set of worlds, called an <em class="term">event</em>, and its probability is the total weight of that set. Logic becomes set algebra: <i>and</i> (&and;) is the overlap, <i>or</i> (&or;) the union, <i>not</i> (&not;) the complement.</p>
+      <p>A <em class="term">random variable</em> is a function that reads a number or label off each world. Total = die 1 + die 2 is one: its <em>domain</em> is {2, &hellip;, 12}, and &ldquo;Total = 7&rdquo; is an event. We write variables with capitals and their values in lower case, and the bold <b>P</b>(Total) means the whole <em class="term">distribution</em>: the list of 11 probabilities, one per value. Variables can also be continuous, like journey time above; then they have a <em>density</em> instead of a list, which chapter 0.5 takes up. <strong>Build an event</strong> from the buttons, then load the first die and watch counting stop working.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ 0 \le P(\omega) \le 1, \qquad \sum_{\omega \in \Omega} P(\omega) = 1 \]</div><div class="read"><b>Read it as:</b> every world gets a weight between 0 and 1, and the weights of all the worlds add up to exactly 1. Something must happen.</div><div class="eq-say"><b>Say it</b><em>&ldquo;P of omega is between zero and one, and the sum of P of omega over all of Omega is one.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ P(\phi) = \sum_{\omega \in \phi} P(\omega) \]</div><div class="read"><b>Read it as:</b> the probability of a proposition &phi; is the sum of the weights of the worlds where it is true. When all worlds weigh the same, this is just counting: worlds in the event &divide; worlds in total.</div><div class="eq-say"><b>Say it</b><em>&ldquo;P of phi is the sum of P of omega over the worlds omega in phi.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-dc" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 mob dcm"><canvas id="dc-cv" aria-label="The 36 worlds of two dice, with the event highlighted, and the distribution of the total"></canvas></div>
+        <figcaption>Grid: the 36 worlds; highlighted squares make up the event, and darker squares weigh more. Bars: <b>P</b>(Total), with each total&rsquo;s share of the event in colour.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <span class="mini-h">Proposition A</span>
+        <div class="seg sm" role="group" aria-label="Proposition A"><button type="button" data-da="sum7" aria-pressed="true">Total = 7</button><button type="button" data-da="dbl">Doubles</button><button type="button" data-da="even">Die 1 even</button><button type="button" data-da="ge10">Total &ge; 10</button><button type="button" data-da="six">A six shows</button></div>
+        <span class="mini-h">Proposition B</span>
+        <div class="seg sm" role="group" aria-label="Proposition B"><button type="button" data-db="sum7">Total = 7</button><button type="button" data-db="dbl">Doubles</button><button type="button" data-db="even">Die 1 even</button><button type="button" data-db="ge10">Total &ge; 10</button><button type="button" data-db="six" aria-pressed="true">A six shows</button></div>
+        <span class="mini-h">Event to measure</span>
+        <div class="seg sm" role="group" aria-label="Event"><button type="button" data-dop="a" aria-pressed="true">A</button><button type="button" data-dop="and">A &and; B</button><button type="button" data-dop="or">A &or; B</button><button type="button" data-dop="not">&not;A</button></div>
+        <div class="seg sm" role="group" aria-label="Dice"><button type="button" data-dd="fair" aria-pressed="true">Fair dice</button><button type="button" data-dd="load">Die 1 loaded towards 6</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="dc-n"></div><div class="k">worlds in the event</div></div><div class="stat"><div class="v" id="dc-p"></div><div class="k">probability of the event</div></div></div>
+        <p class="note" id="dc-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- AXIOMS -->
+<section class="chap" id="axioms">
+  <div class="wrap">
+    <div class="tag">The rules of the game</div>
+    <h2>The axioms, and why you should accept them</h2>
+    <div class="prose">
+      <p>The two facts above, weights between 0 and 1 that add up to 1, together with the rule that an event&rsquo;s probability is the sum of its worlds, are essentially the axioms Andrey Kolmogorov wrote down in 1933. Everything else follows from them. A proposition and its negation split &Omega; in two, so their probabilities add to 1. And when you add P(a) and P(b), the worlds where both are true get counted twice, so you take them off once: that is <em class="term">inclusion&ndash;exclusion</em>.</p>
+      <p>Why should an agent&rsquo;s <em>beliefs</em> obey these rules? Bruno de Finetti&rsquo;s answer is a betting argument. Suppose you believe a proposition &phi; to degree P(&phi;). Then a ticket that pays &pound;10 if &phi; turns out true is worth &pound;10&times;P(&phi;) to you, and you should be happy to buy or sell it at that price. De Finetti proved that if your beliefs break the axioms, a bookie can choose a handful of such tickets, each one fair by your own lights, that together <b>lose you money in every possible world</b>. This is a <em class="term">Dutch book</em>. Richard Cox (1946) reached the same rules from a different direction: any sensible way of grading plausibility with numbers turns out to be probability. <strong>Set your four beliefs</strong> about tomorrow&rsquo;s weather and see whether the bookie can trap you.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} P(\lnot a) &= 1 - P(a) \\ P(a \lor b) &= P(a) + P(b) - P(a \land b) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the worlds where a is false are all the others, so their weight is what is left of the total of 1. For &ldquo;a or b&rdquo;, add the two, then take away the overlap that you counted twice.</div><div class="eq-say"><b>Say it</b><em>&ldquo;P of not a is one minus P of a. P of a or b is P of a plus P of b minus P of a and b.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ G(\omega) = 10 \sum_{k} s_k \big( [\phi_k]_\omega - P(\phi_k) \big) \]</div><div class="read"><b>Read it as:</b> your net gain in world &omega; from a set of &pound;10 tickets. s<sub>k</sub> = +1 if you bought ticket k and &minus;1 if you sold it; [&phi;<sub>k</sub>]<sub>&omega;</sub> is 1 when &phi;<sub>k</sub> is true in world &omega; and 0 when it is false. A Dutch book is a choice of tickets that makes G(&omega;) negative for every &omega;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;G of omega is ten times the sum over tickets of s-k times, the truth of phi-k in omega, minus P of phi-k.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-db" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 mob"><canvas id="db-cv" aria-label="Your net gain from the bookie's tickets in each of the four possible worlds"></canvas></div>
+        <figcaption>Your net gain in each of the four worlds from the tickets in the table below. Red bars are losses.</figcaption>
+        <div class="tbl-wrap" style="margin-top:12px"><table class="hand" id="db-tbl"></table></div>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="db-a">Your belief P(rain)</label><output id="db-a-o"></output></div><input type="range" id="db-a" min="0" max="1" step="0.01" value="0.5"></div>
+        <div class="ctrl"><div class="top"><label for="db-b">Your belief P(wind)</label><output id="db-b-o"></output></div><input type="range" id="db-b" min="0" max="1" step="0.01" value="0.4"></div>
+        <div class="ctrl"><div class="top"><label for="db-ab">Your belief P(rain &and; wind)</label><output id="db-ab-o"></output></div><input type="range" id="db-ab" min="0" max="1" step="0.01" value="0.2"></div>
+        <div class="ctrl"><div class="top"><label for="db-or">Your belief P(rain &or; wind)</label><output id="db-or-o"></output></div><input type="range" id="db-or" min="0" max="1" step="0.01" value="0.8"></div>
+        <div class="btns"><button type="button" class="btn" id="db-fix">Make my beliefs coherent</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="db-gap"></div><div class="k">inclusion&ndash;exclusion gap</div></div><div class="stat"><div class="v" id="db-loss"></div><div class="k">your sure loss</div></div></div>
+        <p class="note" id="db-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- RULES -->
+<section class="chap" id="rules">
+  <div class="wrap">
+    <div class="tag">Two rules</div>
+    <h2>The sum rule and the product rule</h2>
+    <div class="prose">
+      <p>Take two variables: today&rsquo;s weather X (sun, cloud or rain) and how you get to work Y (walk, bike, bus or car). Keep a diary for N days and write n<sub>ij</sub> for the number of days with weather i and travel j. Following Bishop, read probabilities as fractions of days. The <em class="term">joint</em> probability p(X = i, Y = j) is n<sub>ij</sub>/N: one cell. The <em class="term">marginal</em> p(X = i) ignores Y: it is the column total c<sub>i</sub> over N, so you get it by adding the joint across Y. That is the <b>sum rule</b>. The <em class="term">conditional</em> p(Y = j | X = i) looks only inside column i: it is n<sub>ij</sub>/c<sub>i</sub>. Multiply it by c<sub>i</sub>/N and you are back at the joint. That is the <b>product rule</b>, and with counts it holds exactly, not just in the limit.</p>
+      <p>As N grows, the fractions settle on the true probabilities. Two lines of algebra on these rules give everything else in this chapter, including Bayes&rsquo; rule. For a continuous variable the sum becomes an integral, p(x) = &int; p(x, y) dy. <strong>Record more days</strong>, then pick a weather and a way to travel.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(X) &= \sum_{Y} p(X, Y) \\ p(X, Y) &= p(Y \mid X)\, p(X) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the first line is the <b>sum rule</b>: to forget a variable, add over its values. The second is the <b>product rule</b>: to build a joint, take the chance of the first, then the chance of the second <i>given</i> the first. Rearranged, the product rule <i>defines</i> conditional probability: p(Y | X) = p(X, Y) / p(X), whenever p(X) &gt; 0.</div><div class="eq-say"><b>Say it</b><em>&ldquo;p of X is the sum over Y of p of X and Y. p of X and Y is p of Y given X, times p of X.&rdquo;</em></div><div class="eq-run" id="run-sp"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &P(x_1, \dots, x_n) \\ &\ = P(x_1)\, P(x_2 \mid x_1) \\ &\quad \cdots P(x_n \mid x_1, \dots, x_{n-1}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the <b>chain rule</b>: apply the product rule again and again. Any joint distribution is a product of one-variable conditionals, each given everything before it. It is always true, in any order; later chapters get their savings by dropping terms from the &ldquo;given&rdquo; lists.</div><div class="eq-say"><b>Say it</b><em>&ldquo;P of x-one to x-n is P of x-one, times P of x-two given x-one, and so on, up to P of x-n given all the earlier ones.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 mob"><canvas id="sp-cv" aria-label="A grid of days by weather and travel, with column and row totals"></canvas></div>
+        <figcaption>Each dot is a day in your diary. Column totals c<sub>i</sub> along the bottom, row totals on the right. The shaded column is the weather you picked; the outlined cell is the pair.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="sp-10">Record 10 days</button><button type="button" class="btn" id="sp-100">+100</button><button type="button" class="btn" id="sp-1000">+1,000</button><button type="button" class="btn" id="sp-0">Start again</button></div>
+        <span class="mini-h">Weather X</span>
+        <div class="seg sm" role="group" aria-label="Weather"><button type="button" data-sx="0">Sun</button><button type="button" data-sx="1">Cloud</button><button type="button" data-sx="2" aria-pressed="true">Rain</button></div>
+        <span class="mini-h">Travel Y</span>
+        <div class="seg sm" role="group" aria-label="Travel"><button type="button" data-sy="0">Walk</button><button type="button" data-sy="1">Bike</button><button type="button" data-sy="2" aria-pressed="true">Bus</button><button type="button" data-sy="3">Car</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="sp-j"></div><div class="k">joint p(x, y)</div></div><div class="stat"><div class="v" id="sp-m"></div><div class="k">marginal p(x)</div></div><div class="stat"><div class="v" id="sp-c"></div><div class="k">conditional p(y | x)</div></div><div class="stat"><div class="v" id="sp-n"></div><div class="k">days recorded</div></div></div>
+        <p class="note" id="sp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- JOINT -->
+<section class="chap" id="joint">
+  <div class="wrap">
+    <div class="tag">Answering any question</div>
+    <h2>Inference by enumeration: the full joint table</h2>
+    <div class="prose">
+      <p>Write down a probability for every combination of every variable and you have the <em class="term">full joint distribution</em>. Here is the one behind the hero: three Boolean variables, Flu, Fever and Cough, so 2&sup3; = 8 entries that add up to 1. From this one table you can answer <em>any</em> question about the three by adding entries. To get P(fever), add the four cells where fever is true: that is <em class="term">marginalisation</em>, the sum rule again. To get P(flu | fever), add the cells where flu and fever are both true and divide by P(fever).</p>
+      <p>Look at that division. Asking &ldquo;flu or not, given fever?&rdquo;, both answers divide by the same P(fever). So you can skip it: add up the matching cells for each value of the query variable, then scale the results so they add to 1. That scaling constant is written &alpha;, and the step is <em class="term">normalisation</em>. Variables that are neither asked about nor observed are <em>hidden</em>, and they get summed out. <strong>Choose what to ask and what you&rsquo;ve seen</strong>; the cells that get added light up.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{P}(Y) &= \sum_{z} \mathbf{P}(Y, z) \\ &= \sum_{z} \mathbf{P}(Y \mid z)\, P(z) \end{aligned} \]</div><div class="read"><b>Read it as:</b> marginalising, then <em>conditioning</em>: to get a distribution over Y, add the joint over every value z of the other variables, or, equivalently, average Y&rsquo;s conditional distributions weighted by how likely each z is.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Bold P of Y is the sum over z of bold P of Y and z, which is the sum over z of bold P of Y given z, times P of z.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{P}(X \mid \mathbf{e}) &= \alpha\, \mathbf{P}(X, \mathbf{e}) \\ &= \alpha \sum_{\mathbf{y}} \mathbf{P}(X, \mathbf{e}, \mathbf{y}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the whole recipe. X is what you ask about, <b>e</b> the evidence you observed, <b>y</b> the hidden variables. Fix the evidence, sum out the hidden variables, and normalise with &alpha; = 1 / P(<b>e</b>) so the answer adds to 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Bold P of X given e is alpha times bold P of X and e, which is alpha times the sum over y of bold P of X, e and y.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-jt" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <div class="tbl-wrap"><table class="hand jt" id="jt-tbl"></table></div>
+        <div class="plot" style="aspect-ratio:3.2/1; margin-top:14px"><canvas id="jt-cv" aria-label="Unnormalised sums and the normalised answer"></canvas></div>
+        <p class="note" style="margin-top:6px">Entries are probabilities; multiply by 1,000 for the number of patients in the hero. Bars: the two unnormalised sums (faint) and the answer after normalising (solid).</p>
+      </div>
+      <div class="panel"><div class="grp">
+        <span class="mini-h">Flu</span>
+        <div class="seg sm" role="group" aria-label="Flu"><button type="button" data-jv="0" data-js="ask" aria-pressed="true">Ask</button><button type="button" data-jv="0" data-js="t">Seen: yes</button><button type="button" data-jv="0" data-js="f">Seen: no</button><button type="button" data-jv="0" data-js="h">Unknown</button></div>
+        <span class="mini-h">Fever</span>
+        <div class="seg sm" role="group" aria-label="Fever"><button type="button" data-jv="1" data-js="ask">Ask</button><button type="button" data-jv="1" data-js="t" aria-pressed="true">Seen: yes</button><button type="button" data-jv="1" data-js="f">Seen: no</button><button type="button" data-jv="1" data-js="h">Unknown</button></div>
+        <span class="mini-h">Cough</span>
+        <div class="seg sm" role="group" aria-label="Cough"><button type="button" data-jv="2" data-js="ask">Ask</button><button type="button" data-jv="2" data-js="t">Seen: yes</button><button type="button" data-jv="2" data-js="f">Seen: no</button><button type="button" data-jv="2" data-js="h" aria-pressed="true">Unknown</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="jt-p"></div><div class="k" id="jt-pk">answer</div></div><div class="stat"><div class="v" id="jt-a"></div><div class="k">normaliser &alpha;</div></div></div>
+        <p class="note" id="jt-say"></p>
+      </div>
+      <div class="grp">
+        <span class="mini-h">The catch: table size</span>
+        <div class="ctrl"><div class="top"><label for="jt-n">Boolean variables in the model</label><output id="jt-n-o"></output></div><input type="range" id="jt-n" min="3" max="80" step="1" value="3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="jt-sz"></div><div class="k">entries in the full joint</div></div><div class="stat"><div class="v" id="jt-tm"></div><div class="k">one query at 10&#8313; additions/s</div></div></div>
+        <p class="note" id="jt-say2"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- INDEP -->
+<section class="chap" id="indep">
+  <div class="wrap">
+    <div class="tag">Shrinking the table</div>
+    <h2>Independence and conditional independence</h2>
+    <div class="prose">
+      <p>Add a fourth variable, tomorrow&rsquo;s Weather with four values, and the table grows to 8 &times; 4 = 32 entries. But the weather has nothing to do with your flu: P(flu | sunny) = P(flu). When learning one variable never changes your belief about another, they are <em class="term">independent</em>, the joint is just the product of the two marginals, and you can store 8 + 4 numbers instead of 32. Absolute independence like this is powerful but rare. Fever and cough are <em>not</em> independent: each is a sign of flu, so a fever makes a cough more likely.</p>
+      <p>Yet once you <em>know</em> whether the patient has flu, a fever tells you nothing more about a cough: both depend on the illness, not on each other. That is <em class="term">conditional independence</em>, and it is the workhorse of probabilistic AI. It lets the joint factor into small pieces, P(Flu) P(Fever | Flu) P(Cough | Flu): 1 + 2 + 2 = 5 numbers instead of 7, and with n symptoms 2n + 1 instead of 2<sup>n+1</sup> &minus; 1. <strong>Switch between everyone, flu and no flu</strong>, then use the slider to make the symptoms interact.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} a \perp b \iff\ & P(a \mid b) = P(a) \\ \iff\ & P(a \land b) = P(a)\,P(b) \end{aligned} \]</div><div class="read"><b>Read it as:</b> a and b are independent when knowing b leaves your belief in a where it was. Put the first line into the product rule and you get the second: the joint is the product of the marginals. For variables, this must hold for every pair of values.</div><div class="eq-say"><b>Say it</b><em>&ldquo;a is independent of b if and only if P of a given b equals P of a, if and only if P of a and b equals P of a times P of b.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\mathbf{P}(X, Y \mid Z) \\ &\quad = \mathbf{P}(X \mid Z)\, \mathbf{P}(Y \mid Z) \\[4pt] &\mathbf{P}(Z, X, Y) \\ &\quad = \mathbf{P}(Z)\, \mathbf{P}(X \mid Z)\, \mathbf{P}(Y \mid Z) \end{aligned} \]</div><div class="read"><b>Read it as:</b> X and Y are conditionally independent given Z when, inside each value of Z, their joint is the product of their conditionals. Then the full joint factors into a cause and its separate effects. Here Z = Flu, X = Fever, Y = Cough.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Bold P of X and Y given Z is bold P of X given Z times bold P of Y given Z.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-ci" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Who to look at"><button type="button" data-ci="all" aria-pressed="true">Everyone</button><button type="button" data-ci="flu">Only flu</button><button type="button" data-ci="no">Only no flu</button></div></div>
+        <div class="plot ar-16x10 mob"><canvas id="ci-cv" aria-label="Fever by cough: the real joint as filled squares, the product of marginals as outlines"></canvas></div>
+        <figcaption>Each square&rsquo;s <b>area</b> is P(fever?, cough? | group). <span style="color:var(--cA)">&#9632;</span> the real joint; <span style="color:var(--ink)">&#9633;</span> dashed outline: what independence predicts, P(fever? | group) &times; P(cough? | group). Where they match, the two symptoms are independent in that group.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ci-e">How the symptoms interact, given flu or not</label><output id="ci-e-o"></output></div><input type="range" id="ci-e" min="-0.8" max="0.8" step="0.02" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ci-pc"></div><div class="k">P(cough | group)</div></div><div class="stat"><div class="v" id="ci-pcf"></div><div class="k">P(cough | fever, group)</div></div></div>
+        <p class="note" id="ci-say"></p>
+      </div>
+      <div class="grp">
+        <span class="mini-h">Counting numbers to store</span>
+        <div class="ctrl"><div class="top"><label for="ci-n">Symptoms of one illness</label><output id="ci-n-o"></output></div><input type="range" id="ci-n" min="1" max="40" step="1" value="2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ci-full"></div><div class="k">full joint</div></div><div class="stat"><div class="v" id="ci-fact"></div><div class="k">with conditional independence</div></div></div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BAYES -->
+<section class="chap" id="bayes">
+  <div class="wrap">
+    <div class="tag">Diagnosis</div>
+    <h2>Bayes&rsquo; rule: turning the evidence around</h2>
+    <div class="prose">
+      <p>The product rule can be written both ways round: P(a, b) = P(a | b) P(b) = P(b | a) P(a). Divide by P(b) and you have <em class="term">Bayes&rsquo; rule</em>. Why is it so useful? Because knowledge usually comes in the <em>causal</em> direction. A test&rsquo;s maker can tell you P(positive | disease), and that number is the same in every clinic. What a doctor needs is the <em>diagnostic</em> direction, P(disease | positive), and that depends on how common the disease is where you are. Bayes&rsquo; rule converts one into the other. The prior P(disease) is the <em class="term">base rate</em>; the answer is the <em class="term">posterior</em>.</p>
+      <p>Picture it as 1,000 people (Gigerenzer&rsquo;s &ldquo;natural frequencies&rdquo;, the easiest way to get this right). With a rare disease, the healthy majority produces more false alarms than the sick minority produces true positives, so most positive tests are wrong, even for a good test. A second positive from an <em>independent</em> test helps a lot: because the tests are conditionally independent given the disease, their likelihoods simply multiply. <strong>Lower the base rate</strong> and watch the posterior collapse; then add tests.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} P(c \mid e) &= \frac{P(e \mid c)\, P(c)}{P(e)} \\ P(e) &= \sum_{c'} P(e \mid c')\, P(c') \end{aligned} \]</div><div class="read"><b>Read it as:</b> the chance of the cause given the effect is the chance of the effect given the cause, times the prior of the cause, divided by the overall chance of the effect. The bottom line comes from the sum rule: add the same top line over every possible cause.</div><div class="eq-say"><b>Say it</b><em>&ldquo;P of c given e is P of e given c times P of c, over P of e.&rdquo;</em></div><div class="eq-run" id="run-by"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\mathbf{P}(C \mid e_1, \dots, e_n) \\ &\quad = \alpha\, \mathbf{P}(C) \prod_{i=1}^{n} \mathbf{P}(e_i \mid C) \end{aligned} \]</div><div class="read"><b>Read it as:</b> when pieces of evidence are conditionally independent given the cause, multiply the prior by each likelihood in turn and normalise at the end. Each test&rsquo;s posterior becomes the next test&rsquo;s prior. For the flu table: P(flu | fever, cough) = &alpha; &times; 0.1 &times; 0.7 &times; 0.8 versus &alpha; &times; 0.9 &times; 0.1 &times; 0.2, which gives 0.056 / (0.056 + 0.018) = 0.757.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Bold P of C given e-one to e-n is alpha times bold P of C times the product of bold P of e-i given C.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Positive tests in a row"><button type="button" data-bk="1" aria-pressed="true">1 positive test</button><button type="button" data-bk="2">2 positives</button><button type="button" data-bk="3">3 positives</button></div></div>
+        <div class="plot ar-16x10 mob"><canvas id="by-cv" aria-label="A thousand people: who is ill and who tests positive"></canvas></div>
+        <figcaption><span style="color:var(--cA)">&#9679;</span> has the disease &nbsp; <span style="color:var(--muted)">&#9675;</span> healthy &nbsp; <span style="color:var(--cB)">&#9711;</span> ringed: tests positive every time. Each dot is one person in 1,000; counts are rounded to whole people.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="by-p">Base rate P(disease)</label><output id="by-p-o"></output></div><input type="range" id="by-p" min="-3" max="-0.3" step="0.01" value="-2"></div>
+        <div class="ctrl"><div class="top"><label for="by-s">Sensitivity P(+ | disease)</label><output id="by-s-o"></output></div><input type="range" id="by-s" min="0.5" max="1" step="0.01" value="0.9"></div>
+        <div class="ctrl"><div class="top"><label for="by-f">False-positive rate P(+ | healthy)</label><output id="by-f-o"></output></div><input type="range" id="by-f" min="0.005" max="0.3" step="0.005" value="0.05"></div>
+        <div class="stats"><div class="stat big"><div class="v" id="by-post"></div><div class="k">P(disease | every test positive)</div></div><div class="stat"><div class="v" id="by-tp"></div><div class="k">ill and positive, per 1,000</div></div><div class="stat"><div class="v" id="by-fp"></div><div class="k">healthy and positive, per 1,000</div></div></div>
+        <p class="note" id="by-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- WUMPUS -->
+<section class="chap" id="wumpus">
+  <div class="wrap">
+    <div class="tag">An agent under uncertainty</div>
+    <h2>The Wumpus world revisited</h2>
+    <div class="prose">
+      <p>The Wumpus world is a 4 &times; 4 cave that a logical agent explores square by square. Each square other than the start [1,1] hides a bottomless pit with probability 0.2, independently of the others, and the agent feels a <em class="term">breeze</em> in any square next to a pit. (We ignore the Wumpus and the gold here; the pits are hard enough.) In the classic position the agent has visited [1,1], [1,2] and [2,1] and felt a breeze in both [1,2] and [2,1]. Logic is stuck: none of the three squares it could step into next, [1,3], [2,2] and [3,1], is provably safe. Probability is not stuck.</p>
+      <p>The full joint has 2<sup>15</sup> = 32,768 pit layouts (2<sup>13</sup> = 8,192 once the three visited squares are known to be pit-free), but most squares are far from anything the agent has sensed. Split the unknown squares into the query, the <em class="term">frontier</em> (unknown squares next to visited ones) and everything else. The breezes depend only on the frontier, and the other squares&rsquo; pits are independent of everything, so their sum is 1 and they drop out. What is left is a sum over a handful of frontier layouts, and it gives exactly the same answer. <strong>Click a frontier square to step into it</strong>, or start a new cave and play; the numbers are each square&rsquo;s chance of a pit.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{P}(P_{1,1}, \dots, P_{4,4}) &= \prod_{i,j} \mathbf{P}(P_{i,j}) \\ P(p_{i,j}) &= 0.2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> the prior over caves. Pits are placed independently, so a layout with k pits among the 15 squares has probability 0.2<sup>k</sup> &times; 0.8<sup>15&minus;k</sup>. The breezes are then fixed by the pits: a square is breezy exactly when a neighbour holds a pit.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The joint over all the pit variables is the product of each square&rsquo;s own pit probability, which is 0.2.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\mathbf{P}(P_q \mid k, b) \\ &\ = \alpha'\, \mathbf{P}(P_q) \sum_{f} P(b \mid k, P_q, f)\, P(f) \end{aligned} \]</div><div class="read"><b>Read it as:</b> k is what the agent knows (the visited squares have no pits), b the breezes it felt, and f a layout of pits on the frontier. To get the pit chance of query square q, run over the frontier layouts only. Each layout scores 1 if it explains every breeze and no-breeze the agent felt, and 0 if not, weighted by its prior. Multiply by q&rsquo;s own prior and normalise.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Bold P of P-q given k and b is alpha-prime times bold P of P-q, times the sum over frontier layouts f of P of b given k, P-q and f, times P of f.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-wp" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Cave"><button type="button" data-wm="classic" aria-pressed="true">Classic position</button><button type="button" data-wm="new">New cave</button></div></div>
+        <div class="plot" style="aspect-ratio:1/1; max-width:520px; margin:0 auto"><canvas id="wp-cv" aria-label="The 4 by 4 cave with pit probabilities; click a frontier square to step into it"></canvas></div>
+        <figcaption>Pale squares are visited (&ldquo;B&rdquo; = breeze felt). Outlined squares are the frontier; the number is P(pit) and the redder the square, the riskier. <span style="color:var(--cB)">&#9733;</span> the safest frontier square.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="wp-pr">Prior chance of a pit in each square</label><output id="wp-pr-o"></output></div><input type="range" id="wp-pr" min="0.05" max="0.5" step="0.01" value="0.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="wp-best"></div><div class="k">safest next square</div></div><div class="stat"><div class="v" id="wp-n"></div><div class="k">layouts summed: full vs frontier</div></div><div class="stat"><div class="v" id="wp-v"></div><div class="k">squares explored</div></div><div class="stat"><div class="v" id="wp-r"></div><div class="k">chance you'd survive this far</div></div></div>
+        <div class="btns"><button type="button" class="btn primary" id="wp-auto">Step into the safest square</button></div>
+        <p class="note" id="wp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: a census you can query by counting</h2>
+    <div class="prose">
+      <p>The <b>Adult</b> data set was extracted by Barry Becker from the 1994 US Census database and published on the UCI repository (CC BY 4.0) by Becker and Ronny Kohavi. Its two files hold <strong>48,842</strong> adults. We keep six of their variables and cut each into a few bands: <b>age</b> (4 bands), <b>sex</b> (2), <b>education</b> (5), <b>marital status</b> (3), <b>hours worked per week</b> (3) and <b>income</b> (at most or more than $50K a year, 2). That makes a full joint table with 4 &times; 2 &times; 5 &times; 3 &times; 3 &times; 2 = <b>720</b> cells. The page holds the 720 counts and nothing else; every answer below is computed from them, live, by the recipe of the last few sections: select, sum, divide. Counts divided by 48,842 are probabilities of a person drawn at random from <em>this sample</em>, not of the US population.</p>
+    </div>
+
+    <h3>Ask the table</h3>
+    <div class="prose"><p><strong>Pick a variable to ask about, then set any evidence you like.</strong> The solid bars are P(answer | evidence) by counting; the faint bars are the same variable with no evidence, so you can see what the evidence changed.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg sm" role="group" aria-label="Ask about" id="aq-t"></div></div>
+        <div class="plot ar-16x10 mob"><canvas id="aq-cv" aria-label="The answer distribution for the chosen query"></canvas></div>
+        <figcaption><span style="color:var(--cA)">&#9644;</span> P(value | your evidence), by counting &nbsp; <span style="color:var(--muted)">&#9644;</span> P(value) with no evidence &nbsp; <span style="color:var(--cB)">&#9670;</span> what you would get by assuming the evidence is conditionally independent given the asked variable</figcaption>
+      </figure>
+      <div class="panel"><div class="grp" id="aq-ev"></div>
+      <div class="grp">
+        <div class="stats"><div class="stat"><div class="v" id="aq-n"></div><div class="k">people matching the evidence</div></div><div class="stat"><div class="v" id="aq-c"></div><div class="k">table cells added</div></div></div>
+        <div class="btns"><button type="button" class="btn" id="aq-flip">Flip it with Bayes</button><button type="button" class="btn" id="aq-clear">Clear the evidence</button></div>
+        <p class="note" id="aq-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Independence on real data</h3>
+    <div class="prose"><p>Are two variables independent? Then every row of P(Y | X = x) looks the same as P(Y). Below, each bar is one row, split into the values of Y. <strong>Pick a pair, then condition on a third variable</strong>. Sex and income, for example, are strongly dependent overall; look at them again among married people only.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 mob"><canvas id="iq-cv" aria-label="Rows of the conditional distribution of Y for each value of X"></canvas></div>
+        <figcaption id="iq-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <span class="mini-h">Rows: X</span><div class="seg sm" role="group" aria-label="X" id="iq-x"></div>
+        <span class="mini-h">Split by: Y</span><div class="seg sm" role="group" aria-label="Y" id="iq-y"></div>
+        <span class="mini-h">Only people with</span><div class="seg sm" role="group" aria-label="Condition" id="iq-z"></div>
+        <div class="seg sm" role="group" aria-label="Condition value" id="iq-zv"></div>
+        <div class="stats"><div class="stat"><div class="v" id="iq-gap"></div><div class="k">largest |P(y | x) &minus; P(y)|</div></div><div class="stat"><div class="v" id="iq-n"></div><div class="k">people in the group</div></div></div>
+        <p class="note" id="iq-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Why nobody stores the full joint</h3>
+    <div class="prose"><p>Every answer above was exact, and with only 720 cells it was cheap. But even here <span id="pj-empty"></span> of the cells hold nobody, and <span id="pj-small"></span> hold fewer than ten people, so narrow questions rest on very few people. Keep all nine categorical columns of the original data instead (counting &ldquo;?&rdquo;, the mark for a missing value, as a value), and the table has <b>76,204,800</b> cells for 48,842 people. Only 12,672 of them hold anybody: 99.98% of the table is empty, and almost every combination you could ask about has never been seen. This is the O(2<sup>n</sup>) wall of the full joint, met with real data, and it is why the rest of the book is about <em>structure</em>: independence and conditional independence that let a model store a few small tables instead of one enormous one. The orange diamonds in &ldquo;Ask the table&rdquo; come from the simplest such model, and the <a href="../naive-bayes/">naive Bayes</a> chapter builds it properly.</p></div>
+
+    <h3>The same counts in pandas</h3>
+<pre class="code"><code>import pandas as pd
+
+cols = ["age", "workclass", "fnlwgt", "education", "edu_num", "marital", "occupation",
+        "relationship", "race", "sex", "cap_gain", "cap_loss", "hours", "country", "income"]
+read = lambda f, skip: pd.read_csv(f, header=None, names=cols, skipinitialspace=True, skiprows=skip)
+df = pd.concat([read("adult.data", 0), read("adult.test", 1)], ignore_index=True)   # UCI Adult, 48,842 people
+df["income"] = df.income.str.rstrip(".")
+df["age"] = pd.cut(df.age, [16, 29, 44, 59, 200], labels=["17-29", "30-44", "45-59", "60+"])
+df["edu"] = pd.cut(df.edu_num, [0, 8, 9, 12, 13, 16],
+                   labels=["No diploma", "High school", "Some college", "Bachelor's", "Postgrad"])
+df["marital"] = df.marital.map(lambda m: "Married" if m in ("Married-civ-spouse", "Married-AF-spouse")
+                               else "Never married" if m == "Never-married" else "Div./sep./wid.")
+df["hours"] = pd.cut(df.hours, [0, 34, 45, 200], labels=["Under 35", "35-45", "46+"])
+V = ["age", "sex", "edu", "marital", "hours", "income"]
+
+J = df.groupby(V, observed=False).size()          # the full joint table, as counts
+print(f"{len(J)} cells, {(J == 0).sum()} empty, N = {J.sum()}")
+
+def P(query, given={}):                            # P(query | given), by counting rows of the joint
+    keep = pd.Series(True, J.index)
+    for v, x in given.items(): keep &amp;= J.index.get_level_values(v) == x
+    hit = keep &amp; (J.index.get_level_values(query[0]) == query[1])
+    return J[hit].sum() / J[keep].sum(), J[hit].sum(), J[keep].sum()
+
+rich = ("income", "&gt;50K")
+for given in [{}, {"sex": "Female"}, {"sex": "Male"}, {"edu": "Postgrad"},
+              {"marital": "Married"}, {"marital": "Married", "sex": "Female"}, {"marital": "Married", "sex": "Male"},
+              {"age": "45-59", "sex": "Male", "edu": "Postgrad", "marital": "Married", "hours": "46+"}]:
+    p, a, b = P(rich, given)
+    print(f"P(&gt;50K | {', '.join(given.values()) or 'nothing'}) = {a}/{b} = {p:.4f}")
+p, a, b = P(("edu", "Postgrad"), {"income": "&gt;50K"})
+print(f"Bayes flip: P(Postgrad | &gt;50K) = {a}/{b} = {p:.4f}")
+cats = ["workclass", "education", "marital", "occupation", "relationship", "race", "sex", "country", "income"]
+raw = pd.concat([read("adult.data", 0), read("adult.test", 1)], ignore_index=True)
+raw["income"] = raw.income.str.rstrip(".")
+cells = 1
+for c in cats: cells *= raw[c].nunique()
+print(f"all 9 categorical columns: {cells:,} cells, {len(raw.groupby(cats))} non-empty")</code></pre>
+<pre class="code out"><code id="pj-out">720 cells, 90 empty, N = 48842
+P(>50K | nothing) = 11687/48842 = 0.2393
+P(>50K | Female) = 1769/16192 = 0.1093
+P(>50K | Male) = 9918/32650 = 0.3038
+P(>50K | Postgrad) = 2507/4085 = 0.6137
+P(>50K | Married) = 9998/22416 = 0.4460
+P(>50K | Married, Female) = 1121/2505 = 0.4475
+P(>50K | Married, Male) = 8877/19911 = 0.4458
+P(>50K | 45-59, Male, Postgrad, Married, 46+) = 393/439 = 0.8952
+Bayes flip: P(Postgrad | >50K) = 2507/11687 = 0.2145
+all 9 categorical columns: 76,204,800 cells, 12672 non-empty</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-check"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Probability summarises what an agent does not know: a weight on every possible world, adding to 1. Combined with utilities it tells the agent what to do: maximise expected utility.</li>
+      <li>An event is a set of worlds and its probability is their total weight. Beliefs that break the axioms can be Dutch-booked: a set of bets each fair to you that loses in every world.</li>
+      <li>Two rules do all the work. Sum rule: p(X) = &Sigma;<sub>Y</sub> p(X, Y). Product rule: p(X, Y) = p(Y | X) p(X). Conditional probability is their ratio.</li>
+      <li>The full joint answers any query by selecting, summing out the hidden variables and normalising, but it grows as 2<sup>n</sup>. Independence and conditional independence factor it into small pieces.</li>
+      <li>Bayes&rsquo; rule turns causal knowledge P(e | c) into diagnosis P(c | e), and the base rate matters: a 90% test for a 1-in-100 disease is right only about 15% of the time it says yes.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Two fair dice. What is P(Total = 7 | a six shows)?</summary><p>&ldquo;A six shows&rdquo; holds in 11 of the 36 worlds. Of those, two have total 7: (1, 6) and (6, 1). So the answer is 2/11 &asymp; 0.18, a little more than P(Total = 7) = 6/36 &asymp; 0.17.</p></details>
+      <details class="q"><summary>You believe P(a) = 0.6 and P(&not;a) = 0.5. Which tickets should a bookie sell you to guarantee a profit?</summary><p>Sell you both &pound;10 tickets, on a and on &not;a, for &pound;6 and &pound;5. Exactly one of them pays &pound;10 whatever happens, so you pay &pound;11 for a sure &pound;10: a loss of &pound;1 in every world.</p></details>
+      <details class="q"><summary>Using the flu table, why can you find P(flu | fever) without first working out P(fever)?</summary><p>Because P(fever) divides both P(flu, fever) = 0.070 and P(&not;flu, fever) = 0.090. Normalising the pair (0.070, 0.090) to add to 1 gives the same answer, 0.4375, and the sum 0.16 you divided by <em>is</em> P(fever).</p></details>
+      <details class="q"><summary>Fever and cough are conditionally independent given flu. Are they independent?</summary><p>No. Overall P(cough) = 0.26 but P(cough | fever) = 0.4625: a fever raises the chance of flu, and flu raises the chance of a cough. Conditional independence and independence are different properties, and neither implies the other.</p></details>
+      <details class="q"><summary>In the classic Wumpus position, why are [1,3] and [3,1] safer than [2,2]?</summary><p>A pit in [2,2] would explain both breezes at once. Without one, you need pits in both [1,3] and [3,1], which is a priori much less likely (0.2 &times; 0.2). So the layouts consistent with the breezes mostly contain a pit in [2,2]: P = 0.86 there and 0.31 in each of the others.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../random-variables-distributions/">Next: Chapter 0.5, Random Variables, Expectations &amp; the Common Distributions &rarr;</a>
+      <a class="btn" href="../calculus-numerics-optimisation/">&larr; Previous: Matrix Calculus, Numerics &amp; Constraints</a>
+      <a class="btn primary" href="../random-variables-distributions/">Next chapter: Random Variables, Expectations &amp; Distributions &rarr;</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Russell, S. &amp; Norvig, P. (2020). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed., Pearson. Chapter 12, Quantifying Uncertainty, and Appendix A.</li>
+      <li>Bishop, C. M. (2006). <em>Pattern Recognition and Machine Learning</em>, Springer. Section 1.2, Probability Theory.</li>
+      <li>Goodfellow, I., Bengio, Y. &amp; Courville, A. (2016). <em>Deep Learning</em>, MIT Press. Chapter 3, Probability and Information Theory.</li>
+      <li>Kolmogorov, A. N. (1933). <em>Grundbegriffe der Wahrscheinlichkeitsrechnung</em>, Springer; English translation <em>Foundations of the Theory of Probability</em> (1950), Chelsea.</li>
+      <li>de Finetti, B. (1931). Sul significato soggettivo della probabilit&agrave;. <em>Fundamenta Mathematicae</em> 17: 298&ndash;329.</li>
+      <li>Cox, R. T. (1946). Probability, frequency and reasonable expectation. <em>American Journal of Physics</em> 14(1): 1&ndash;13.</li>
+      <li>Gigerenzer, G. &amp; Hoffrage, U. (1995). How to improve Bayesian reasoning without instruction: frequency formats. <em>Psychological Review</em> 102(4): 684&ndash;704.</li>
+      <li>Becker, B. &amp; Kohavi, R. (1996). Adult [data set]. UCI Machine Learning Repository, doi:10.24432/C5XW20 (CC BY 4.0); Kohavi, R. (1996). Scaling up the accuracy of naive-Bayes classifiers: a decision-tree hybrid. <em>KDD-96</em>.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const f3 = v => fmt(v, 3), f4 = v => fmt(v, 4);
+const big = n => Math.round(n).toLocaleString('en-GB');
+const sum = a => a.reduce((s, v) => s + v, 0);
+function setPressed(sel, val, attr) { $$(sel).forEach(b => b.setAttribute('aria-pressed', b.getAttribute(attr) === String(val) ? 'true' : 'false')); }
+function txt(c, s, x, y, font, col, align, base) { c.font = font; c.fillStyle = col; c.textAlign = align || 'left'; c.textBaseline = base || 'alphabetic'; c.fillText(s, x, y); }
+function rrect(c, x, y, w, h, r) { r = Math.max(0, Math.min(r, w / 2, h / 2)); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+// normal CDF via a high-accuracy erfc (W. J. Cody style rational fit, |error| < 1.2e-7)
+function erfc(x) { const z = Math.abs(x), t = 1 / (1 + 0.5 * z); const r = t * Math.exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277))))))))); return x >= 0 ? r : 2 - r; }
+const Phi = z => 0.5 * erfc(-z / Math.SQRT2);
+
+/* ---------- the flu table: counts per 1,000 patients, index = flu*4 + fever*2 + cough (1 = true) ---------- */
+const FLU = [648, 162, 72, 18, 6, 24, 14, 56]; // [¬fl¬fe¬co, ¬fl¬fe co, ¬fl fe¬co, ¬fl fe co, fl¬fe¬co, fl¬fe co, fl fe¬co, fl fe co]
+const fluN = pred => { let s = 0; for (let i = 0; i < 8; i++) if (pred(i >> 2 & 1, i >> 1 & 1, i & 1)) s += FLU[i]; return s; };
+
+/* ---------- hero: a mosaic of 1,000 patients ---------- */
+const HB = [ // blocks by symptom: fever, cough
+  { k: 'fc', fe: 1, co: 1, name: 'fever and cough' }, { k: 'fn', fe: 1, co: 0, name: 'fever, no cough' },
+  { k: 'nc', fe: 0, co: 1, name: 'cough, no fever' }, { k: 'nn', fe: 0, co: 0, name: 'neither symptom' }];
+HB.forEach(b => { b.flu = fluN((fl, fe, co) => fl && fe === b.fe && co === b.co); b.n = fluN((fl, fe, co) => fe === b.fe && co === b.co); });
+const HS = { sel: new Set(), hover: -1, rects: [] };
+function heroName(sel) {
+  const s = [...sel].sort().join(','), named = { 'fc,fn': 'fever', 'nc,nn': 'no fever', 'fc,nc': 'cough', 'fn,nn': 'no cough', 'fc,fn,nc': 'fever or cough', 'fc,fn,nc,nn': 'anything (everyone)' };
+  return named[s] || HB.filter(b => sel.has(b.k)).map(b => b.name).join(' or ');
+}
+function drawHero() {
+  const C = C0(), cv = $('#hero-cv'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, W = v.w, H = v.h;
+  const pl = 8, pr = 8, pt = 24, pb = 8, g = 6, aw = W - pl - pr - g, ah = H - pt - pb - g;
+  const nFe = HB[0].n + HB[1].n, wFe = aw * nFe / 1000;
+  const cols = [{ x: pl, w: wFe, blocks: [HB[0], HB[1]], tot: nFe, lab: 'fever' }, { x: pl + wFe + g, w: aw - wFe, blocks: [HB[2], HB[3]], tot: 1000 - nFe, lab: 'no fever' }];
+  HS.rects = [];
+  const any = HS.sel.size > 0, small = W < 460;
+  cols.forEach(col => {
+    txt(c, `${col.lab} (${col.tot})`, col.x + 2, pt - 8, (small ? '10px ' : '11px ') + css('--f-mono'), C.muted);
+    let y = pt; const hTop = ah * col.blocks[0].n / col.tot;
+    col.blocks.forEach((b, bi) => {
+      const rh = bi === 0 ? hTop : ah - hTop, rx = col.x, ry = bi === 0 ? pt : pt + hTop + g, rw = col.w;
+      HS.rects.push({ b, x: rx, y: ry, w: rw, h: rh });
+      const on = HS.sel.has(b.k), hov = HS.hover === b.k, dim = any && !on;
+      c.save(); rrect(c, rx, ry, rw, rh, 5); c.fillStyle = on ? `color-mix(in srgb, ${C.a} 13%, ${C.surf})` : C.soft; c.globalAlpha = dim ? 0.5 : 1; c.fill();
+      if (on || hov) { c.globalAlpha = 1; c.strokeStyle = on ? C.a : C.muted; c.lineWidth = on ? 2 : 1.2; c.stroke(); }
+      c.restore();
+      // dots
+      const n = b.n, s = Math.sqrt(rw * rh / n); let nc = Math.max(1, Math.round(rw / s)), nr = Math.ceil(n / nc);
+      const sx = rw / nc, sy = rh / nr, r = Math.max(1.1, Math.min(sx, sy) * 0.36);
+      for (let i = 0; i < n; i++) {
+        const cx = rx + (i % nc + 0.5) * sx, cy = ry + (Math.floor(i / nc) + 0.5) * sy, fl = i < b.flu;
+        c.globalAlpha = dim ? 0.28 : 1; c.beginPath(); c.arc(cx, cy, r, 0, 7);
+        if (fl) { c.fillStyle = C.a; c.fill(); } else { c.strokeStyle = C.muted; c.lineWidth = r > 2.2 ? 1 : 0.8; c.globalAlpha = dim ? 0.18 : 0.55; c.stroke(); }
+      }
+      c.globalAlpha = 1;
+      const lab = b.co ? 'cough' : 'no cough', fnt = (small ? '9.5px ' : '10.5px ') + css('--f-mono'); c.font = fnt; const tw = c.measureText(lab).width;
+      if (tw + 8 < rw && rh > 16) { c.save(); c.globalAlpha = 0.88; c.fillStyle = C.surf; rrect(c, rx + 3, ry + 3, tw + 8, 15, 4); c.fill(); c.restore(); txt(c, lab, rx + 7, ry + 14, fnt, C.q); }
+    });
+  });
+  const flAll = 100;
+  if (!any) { $('#hero-cap').innerHTML = `1,000 patients; ${tip('<b>' + flAll + '</b>', 'sum of the four flu cells of the joint table:\n56 + 14 + 24 + 6 = 100')} have flu (filled), so P(flu) = ${tip('0.10', '100 / 1,000')}. Each block holds the patients with one combination of symptoms, and its area is its probability. Click one or more blocks to condition on them.`; return; }
+  const bl = HB.filter(b => HS.sel.has(b.k)), n = sum(bl.map(b => b.n)), k = sum(bl.map(b => b.flu)), p = k / n, nm = heroName(HS.sel);
+  $('#hero-cap').innerHTML = `Given <b>${nm}</b>: ${tip(big(n), bl.map(b => `${b.name}: ${b.n}`).join('\n') + (bl.length > 1 ? `\ntotal ${n}` : ''))} patients, of whom ${tip(String(k), bl.map(b => `${b.name}: ${b.flu} with flu`).join('\n'))} have flu. P(flu | ${nm}) = ${k}/${n} = ${tip('<b>' + f3(p) + '</b>', `flu dots in the selected blocks ÷ all dots in them\n= ${k} / ${n}`)}, ${p > 0.1005 ? fmt(p / 0.1, 1) + '&times; the prior of 0.10' : p < 0.0995 ? 'down from the prior of 0.10' : 'the same as the prior'}. Conditioning is zooming in: drop every world that disagrees with the evidence, then rescale what is left.`;
+}
+{ const cv = $('#hero-cv'); const hit = e => { const [px, py] = evPos(cv, e); const r = HS.rects.find(r => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h); return r ? r.b.k : -1; };
+  cv.addEventListener('click', e => { const k = hit(e); if (k === -1) return; HS.sel.has(k) ? HS.sel.delete(k) : HS.sel.add(k); drawHero(); });
+  cv.addEventListener('pointermove', e => { const k = hit(e); cv.style.cursor = k === -1 ? 'default' : 'pointer'; if (k !== HS.hover) { HS.hover = k; drawHero(); } });
+  cv.addEventListener('pointerleave', () => { HS.hover = -1; drawHero(); }); }
+fig($('#hero-cv'), drawHero);
+
+/* ---------- why: the airport ---------- */
+const AP = { t: 60, lm: 2.7, s: 0.25, med: 50 };
+const apOn = (t, s) => t <= 0 ? 0 : Phi((Math.log(t) - Math.log(AP.med)) / s);
+const apCost = (t, M, s) => t + M * (1 - apOn(t, s));
+function apBest(M, s) { let bt = 20, bc = Infinity; for (let t = 20; t <= 400; t += 0.25) { const c = apCost(t, M, s); if (c < bc) { bc = c; bt = t; } } return { t: bt, c: bc }; }
+function hm(m) { m = Math.round(m); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') + ' min'; }
+function drawAP() {
+  const C = C0(), M = Math.pow(10, AP.lm), s = AP.s, t = AP.t, best = apBest(M, s), pOn = apOn(t, s), cost = apCost(t, M, s);
+  // journey-time density
+  { const lp = x => x <= 0 ? 0 : Math.exp(-((Math.log(x) - Math.log(AP.med)) ** 2) / (2 * s * s)) / (x * s * Math.sqrt(2 * Math.PI));
+    let ym = 0; for (let x = 1; x < 300; x += 1) ym = Math.max(ym, lp(x));
+    const v = frame($('#ap-pdf'), [0, 300], [0, ym * 1.12], { l: 14, r: 14, t: 10, b: 26 }); axes(v, 'journey time (min)', '', { sx: 30, fy: () => '' }); clip(v);
+    const c = v.ctx; c.save(); c.beginPath(); c.moveTo(v.X(Math.min(t, 300)), v.Y(0)); for (let x = t; x <= 300; x += 1) c.lineTo(v.X(x), v.Y(lp(x))); c.lineTo(v.X(300), v.Y(0)); c.closePath(); c.fillStyle = C.bad; c.globalAlpha = 0.25; c.fill(); c.restore();
+    curve(v, lp, C.q, 2); seg(v, t, 0, t, ym * 1.12, C.q, 1.5, [4, 3]);
+    txt(c, `late: ${pct(1 - pOn, 1)}`, Math.min(v.X(t) + 6, v.w - 90), v.pad.t + 14, '11px ' + css('--f-mono'), C.bad);
+    v.ctx.restore(); }
+  // expected cost
+  { let ymax = Math.max(best.c * 2.6, cost * 1.12); ymax = Math.min(ymax, apCost(30, M, s) * 1.05, 6000);
+    const v = frame($('#ap-cost'), [30, 300], [0, ymax], { l: 46, r: 14, t: 14, b: 26 }); axes(v, 'leave t min early', 'expected cost (min)', { sx: 30 }); clip(v);
+    curve(v, x => apCost(x, M, s), C.a, 2.6); curve(v, x => x, C.muted, 1.2, [4, 4]);
+    star(v, best.t, best.c, C.b, 9); dot(v, t, Math.min(cost, ymax * 0.99), C.q, 5.5);
+    v.ctx.restore(); }
+  $('#ap-t-o').textContent = hm(t); $('#ap-m-o').textContent = hm(M); $('#ap-s-o').textContent = 'σ = ' + fmt(s, 2);
+  $('#ap-p').innerHTML = tip(pct(pOn, 1), `P(journey ≤ ${t}) for a lognormal journey\nwith median ${AP.med} min and σ = ${fmt(s, 2)}:\nΦ((ln ${t} − ln ${AP.med}) / ${fmt(s, 2)}) = Φ(${fmt((Math.log(t) - Math.log(AP.med)) / s, 3)}) = ${f4(pOn)}`);
+  $('#ap-c').innerHTML = tip(hm(cost), `t + M × P(late)\n= ${t} + ${fmt(M, 1)} × ${f4(1 - pOn)}\n= ${fmt(cost, 1)} min`);
+  $('#ap-bt').innerHTML = tip(hm(best.t), `scan t from 20 to 400 min in steps of 0.25\nand keep the smallest t + M × P(late):\ncost ${fmt(best.c, 1)} min at t = ${fmt(best.t, 2)}`);
+  $('#ap-bp').innerHTML = tip(pct(apOn(best.t, s), 1), `Φ((ln ${fmt(best.t, 2)} − ln ${AP.med}) / ${fmt(s, 2)})`);
+  const ratio = cost / best.c, dt = t - best.t;
+  $('#ap-say').innerHTML = (ratio < 1.02 ? `<b>You found the best plan</b> (within 2% of the lowest expected cost).`
+    : dt < 0 ? `You are leaving <b>too late</b>: a ${pct(1 - pOn, 0)} chance of missing the plane, at ${hm(M)} each time, outweighs the waiting you save. Leave about ${hm(best.t)} early.`
+    : `You are leaving <b>too early</b>: you buy only ${pct(apOn(best.t, s) < pOn ? pOn - apOn(best.t, s) : 0, 1)} more certainty with ${hm(dt)} of extra waiting.`)
+    + ` Even the best plan accepts a ${pct(1 - apOn(best.t, s), 1)} risk of missing the flight: insisting on certainty would mean leaving absurdly early. ${AP.lm > 3.2 ? 'When missing is a disaster, the best time moves earlier.' : AP.lm < 2.1 ? 'When missing hardly matters, the best plan cuts it fine.' : 'Make missing the plane hurt more, and the best time moves earlier.'}`;
+  $('#run-ap').innerHTML = `<b>Running example</b>: leave t = ${t} min early. P(late) = 1 &minus; ${tip(f4(pOn), 'Φ((ln t − ln 50) / σ)')} = ${f4(1 - pOn)}, so cost(${t}) = ${t} + ${fmt(M, 1)} &times; ${f4(1 - pOn)} = ${tip('<b>' + fmt(cost, 1) + '</b>', 'minutes of travel and waiting, plus\nthe expected misery of missing the plane')} min. The best plan, t = ${fmt(best.t, 1)}, costs ${fmt(best.c, 1)} min.`;
+}
+$('#ap-t').addEventListener('input', e => { AP.t = +e.target.value; drawAP(); });
+$('#ap-m').addEventListener('input', e => { AP.lm = +e.target.value; drawAP(); });
+$('#ap-s').addEventListener('input', e => { AP.s = +e.target.value; drawAP(); });
+fig($('#ap-pdf'), drawAP); fig($('#ap-cost'), drawAP);
+
+/* ---------- events: two dice ---------- */
+const DC = { a: 'sum7', b: 'six', op: 'a', dice: 'fair' };
+const DEV = { sum7: [(x, y) => x + y === 7, 'Total = 7'], dbl: [(x, y) => x === y, 'Doubles'], even: [(x, y) => x % 2 === 0, 'Die 1 even'], ge10: [(x, y) => x + y >= 10, 'Total ≥ 10'], six: [(x, y) => x === 6 || y === 6, 'A six shows'] };
+const dW = (x, y) => DC.dice === 'fair' ? 1 / 36 : (x === 6 ? 0.5 : 0.1) / 6;
+function dIn(x, y) { const A = DEV[DC.a][0](x, y), B = DEV[DC.b][0](x, y); return DC.op === 'a' ? A : DC.op === 'and' ? A && B : DC.op === 'or' ? A || B : !A; }
+function dP(f) { let p = 0, n = 0; for (let x = 1; x <= 6; x++) for (let y = 1; y <= 6; y++) if (f(x, y)) { p += dW(x, y); n++; } return { p, n }; }
+function dName() { const A = DEV[DC.a][1], B = DEV[DC.b][1]; return DC.op === 'a' ? A : DC.op === 'and' ? `(${A}) ∧ (${B})` : DC.op === 'or' ? `(${A}) ∨ (${B})` : `¬(${A})`; }
+function drawDC() {
+  const C = C0(), cv = $('#dc-cv'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, W = v.w, H = v.h;
+  const narrow = W < 460, gs = narrow ? Math.min(W - 40, H * 0.56) : Math.min(H - 40, W * 0.54), gx = 26, gy = 10, cs = gs / 6, wmax = DC.dice === 'fair' ? 1 / 36 : 0.5 / 6;
+  for (let x = 1; x <= 6; x++) for (let y = 1; y <= 6; y++) {
+    const px = gx + (x - 1) * cs, py = gy + (6 - y) * cs, inE = dIn(x, y), w = dW(x, y);
+    c.save(); rrect(c, px + 1.5, py + 1.5, cs - 3, cs - 3, 4);
+    if (inE) { c.fillStyle = C.a; c.globalAlpha = 0.22 + 0.6 * w / wmax; } else { c.fillStyle = C.soft; c.globalAlpha = 1; }
+    c.fill(); c.restore();
+    txt(c, String(x + y), px + cs / 2, py + cs / 2 + 1, (inE ? '600 ' : '') + Math.round(Math.min(13, cs * 0.36)) + 'px ' + css('--f-mono'), inE ? C.q : C.muted, 'center', 'middle');
+  }
+  c.font = '10px ' + css('--f-mono'); c.fillStyle = C.muted;
+  for (let i = 1; i <= 6; i++) { txt(c, String(i), gx + (i - 0.5) * cs, gy + gs + 13, '10px ' + css('--f-mono'), C.muted, 'center'); txt(c, String(i), gx - 8, gy + (6 - i + 0.5) * cs + 3, '10px ' + css('--f-mono'), C.muted, 'center'); }
+  txt(c, 'die 1 →', gx + gs, gy + gs + 26, '10px ' + css('--f-mono'), C.muted, 'right');
+  txt(c, 'die 2', 2, gy + gs + 26, '10px ' + css('--f-mono'), C.muted, 'left');
+  // P(Total) bars on the right
+  const bx = narrow ? gx : gx + gs + 22, bw = narrow ? gs : W - bx - 8, by0 = narrow ? gy + gs + 40 : gy; if (bw > 60) {
+    const tot = [], ev = []; for (let s = 2; s <= 12; s++) { tot.push(dP((x, y) => x + y === s).p); ev.push(dP((x, y) => x + y === s && dIn(x, y)).p); }
+    const ym = Math.max(0.2, ...tot) * 1.08, bh = narrow ? H - by0 - 30 : gs, step = bw / 11;
+    const Y = p => by0 + bh - p / ym * bh;
+    c.strokeStyle = C.line; c.lineWidth = 1; c.beginPath(); c.moveTo(bx, by0 + bh + 0.5); c.lineTo(bx + bw, by0 + bh + 0.5); c.stroke();
+    tot.forEach((p, i) => { const x0 = bx + i * step + step * 0.15, ww = step * 0.7;
+      c.fillStyle = C.line; c.fillRect(x0, Y(p), ww, by0 + bh - Y(p)); c.fillStyle = C.a; c.fillRect(x0, Y(ev[i]), ww, by0 + bh - Y(ev[i]));
+      if (step > 14 || i % 2 === 0) txt(c, String(i + 2), x0 + ww / 2, by0 + bh + 13, '10px ' + css('--f-mono'), C.muted, 'center'); });
+    txt(c, 'P(Total)', bx, by0 + 10, '10.5px ' + css('--f-mono'), C.muted);
+    txt(c, 'total →', bx + bw, by0 + bh + 26, '10px ' + css('--f-mono'), C.muted, 'right');
+  }
+  const E = dP(dIn), A = dP((x, y) => DEV[DC.a][0](x, y)), B = dP((x, y) => DEV[DC.b][0](x, y)), AB = dP((x, y) => DEV[DC.a][0](x, y) && DEV[DC.b][0](x, y)), nm = dName();
+  $('#dc-n').innerHTML = tip(`${E.n} of 36`, `count the highlighted squares`);
+  // grouped sum for the running example
+  let parts; if (DC.dice === 'fair') parts = `${E.n} &times; 1/36`; else { const k6 = dP((x, y) => dIn(x, y) && x === 6).n, ko = E.n - k6; parts = [k6 ? `${k6} &times; 0.0833` : '', ko ? `${ko} &times; 0.0167` : ''].filter(Boolean).join(' + ') || '0'; }
+  $('#dc-p').innerHTML = tip(f4(E.p), DC.dice === 'fair' ? `${E.n} worlds × 1/36 = ${E.n}/36` : `worlds with die 1 = 6 weigh 0.5 × 1/6 = 0.0833\nthe others weigh 0.1 × 1/6 = 0.0167\nsum over the ${E.n} highlighted worlds`);
+  $('#run-dc').innerHTML = `<b>Running example</b>: P(${nm}) = ${parts} = ${tip('<b>' + f4(E.p) + '</b>', 'sum of the weights of the worlds in the event')}.` + (DC.op === 'or' ? ` Check with inclusion&ndash;exclusion: P(A) + P(B) &minus; P(A &and; B) = ${f4(A.p)} + ${f4(B.p)} &minus; ${f4(AB.p)} = ${f4(A.p + B.p - AB.p)}.` : DC.op === 'not' ? ` Check: 1 &minus; P(A) = 1 &minus; ${f4(A.p)} = ${f4(1 - A.p)}.` : DC.op === 'and' && B.p > 0 ? ` As a preview of conditioning: P(A | B) = P(A &and; B) / P(B) = ${f4(AB.p)} / ${f4(B.p)} = ${f4(AB.p / B.p)}.` : '');
+  const naive = E.n / 36;
+  $('#dc-say').innerHTML = DC.dice === 'fair'
+    ? `All 36 worlds weigh 1/36, so here probability is counting: ${E.n} worlds &divide; 36 = ${f4(naive)}.${DC.op === 'and' && AB.n === 0 ? ' A and B never happen together: they are <i>mutually exclusive</i>, and then P(A &or; B) = P(A) + P(B).' : ''} Now load die 1.`
+    : `Die 1 now shows a six half the time, so the six squares in its column weigh five times as much as the rest. Counting would still say ${E.n}/36 = ${f4(naive)}, but the true probability is ${f4(E.p)}${Math.abs(naive - E.p) < 1e-9 ? ' (the same here, by luck of the event)' : ''}. Probability is a <b>sum of weights</b>; counting is the special case where the weights are equal.`;
+}
+seg1('[data-da]', 'data-da', k => { DC.a = k; drawDC(); });
+seg1('[data-db]', 'data-db', k => { DC.b = k; drawDC(); });
+seg1('[data-dop]', 'data-dop', k => { DC.op = k; drawDC(); });
+seg1('[data-dd]', 'data-dd', k => { DC.dice = k; drawDC(); });
+fig($('#dc-cv'), drawDC);
+
+/* ---------- axioms: the Dutch book ---------- */
+const DB = { a: 0.5, b: 0.4, ab: 0.2, or: 0.8 };
+const WORLDS = [[1, 1], [1, 0], [0, 1], [0, 0]], WN = ['rain, wind', 'rain, calm', 'dry, wind', 'dry, calm'];
+const PROPS = { a: ['rain', (r, w) => r], b: ['wind', (r, w) => w], ab: ['rain ∧ wind', (r, w) => r && w], or: ['rain ∨ wind', (r, w) => r || w] };
+function dbBook() {
+  const { a, b, ab, or } = DB, d = or - (a + b - ab);
+  if (Math.abs(d) >= 0.005) { const s = d > 0 ? 1 : -1; return { kind: 'ie', d, bets: [['or', s], ['a', -s], ['b', -s], ['ab', s]] }; }
+  if (ab > a + 0.005) return { kind: 'suba', d, bets: [['ab', 1], ['a', -1]] };
+  if (ab > b + 0.005) return { kind: 'subb', d, bets: [['ab', 1], ['b', -1]] };
+  return { kind: 'ok', d, bets: [['or', 1], ['a', -1], ['b', -1], ['ab', 1]] };
+}
+const dbGain = (bets, r, w) => sum(bets.map(([k, s]) => s * 10 * ((PROPS[k][1](r, w) ? 1 : 0) - DB[k])));
+function drawDB() {
+  const C = C0(), bk = dbBook(), G = WORLDS.map(([r, w]) => dbGain(bk.bets, r, w)), lim = Math.max(2, ...G.map(Math.abs)) * 1.25;
+  const v = frame($('#db-cv'), [0, 4], [-lim, lim], { l: 46, r: 12, t: 14, b: 30 }); axes(v, '', 'your net gain (£)', { sx: 10, fx: () => '', fy: y => (y > 0 ? '+' : '') + fmt(y, Math.abs(lim) < 4 ? 1 : 0) });
+  const c = v.ctx; seg(v, 0, 0, 4, 0, C.q, 1.4);
+  G.forEach((g, i) => { const x0 = v.X(i + 0.2), x1 = v.X(i + 0.8), y0 = v.Y(0), y1 = v.Y(g); c.fillStyle = g < -1e-9 ? C.bad : g > 1e-9 ? C.a : C.muted; c.globalAlpha = 0.85; c.fillRect(x0, Math.min(y0, y1), x1 - x0, Math.max(2, Math.abs(y1 - y0))); c.globalAlpha = 1;
+    txt(c, (g > 0.004 ? '+' : g < -0.004 ? '−' : '') + '£' + fmt(Math.abs(g), 2), (x0 + x1) / 2, g < 0 ? y1 + 14 : y1 - 6, '600 11px ' + css('--f-mono'), C.q, 'center');
+    txt(c, WN[i], (x0 + x1) / 2, v.h - 10, (v.w < 420 ? '9.5px ' : '11px ') + css('--f-mono'), C.muted, 'center'); });
+  ['a', 'b', 'ab', 'or'].forEach(k => { $('#db-' + k + '-o').textContent = fmt(DB[k], 2); });
+  // table of tickets
+  const verb = s => s > 0 ? 'you buy' : 'you sell';
+  let h = '<thead><tr><th>ticket pays £10 if</th><th>your price</th><th>trade</th>' + WN.map(n => `<th>${n}</th>`).join('') + '</tr></thead><tbody>';
+  bk.bets.forEach(([k, s]) => { h += `<tr><td>${PROPS[k][0]}</td><td class="num">£${fmt(10 * DB[k], 2)}</td><td>${verb(s)}</td>` + WORLDS.map(([r, w]) => { const g = s * 10 * ((PROPS[k][1](r, w) ? 1 : 0) - DB[k]); return `<td class="num">${tip((g >= 0 ? '+' : '−') + fmt(Math.abs(g), 2), `${s > 0 ? 'bought' : 'sold'} at £${fmt(10 * DB[k], 2)}; ${PROPS[k][0]} is ${PROPS[k][1](r, w) ? 'true: pays £10' : 'false: pays £0'}\n${s > 0 ? '' : '−'}(${PROPS[k][1](r, w) ? 10 : 0} − ${fmt(10 * DB[k], 2)}) = ${fmt(g, 2)}`)}</td>`; }).join('') + '</tr>'; });
+  h += `<tr><th colspan="3">net gain</th>` + G.map(g => `<th class="num">${(g >= 0 ? '+' : '−') + fmt(Math.abs(g), 2)}</th>`).join('') + '</tr></tbody>';
+  $('#db-tbl').innerHTML = h;
+  const worst = Math.max(...G), sure = -worst;
+  $('#db-gap').innerHTML = tip((bk.d > 0 ? '+' : '') + fmt(bk.d, 2), `P(r ∨ w) − [P(r) + P(w) − P(r ∧ w)]\n= ${fmt(DB.or, 2)} − (${fmt(DB.a, 2)} + ${fmt(DB.b, 2)} − ${fmt(DB.ab, 2)})\n= ${fmt(bk.d, 3)}`);
+  $('#db-loss').innerHTML = bk.kind === 'ok' ? tip('none', 'your beliefs are coherent:\nno set of tickets loses in every world') : tip('£' + fmt(sure, 2), `the best of the four worlds for you\nstill leaves you £${fmt(sure, 2)} down`);
+  $('#db-say').innerHTML = bk.kind === 'ie'
+    ? `Your P(rain &or; wind) is ${bk.d > 0 ? 'higher' : 'lower'} than inclusion&ndash;exclusion allows, by ${fmt(Math.abs(bk.d), 2)}. So the bookie ${bk.d > 0 ? 'sells you the &ldquo;rain or wind&rdquo; ticket and buys the other three from you' : 'buys the &ldquo;rain or wind&rdquo; ticket from you and sells you the other three'}. Each trade is fair at your prices, yet whatever the weather <b>you lose &pound;${fmt(sure, 2)}</b>: the payouts cancel exactly and only your mispricing remains.`
+    : bk.kind !== 'ok' ? `Inclusion&ndash;exclusion holds, but you believe &ldquo;rain and wind&rdquo; more than &ldquo;${bk.kind === 'suba' ? 'rain' : 'wind'}&rdquo; alone, which is impossible: every world where both happen is a world where ${bk.kind === 'suba' ? 'it rains' : 'it is windy'}. The bookie sells you the first ticket and buys the second; you lose at least <b>&pound;${fmt(sure, 2)}</b> in every world.`
+    : `<b>Coherent.</b> Your beliefs are a real probability model: P(rain, wind) = ${fmt(DB.ab, 2)}, P(rain, calm) = ${fmt(DB.a - DB.ab, 2)}, P(dry, wind) = ${fmt(DB.b - DB.ab, 2)}, P(dry, calm) = ${fmt(1 - DB.or, 2)}. The bookie&rsquo;s old trick now breaks even in every world, and de Finetti&rsquo;s theorem says no other set of tickets can do better.`;
+  const r1 = bk.bets.map(([k, s]) => `${s > 0 ? '+' : '&minus;'}(1 &minus; ${fmt(DB[k], 2)})`).join(' ');
+  $('#run-db').innerHTML = `<b>Running example</b>: in the world &ldquo;rain, wind&rdquo; every proposition here is true, so each bracket is 1 &minus; your price: G = 10 &times; [${r1}] = ${tip('<b>' + (G[0] >= 0 ? '+' : '&minus;') + '£' + fmt(Math.abs(G[0]), 2) + '</b>', 'net gain from all the tickets in the world rain ∧ wind')}.${bk.kind === 'ie' ? ` In every other world the payouts cancel too, so you get the same &minus;&pound;${fmt(10 * Math.abs(bk.d), 2)} = &minus;10 &times; |gap|.` : ''}`;
+}
+['a', 'b', 'ab', 'or'].forEach(k => $('#db-' + k).addEventListener('input', e => { DB[k] = +e.target.value; drawDB(); }));
+$('#db-fix').addEventListener('click', () => { DB.ab = Math.min(DB.ab, DB.a, DB.b); if (DB.a + DB.b - DB.ab > 1) DB.ab = +(DB.a + DB.b - 1).toFixed(2); DB.or = +(DB.a + DB.b - DB.ab).toFixed(2); ['a', 'b', 'ab', 'or'].forEach(k => { $('#db-' + k).value = DB[k]; }); drawDB(); });
+fig($('#db-cv'), drawDB);
+
+/* ---------- sum and product rules: a diary of days ---------- */
+const SPT = [[0.20, 0.15, 0.10, 0.05], [0.08, 0.06, 0.10, 0.06], [0.02, 0.01, 0.09, 0.08]], SPX = ['Sun', 'Cloud', 'Rain'], SPY = ['Walk', 'Bike', 'Bus', 'Car'];
+const SP = { days: [], n: SPT.map(r => r.map(() => 0)), rng: mulberry32(2024), x: 2, y: 2 };
+function spAdd(k) { for (let t = 0; t < k; t++) { let u = SP.rng(), x = 0, y = 0; outer: for (x = 0; x < 3; x++) for (y = 0; y < 4; y++) { u -= SPT[x][y]; if (u < 0) break outer; } if (x > 2) { x = 2; y = 3; } SP.n[x][y]++; SP.days.push([x, y, SP.rng(), SP.rng()]); } }
+function spReset() { SP.days = []; SP.n = SPT.map(r => r.map(() => 0)); SP.rng = mulberry32(2024); spAdd(50); }
+spReset();
+function drawSP() {
+  const C = C0(), cv = $('#sp-cv'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, W = v.w, H = v.h;
+  const N = SP.days.length, pl = 46, pr = 52, pt = 22, pb = 40, cw = (W - pl - pr) / 3, ch = (H - pt - pb) / 4;
+  const col = SP.n.map(r => sum(r)), row = SPY.map((_, j) => sum(SP.n.map(r => r[j])));
+  c.save(); c.fillStyle = C.a; c.globalAlpha = 0.09; c.fillRect(pl + SP.x * cw, pt, cw, 4 * ch); c.restore();
+  c.strokeStyle = C.line; c.lineWidth = 1;
+  for (let i = 0; i <= 3; i++) { c.beginPath(); c.moveTo(pl + i * cw + 0.5, pt); c.lineTo(pl + i * cw + 0.5, pt + 4 * ch); c.stroke(); }
+  for (let j = 0; j <= 4; j++) { c.beginPath(); c.moveTo(pl, pt + j * ch + 0.5); c.lineTo(pl + 3 * cw, pt + j * ch + 0.5); c.stroke(); }
+  const shown = Math.min(N, 2500), r = Math.max(1.1, Math.min(3.2, Math.sqrt(cw * ch * 12 / Math.max(50, shown)) * 0.22));
+  for (let k = 0; k < shown; k++) { const [x, y, u, w] = SP.days[k]; c.beginPath(); c.arc(pl + x * cw + (0.06 + 0.88 * u) * cw, pt + y * ch + (0.12 + 0.82 * w) * ch, r, 0, 7); c.fillStyle = x === SP.x ? C.a : C.muted; c.globalAlpha = x === SP.x ? 0.8 : 0.45; c.fill(); }
+  c.globalAlpha = 1;
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 4; y++) { const s = String(SP.n[x][y]); c.font = '600 11px ' + css('--f-mono'); const tw = c.measureText(s).width; c.save(); c.globalAlpha = 0.85; c.fillStyle = C.surf; c.fillRect(pl + x * cw + 3, pt + y * ch + 3, tw + 6, 14); c.restore(); txt(c, s, pl + x * cw + 6, pt + y * ch + 14, '600 11px ' + css('--f-mono'), C.q); }
+  c.save(); c.strokeStyle = C.q; c.lineWidth = 2.2; c.strokeRect(pl + SP.x * cw + 1.5, pt + SP.y * ch + 1.5, cw - 3, ch - 3); c.restore();
+  SPX.forEach((nm, i) => { txt(c, nm, pl + (i + 0.5) * cw, pt - 7, '11px ' + css('--f-body'), i === SP.x ? C.q : C.muted, 'center'); txt(c, 'c = ' + col[i], pl + (i + 0.5) * cw, pt + 4 * ch + 15, '600 11px ' + css('--f-mono'), i === SP.x ? C.a : C.muted, 'center'); });
+  SPY.forEach((nm, j) => { txt(c, nm, pl - 6, pt + (j + 0.5) * ch + 4, '11px ' + css('--f-body'), j === SP.y ? C.q : C.muted, 'right'); txt(c, String(row[j]), pl + 3 * cw + 8, pt + (j + 0.5) * ch + 4, '11px ' + css('--f-mono'), C.muted, 'left'); });
+  txt(c, 'N = ' + big(N), pl + 3 * cw + 8, pt + 4 * ch + 15, '600 11px ' + css('--f-mono'), C.q, 'left');
+  if (N > shown) txt(c, `dots: first ${big(shown)} days`, pl, H - 6, '10px ' + css('--f-mono'), C.muted);
+  const n = SP.n[SP.x][SP.y], cx = col[SP.x], tj = SPT[SP.x][SP.y], tm = sum(SPT[SP.x]), X = SPX[SP.x].toLowerCase(), Y = SPY[SP.y].toLowerCase();
+  $('#sp-j').innerHTML = tip(f3(n / N), `n / N = ${n} / ${N}\ntrue value ${fmt(tj, 2)}`);
+  $('#sp-m').innerHTML = tip(f3(cx / N), `sum rule: add the ${X} column\n${SP.n[SP.x].join(' + ')} = ${cx}; ${cx} / ${N}\ntrue value ${fmt(tm, 2)}`);
+  $('#sp-c').innerHTML = cx ? tip(f3(n / cx), `look only inside the ${X} column:\nn / c = ${n} / ${cx}\ntrue value ${f3(tj / tm)}`) : '—';
+  $('#sp-n').innerHTML = big(N);
+  $('#run-sp').innerHTML = `<b>Running example</b>: p(${X}) = (${SP.n[SP.x].join(' + ')}) / ${N} = ${f3(cx / N)}. ` + (cx ? `Product rule: p(${Y} | ${X}) &times; p(${X}) = ${n}/${cx} &times; ${cx}/${N} = ${tip('<b>' + f3(n / N) + '</b>', `the c's cancel: (n / c) × (c / N) = n / N\n= ${n} / ${N}, exactly the joint`)} = p(${X}, ${Y}).` : `No ${X} days yet, so p(&middot; | ${X}) is undefined.`);
+  const err = Math.abs(n / N - tj);
+  $('#sp-say').innerHTML = (N < 200 ? `With only ${N} days the fractions are rough: the true p(${X}, ${Y}) is ${fmt(tj, 2)}, your estimate ${f3(n / N)}. Record more days.` : `After ${big(N)} days the estimate ${f3(n / N)} is ${err < 0.005 ? 'within half a percentage point of' : 'close to'} the true ${fmt(tj, 2)}: fractions settle on probabilities as N grows.`) + ` Whatever N is, the product rule holds exactly for the counts, because the column total c cancels.`;
+}
+$('#sp-10').addEventListener('click', () => { spAdd(10); drawSP(); });
+$('#sp-100').addEventListener('click', () => { spAdd(100); drawSP(); });
+$('#sp-1000').addEventListener('click', () => { spAdd(1000); drawSP(); });
+$('#sp-0').addEventListener('click', () => { SP.days = []; SP.n = SPT.map(r => r.map(() => 0)); SP.rng = mulberry32(7 + Math.floor(Math.random() * 1e6)); spAdd(10); drawSP(); });
+seg1('[data-sx]', 'data-sx', k => { SP.x = +k; drawSP(); });
+seg1('[data-sy]', 'data-sy', k => { SP.y = +k; drawSP(); });
+fig($('#sp-cv'), drawSP);
+
+/* ---------- the full joint: inference by enumeration ---------- */
+const JT = { role: ['ask', 't', 'h'], n: 3 }, JN = ['flu', 'fever', 'cough'];
+function jtSet(i, r) { if (r === 'ask') JT.role = JT.role.map((x, j) => j === i ? 'ask' : x === 'ask' ? 'h' : x); else JT.role[i] = r; JT.role.forEach((x, j) => setPressed(`[data-jv="${j}"]`, x, 'data-js')); drawJT(); }
+const lit = (nm, v) => v ? nm : '¬' + nm;
+function jtCalc() {
+  const q = JT.role.indexOf('ask'), match = bits => JT.role.every((r, j) => r === 'h' || r === 'ask' || (r === 't') === !!bits[j]);
+  const cells = []; for (let i = 0; i < 8; i++) { const bits = [i >> 2 & 1, i >> 1 & 1, i & 1]; if (match(bits)) cells.push({ i, bits, p: FLU[i] / 1000 }); }
+  cells.sort((a, b) => b.i - a.i);
+  return { q, cells };
+}
+function drawJT() {
+  const C = C0(), { q, cells } = jtCalc(), on = new Map(cells.map(o => [o.i, o]));
+  // table
+  const hd = '<thead><tr><th rowspan="2"></th><th colspan="2" class="ctr">fever</th><th colspan="2" class="ctr">¬fever</th></tr><tr><th>cough</th><th>¬cough</th><th>cough</th><th>¬cough</th></tr></thead>';
+  let b = '<tbody>'; [1, 0].forEach(fl => { b += `<tr><th>${fl ? 'flu' : '¬flu'}</th>`; [[1, 1], [1, 0], [0, 1], [0, 0]].forEach(([fe, co]) => { const i = fl * 4 + fe * 2 + co, o = on.get(i), cls = !o ? 'off' : q < 0 ? 'on-e' : (o.bits[q] ? 'on-t' : 'on-f'); b += `<td class="num ${cls}">${tip(fmt(FLU[i] / 1000, 3), `P(${lit('flu', fl)}, ${lit('fever', fe)}, ${lit('cough', co)})\n= ${FLU[i]} patients of 1,000`)}</td>`; }); b += '</tr>'; }); b += '</tbody>';
+  $('#jt-tbl').innerHTML = hd + b;
+  const ev = JT.role.map((r, j) => r === 't' ? JN[j] : r === 'f' ? '¬' + JN[j] : null).filter(Boolean), hid = JT.role.map((r, j) => r === 'h' ? JN[j] : null).filter(Boolean), evs = ev.join(', ');
+  const v = frame($('#jt-cv'), [0, 1], [0, 2], { l: 70, r: 50, t: 8, b: 22 }); axes(v, '', '', { sx: 0.25, sy: 5, fx: x => fmt(x, 2), fy: () => '' });
+  const c = v.ctx, Y0 = v.Y(1.5), Y1 = v.Y(0.5), bh = Math.min(40, (v.ph / 2) * 0.7);
+  if (q >= 0) {
+    const ut = sum(cells.filter(o => o.bits[q]).map(o => o.p)), uf = sum(cells.filter(o => !o.bits[q]).map(o => o.p)), Z = ut + uf, pt = ut / Z, pf = uf / Z, alpha = 1 / Z;
+    [[ut, pt, Y0, C.a, JN[q]], [uf, pf, Y1, C.b, '¬' + JN[q]]].forEach(([u, p, y, col, lab]) => {
+      c.save(); c.globalAlpha = 0.25; c.fillStyle = col; c.fillRect(v.X(0), y - bh / 2, v.X(u) - v.X(0), bh); c.globalAlpha = 0.9; c.fillRect(v.X(0), y - bh / 4, v.X(p) - v.X(0), bh / 2); c.restore();
+      txt(c, lab, v.pad.l - 8, y + 4, '12px ' + css('--f-mono'), C.q, 'right'); txt(c, f3(p), Math.min(v.X(p) + 6, v.w - 44), y + 4, '600 11px ' + css('--f-mono'), C.q); });
+    const tc = cells.filter(o => o.bits[q]).map(o => fmt(o.p, 3)), fc = cells.filter(o => !o.bits[q]).map(o => fmt(o.p, 3));
+    $('#jt-pk').textContent = `P(${JN[q]} | ${evs || 'nothing'})`;
+    $('#jt-p').innerHTML = tip(f4(pt), `α × (${tc.join(' + ')})\n= ${fmt(ut, 3)} / ${fmt(Z, 3)}`);
+    $('#jt-a').innerHTML = tip(fmt(alpha, 3), `1 / (sum of every lit cell)\n= 1 / ${fmt(Z, 3)} = 1 / P(${evs || 'anything'})`);
+    $('#run-jt').innerHTML = `<b>Running example</b>: <b>P</b>(${JN[q][0].toUpperCase() + JN[q].slice(1)} | ${evs || 'nothing'}) = &alpha; &lang;${tc.join(' + ')}, ${fc.join(' + ')}&rang; = &alpha; &lang;${fmt(ut, 3)}, ${fmt(uf, 3)}&rang;. The two add to ${fmt(Z, 3)}, so &alpha; = 1/${fmt(Z, 3)} = ${fmt(alpha, 3)} and the answer is ${tip('<b>&lang;' + f4(pt) + ', ' + f4(pf) + '&rang;</b>', 'each unnormalised sum × α')}.`;
+    const prior = fluN((...bb) => bb[q]) / 1000;
+    $('#jt-say').innerHTML = `${cells.length} of 8 cells lit${hid.length ? `; <b>${hid.join(' and ')}</b> ${hid.length > 1 ? 'are' : 'is'} hidden and summed out` : ''}. ${ev.length ? `The evidence moves P(${JN[q]}) from ${fmt(prior, 3)} to ${f4(pt)}.` : `With no evidence this is just the marginal P(${JN[q]}) = ${fmt(prior, 3)}: the sum rule.`}${q === 0 && JT.role[1] === 't' && JT.role[2] === 't' ? ' Both symptoms together are much stronger evidence than either one alone.' : ''}`;
+  } else {
+    const Z = sum(cells.map(o => o.p));
+    c.save(); c.globalAlpha = 0.9; c.fillStyle = C.lda; c.fillRect(v.X(0), v.Y(1) - bh / 2, v.X(Z) - v.X(0), bh); c.restore();
+    txt(c, 'P(e)', v.pad.l - 8, v.Y(1) + 4, '12px ' + css('--f-mono'), C.q, 'right'); txt(c, f3(Z), v.X(Z) + 6, v.Y(1) + 4, '600 11px ' + css('--f-mono'), C.q);
+    $('#jt-pk').textContent = `P(${evs || 'anything'})`;
+    $('#jt-p').innerHTML = tip(f4(Z), `sum of the lit cells:\n${cells.map(o => fmt(o.p, 3)).join(' + ')}`); $('#jt-a').textContent = '—';
+    $('#run-jt').innerHTML = `<b>Running example</b>: nothing is being asked, so the table gives the probability of the evidence itself: P(${evs || 'anything'}) = ${cells.map(o => fmt(o.p, 3)).join(' + ')} = <b>${f4(Z)}</b>. That number is 1/&alpha; for any question asked with this evidence.`;
+    $('#jt-say').innerHTML = `No variable is marked &ldquo;Ask&rdquo;, so this is P(evidence): add the ${cells.length} lit cells. Mark one variable &ldquo;Ask&rdquo; to get a conditional.`;
+  }
+  // table-size slider
+  const n = JT.n, sz = Math.pow(2, n), secs = sz / 1e9;
+  $('#jt-n-o').textContent = 'n = ' + n;
+  $('#jt-sz').innerHTML = tip(n <= 40 ? big(sz) : sz.toExponential(2).replace('e+', ' × 10^'), `2^${n}: two values for each of ${n} variables`);
+  const tstr = secs < 1e-6 ? fmt(secs * 1e9, 0) + ' ns' : secs < 1e-3 ? fmt(secs * 1e6, 1) + ' µs' : secs < 1 ? fmt(secs * 1e3, 1) + ' ms' : secs < 120 ? fmt(secs, 1) + ' s' : secs < 7200 ? fmt(secs / 60, 1) + ' min' : secs < 172800 ? fmt(secs / 3600, 1) + ' hours' : secs < 3.156e7 * 2 ? fmt(secs / 86400, 1) + ' days' : secs < 3.156e7 * 1e6 ? big(secs / 3.156e7) + ' years' : (secs / 3.156e7).toExponential(1).replace('e+', ' × 10^') + ' years';
+  $('#jt-tm').innerHTML = tip(tstr, `in the worst case a query reads every entry:\n2^${n} / 10^9 per second = ${secs.toExponential(2)} s`);
+  $('#jt-say2').innerHTML = n === 3 ? 'Three variables are no trouble. Slide right: each new Boolean variable <b>doubles</b> the table.' : `Each extra variable doubles the table. In the O() notation of Appendix A, enumeration costs O(2<sup>n</sup>) time and space: constant factors aside, the cost grows exponentially, and no faster computer rescues that. ${n >= 30 ? `With ${n} variables, a modest number for a medical model, the table has more entries than ${n >= 34 ? 'there are people on Earth' : 'there are bytes in a gigabyte'}.` : ''}`;
+}
+$$('[data-jv]').forEach(btn => btn.addEventListener('click', () => jtSet(+btn.getAttribute('data-jv'), btn.getAttribute('data-js'))));
+$('#jt-n').addEventListener('input', e => { JT.n = +e.target.value; drawJT(); });
+fig($('#jt-cv'), drawJT);
+
+/* ---------- independence and conditional independence ---------- */
+const CI = { g: 'all', e: 0, n: 2 }, CIG = { flu: { p: 0.1, f: 0.7, c: 0.8 }, no: { p: 0.9, f: 0.1, c: 0.2 } };
+function ciGroup(k) { // P(fever, cough | group) as [[f c, f ¬c], [¬f c, ¬f ¬c]]
+  const G = CIG[k], a = G.f, b = G.c, J = [[a * b, a * (1 - b)], [(1 - a) * b, (1 - a) * (1 - b)]];
+  const d = CI.e >= 0 ? CI.e * Math.min(J[0][1], J[1][0]) : CI.e * Math.min(J[0][0], J[1][1]);
+  return [[J[0][0] + d, J[0][1] - d], [J[1][0] - d, J[1][1] + d]];
+}
+function ciJoint() { if (CI.g !== 'all') return ciGroup(CI.g); const A = ciGroup('flu'), B = ciGroup('no'); return A.map((r, i) => r.map((x, j) => CIG.flu.p * x + CIG.no.p * B[i][j])); }
+function drawCI() {
+  const C = C0(), J = ciJoint(), pf = J[0][0] + J[0][1], pc = J[0][0] + J[1][0], pcf = J[0][0] / pf;
+  const cv = $('#ci-cv'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, W = v.w, H = v.h;
+  const pl = 74, pt = 26, pb = 10, side = Math.min((W - pl - 16) / 2, (H - pt - pb) / 2), x0 = pl + ((W - pl - 16) - 2 * side) / 2;
+  const cols = [['fever', pf], ['no fever', 1 - pf]], rows = [['cough', pc], ['no cough', 1 - pc]];
+  cols.forEach(([nm, p], i) => txt(c, `${nm} (${fmt(p, 2)})`, x0 + (i + 0.5) * side, pt - 9, '11px ' + css('--f-mono'), C.muted, 'center'));
+  rows.forEach(([nm, p], j) => { txt(c, nm, x0 - 8, pt + (j + 0.5) * side - 2, '11px ' + css('--f-mono'), C.muted, 'right'); txt(c, `(${fmt(p, 2)})`, x0 - 8, pt + (j + 0.5) * side + 12, '11px ' + css('--f-mono'), C.muted, 'right'); });
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+    const bx = x0 + i * side, by = pt + j * side, cx = bx + side / 2, cy = by + side / 2, box = side - 10;
+    c.strokeStyle = C.line; c.lineWidth = 1; c.strokeRect(bx + 5, by + 5, box, box);
+    const obs = J[i === 0 ? 0 : 1][j === 0 ? 0 : 1], pred = (i === 0 ? pf : 1 - pf) * (j === 0 ? pc : 1 - pc);
+    const so = Math.sqrt(Math.max(0, obs)) * box, sp = Math.sqrt(pred) * box;
+    c.fillStyle = C.a; c.globalAlpha = 0.75; c.fillRect(cx - so / 2, cy - so / 2, so, so); c.globalAlpha = 1;
+    c.save(); c.setLineDash([5, 4]); c.strokeStyle = C.q; c.lineWidth = 1.5; c.strokeRect(cx - sp / 2, cy - sp / 2, sp, sp); c.restore();
+    const lab = fmt(obs, 3), lab2 = 'vs ' + fmt(pred, 3); c.font = '600 11px ' + css('--f-mono'); const tw = Math.max(c.measureText(lab).width, c.measureText(lab2).width);
+    c.save(); c.globalAlpha = 0.85; c.fillStyle = C.surf; c.fillRect(bx + 8, by + 8, tw + 8, 30); c.restore();
+    txt(c, lab, bx + 12, by + 21, '600 11px ' + css('--f-mono'), C.q); txt(c, lab2, bx + 12, by + 34, '11px ' + css('--f-mono'), C.muted);
+  }
+  const gname = CI.g === 'all' ? 'everyone' : CI.g === 'flu' ? 'flu' : 'no flu', gv = CI.g === 'all' ? '' : ', ' + gname;
+  $('#ci-e-o').textContent = CI.e === 0 ? 'none' : (CI.e > 0 ? '+' : '') + fmt(CI.e, 2);
+  $('#ci-pc').innerHTML = tip(f4(pc), `P(cough, fever${gv}) + P(cough, no fever${gv})\n= ${f4(J[0][0])} + ${f4(J[1][0])}`);
+  $('#ci-pcf').innerHTML = tip(f4(pcf), `P(cough, fever${gv}) / P(fever${gv})\n= ${f4(J[0][0])} / ${f4(pf)}`);
+  $('#run-ci').innerHTML = `<b>Running example</b> (${gname}): P(fever, cough${gv}) = ${tip(f4(J[0][0]), CI.g === 'all' ? '0.1 × P(f, c | flu) + 0.9 × P(f, c | no flu)' : 'the top-left square')}, while P(fever${gv}) &times; P(cough${gv}) = ${f4(pf)} &times; ${f4(pc)} = ${f4(pf * pc)}. ${Math.abs(J[0][0] - pf * pc) < 5e-5 ? 'Equal: independent in this group.' : `Not equal (off by ${f4(Math.abs(J[0][0] - pf * pc))}): dependent in this group.`}`;
+  const indep = Math.abs(pcf - pc) < 5e-5;
+  $('#ci-say').innerHTML = CI.g === 'all'
+    ? (CI.e === 0 ? `Across everyone, a fever raises P(cough) from ${fmt(pc, 2)} to ${f4(pcf)}: the symptoms are <b>dependent</b>, because each one is evidence of flu. Yet inside each group they are independent. Switch to &ldquo;Only flu&rdquo;.` : `Across everyone the symptoms are dependent (P(cough) ${f4(pc)} vs ${f4(pcf)} given fever), now partly through flu and partly because they interact directly.`)
+    : indep ? `Inside the ${gname} group, the filled squares sit exactly in their outlines: P(cough | fever${gv}) = P(cough${gv}) = ${f4(pc)}. Once you know about flu, a fever tells you <b>nothing more</b> about a cough. That is conditional independence, and it is why 5 numbers describe this table.`
+    : `With the symptoms interacting, P(cough | fever${gv}) = ${f4(pcf)} &ne; ${f4(pc)}: conditional independence is broken, and the 5-number factorised model would now give wrong answers. ${CI.e > 0 ? 'Positive interaction: the symptoms tend to come together.' : 'Negative interaction: one symptom makes the other less likely.'}`;
+  const n = CI.n, full = Math.pow(2, n + 1) - 1, fact = 2 * n + 1;
+  $('#ci-n-o').textContent = n;
+  $('#ci-full').innerHTML = tip(full < 1e15 ? big(full) : full.toExponential(2).replace('e+', ' × 10^'), `2^(n+1) − 1 = 2^${n + 1} − 1\n(the last entry is fixed by summing to 1)`);
+  $('#ci-fact').innerHTML = tip(big(fact), `P(illness): 1 number\nP(symptom | illness), P(symptom | no illness): 2 per symptom\n1 + 2 × ${n} = ${fact}`);
+}
+seg1('[data-ci]', 'data-ci', k => { CI.g = k; drawCI(); });
+$('#ci-e').addEventListener('input', e => { CI.e = +e.target.value; drawCI(); });
+$('#ci-n').addEventListener('input', e => { CI.n = +e.target.value; drawCI(); });
+fig($('#ci-cv'), drawCI);
+
+/* ---------- Bayes' rule: natural frequencies ---------- */
+const BY = { lp: -2, s: 0.9, f: 0.05, k: 1, perm: (() => { const r = mulberry32(99), a = [...Array(1000).keys()]; for (let i = 999; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; })() };
+function byCalc() { const pi = Math.pow(10, BY.lp), sk = Math.pow(BY.s, BY.k), fk = Math.pow(BY.f, BY.k), tp = pi * sk, fp = (1 - pi) * fk; return { pi, sk, fk, tp, fp, post: tp / (tp + fp) }; }
+function drawBY() {
+  const C = C0(), R = byCalc(), cv = $('#by-cv'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, W = v.w, H = v.h;
+  const tall = H > W, nc = tall ? 25 : 40, nr = tall ? 40 : 25, s = Math.min((W - 16) / nc, (H - 16) / nr), ox = (W - nc * s) / 2, oy = (H - nr * s) / 2, rad = s * 0.3;
+  const D = Math.round(1000 * R.pi), TP = Math.min(D, Math.round(1000 * R.tp)), FP = Math.min(1000 - D, Math.round(1000 * R.fp));
+  const role = new Array(1000).fill(0); let ill = 0, hl = 0;
+  BY.perm.forEach(idx => { if (ill < D) { role[idx] = ill < TP ? 3 : 1; ill++; } else { role[idx] = hl < FP ? 2 : 0; hl++; } });
+  for (let i = 0; i < 1000; i++) { const x = ox + (i % nc + 0.5) * s, y = oy + (Math.floor(i / nc) + 0.5) * s, r0 = role[i];
+    c.beginPath(); c.arc(x, y, rad, 0, 7);
+    if (r0 & 1) { c.fillStyle = C.a; c.fill(); } else { c.strokeStyle = C.muted; c.globalAlpha = 0.5; c.lineWidth = 1; c.stroke(); c.globalAlpha = 1; }
+    if (r0 >= 2) { c.beginPath(); c.arc(x, y, rad + Math.max(1.6, s * 0.16), 0, 7); c.strokeStyle = C.b; c.lineWidth = Math.max(1.4, s * 0.1); c.stroke(); } }
+  $('#by-p-o').textContent = pct(R.pi, R.pi < 0.01 ? 2 : 1); $('#by-s-o').textContent = pct(BY.s, 0); $('#by-f-o').textContent = pct(BY.f, 1);
+  const k = BY.k, kk = k > 1 ? `<sup>${k}</sup>` : '', kt = k > 1 ? '^' + k : '';
+  $('#by-post').innerHTML = tip(pct(R.post, 1), `P(+${kt} | d) P(d) / [P(+${kt} | d) P(d) + P(+${kt} | h) P(h)]\n= ${fmt(R.tp, 5)} / (${fmt(R.tp, 5)} + ${fmt(R.fp, 5)})\n= ${f4(R.post)}`);
+  $('#by-tp').innerHTML = tip(fmt(1000 * R.tp, 1), `1,000 × P(d) × sensitivity${kt}\n= 1,000 × ${fmt(R.pi, 4)} × ${fmt(R.sk, 4)}`);
+  $('#by-fp').innerHTML = tip(fmt(1000 * R.fp, 1), `1,000 × P(h) × false-positive rate${kt}\n= 1,000 × ${fmt(1 - R.pi, 4)} × ${fmt(R.fk, 5)}`);
+  $('#run-by').innerHTML = `<b>Running example</b>: P(d | +${kk}) = ${fmt(BY.s, 2)}${kk} &times; ${fmt(R.pi, 4)} / (${fmt(BY.s, 2)}${kk} &times; ${fmt(R.pi, 4)} + ${fmt(BY.f, 3)}${kk} &times; ${fmt(1 - R.pi, 4)}) = ${fmt(R.tp, 5)} / ${fmt(R.tp + R.fp, 5)} = ${tip('<b>' + f4(R.post) + '</b>', 'the denominator is P(+' + kt + '), from the sum rule')}.`;
+  const tpn = 1000 * R.tp, fpn = 1000 * R.fp;
+  $('#by-say').innerHTML = (fpn > tpn ? `Out of 1,000 people, about ${fmt(tpn + fpn, 1)} test positive${k > 1 ? ' every time' : ''}, and only ${fmt(tpn, 1)} of them are ill: the ${pct(1 - R.pi, 1)} who are healthy supply ${fmt(fpn, 1)} false alarms. A positive result is <b>more likely a false alarm than a real case</b>.` : `About ${fmt(tpn, 1)} true positives against ${fmt(fpn, 1)} false alarms per 1,000: a positive result now means you are probably ill (${pct(R.post, 1)}).`)
+    + (k === 1 ? ' Try a second, independent positive test.' : ` With ${k} independent positives the likelihood ratio is (${fmt(BY.s, 2)}/${fmt(BY.f, 3)})${kk} = ${big(Math.pow(BY.s / BY.f, k))}.`);
+}
+$('#by-p').addEventListener('input', e => { BY.lp = +e.target.value; drawBY(); });
+$('#by-s').addEventListener('input', e => { BY.s = +e.target.value; drawBY(); });
+$('#by-f').addEventListener('input', e => { BY.f = +e.target.value; drawBY(); });
+seg1('[data-bk]', 'data-bk', k => { BY.k = +k; drawBY(); });
+fig($('#by-cv'), drawBY);
+
+/* ---------- the Wumpus world ---------- */
+const WP = { pr: 0.2, vis: new Set(), bz: new Map(), dead: -1, surv: 1, rng: mulberry32(5), res: null, mode: 'classic', last: 0 };
+const sqName = i => `[${i % 4 + 1},${Math.floor(i / 4) + 1}]`, sqIdx = (x, y) => (y - 1) * 4 + (x - 1);
+const NB = [...Array(16).keys()].map(i => { const x = i % 4, y = Math.floor(i / 4), o = []; if (x > 0) o.push(i - 1); if (x < 3) o.push(i + 1); if (y > 0) o.push(i - 4); if (y < 3) o.push(i + 4); return o; });
+function wpSolve() {
+  const U = [...Array(16).keys()].filter(i => !WP.vis.has(i)), pos = new Map(U.map((u, k) => [u, k])), obs = [...WP.bz.entries()];
+  const masks = obs.map(([v, b]) => [NB[v].filter(n => pos.has(n)).reduce((m, n) => m | 1 << pos.get(n), 0), b]);
+  const K = U.length, pr = WP.pr, lw1 = Math.log(pr), lw0 = Math.log(1 - pr); let Z = 0; const S = new Float64Array(K), cons = [];
+  for (let m = 0; m < 1 << K; m++) { let ok = true; for (const [mk, b] of masks) if (((m & mk) !== 0) !== b) { ok = false; break; } if (!ok) continue;
+    let k = 0, t = m; while (t) { k += t & 1; t >>>= 1; } const w = Math.exp(k * lw1 + (K - k) * lw0); Z += w; cons.push([m, w]); for (let j = 0; j < K; j++) if (m >> j & 1) S[j] += w; }
+  const P = new Map(U.map((u, j) => [u, S[j] / Z]));
+  const F = U.filter(u => NB[u].some(n => WP.vis.has(n)));
+  // the frontier-only computation, for every frontier square (checked against the full sum)
+  const fr = new Map();
+  F.forEach(q => { const Fp = F.filter(f => f !== q), fpos = new Map(Fp.map((f, k) => [f, k])); let st = 0, sf = 0, nt = 0, nf = 0;
+    for (let m = 0; m < 1 << Fp.length; m++) { let k = 0, t = m; while (t) { k += t & 1; t >>>= 1; } const w = Math.pow(pr, k) * Math.pow(1 - pr, Fp.length - k);
+      for (const qv of [1, 0]) { const ok = obs.every(([v, b]) => NB[v].some(n => (n === q && qv) || (fpos.has(n) && (m >> fpos.get(n) & 1))) === b); if (ok) { if (qv) { st += w; nt++; } else { sf += w; nf++; } } } }
+    fr.set(q, { st, sf, nt, nf, p: pr * st / (pr * st + (1 - pr) * sf) }); });
+  WP.res = { U, P, F, fr, Z, cons, K, pos };
+}
+function wpSample() { const { cons, Z, U } = WP.res; let r = WP.rng() * Z; for (const [m, w] of cons) { r -= w; if (r <= 0) return new Set(U.filter((u, j) => m >> j & 1)); } return new Set(U.filter((u, j) => cons[cons.length - 1][0] >> j & 1)); }
+function wpStep(q) {
+  if (WP.dead >= 0 || WP.vis.has(q) || !WP.res.F.includes(q)) return;
+  const p = WP.res.P.get(q), pits = wpSample(); WP.last = q;
+  if (pits.has(q)) { WP.dead = q; WP.deadP = p; drawWP(); return; }
+  WP.surv *= 1 - p; WP.vis.add(q); WP.bz.set(q, NB[q].some(n => pits.has(n))); wpSolve(); drawWP();
+}
+function wpReset(mode) {
+  WP.mode = mode; WP.dead = -1; WP.surv = 1; WP.vis = new Set([0]); WP.bz = new Map();
+  if (mode === 'classic') { WP.vis.add(sqIdx(1, 2)); WP.vis.add(sqIdx(2, 1)); WP.bz.set(0, false); WP.bz.set(sqIdx(1, 2), true); WP.bz.set(sqIdx(2, 1), true); WP.last = sqIdx(1, 2); }
+  else { WP.rng = mulberry32(1 + Math.floor(Math.random() * 1e9)); wpSolve(); const pits = wpSample(); WP.bz.set(0, NB[0].some(n => pits.has(n))); WP.last = 0; }
+  wpSolve();
+}
+let wpV = null;
+function drawWP() {
+  const C = C0(), cv = $('#wp-cv'), v = wpV = frame(cv, [0, 4], [0, 4], { l: 8, r: 8, t: 8, b: 8 }, true), c = v.ctx, { P, F, fr } = WP.res;
+  const cs = v.X(1) - v.X(0), fs = Math.max(10, Math.min(15, cs * 0.17));
+  let best = -1; F.forEach(q => { if (best < 0 || P.get(q) < P.get(best) - 1e-12) best = q; });
+  for (let i = 0; i < 16; i++) {
+    const x = i % 4, y = Math.floor(i / 4), px = v.X(x), py = v.Y(y + 1), vis = WP.vis.has(i), front = F.includes(i), p = P.get(i);
+    c.save(); rrect(c, px + 3, py + 3, cs - 6, cs - 6, 6);
+    if (i === WP.dead) { c.fillStyle = C.q; c.fill(); }
+    else if (vis) { c.fillStyle = `color-mix(in srgb, ${C.a} 12%, ${C.surf})`; c.fill(); }
+    else { c.fillStyle = C.bad; c.globalAlpha = 0.06 + 0.6 * p; c.fill(); c.globalAlpha = 1; }
+    if (front && WP.dead < 0) { c.strokeStyle = C.q; c.lineWidth = 1.8; c.stroke(); } else { c.strokeStyle = C.line; c.lineWidth = 1; c.stroke(); }
+    c.restore();
+    txt(c, sqName(i), px + 8, py + 8 + fs * 0.75, Math.round(fs * 0.72) + 'px ' + css('--f-mono'), i === WP.dead ? C.surf : C.muted);
+    if (i === WP.dead) txt(c, 'pit!', px + cs / 2, py + cs / 2 + 5, '600 ' + Math.round(fs * 1.1) + 'px ' + css('--f-mono'), C.surf, 'center');
+    else if (vis) { if (WP.bz.get(i)) txt(c, 'B', px + cs / 2, py + cs / 2 + fs * 0.4, '600 ' + Math.round(fs * 1.5) + 'px ' + css('--f-display'), C.a, 'center'); else if (WP.bz.has(i)) txt(c, 'no breeze', px + cs / 2, py + cs / 2 + 4, Math.round(fs * 0.7) + 'px ' + css('--f-mono'), C.muted, 'center');
+      if (i === WP.last && WP.dead < 0) { c.beginPath(); c.arc(px + cs - 16, py + cs - 16, Math.max(5, cs * 0.07), 0, 7); c.fillStyle = C.q; c.fill(); } }
+    else txt(c, fmt(p, 2), px + cs / 2, py + cs / 2 + fs * 0.45, (front ? '600 ' : '') + Math.round(front ? fs * 1.25 : fs * 0.95) + 'px ' + css('--f-mono'), front ? C.q : C.muted, 'center');
+    if (i === best && WP.dead < 0) star(v, x + 0.82, y + 0.18, C.b, Math.max(6, cs * 0.08));
+  }
+  const nV = WP.vis.size;
+  $('#wp-pr-o').textContent = fmt(WP.pr, 2);
+  $('#wp-best').innerHTML = best >= 0 && WP.dead < 0 ? tip(`${sqName(best)}: ${fmt(P.get(best), 2)}`, `lowest P(pit) among the ${F.length} frontier squares`) : '—';
+  $('#wp-n').innerHTML = tip(`${big(Math.pow(2, WP.res.K))} vs ${big(Math.pow(2, F.length))}`, `full joint: every layout of the ${WP.res.K} unknown squares\nfrontier: only the ${F.length} unknown squares next to visited ones`);
+  $('#wp-v').innerHTML = String(nV);
+  $('#wp-r').innerHTML = tip(pct(WP.surv, 1), 'product of (1 − P(pit)) for each square you stepped into,\nat the moment you stepped');
+  const say = $('#wp-say');
+  if (WP.dead >= 0) say.innerHTML = `You stepped into ${sqName(WP.dead)}, which had a <b>${pct(WP.deadP, 0)}</b> chance of a pit, and fell in. Good reasoning lowers risk; it cannot remove it. Start a new cave.`;
+  else if (!F.length) say.innerHTML = `Every square you can reach without a pit is explored: ${nV} of 16. The rest are walled off by pits.`;
+  else { const sorted = F.slice().sort((a, b) => P.get(a) - P.get(b)), safe = F.filter(q => P.get(q) < 1e-12), sure = F.filter(q => P.get(q) > 1 - 1e-12);
+    say.innerHTML = (safe.length ? `${safe.map(sqName).join(', ')} ${safe.length > 1 ? 'are' : 'is'} <b>certainly safe</b>: logic would find ${safe.length > 1 ? 'these' : 'this'} too. ` : `Logic alone is stuck here: no frontier square is provably safe. Probability ranks them: `) + sorted.map(q => `${sqName(q)} ${fmt(P.get(q), 2)}`).join(', ') + '.' + (sure.length ? ` ${sure.map(sqName).join(', ')} certainly ${sure.length > 1 ? 'hold' : 'holds'} a pit.` : '') + (WP.mode === 'classic' && nV === 3 ? ' A pit in [2,2] would explain both breezes at once, which is why it is so likely.' : '') + ` The page draws the hidden cave from these same probabilities as you step, which is exactly as if it had been fixed at the start.`; }
+  if (best >= 0) { const o = fr.get(best), full = P.get(best);
+    $('#run-wp').innerHTML = `<b>Running example</b> for ${sqName(best)}: the frontier has ${F.length} square${F.length > 1 ? 's' : ''}. With a pit in ${sqName(best)}, ${o.nt} layout${o.nt === 1 ? '' : 's'} of the other frontier squares fit the breezes (total prior ${f4(o.st)}); without one, ${o.nf} fit (total ${f4(o.sf)}). So <b>P</b>(P<sub>q</sub> | k, b) = &alpha;&prime; &lang;${fmt(WP.pr, 2)} &times; ${f4(o.st)}, ${fmt(1 - WP.pr, 2)} &times; ${f4(o.sf)}&rang; = ${tip('<b>&lang;' + f3(o.p) + ', ' + f3(1 - o.p) + '&rang;</b>', `frontier sum only; the full sum over ${big(Math.pow(2, WP.res.K))} layouts gives ${fmt(full, 6)}`)}.`; }
+  else $('#run-wp').innerHTML = WP.dead >= 0 ? '<b>Running example</b>: the game is over; start a new cave.' : '<b>Running example</b>: no frontier left to reason about.';
+}
+$('#wp-cv').addEventListener('click', e => { if (!wpV) return; const [px, py] = evPos($('#wp-cv'), e), x = Math.floor(wpV.iX(px)), y = Math.floor(wpV.iY(py)); if (x < 0 || x > 3 || y < 0 || y > 3) return; wpStep(y * 4 + x); });
+$('#wp-cv').addEventListener('pointermove', e => { if (!wpV || !WP.res) return; const [px, py] = evPos($('#wp-cv'), e), x = Math.floor(wpV.iX(px)), y = Math.floor(wpV.iY(py)); $('#wp-cv').style.cursor = x >= 0 && x < 4 && y >= 0 && y < 4 && WP.res.F.includes(y * 4 + x) && WP.dead < 0 ? 'pointer' : 'default'; });
+$('#wp-pr').addEventListener('input', e => { WP.pr = +e.target.value; wpSolve(); drawWP(); });
+$('#wp-auto').addEventListener('click', () => { if (WP.dead >= 0) { wpReset('new'); setPressed('[data-wm]', 'new', 'data-wm'); drawWP(); return; } const { P, F } = WP.res; if (!F.length) return; let b = F[0]; F.forEach(q => { if (P.get(q) < P.get(b) - 1e-12) b = q; }); wpStep(b); });
+seg1('[data-wm]', 'data-wm', k => { wpReset(k); drawWP(); });
+wpReset('classic');
+fig($('#wp-cv'), drawWP);
+
+/* ---------- project: the Adult census joint table ---------- */
+const AD = {"vars":["age","sex","edu","marital","hours","income"],"vals":[["17–29","30–44","45–59","60+"],["Female","Male"],["No diploma","High school","Some college","Bachelor’s","Postgrad"],["Married","Never married","Div./sep./wid."],["Under 35","35–45","46+"],["≤50K",">50K"]],"counts":[13,0,39,1,5,0,500,0,188,0,15,0,19,0,68,0,10,0,43,2,99,19,3,3,384,1,719,1,80,1,56,0,168,1,27,1,39,5,87,30,10,5,1006,1,940,10,98,1,57,0,154,1,13,0,13,7,35,30,5,12,165,1,502,14,101,6,7,0,25,0,8,3,0,3,2,8,1,2,15,0,71,5,22,4,2,0,5,0,3,2,22,0,205,13,44,8,540,0,504,4,98,4,1,0,55,0,10,0,27,2,526,75,184,33,339,0,1234,3,235,9,11,0,131,2,37,2,51,1,329,88,131,45,732,5,1059,12,242,12,16,0,67,6,24,2,24,0,103,88,45,57,142,0,451,21,149,29,1,0,13,1,10,0,8,0,16,19,14,14,24,0,49,5,40,5,2,0,0,0,2,1,21,0,37,5,12,1,40,0,79,0,7,0,47,0,167,1,21,0,62,16,140,91,21,9,70,0,396,6,43,1,157,1,627,11,90,9,55,43,106,129,16,22,63,3,366,10,57,12,141,1,668,32,94,9,24,55,44,105,9,35,36,0,273,27,60,25,34,3,187,22,47,24,5,26,14,53,3,38,22,0,110,24,30,31,18,3,69,22,20,19,38,2,515,52,142,27,26,0,159,5,29,4,19,0,162,1,40,4,98,6,1353,519,522,350,60,0,533,19,184,10,39,0,472,22,171,18,66,15,868,651,446,451,63,1,394,26,128,18,25,1,330,24,131,38,34,12,341,691,203,572,30,0,256,55,104,37,13,0,131,34,49,32,17,15,110,344,89,403,15,2,74,48,39,40,5,1,20,23,15,24,18,3,43,8,5,0,13,0,38,0,4,0,74,0,195,3,22,3,37,20,92,69,17,4,22,0,97,0,6,1,139,2,626,21,66,10,23,16,34,59,15,13,12,0,81,6,13,2,73,6,465,15,99,12,5,14,13,41,6,10,6,1,48,13,15,4,22,2,134,26,43,22,4,9,6,42,2,18,5,2,33,13,13,18,17,2,91,29,31,20,42,3,483,78,131,46,13,0,53,1,11,0,16,0,121,7,36,4,84,17,784,551,313,289,17,0,100,7,21,4,36,1,260,27,67,21,55,18,441,562,203,302,9,0,58,7,17,5,27,2,159,27,62,22,33,19,160,500,106,333,8,0,36,13,15,11,8,3,77,37,31,30,14,19,77,396,46,393,6,4,20,17,13,13,10,1,31,33,17,53,9,0,11,0,0,1,2,0,10,0,4,0,109,1,105,1,10,1,28,4,17,7,3,0,8,0,25,3,1,0,210,5,163,10,25,1,10,6,9,7,1,1,8,0,13,2,1,1,114,1,112,6,14,5,3,3,6,3,0,0,4,0,5,0,0,2,37,2,27,7,7,2,3,2,1,5,0,1,8,1,6,2,0,4,20,1,16,7,5,1,160,9,225,37,50,22,14,0,10,0,4,1,43,1,53,4,8,0,226,15,253,114,73,38,11,1,14,3,1,1,45,0,39,11,14,3,112,38,121,97,36,34,7,0,7,5,1,0,24,0,29,7,5,4,75,39,54,103,16,56,2,2,7,2,3,0,13,1,11,8,2,6,48,45,26,84,16,67,4,0,3,0,8,3,8,5,12,3,7,10]};
+const AV = AD.vars, AVals = AD.vals, ADIM = AVals.map(v => v.length), ACNT = AD.counts, ANAME = { age: 'Age', sex: 'Sex', edu: 'Education', marital: 'Marital status', hours: 'Hours per week', income: 'Income' };
+const ASTR = ADIM.map((_, i) => ADIM.slice(i + 1).reduce((a, b) => a * b, 1)), AN = sum(ACNT);
+const cellVal = (idx, i) => Math.floor(idx / ASTR[i]) % ADIM[i];
+function aCount(fix) { let n = 0, cells = 0; for (let k = 0; k < ACNT.length; k++) { let ok = true; for (let i = 0; i < fix.length; i++) if (fix[i] >= 0 && cellVal(k, i) !== fix[i]) { ok = false; break; } if (ok) { n += ACNT[k]; cells++; } } return { n, cells }; }
+const AQ = { t: 5, foc: 1, ev: [-1, -1, 4, -1, -1, -1] };
+const segHTML = (attr, items, cur) => items.map(([val, lab]) => `<button type="button" ${attr}="${val}" aria-pressed="${String(val) === String(cur)}">${lab}</button>`).join('');
+function aqBuild() {
+  $('#aq-t').innerHTML = segHTML('data-at', AV.map((v, i) => [i, ANAME[v]]), AQ.t);
+  $$('#aq-t button').forEach(b => b.addEventListener('click', () => { const t = +b.getAttribute('data-at'); if (t === AQ.t) return; AQ.t = t; AQ.foc = ADIM[t] - 1; AQ.ev[t] = -1; AQ.flipped = false; aqBuild(); drawAQ(); }));
+  $('#aq-ev').innerHTML = '<span class="mini-h">Evidence</span>' + AV.map((v, i) => i === AQ.t ? '' : `<div class="evrow"><span class="evl">${ANAME[v]}</span><div class="seg sm" role="group" aria-label="${ANAME[v]}">${segHTML('data-ae' + i, [[-1, 'Any'], ...AVals[i].map((x, j) => [j, x])], AQ.ev[i])}</div></div>`).join('');
+  AV.forEach((v, i) => { if (i === AQ.t) return; $$(`[data-ae${i}]`).forEach(b => b.addEventListener('click', () => { AQ.ev[i] = +b.getAttribute('data-ae' + i); setPressed(`[data-ae${i}]`, AQ.ev[i], 'data-ae' + i); drawAQ(); })); });
+}
+function aqDist(ev, t) { const base = aCount(ev), out = []; for (let j = 0; j < ADIM[t]; j++) { const f = ev.slice(); f[t] = j; const c = aCount(f); out.push({ n: c.n, p: base.n ? c.n / base.n : NaN }); } return { base, out }; }
+function aqNaive(ev, t) { // P(t) * prod_i P(e_i | t), normalised
+  const un = []; for (let j = 0; j < ADIM[t]; j++) { const f = new Array(6).fill(-1); f[t] = j; const nt = aCount(f).n; let w = nt / AN; ev.forEach((x, i) => { if (x < 0 || i === t) return; const g = f.slice(); g[i] = x; w *= nt ? aCount(g).n / nt : 0; }); un.push(w); }
+  const Z = sum(un); return un.map(w => Z ? w / Z : NaN);
+}
+let aqV = null;
+function drawAQ() {
+  const C = C0(), t = AQ.t, ev = AQ.ev.map((x, i) => i === t ? -1 : x), D = aqDist(ev, t), pri = aqDist(new Array(6).fill(-1), t).out, nb = ev.some(x => x >= 0) ? aqNaive(ev, t) : null, K = ADIM[t];
+  const ymax = Math.min(1, Math.max(0.2, ...D.out.map(o => o.p || 0), ...pri.map(o => o.p), ...(nb || []).map(x => x || 0)) * 1.15);
+  const v = aqV = frame($('#aq-cv'), [0, K], [0, ymax], { l: 44, r: 10, t: 14, b: 44 }); axes(v, '', 'P', { sx: 10, fx: () => '' });
+  const c = v.ctx, bw = (v.X(1) - v.X(0));
+  for (let j = 0; j < K; j++) {
+    const x0 = v.X(j) + bw * 0.14, w = bw * 0.72, p = D.out[j].p, foc = j === AQ.foc;
+    c.fillStyle = C.muted; c.globalAlpha = 0.35; c.fillRect(x0, v.Y(pri[j].p), w * 0.34, v.Y(0) - v.Y(pri[j].p)); c.globalAlpha = 1;
+    if (isFinite(p)) { c.fillStyle = C.a; c.globalAlpha = foc ? 1 : 0.6; c.fillRect(x0 + w * 0.38, v.Y(p), w * 0.62, v.Y(0) - v.Y(p)); c.globalAlpha = 1;
+      txt(c, fmt(p, 3), x0 + w * 0.69, v.Y(p) - 5, (foc ? '600 ' : '') + (v.w < 420 ? '9.5px ' : '11px ') + css('--f-mono'), C.q, 'center'); }
+    if (nb && isFinite(nb[j])) { const cx = x0 + w * 0.69, cy = v.Y(nb[j]), r = 5; c.beginPath(); c.moveTo(cx, cy - r); c.lineTo(cx + r, cy); c.lineTo(cx, cy + r); c.lineTo(cx - r, cy); c.closePath(); c.fillStyle = C.b; c.fill(); c.strokeStyle = C.surf; c.lineWidth = 1; c.stroke(); }
+    const lab = AVals[t][j], fnt = (foc ? '600 ' : '') + (v.w < 420 ? '9.5px ' : '11px ') + css('--f-body'); c.font = fnt;
+    const words = lab.split(' '); if (c.measureText(lab).width > bw - 4 && words.length > 1) { txt(c, words[0], v.X(j + 0.5), v.h - 28, fnt, foc ? C.q : C.muted, 'center'); txt(c, words.slice(1).join(' '), v.X(j + 0.5), v.h - 15, fnt, foc ? C.q : C.muted, 'center'); }
+    else txt(c, lab, v.X(j + 0.5), v.h - 22, fnt, foc ? C.q : C.muted, 'center');
+  }
+  const evs = ev.map((x, i) => x >= 0 ? AVals[i][x] : null).filter(Boolean), es = evs.join(', ') || 'nothing', fv = AVals[t][AQ.foc], fo = D.out[AQ.foc];
+  $('#aq-n').innerHTML = tip(big(D.base.n), `sum of the ${D.base.cells} cells that match the evidence`);
+  $('#aq-c').innerHTML = tip(`${D.base.cells} of 720`, evs.length ? `720 ÷ (${ev.map((x, i) => x >= 0 ? ADIM[i] : null).filter(Boolean).join(' × ')}) = ${D.base.cells}` : 'no evidence: every cell counts');
+  const nEv = ev.filter(x => x >= 0).length; $('#aq-flip').disabled = nEv !== 1;
+  let say = !D.base.n ? `<b>Nobody</b> in the table matches this evidence, so counting gives 0/0: no answer at all. The diamonds still give one, because the independence model combines evidence that was each seen on its own. This is the price of a full joint: every combination needs its own data.`
+    : `${ANAME[AV[t]]} = <b>${fv}</b> (click a bar to change): P(${fv} | ${es}) = ${tip(fo.n + '/' + D.base.n, `people with ${fv} and the evidence ÷ people with the evidence`)} = <b>${f4(fo.p)}</b>, against ${f4(pri[AQ.foc].p)} with no evidence.`
+      + (D.base.n < 30 ? ` Only ${D.base.n} people match: the estimate is shaky.` : '')
+      + (nb && isFinite(nb[AQ.foc]) ? ` Assuming conditional independence gives ${f4(nb[AQ.foc])}${Math.abs(nb[AQ.foc] - fo.p) > 0.05 ? ', noticeably off: these variables are not independent given ' + ANAME[AV[t]].toLowerCase() : ', close to the exact count'}.` : '');
+  if (AQ.flipped && nEv === 1) { const i = ev.findIndex(x => x >= 0), x = ev[i], fA = new Array(6).fill(-1), fB = new Array(6).fill(-1); fA[t] = AQ.foc; fB[i] = x; const fAB = fA.slice(); fAB[i] = x;
+    const pA = aCount(fA).n / AN, pB = aCount(fB).n / AN, pBA = aCount(fAB).n / aCount(fA).n;
+    say += ` Bayes check: P(${fv} | ${AVals[i][x]}) = P(${AVals[i][x]} | ${fv}) &times; P(${fv}) / P(${AVals[i][x]}) = ${f4(pBA)} &times; ${f4(pA)} / ${f4(pB)} = ${tip(f4(pBA * pA / pB), 'the same as counting directly, as it must be')}.`; }
+  $('#aq-say').innerHTML = say;
+}
+$('#aq-cv').addEventListener('click', e => { if (!aqV) return; const [px] = evPos($('#aq-cv'), e), j = Math.floor(aqV.iX(px)); if (j >= 0 && j < ADIM[AQ.t]) { AQ.foc = j; drawAQ(); } });
+$('#aq-cv').style.cursor = 'pointer';
+$('#aq-flip').addEventListener('click', () => { const i = AQ.ev.findIndex((x, k) => x >= 0 && k !== AQ.t); if (i < 0) return; const ot = AQ.t, of = AQ.foc, x = AQ.ev[i]; AQ.ev = new Array(6).fill(-1); AQ.ev[ot] = of; AQ.t = i; AQ.foc = x; AQ.flipped = true; aqBuild(); drawAQ(); });
+$('#aq-clear').addEventListener('click', () => { AQ.ev = new Array(6).fill(-1); AQ.flipped = false; aqBuild(); drawAQ(); });
+aqBuild();
+fig($('#aq-cv'), drawAQ);
+
+/* independence on real data */
+const IQ = { x: 1, y: 5, z: -1, zv: 0 };
+function iqBuild() {
+  $('#iq-x').innerHTML = segHTML('data-ix', AV.map((v, i) => [i, ANAME[v]]), IQ.x);
+  $('#iq-y').innerHTML = segHTML('data-iy', AV.map((v, i) => [i, ANAME[v]]), IQ.y);
+  if (IQ.z === IQ.x || IQ.z === IQ.y) IQ.z = -1;
+  $('#iq-z').innerHTML = segHTML('data-iz', [[-1, 'Anyone'], ...AV.map((v, i) => [i, ANAME[v]]).filter(([i]) => i !== IQ.x && i !== IQ.y)], IQ.z);
+  $('#iq-zv').innerHTML = IQ.z >= 0 ? segHTML('data-izv', AVals[IQ.z].map((x, j) => [j, x]), IQ.zv) : '';
+  $('#iq-zv').style.display = IQ.z >= 0 ? '' : 'none';
+  [['x', 'ix'], ['y', 'iy'], ['z', 'iz'], ['zv', 'izv']].forEach(([k, a]) => $$(`[data-${a}]`).forEach(b => b.addEventListener('click', () => { const val = +b.getAttribute('data-' + a);
+    if (k === 'x' && val === IQ.y) IQ.y = IQ.x; if (k === 'y' && val === IQ.x) IQ.x = IQ.y; IQ[k] = val; if (k === 'z') IQ.zv = 0;
+    iqBuild(); drawIQ(); })));
+}
+function drawIQ() {
+  const C = C0(), pal = [C.a, C.b, C.c, C.lda, C.bad], { x: X, y: Y, z: Z, zv } = IQ, KX = ADIM[X], KY = ADIM[Y];
+  const fz = new Array(6).fill(-1); if (Z >= 0) fz[Z] = zv; const nG = aCount(fz).n;
+  const rows = []; for (let i = 0; i < KX; i++) { const f = fz.slice(); f[X] = i; const n = aCount(f).n, ps = []; for (let j = 0; j < KY; j++) { const g = f.slice(); g[Y] = j; ps.push(n ? aCount(g).n / n : 0); } rows.push({ lab: AVals[X][i], n, ps }); }
+  const all = []; for (let j = 0; j < KY; j++) { const g = fz.slice(); g[Y] = j; all.push(nG ? aCount(g).n / nG : 0); } rows.push({ lab: 'all', n: nG, ps: all, tot: true });
+  const cv = $('#iq-cv'), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, W = v.w, H = v.h, small = W < 460;
+  const pl = small ? 92 : 118, pr = 10, pt = 10, pb = 10, rh = (H - pt - pb) / (rows.length + 0.4), bh = rh * 0.66, bw = W - pl - pr;
+  rows.forEach((r, i) => { const y = pt + i * rh + (r.tot ? rh * 0.4 : 0) + (rh - bh) / 2; let x = pl;
+    txt(c, r.lab, pl - 8, y + bh / 2 - 1, (r.tot ? '600 ' : '') + (small ? '10px ' : '11.5px ') + css('--f-body'), C.q, 'right');
+    txt(c, 'n = ' + big(r.n), pl - 8, y + bh / 2 + 11, (small ? '9px ' : '10px ') + css('--f-mono'), C.muted, 'right');
+    r.ps.forEach((p, j) => { const w = p * bw; c.fillStyle = pal[j % 5]; c.globalAlpha = r.tot ? 0.95 : 0.78; c.fillRect(x, y, w, bh); c.globalAlpha = 1; c.strokeStyle = C.surf; c.lineWidth = 1; c.strokeRect(x, y, w, bh);
+      if (w > 34) txt(c, pct(p, 0), x + w / 2, y + bh / 2 + 4, '600 ' + (small ? '9.5px ' : '11px ') + css('--f-mono'), '#fff', 'center'); x += w; });
+    if (!r.n) txt(c, 'nobody', pl + 6, y + bh / 2 + 4, '11px ' + css('--f-mono'), C.muted); });
+  c.strokeStyle = C.line; c.setLineDash([3, 3]); const ysep = pt + KX * rh + rh * 0.2; c.beginPath(); c.moveTo(pl, ysep); c.lineTo(W - pr, ysep); c.stroke(); c.setLineDash([]);
+  let gap = 0, gi = -1, gj = -1; rows.slice(0, KX).forEach((r, i) => { if (!r.n) return; r.ps.forEach((p, j) => { const d = Math.abs(p - all[j]); if (d > gap) { gap = d; gi = i; gj = j; } }); });
+  const zs = Z >= 0 ? `${AVals[Z][zv]} only` : 'everyone';
+  $('#iq-cap').innerHTML = `Rows: ${ANAME[AV[X]].toLowerCase()} (${zs}). Colours, left to right: ` + AVals[Y].map((x, j) => `<span style="color:${pal[j % 5]}">&#9632;</span> ${x}`).join(' &nbsp;') + '. The bottom bar is P(Y) for the whole group.';
+  $('#iq-gap').innerHTML = gi >= 0 ? tip(f3(gap), `largest over rows and colours:\nP(${AVals[Y][gj]} | ${AVals[X][gi]}${Z >= 0 ? ', ' + AVals[Z][zv] : ''}) − P(${AVals[Y][gj]}${Z >= 0 ? ' | ' + AVals[Z][zv] : ''})\n= ${f4(rows[gi].ps[gj])} − ${f4(all[gj])}`) : '—';
+  $('#iq-n').innerHTML = tip(big(nG), Z >= 0 ? `people with ${AVals[Z][zv]}` : 'all 48,842 people');
+  $('#iq-say').innerHTML = gi < 0 ? 'Nobody in this group.' : gap < 0.02
+    ? `The rows are nearly identical (largest gap ${f3(gap)}): among ${zs}, ${ANAME[AV[X]].toLowerCase()} and ${ANAME[AV[Y]].toLowerCase()} are <b>close to independent</b>.${Z >= 0 ? ' Compare with &ldquo;Anyone&rdquo;: conditioning can create or destroy independence.' : ''}`
+    : `<b>Dependent</b>${Z >= 0 ? ` among ${zs}` : ''}: P(${AVals[Y][gj]}) is ${f3(all[gj])} overall but ${f3(rows[gi].ps[gj])} for ${AVals[X][gi]}. ${X === 1 && Y === 5 && Z < 0 ? 'Now condition on marital status = Married.' : ''}`;
+}
+iqBuild();
+fig($('#iq-cv'), drawIQ);
+
+/* sparsity numbers and the check against pandas */
+{ const empty = ACNT.filter(n => n === 0).length, small = ACNT.filter(n => n > 0 && n < 10).length;
+  $('#pj-empty').innerHTML = tip(String(empty), 'cells with a count of 0'); $('#pj-small').innerHTML = tip(String(small), 'cells with 1 to 9 people');
+  const NV = (nm, val) => { const i = AV.indexOf(nm), j = AVals[i].findIndex(x => x.replace(/[–’]/g, m => m === '–' ? '-' : "'") === val); if (j < 0) throw new Error('no value ' + val); return [i, j]; };
+  const Q = [[], [['sex', 'Female']], [['sex', 'Male']], [['edu', 'Postgrad']], [['marital', 'Married']], [['marital', 'Married'], ['sex', 'Female']], [['marital', 'Married'], ['sex', 'Male']], [['age', '45-59'], ['sex', 'Male'], ['edu', 'Postgrad'], ['marital', 'Married'], ['hours', '46+']]];
+  const mine = Q.map(q => { const f = new Array(6).fill(-1); q.forEach(([nm, val]) => { const [i, j] = NV(nm, val); f[i] = j; }); const b = aCount(f).n; f[5] = 1; return [aCount(f).n, b]; });
+  { const f = new Array(6).fill(-1); f[5] = 1; const b = aCount(f).n; f[2] = 4; mine.push([aCount(f).n, b]); }
+  const theirs = [...$('#pj-out').textContent.matchAll(/= (\d+)\/(\d+) =/g)].map(m => [+m[1], +m[2]]);
+  const same = theirs.length === mine.length && mine.every((x, i) => x[0] === theirs[i][0] && x[1] === theirs[i][1]);
+  const head = $('#pj-out').textContent.match(/(\d+) cells, (\d+) empty, N = (\d+)/), sameHead = head && +head[1] === ACNT.length && +head[2] === empty && +head[3] === AN;
+  window.__x004check = { mine, theirs, same, sameHead };
+  $('#pj-check').innerHTML = `${same && sameHead ? '<b>Checked live:</b>' : '<b>Mismatch:</b>'} this page recomputed all ${mine.length} fractions above from its own 720 counts (${mine.map(x => x[0] + '/' + x[1]).join(', ')}) and the table summary (${ACNT.length} cells, ${empty} empty, N = ${big(AN)}); ${same && sameHead ? 'every number is identical to the pandas output' : 'some differ from pandas'}. Counting is exact, so there is no rounding to explain away. The last line of the output comes from the full nine-column data, which the page does not hold. Age, education and hours are banded by us, and &ldquo;Div./sep./wid.&rdquo; also includes the 628 people recorded as married with an absent spouse.`;
+}
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+drawHero(); drawAP(); drawDC(); drawDB(); drawSP(); drawJT(); drawCI(); drawBY(); drawWP(); drawAQ(); drawIQ();
+window.__x004 = { FLU, fluN, AP, apBest, apOn, DB, dbBook, SP, JT, jtSet, CI, ciJoint, BY, byCalc, WP, wpSolve, wpReset, wpStep, AQ, aCount, aqDist, aqNaive, IQ, AVals };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

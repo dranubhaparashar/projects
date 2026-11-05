@@ -1,0 +1,1349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on estimation: point estimators and their sampling distributions, bias, variance and mean squared error, consistency, maximum likelihood as minimising KL divergence to the data, conditional likelihood giving MSE and cross-entropy, efficiency and the Cramér–Rao bound, output units learning conditional means, medians and quantiles, and MAP estimation with priors as regularisers, ending with MLE versus MAP estimates of hourly cyclist counts on Seattle's Fremont Bridge, verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Estimators, Maximum Likelihood &amp; MAP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 12%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+table.mini td, table.mini th { font-size: 0.84rem; padding: 5px 7px; }
+.mapplot { aspect-ratio: 2.6 / 1; }
+.lineplot { aspect-ratio: 3 / 1; }
+.hourplot { aspect-ratio: 2.4 / 1; }
+.stat .v small { font-size: 0.72em; color: var(--muted); }
+#hero-cap { font-size: 0.9rem; line-height: 1.55; }
+@media (max-width: 560px) { .mapplot { aspect-ratio: 1.8 / 1; } .lineplot { aspect-ratio: 1.7 / 1; } .hourplot { aspect-ratio: 1.5 / 1; } }
+@media (max-width: 560px) { .plot.tall { aspect-ratio: 1.15 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">MLE &amp; MAP <span>&middot; the best guess from data</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#estimators">Estimators</a>
+      <a href="#bias">Bias &amp; variance</a>
+      <a href="#consistency">Consistency</a>
+      <a href="#mle">Maximum likelihood</a>
+      <a href="#kl">MLE as KL</a>
+      <a href="#conditional">MSE &amp; cross-entropy</a>
+      <a href="#properties">Cram&eacute;r&ndash;Rao</a>
+      <a href="#outputs">Output units</a>
+      <a href="#map">Priors &amp; MAP</a>
+      <a href="#project">Bridge project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Foundations · chapter 0.7 · estimation</div>
+      <h1>Estimators, Maximum Likelihood &amp; MAP</h1>
+      <div class="sub">How to turn a handful of data into the best possible guess</div>
+      <p class="lead">Every model you train is an estimate: a number, or a million numbers, worked out from a finite, noisy sample. This chapter asks what makes one estimate better than another, and arrives at the two recipes behind nearly every loss function in machine learning: <em>maximum likelihood</em>, which trusts only the data, and <em>MAP</em>, which also brings what you already believed. The figure uses real counts from the bicycle counter on Seattle&rsquo;s Fremont Bridge. We want the average number of cyclists in one weekday hour of 2025, and last year&rsquo;s figure is our prior belief. <strong>Press &ldquo;Add a day&rdquo;</strong> to reveal one more real weekday and watch the two estimates close in on the truth.</p>
+      <dl class="facts">
+        <div><dt>Maximum likelihood</dt><dd>Pick the parameters under which the data you saw is most probable</dd></div>
+        <div><dt>MAP</dt><dd>Maximum likelihood plus a prior: in practice, a regulariser</dd></div>
+        <div><dt>The yardstick</dt><dd>Mean squared error = bias&sup2; + variance</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="fig-head"><div class="seg" role="group" aria-label="Hour of the day"><button type="button" data-hh="8">8&ndash;9 am</button><button type="button" data-hh="14">2&ndash;3 pm</button><button type="button" data-hh="17" aria-pressed="true">5&ndash;6 pm</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="hero-add">Add a day</button><button type="button" class="btn" id="hero-add5">Add 5</button><button type="button" class="btn" id="hero-reset">Start again</button></div></div>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Prior, likelihood and posterior for the hourly cyclist rate, with the revealed days as dots"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>11 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#estimators"><i>01</i>An estimator is a repeatable guess</a></li>
+    <li><a href="#bias"><i>02</i>Bias, variance and MSE</a></li>
+    <li><a href="#consistency"><i>03</i>Consistency: more data helps</a></li>
+    <li><a href="#mle"><i>04</i>Maximum likelihood</a></li>
+    <li><a href="#kl"><i>05</i>MLE as matching the data</a></li>
+    <li><a href="#conditional"><i>06</i>Where MSE and cross-entropy come from</a></li>
+    <li><a href="#properties"><i>07</i>Efficiency and Cramér–Rao</a></li>
+    <li><a href="#outputs"><i>08</i>Output units learn statistics</a></li>
+    <li><a href="#map"><i>09</i>Priors as regularisers</a></li>
+    <li><a href="#project"><i>10</i>Cyclists on the Fremont Bridge</a></li>
+    <li><a href="#summary"><i>11</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- ESTIMATORS -->
+<section class="chap" id="estimators">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>An estimator is a guess you can repeat</h2>
+    <div class="prose">
+      <p>Machine learning is, at heart, estimation. There is some quantity we cannot see directly (the average traffic in an hour, the weights of the best network, the function that maps an x-ray to a diagnosis) and a sample of data that carries clues about it. A <em class="term">point estimator</em> is any rule that turns the sample into a single best guess. Any rule at all: the definition does not demand that the guess be good, which is exactly why we need ways to grade estimators.</p>
+      <p>The key shift in thinking is this. The data was drawn at random, so the estimate is random too: collect a different sample and you get a different number. An estimator therefore has a <em>distribution</em>, its sampling distribution, and that distribution is what we judge. The same idea covers <em class="term">function estimation</em>: when we fit a model f&#770; to predict y from x, the fitted function is an estimate of the true relation, and it would also come out differently on a different training set.</p>
+      <p>Below, the population is all 261 weekdays of 2025 at the Fremont Bridge, 5&ndash;6 pm, and the true value is their mean. Four rules each guess it from the same few days. <strong>Draw 1,000 samples</strong> and see whose guesses cluster tightest around the truth.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \hat{\theta}_m = g\big(x^{(1)}, x^{(2)}, \dots, x^{(m)}\big) \]</div><div class="read"><b>Read it as:</b> &theta; is the true, fixed, unknown quantity. x<sup>(1)</sup> to x<sup>(m)</sup> are m data points drawn at random. g is any function of them, and its output &theta;&#770;<sub>m</sub> (&ldquo;theta hat&rdquo;) is the estimate. Because the x&rsquo;s are random, &theta;&#770;<sub>m</sub> is a random variable, while &theta; is not.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Theta-hat-m is some function g of the m data points.&rdquo;</em></div><div class="eq-run" id="run-es"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="es-cv" aria-label="Sampling distributions of four estimators of the mean"></canvas></div><figcaption>Each row collects the guesses of one estimator over all the samples drawn so far. The dashed line is the truth, 372.8 cyclists; the ringed dot is the latest sample&rsquo;s guess.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="es-n">Days per sample, m</label><output id="es-n-o"></output></div><input type="range" id="es-n" min="1" max="40" step="1" value="5"></div>
+        <div class="btns"><button type="button" class="btn primary" id="es-one">Draw one sample</button><button type="button" class="btn" id="es-many">Draw 1,000 samples</button><button type="button" class="btn" id="es-clear">Clear</button></div>
+        <div class="tbl-wrap"><table class="hand mini" id="es-tbl"></table></div>
+        <p class="note" id="es-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BIAS -->
+<section class="chap" id="bias">
+  <div class="wrap">
+    <div class="tag">Grading estimators</div>
+    <h2>Bias, variance and the divisor in s&sup2;</h2>
+    <div class="prose">
+      <p>Two questions grade an estimator. Is it right <em>on average</em>? That is its <em class="term">bias</em>, the gap between the centre of its sampling distribution and the truth. And how much does it wobble from sample to sample? That is its <em class="term">variance</em>; the square root is called the <em class="term">standard error</em>. An estimator with zero bias is called unbiased.</p>
+      <p>Some familiar estimators are unbiased. The fraction of heads in m coin flips has expected value exactly &theta;, the coin&rsquo;s true chance of heads, and the sample mean of a Gaussian sample has expected value exactly &mu;. The sample variance is the classic counter-example. Measured around the sample mean, the squared spread is a little too small, because the sample mean is by construction the point that the sample huddles around most tightly.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{gathered} \operatorname{bias}(\hat\theta_m) = \mathbb{E}[\hat\theta_m] - \theta \\ \text{coin flips: } \mathbb{E}\big[\tfrac1m \textstyle\sum_i x^{(i)}\big] = \theta \end{gathered} \]</div><div class="read"><b>Read it as:</b> the expectation is over the random sample. For coin flips x &isin; {0, 1} with P(x = 1) = &theta;, each flip has expected value &theta;, so their average does too, whatever m is. The same one-line argument shows the Gaussian sample mean is unbiased for &mu;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The bias is the expected estimate minus the true value.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \hat\sigma^2_m &= \tfrac1m \textstyle\sum_i \big(x^{(i)} - \hat\mu_m\big)^2 \\ \mathbb{E}\big[\hat\sigma^2_m\big] &= \tfrac{m-1}{m}\,\sigma^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> averaging the squared deviations from the sample mean &mu;&#770;<sub>m</sub> underestimates the true variance by a factor (m &minus; 1)/m, so its bias is &minus;&sigma;&sup2;/m. Dividing by m &minus; 1 instead removes the bias exactly; that is the &ldquo;unbiased sample variance&rdquo; that statistics packages print.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected value of sigma-hat squared is m minus one over m, times sigma squared.&rdquo;</em></div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>Is unbiased best, then? Not necessarily. A sensible overall score is the <em class="term">mean squared error</em>, the average squared distance from the truth, and it splits cleanly into bias squared plus variance. Shrinking an estimate a little towards zero adds bias but can remove more variance. For Gaussian data the exact numbers are known, so the curves below are not simulations. <strong>Slide the divisor</strong> from m &minus; 1 to m + 3 and find the lowest MSE.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \operatorname{MSE} &= \mathbb{E}\big[(\hat\theta_m - \theta)^2\big] \\ &= \operatorname{bias}(\hat\theta_m)^2 + \operatorname{Var}(\hat\theta_m) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the typical squared miss has two sources: aiming at the wrong place (bias) and a shaky hand (variance). Here the estimator is S/d, where S = &Sigma;(x &minus; &mu;&#770;)&sup2; and d is the divisor; for Gaussian data E[S] = (m &minus; 1)&sigma;&sup2; and Var(S) = 2(m &minus; 1)&sigma;<sup>4</sup>, which gives both terms exactly.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The mean squared error is the bias squared plus the variance.&rdquo;</em></div><div class="eq-run" id="run-bv"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="bv-cv" aria-label="Bias squared, variance and MSE of the variance estimator against its divisor"></canvas></div><figcaption><span style="color:var(--cC)">&#9644;</span> bias&sup2; &nbsp; <span style="color:var(--cB)">&#9644;</span> variance &nbsp; <span style="color:var(--cA)">&#9644;</span> MSE = their sum. Gaussian data with true variance &sigma;&sup2; = 1. Squares: a simulation of 5,000 samples, after you press the button.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="bv-m">Sample size m</label><output id="bv-m-o"></output></div><input type="range" id="bv-m" min="2" max="30" step="1" value="5"></div>
+        <div class="ctrl"><div class="top"><label for="bv-c">Divisor d = m + c</label><output id="bv-c-o"></output></div><input type="range" id="bv-c" min="-1" max="3" step="0.05" value="0"></div>
+        <div class="btns"><button type="button" class="btn" id="bv-sim">Simulate 5,000 samples</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="bv-e"></div><div class="k">expected estimate E[S/d]</div></div><div class="stat"><div class="v" id="bv-b"></div><div class="k">bias</div></div><div class="stat"><div class="v" id="bv-v"></div><div class="k">variance</div></div><div class="stat"><div class="v" id="bv-mse"></div><div class="k">MSE</div></div></div>
+        <p class="note" id="bv-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONSISTENCY -->
+<section class="chap" id="consistency">
+  <div class="wrap">
+    <div class="tag">More data</div>
+    <h2>Consistency: why more data helps</h2>
+    <div class="prose">
+      <p>Bias and variance describe an estimator at one fixed sample size. The deeper promise we want is about what happens as data piles up: that the estimate homes in on the truth. An estimator is <em class="term">consistent</em> if, for any tolerance &epsilon; you name, the chance of missing by more than &epsilon; shrinks to zero as m grows. That is called convergence in probability.</p>
+      <p>Consistency and unbiasedness are different promises. Using only the first data point is unbiased (its expected value is the truth) yet it never improves, however much data you collect. Laplace&rsquo;s rule, (heads + 1)/(m + 2), is biased at every m but consistent, because its bias fades like 1/m. Each line below is one person flipping a coin with P(heads) = 0.3, two thousand times, recomputing the estimate after every flip. <strong>Switch estimators and narrow the band</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\lim_{m\to\infty} P\big(\lvert\hat\theta_m - \theta\rvert > \epsilon\big) = 0 \\ &\text{for every } \epsilon > 0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> pick any band of half-width &epsilon; around the truth. The share of people whose estimate after m flips lies outside the band must head to zero as m grows. Written compactly, plim &theta;&#770;<sub>m</sub> = &theta;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;As m goes to infinity, the probability that theta-hat misses by more than epsilon goes to zero.&rdquo;</em></div><div class="eq-run" id="run-cs"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \operatorname{Var}\big(\hat\theta_m\big) &= \frac{\theta(1-\theta)}{m} \\ \operatorname{SE} &= \sqrt{\frac{\theta(1-\theta)}{m}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> for the fraction of heads, the variance falls like 1/m, so the standard error falls like 1/&radic;m: four times the data halves the typical error. An unbiased estimator whose variance goes to zero is consistent.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The variance is theta times one minus theta, over m; the standard error is its square root.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Estimator"><button type="button" data-ce="mean" aria-pressed="true">Fraction of heads</button><button type="button" data-ce="first">First flip only</button><button type="button" data-ce="lap">Laplace&rsquo;s rule</button></div></div>
+        <div class="plot ar-16x10 tall"><canvas id="cs-cv" aria-label="Running estimates of a coin's chance of heads for many people as flips accumulate"></canvas></div>
+        <figcaption>Forty of the 400 simulated people are drawn. Shaded: the band &theta; &plusmn; &epsilon;. The vertical line marks the m you chose; the flip axis is logarithmic.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cs-e">Tolerance &epsilon;</label><output id="cs-e-o"></output></div><input type="range" id="cs-e" min="0.01" max="0.2" step="0.005" value="0.05"></div>
+        <div class="ctrl"><div class="top"><label for="cs-m">Flips so far, m</label><output id="cs-m-o"></output></div><input type="range" id="cs-m" min="0" max="1" step="0.01" value="0.6"></div>
+        <div class="stats"><div class="stat"><div class="v" id="cs-out"></div><div class="k">of 400 people outside the band</div></div><div class="stat"><div class="v" id="cs-p"></div><div class="k">exact P(miss by more than &epsilon;)</div></div></div>
+        <div class="btns"><button type="button" class="btn" id="cs-new">New people</button></div>
+        <p class="note" id="cs-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MLE -->
+<section class="chap" id="mle">
+  <div class="wrap">
+    <div class="tag">The recipe</div>
+    <h2>Maximum likelihood: the most believable setting</h2>
+    <div class="prose">
+      <p>So far we judged estimators someone handed us. Where do good ones come from? The most widely used principle is <em class="term">maximum likelihood</em>. Choose a family of distributions p<sub>model</sub>(x; &theta;), one for each setting of the parameters &theta;. For each setting, ask how probable it makes the data you actually observed, and keep the setting that makes it most probable.</p>
+      <p>With independent examples, that probability is a product of one term per example. Products of many numbers below 1 are numerically hopeless (a thousand factors of 0.1 is 10<sup>&minus;1000</sup>, far below the smallest number a computer can store), so we take the logarithm. The log turns the product into a sum, and because it only ever increases it does not move the peak. <strong>Drag the dots, then move &mu; and &sigma;</strong> to make the data as likely as you can; the map below shows where the peak is.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \theta_{\text{ML}} &= \arg\max_\theta \prod_{i=1}^{m} p_{\text{model}}(x^{(i)};\theta) \\ &= \arg\max_\theta \sum_{i=1}^{m} \log p_{\text{model}}(x^{(i)};\theta) \end{aligned} \]</div><div class="read"><b>Read it as:</b> each data point casts a vote: the height of the model&rsquo;s density at that point. Multiply the votes (or add their logs) and pick the parameters with the biggest total. The sum of logs is the <em class="term">log-likelihood</em> &#8467;(&theta;). For a Gaussian the answer comes out in closed form: &mu;<sub>ML</sub> is the sample mean and &sigma;&sup2;<sub>ML</sub> is the average squared deviation, divided by m. That is the biased variance estimator from the previous section.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Theta-M-L is the theta that maximises the product of the model probabilities of the data, or equally the sum of their logs.&rdquo;</em></div><div class="eq-run" id="run-ml"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="How many copies of the data"><button type="button" data-mc="1" aria-pressed="true">Each point once</button><button type="button" data-mc="100">Each point &times; 100</button></div></div>
+        <div class="plot ar-16x10"><canvas id="ml-cv" aria-label="Data points under a Gaussian density; drag the points"></canvas></div>
+        <div class="plot mapplot" style="margin-top:10px"><canvas id="ml-map" aria-label="Log-likelihood over mu and sigma; click to choose"></canvas></div>
+        <figcaption>Top: each stick is one point&rsquo;s density, its vote. Bottom: the log-likelihood for every (&mu;, &sigma;), brighter is higher; &#9733; is the maximum, the ring is your setting. Click the map to jump there.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ml-mu">&mu;, the centre</label><output id="ml-mu-o"></output></div><input type="range" id="ml-mu" min="0" max="10" step="0.02" value="3.5"></div>
+        <div class="ctrl"><div class="top"><label for="ml-s">&sigma;, the spread</label><output id="ml-s-o"></output></div><input type="range" id="ml-s" min="0.3" max="4" step="0.01" value="2.4"></div>
+        <div class="btns"><button type="button" class="btn primary" id="ml-best">Jump to the maximum</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ml-ll"></div><div class="k">log-likelihood &#8467;</div></div><div class="stat"><div class="v" id="ml-pr"></div><div class="k">likelihood (the raw product)</div></div><div class="stat"><div class="v" id="ml-mh"></div><div class="k">&mu;<sub>ML</sub> = sample mean</div></div><div class="stat"><div class="v" id="ml-sh"></div><div class="k">&sigma;<sub>ML</sub></div></div></div>
+        <p class="note" id="ml-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- KL -->
+<section class="chap" id="kl">
+  <div class="wrap">
+    <div class="tag">Another view</div>
+    <h2>MLE as matching the data: the KL divergence</h2>
+    <div class="prose">
+      <p>Divide the log-likelihood by m and it becomes an average over the data, that is, an expectation under the <em class="term">empirical distribution</em> p&#770;<sub>data</sub>, which puts probability 1/m on each example. Maximising it is the same as minimising the <em class="term">KL divergence</em> from p&#770;<sub>data</sub> to the model, a measure of how far apart two distributions are (chapter 0.8 builds it properly). So maximum likelihood is an act of matching: it moves the model until its distribution looks as much as possible like the data&rsquo;s.</p>
+      <p>The bars are real: how often 0, 1, 2, &hellip; cyclists crossed the bridge in one night-time hour, over the 261 weekdays of 2025. The model is a Poisson distribution with rate &lambda;, the textbook model for counts of independent events. <strong>Slide &lambda;</strong> and watch the cross-entropy: its lowest point sits exactly at the sample mean.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &D_{\text{KL}}\big(\hat p_{\text{data}} \,\Vert\, p_{\text{model}}\big) \\ &\quad = \mathbb{E}_{\hat p_{\text{data}}}\big[\log \hat p_{\text{data}}(x) \\ &\qquad\qquad - \log p_{\text{model}}(x)\big] \\ &\theta_{\text{ML}} = \arg\min_\theta \\ &\quad -\mathbb{E}_{\hat p_{\text{data}}}\big[\log p_{\text{model}}(x;\theta)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> the first term inside the expectation depends only on the data, not on &theta;, so minimising the KL divergence only has to make the second term small. That second part, &minus;E[log p<sub>model</sub>], is the <em class="term">cross-entropy</em> between the data and the model, and it is exactly the negative average log-likelihood. Any loss written as a negative log-likelihood is a cross-entropy in this sense, including the mean squared error.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Maximum likelihood minimises the cross-entropy between the empirical distribution and the model, which is the same as minimising their KL divergence.&rdquo;</em></div><div class="eq-run" id="run-kl"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Hour of the night"><button type="button" data-kh="0">12&ndash;1 am</button><button type="button" data-kh="1">1&ndash;2 am</button><button type="button" data-kh="2" aria-pressed="true">2&ndash;3 am</button><button type="button" data-kh="3">3&ndash;4 am</button><button type="button" data-kh="4">4&ndash;5 am</button></div></div>
+        <div class="plot ar-16x10"><canvas id="kl-cv" aria-label="Empirical distribution of night-time counts against a Poisson model"></canvas></div>
+        <div class="plot ar-3x1" style="margin-top:10px"><canvas id="kl-ce" aria-label="Cross-entropy against lambda"></canvas></div>
+        <figcaption><span style="color:var(--cB)">&#9632;</span> share of the 261 weekdays with k cyclists in this hour &nbsp; <span style="color:var(--cA)">&#9679;</span> Poisson(&lambda;) probabilities. Below: cross-entropy against &lambda;; the dashed floor is the entropy of the data, which no model can beat.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="kl-l">Rate &lambda;</label><output id="kl-l-o"></output></div><input type="range" id="kl-l" min="0.5" max="12" step="0.01" value="6"></div>
+        <div class="btns"><button type="button" class="btn primary" id="kl-best">Set &lambda; to the sample mean</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="kl-x"></div><div class="k">cross-entropy (nats)</div></div><div class="stat"><div class="v" id="kl-d"></div><div class="k">KL divergence (nats)</div></div><div class="stat"><div class="v" id="kl-m"></div><div class="k">sample mean = &lambda;<sub>ML</sub></div></div><div class="stat"><div class="v" id="kl-r"></div><div class="k">variance &divide; mean</div></div></div>
+        <p class="note" id="kl-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONDITIONAL -->
+<section class="chap" id="conditional">
+  <div class="wrap">
+    <div class="tag">Supervised learning</div>
+    <h2>Conditional likelihood: where MSE and cross-entropy come from</h2>
+    <div class="prose">
+      <p>In supervised learning we do not model the inputs, only the target given the input. The same principle applies to the conditional distribution: choose &theta; to make the observed targets most probable given their inputs. This is the single idea behind almost every loss function in deep learning. Pick an output distribution, take its negative log-likelihood, and the loss falls out; there is no need to invent a new loss for each model.</p>
+      <p>If we say the target is Gaussian around the model&rsquo;s prediction, the negative log-likelihood is the mean squared error, plus terms that do not depend on the line. If we say a 0&ndash;1 label is a biased coin whose chance of heads is the model&rsquo;s output, the negative log-likelihood is the binary cross-entropy of logistic regression. <strong>Steer the line or curve, and change &sigma;</strong>: &sigma; moves the log-likelihood up and down, but never moves the best line.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \theta_{\text{ML}} &= \arg\max_\theta \\ &\qquad \textstyle\sum_{i} \log P(y^{(i)} \mid x^{(i)};\theta) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the same recipe, now conditioned on the inputs. A neural network is then simply a machine that turns x into the parameters of a distribution over y, and training maximises the log-probability of the right answers.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Theta-M-L maximises the sum over examples of the log-probability of y-i given x-i.&rdquo;</em></div></div>
+    <div class="two">
+      <div class="eq"><div class="m">\[ \begin{aligned} &-\tfrac1m \textstyle\sum_i \log p\big(y^{(i)}\mid x^{(i)}\big) \\ &\quad= \log\sigma + \tfrac12\log 2\pi + \tfrac{1}{2\sigma^2}\,\text{MSE} \end{aligned} \]</div><div class="read"><b>Read it as:</b> with p(y | x) = N(y; &ycirc;(x; w), &sigma;&sup2;), each example&rsquo;s negative log-density is log &sigma; + &frac12; log 2&pi; + (&ycirc; &minus; y)&sup2;/(2&sigma;&sup2;). Averaged, the only part that depends on w is MSE = (1/m) &Sigma; (&ycirc;<sup>(i)</sup> &minus; y<sup>(i)</sup>)&sup2;. So least squares is maximum likelihood, and the best &sigma; comes out as &radic;MSE.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The average negative log-likelihood is log sigma, plus half log two pi, plus MSE over two sigma squared.&rdquo;</em></div><div class="eq-run" id="run-cg"></div></div>
+      <div class="eq"><div class="m">\[ \begin{aligned} &-\tfrac1m \textstyle\sum_i \log P\big(y^{(i)}\mid x^{(i)}\big) \\ &\quad= -\tfrac1m \textstyle\sum_i \big[\,y^{(i)}\log\hat y^{(i)} \\ &\qquad\quad + \big(1-y^{(i)}\big)\log\big(1-\hat y^{(i)}\big)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> with P(y = 1 | x) = &ycirc; = &sigma;(wx + b), the probability of the observed label is &ycirc; if y = 1 and 1 &minus; &ycirc; if y = 0. Its negative log is the binary cross-entropy: a confident wrong prediction costs a lot, a confident right one almost nothing. (Here &sigma;(&middot;) is the logistic sigmoid, not a standard deviation.)</div><div class="eq-say"><b>Say it</b><em>&ldquo;The loss is minus the average of y log y-hat plus one minus y, times log of one minus y-hat.&rdquo;</em></div><div class="eq-run" id="run-cb"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Kind of target"><button type="button" data-cm="g" aria-pressed="true">Real-valued y (Gaussian)</button><button type="button" data-cm="b">0&ndash;1 labels (Bernoulli)</button></div></div>
+        <div class="plot ar-16x10"><canvas id="cd-cv" aria-label="Data with a model's prediction; drag the points"></canvas></div>
+        <figcaption id="cd-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cd-w">Slope w</label><output id="cd-w-o"></output></div><input type="range" id="cd-w" min="-1" max="2" step="0.01" value="0.3"></div>
+        <div class="ctrl"><div class="top"><label for="cd-b">Intercept b</label><output id="cd-b-o"></output></div><input type="range" id="cd-b" min="-3" max="6" step="0.01" value="3"></div>
+        <div class="ctrl" id="cd-s-ctrl"><div class="top"><label for="cd-s">Noise &sigma;</label><output id="cd-s-o"></output></div><input type="range" id="cd-s" min="0.2" max="3" step="0.01" value="1.5"></div>
+        <div class="btns"><button type="button" class="btn primary" id="cd-fit">Fit by maximum likelihood</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cd-nll"></div><div class="k">negative log-likelihood per example</div></div><div class="stat"><div class="v" id="cd-o"></div><div class="k" id="cd-o-k">MSE</div></div></div>
+        <p class="note" id="cd-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROPERTIES -->
+<section class="chap" id="properties">
+  <div class="wrap">
+    <div class="tag">Why maximum likelihood</div>
+    <h2>Consistent, efficient, and the Cram&eacute;r&ndash;Rao bound</h2>
+    <div class="prose">
+      <p>Why is maximum likelihood the default? Because of what it does as data grows. Under two conditions it is <em>consistent</em>: the true distribution must be one of the model family (some &theta; really produced the data), and only one &theta; may produce it (otherwise the data cannot tell the candidates apart). Then &theta;<sub>ML</sub> converges to the true value.</p>
+      <p>Many estimators are consistent, so the stronger property is <em class="term">efficiency</em>: how little data an estimator needs for a given accuracy. The <em class="term">Cram&eacute;r&ndash;Rao bound</em> sets a floor on the variance of any unbiased estimator, and for large m no consistent estimator beats maximum likelihood&rsquo;s mean squared error. Below, 2,000 experiments estimate the centre of a distribution with two rules: the sample mean and the sample median. For Gaussian data the mean is the maximum-likelihood estimator; for Laplace data (a peaked distribution with heavier tails) the median is. Both distributions have variance 1. <strong>Switch the data and grow m</strong>: the winner swaps, and as m grows the winner settles onto the bound.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \operatorname{Var}\big(\hat\theta\big) &\ge \frac{1}{m\,I(\theta)} \\ I(\theta) &= \mathbb{E}\Big[\Big(\tfrac{\partial}{\partial\theta}\log p(x;\theta)\Big)^2\Big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> I(&theta;), the <em class="term">Fisher information</em>, measures how sharply one data point&rsquo;s log-likelihood reacts to a change in &theta;: the sharper, the more each point tells you. No unbiased estimator can have variance below 1/(m I). Maximum likelihood reaches this floor as m grows.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The variance of any unbiased estimator is at least one over m times the Fisher information.&rdquo;</em></div><div class="eq-run" id="run-cr"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{Gaussian: } & I = \tfrac{1}{\sigma^2}, \\ \ \operatorname{Var} \ge \tfrac{\sigma^2}{m} \\ \text{Laplace: } & I = \tfrac{1}{b^2}, \\ \ \operatorname{Var} \ge \tfrac{b^2}{m} = \tfrac{\sigma^2}{2m} \end{aligned} \]</div><div class="read"><b>Read it as:</b> a Laplace distribution with scale b has variance 2b&sup2;. Its sharp peak makes each point twice as informative about the centre as a Gaussian point with the same variance, so the bound is half as large. The sample mean ignores the shape and always has variance &sigma;&sup2;/m, so on Laplace data it wastes half the information.</div><div class="eq-say"><b>Say it</b><em>&ldquo;For a Gaussian the bound is sigma squared over m; for a Laplace it is b squared over m.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Data distribution"><button type="button" data-pd="g" aria-pressed="true">Gaussian data</button><button type="button" data-pd="l">Laplace data</button></div></div>
+        <div class="plot ar-16x10 tall"><canvas id="cr-cv" aria-label="Sampling distributions of the sample mean and median against the Cramér–Rao bound"></canvas></div>
+        <figcaption><span style="color:var(--cB)">&#9644;</span> sample mean &nbsp; <span style="color:var(--cA)">&#9644;</span> sample median &nbsp; (histograms of 2,000 experiments, true centre 0) &nbsp; <span style="color:var(--ink)">&#9476;</span> the narrowest bell the Cram&eacute;r&ndash;Rao bound allows</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cr-m">Sample size m</label><output id="cr-m-o"></output></div><input type="range" id="cr-m" min="3" max="200" step="1" value="25"></div>
+        <div class="btns"><button type="button" class="btn" id="cr-run">Run 2,000 new experiments</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cr-vm"></div><div class="k">m &times; Var(mean)</div></div><div class="stat"><div class="v" id="cr-vd"></div><div class="k">m &times; Var(median)</div></div><div class="stat"><div class="v" id="cr-b"></div><div class="k">m &times; bound, 1/I</div></div><div class="stat"><div class="v" id="cr-w"></div><div class="k">winner&rsquo;s efficiency</div></div></div>
+        <p class="note" id="cr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- OUTPUTS -->
+<section class="chap" id="outputs">
+  <div class="wrap">
+    <div class="tag">Output units</div>
+    <h2>Output units: what the loss makes a network learn</h2>
+    <div class="prose">
+      <p>A network&rsquo;s last layer decides which distribution it is predicting, and the loss decides which <em>statistic</em> of that distribution it learns. Suppose the model is flexible enough to output any value for any input. Then minimising squared error drives its output, at every x, to the <em>mean</em> of y given x. Minimising absolute error drives it to the <em>median</em>. The &ldquo;pinball&rdquo; loss, which charges under-predictions &tau; per unit and over-predictions 1 &minus; &tau;, drives it to the &tau;-quantile. (Proving this for every x at once uses the calculus of variations; for one x it is the one-variable minimisation in the small plot.)</p>
+      <p>The simplest output unit is a plain <em class="term">linear unit</em>, &ycirc; = W<sup>&top;</sup>h + b, read as the mean of a Gaussian. It does not saturate, so gradients flow freely, and maximising its log-likelihood is minimising the MSE. A second output can predict the Gaussian&rsquo;s spread too, so the network says how unsure it is at each input. Below, x is the hour of the day and y is the real count of cyclists on each weekday of 2025; the model has one free output per hour, the most flexible model possible. <strong>Switch the loss</strong> and watch which line it learns.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} f^* &= \arg\min_f \ \mathbb{E}\big(y - f(x)\big)^2 \\ &\Rightarrow\; f^*(x) = \mathbb{E}[\,y \mid x\,] \\ f^* &= \arg\min_f \ \mathbb{E}\,\big\lvert y - f(x)\big\rvert \\ &\Rightarrow\; f^*(x) = \operatorname{median}(y \mid x) \end{aligned} \]</div><div class="read"><b>Read it as:</b> for each x separately, the number c that minimises the average squared miss to the y&rsquo;s is their mean, and the number that minimises the average absolute miss is their median. A model trained on MSE therefore learns conditional means, and one trained on absolute error learns conditional medians.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The function that minimises expected squared error predicts the mean of y given x; for absolute error, the median.&rdquo;</em></div><div class="eq-run" id="run-os"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \hat{\mathbf y} &= \mathbf W^{\top}\mathbf h + \mathbf b \\ p(\mathbf y\mid\mathbf x) &= \mathcal N\big(\mathbf y;\ \hat{\mathbf y},\ \mathbf I\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> h is whatever the hidden layers computed from x. The linear unit maps it to &ycirc;, treated as the mean of a Gaussian over y. Its negative log-likelihood is &frac12;&Vert;y &minus; &ycirc;&Vert;&sup2; plus a constant, so this output unit plus maximum likelihood is exactly &ldquo;minimise the squared error&rdquo;. Replace the fixed I by a learned variance and the network also learns the spread.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Y-hat is W-transpose h plus b, and y given x is Gaussian with mean y-hat and identity covariance.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Loss"><button type="button" data-ol="mse" aria-pressed="true">Squared error</button><button type="button" data-ol="mae">Absolute error</button><button type="button" data-ol="pin">Pinball, &tau;</button><button type="button" data-ol="nll">Gaussian, mean and spread</button></div></div>
+        <div class="plot ar-16x10 tall"><canvas id="os-cv" aria-label="Hourly cyclist counts with the statistic the loss learns"></canvas></div>
+        <div class="plot ar-3x1" style="margin-top:10px"><canvas id="os-loss" aria-label="Average loss against the prediction for the chosen hour"></canvas></div>
+        <figcaption id="os-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="os-h">Hour in the small plot</label><output id="os-h-o"></output></div><input type="range" id="os-h" min="0" max="23" step="1" value="8"></div>
+        <div class="ctrl" id="os-t-ctrl"><div class="top"><label for="os-t">Quantile &tau;</label><output id="os-t-o"></output></div><input type="range" id="os-t" min="0.05" max="0.95" step="0.05" value="0.9"></div>
+        <div class="stats"><div class="stat"><div class="v" id="os-f"></div><div class="k" id="os-f-k">learned output</div></div><div class="stat"><div class="v" id="os-mn"></div><div class="k">mean this hour</div></div><div class="stat"><div class="v" id="os-md"></div><div class="k">median this hour</div></div><div class="stat"><div class="v" id="os-l"></div><div class="k">loss at the minimum</div></div></div>
+        <p class="note" id="os-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MAP -->
+<section class="chap" id="map">
+  <div class="wrap">
+    <div class="tag">The Bayesian view</div>
+    <h2>Priors and MAP: regularisation, explained</h2>
+    <div class="prose">
+      <p>Maximum likelihood treats &theta; as a fixed unknown and lets the data speak alone. The <em class="term">Bayesian</em> view treats &theta; itself as uncertain: before seeing data you hold a <em class="term">prior</em> p(&theta;), and Bayes&rsquo; rule turns it into a <em class="term">posterior</em> p(&theta; | x) once the data arrives. A fully Bayesian prediction does not pick one &theta;: it averages the predictions of every &theta;, weighted by the posterior, which also tells you how unsure to be. Chapter 0.9 does this in depth.</p>
+      <p>Averaging over all &theta; is often too expensive, so a popular shortcut keeps a single point: the peak of the posterior, the <em class="term">maximum a posteriori</em> (MAP) estimate. Its objective is the log-likelihood plus the log-prior. With a Gaussian prior centred on zero, the log-prior is a penalty on the squared weights, so MAP <em>is</em> weight decay (ridge regression), and the regularisation strength is the ratio of the noise variance to the prior variance. The fit below is a degree-9 polynomial, 10 weights, through 8 points: maximum likelihood can thread every point, and it swings wildly between and beyond them. <strong>Turn up the prior</strong> and drag the points.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(\theta \mid x) &= \frac{p(x \mid \theta)\,p(\theta)}{p(x)} \\ \theta_{\text{MAP}} &= \arg\max_\theta \\ \log p(x\mid\theta) \\ &\qquad\quad + \log p(\theta) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the posterior is likelihood times prior, rescaled to sum to one. p(x) does not depend on &theta;, so it drops out of the arg max. MAP is maximum likelihood with one extra term, the log-prior, which pulls the estimate towards what you believed in advance. With lots of data the likelihood term grows with m and swamps the prior.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Theta-MAP maximises the log-likelihood plus the log-prior.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &p(\mathbf w) = \mathcal N\big(\mathbf w;\,\mathbf 0,\,\tau^2\mathbf I\big) \;\Rightarrow \\ &\mathbf w_{\text{MAP}} = \arg\min_{\mathbf w}\ \textstyle\sum_i (y_i - \mathbf w^{\top}\boldsymbol\phi_i)^2 \\ &\qquad\qquad + \lambda\,\mathbf w^{\top}\mathbf w, \quad \lambda = \sigma^2/\tau^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> &phi; is the feature vector (here 1, x, x&sup2;, &hellip;, x<sup>9</sup>), &sigma;&sup2; the noise variance, &tau;&sup2; the prior variance of each weight. Multiply the negative log-posterior by 2&sigma;&sup2; and this is what is left: squared error plus &lambda; times the squared weights. A tight prior (small &tau;) means a big &lambda; and small, smooth weights.</div><div class="eq-say"><b>Say it</b><em>&ldquo;W-MAP minimises the squared errors plus lambda times w-transpose w, with lambda equal to sigma squared over tau squared.&rdquo;</em></div><div class="eq-run" id="run-mp"></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \boldsymbol\Sigma_{\text{post}} &= \Big(\tfrac{1}{\sigma^2}\boldsymbol\Phi^{\top}\boldsymbol\Phi + \tfrac{1}{\tau^2}\mathbf I\Big)^{-1} \\ \boldsymbol\mu_{\text{post}} &= \tfrac{1}{\sigma^2}\,\boldsymbol\Sigma_{\text{post}}\boldsymbol\Phi^{\top}\mathbf y \\ p(y_\ast \mid x_\ast) &= \mathcal N\big(y_\ast;\ \boldsymbol\mu_{\text{post}}^{\top}\boldsymbol\phi_\ast, \\ &\qquad\quad \sigma^2 + \boldsymbol\phi_\ast^{\top}\boldsymbol\Sigma_{\text{post}}\boldsymbol\phi_\ast\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> this is <em class="term">Bayesian linear regression</em>. With a Gaussian prior and Gaussian noise the posterior over the weights is Gaussian too, with mean &mu;<sub>post</sub> (equal to w<sub>MAP</sub>, since a Gaussian&rsquo;s peak is its mean) and covariance &Sigma;<sub>post</sub>. A new prediction at x<sub>&ast;</sub> averages over that posterior: its variance is the noise &sigma;&sup2; plus the model&rsquo;s own uncertainty, which grows away from the data. That is the shaded band.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The posterior covariance is the inverse of Phi-transpose Phi over sigma squared plus the identity over tau squared; predictions add the noise variance to phi-transpose Sigma phi.&rdquo;</em></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="What to show"><button type="button" data-mb="0">MAP curve only</button><button type="button" data-mb="1" aria-pressed="true">With Bayesian 95% band</button></div></div>
+        <div class="plot ar-16x10"><canvas id="mp-cv" aria-label="Degree-9 polynomial fits with and without a prior; drag the points"></canvas></div>
+        <figcaption><span style="color:var(--cB)">&#9476;</span> maximum likelihood (&lambda; = 10<sup>&minus;9</sup>, effectively no prior) &nbsp; <span style="color:var(--cA)">&#9644;</span> MAP with your prior &nbsp; shaded: the 95% band of the Bayesian prediction (&sigma; = 0.2)</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="mp-l">Prior strength log<sub>10</sub> &lambda;</label><output id="mp-l-o"></output></div><input type="range" id="mp-l" min="-9" max="2" step="0.05" value="-2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="mp-w"></div><div class="k">&Vert;w<sub>MAP</sub>&Vert;</div></div><div class="stat"><div class="v" id="mp-w0"></div><div class="k">&Vert;w<sub>ML</sub>&Vert;</div></div><div class="stat"><div class="v" id="mp-e"></div><div class="k">training MSE, MAP</div></div><div class="stat"><div class="v" id="mp-t"></div><div class="k">prior s.d. &tau; of each weight</div></div></div>
+        <div class="btns"><button type="button" class="btn" id="mp-reset">Reset the points</button></div>
+        <p class="note" id="mp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: counting cyclists on the Fremont Bridge</h2>
+    <div class="prose">
+      <p>Since October 2012 the City of Seattle has counted every bicycle crossing the Fremont Bridge, hour by hour, with sensors on both sidewalks; the data is published on the city&rsquo;s open-data portal. We take the 261 weekdays of 2025 (all complete, holidays included) and ask a planner&rsquo;s question: <em>what is the average number of cyclists in each hour of a weekday?</em> Here the truth is known, because we have the whole year, so we can test how well a planner with only a few days of counts would do.</p>
+      <p>The planner&rsquo;s model is the textbook one for counts: each day&rsquo;s count in an hour is Poisson with rate &lambda;. Maximum likelihood gives the sample mean. For MAP, the planner&rsquo;s prior belief is the same hour&rsquo;s weekday average from 2024, worth b &ldquo;pseudo-days&rdquo; of data, encoded as a Gamma distribution (the conjugate prior of the Poisson, so the posterior is a Gamma too). <strong>Pick an hour, draw a few days</strong>, and compare the two guesses with the truth.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(\lambda) &\propto \lambda^{\alpha-1}e^{-\beta\lambda} \\ \alpha &= b\,m_0 + 1,\quad \beta = b \\ \lambda_{\text{MAP}} &= \frac{\alpha - 1 + \sum_i x^{(i)}}{\beta + n} \\ &= \frac{b\,m_0 + n\,\bar x}{b + n} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the Poisson likelihood is proportional to &lambda;<sup>&Sigma;x</sup>e<sup>&minus;n&lambda;</sup>. Multiplying by the Gamma prior adds &Sigma;x to &alpha; and n to &beta;, and the peak of the result is the MAP. With &alpha; and &beta; chosen this way the prior&rsquo;s peak is at last year&rsquo;s rate m<sub>0</sub>, and the MAP is a weighted average: b parts last year, n parts this year&rsquo;s sample mean x&#772; (which is &lambda;<sub>ML</sub>). As n grows the data wins.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Lambda-MAP is b times m-nought plus n times x-bar, all over b plus n.&rdquo;</em></div><div class="eq-run" id="run-pj"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \operatorname{MSE}(\lambda_{\text{MAP}}) &= \frac{b^2\,\delta^2 + n^2\operatorname{Var}(\bar x)}{(b+n)^2} \\ \operatorname{Var}(\bar x) &= \frac{s^2}{n}\cdot\frac{N-n}{N-1} \\ \delta &= m_0 - \lambda \end{aligned} \]</div><div class="read"><b>Read it as:</b> bias&sup2; plus variance again. The prior adds bias in proportion to how wrong last year is (&delta;), and divides the variance of the sample mean by (b + n)&sup2;/n&sup2;. s&sup2; is the day-to-day variance over the N = 261 days; the last factor is there because a hand of days is drawn without replacement. Ignoring that factor, the best prior strength is b = s&sup2;/&delta;&sup2;: a trustworthy prior (small &delta;) on a noisy hour deserves many pseudo-days.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The MAP's mean squared error is b squared delta squared plus n squared times the variance of x-bar, over b plus n, squared.&rdquo;</em></div><div class="eq-run" id="run-pm"></div></div>
+    </div>
+
+    <div class="lab">
+      <figure>
+        <div class="plot ar-3x1 lineplot"><canvas id="pj-line" aria-label="One hand of days with the truth, the prior, the MLE and the MAP"></canvas></div>
+        <div class="plot ar-16x10 tall" style="margin-top:10px"><canvas id="pj-rmse" aria-label="RMSE of MLE and MAP against the number of days"></canvas></div>
+        <figcaption>Top: <span style="color:var(--cB)">&#9679;</span> the days drawn, with &#9650; markers for the truth (black), last year (purple), the MLE (amber) and the MAP (teal). Bottom: root mean squared error against the number of days n, over 2,000 random hands per n (dots) and from the formula (lines). <span style="color:var(--cB)">&#9644;</span> MLE &nbsp; <span style="color:var(--cA)">&#9644;</span> MAP</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-h">Hour of the day</label><output id="pj-h-o"></output></div><input type="range" id="pj-h" min="0" max="23" step="1" value="17"></div>
+        <div class="ctrl"><div class="top"><label for="pj-n">Days in the hand, n</label><output id="pj-n-o"></output></div><input type="range" id="pj-n" min="1" max="30" step="1" value="5"></div>
+        <div class="ctrl"><div class="top"><label for="pj-b">Prior strength b (pseudo-days)</label><output id="pj-b-o"></output></div><input type="range" id="pj-b" min="0" max="40" step="1" value="5"></div>
+        <div class="seg" role="group" aria-label="Where the prior comes from"><button type="button" data-pp="24" aria-pressed="true">Prior: 2024</button><button type="button" data-pp="20">Prior: 2020 (pandemic)</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="pj-draw">Draw a new hand</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-ml"></div><div class="k">MLE, off by</div></div><div class="stat"><div class="v" id="pj-mp"></div><div class="k">MAP, off by</div></div><div class="stat"><div class="v" id="pj-r"></div><div class="k">RMSE: MLE vs MAP at this n</div></div><div class="stat"><div class="v" id="pj-bs"></div><div class="k">best b for this hour</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>All 24 hours at once</h3>
+    <div class="prose"><p>One hour can be lucky. The fair test repeats the experiment for every hour of the day, 2,000 hands each, and compares errors relative to the size of each hour&rsquo;s traffic (a miss of 10 cyclists matters more at 3 am than at 8 am). The prior strength and prior year are the ones you set above.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Days in each hand"><button type="button" data-pn="0">n = 1</button><button type="button" data-pn="2">n = 3</button><button type="button" data-pn="3" aria-pressed="true">n = 5</button><button type="button" data-pn="5">n = 10</button><button type="button" data-pn="8">n = 30</button></div></div>
+        <div class="plot ar-3x1 hourplot"><canvas id="pj-hours" aria-label="Relative RMSE of MLE and MAP for each hour of the day"></canvas></div>
+        <figcaption><span style="color:var(--cB)">&#9632;</span> MLE &nbsp; <span style="color:var(--cA)">&#9632;</span> MAP: root mean squared error as a share of the hour&rsquo;s true rate, over 2,000 hands of days. Hover the table numbers to see how they were computed.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="tbl-wrap"><table class="hand race" id="pj-race"></table></div>
+        <p class="note" id="pj-hsay"></p>
+      </div></div>
+    </div>
+
+    <h3>The same experiment in Python</h3>
+<pre class="code"><code>import json, numpy as np
+D = json.load(open("x007-data.json"))            # Fremont Bridge, 261 weekdays of 2025, counts per hour
+X = np.array(D["d25"]); H, N = X.shape            # 24 hours x 261 days
+mu, var = X.mean(1), X.var(1)                      # the truth: each hour's 2025 rate (population of days)
+m24, m20 = np.array(D["m24"]), np.array(D["m20"])  # priors: the same hour's weekday rate in 2024, 2020
+
+def mulberry32(a):                                 # the page's random-number generator, bit for bit
+    a &amp;= 0xFFFFFFFF
+    def r():
+        nonlocal a
+        a = (a + 0x6D2B79F5) &amp; 0xFFFFFFFF
+        t = ((a ^ (a &gt;&gt; 15)) * (1 | a)) &amp; 0xFFFFFFFF
+        t = ((t + (((t ^ (t &gt;&gt; 7)) * (61 | t)) &amp; 0xFFFFFFFF)) &amp; 0xFFFFFFFF) ^ t
+        return ((t ^ (t &gt;&gt; 14)) &amp; 0xFFFFFFFF) / 4294967296
+    return r
+
+NS, R, rng, perm = [1, 2, 3, 5, 7, 10, 14, 20, 30], 2000, mulberry32(2025), list(range(N))
+xbar = np.zeros((H, len(NS), R))
+for h in range(H):                                 # R random hands of n days, without replacement
+    for k, n in enumerate(NS):
+        for r in range(R):
+            s = 0
+            for i in range(n):
+                j = i + int(rng() * (N - i)); perm[i], perm[j] = perm[j], perm[i]; s += X[h, perm[i]]
+            xbar[h, k, r] = s / n
+
+def rmse(prior, b):                                # Monte Carlo RMSE, MAP = (b*m0 + n*xbar)/(b + n)
+    n = np.array(NS)[None, :, None]
+    est = xbar if b == 0 else (b * prior[:, None, None] + n * xbar) / (b + n)
+    return np.sqrt(((est - mu[:, None, None]) ** 2).mean(2))
+def exact(prior, b):                               # the bias-variance formula, finite-population correction
+    n = np.array(NS)[None, :]; v = var[:, None] / n * (N - n) / (N - 1)
+    return np.sqrt((n**2 * v + b**2 * (prior - mu)[:, None] ** 2) / (b + n) ** 2)
+
+b = 5
+mle, m4, m0 = rmse(mu, 0), rmse(m24, b), rmse(m20, b)
+print(f"{N} weekdays x {H} hours; R = {R} hands per (hour, n); MAP prior strength b = {b} days")
+print("  n | MLE rel. RMSE | MAP(2024) | MAP(2020) | hours MAP(2024) wins | exact MLE  exact MAP(2024)")
+for k, n in enumerate(NS):
+    rel = lambda e: (e[:, k] / mu).mean()
+    print(f"{n:3d} |     {rel(mle):.4f}    |  {rel(m4):.4f}   |  {rel(m0):.4f}   |        {(m4[:, k] &lt; mle[:, k]).sum():2d} of 24       |"
+          f"  {rel(exact(mu, 0)):.4f}     {rel(exact(m24, b)):.4f}")
+for h in (8, 17):
+    print(f"{h:02d}:00 truth {mu[h]:.2f}, 2024 prior {m24[h]:.2f}, n = 5: RMSE MLE {mle[h, 3]:.2f}, MAP {m4[h, 3]:.2f};"
+          f" best b = {var[h] / (m24[h] - mu[h]) ** 2:.2f} days")
+c = X[2]; lam = c.mean(); k = np.arange(c.max() + 1); ph = np.bincount(c) / N
+from scipy.special import gammaln
+ce = -(ph * (k * np.log(lam) - lam - gammaln(k + 1))).sum(); Hp = -(ph[ph &gt; 0] * np.log(ph[ph &gt; 0])).sum()
+print(f"02:00 counts: lambda_ML = {lam:.4f}, cross-entropy {ce:.4f} nats, entropy {Hp:.4f}, KL {ce - Hp:.4f}")</code></pre>
+<pre class="code out"><code id="pj-out">261 weekdays x 24 hours; R = 2000 hands per (hour, n); MAP prior strength b = 5 days
+  n | MLE rel. RMSE | MAP(2024) | MAP(2020) | hours MAP(2024) wins | exact MLE  exact MAP(2024)
+  1 |     0.5296    |  0.1607   |  0.3066   |        24 of 24       |  0.5317     0.1609
+  2 |     0.3777    |  0.1596   |  0.2760   |        24 of 24       |  0.3753     0.1592
+  3 |     0.3068    |  0.1549   |  0.2509   |        24 of 24       |  0.3058     0.1551
+  5 |     0.2380    |  0.1461   |  0.2162   |        24 of 24       |  0.2360     0.1453
+  7 |     0.2003    |  0.1371   |  0.1916   |        24 of 24       |  0.1986     0.1361
+ 10 |     0.1649    |  0.1244   |  0.1650   |        24 of 24       |  0.1652     0.1243
+ 14 |     0.1397    |  0.1128   |  0.1417   |        24 of 24       |  0.1385     0.1119
+ 20 |     0.1152    |  0.0984   |  0.1183   |        24 of 24       |  0.1145     0.0980
+ 30 |     0.0909    |  0.0818   |  0.0944   |        22 of 24       |  0.0915     0.0824
+08:00 truth 428.94, 2024 prior 320.08, n = 5: RMSE MLE 77.92, MAP 66.91; best b = 2.60 days
+17:00 truth 372.80, 2024 prior 406.19, n = 5: RMSE MLE 80.34, MAP 44.02; best b = 28.82 days
+02:00 counts: lambda_ML = 3.4061, cross-entropy 2.6190 nats, entropy 2.2518, KL 0.3672</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>An estimator is a rule from data to a guess. Its guesses vary from sample to sample, and we grade that spread: MSE = bias&sup2; + variance. Unbiased is not automatically best.</li>
+      <li>Consistency is the promise that more data drives the error to zero. An estimator can be unbiased and never improve, or biased and still consistent.</li>
+      <li>Maximum likelihood picks the parameters that make the observed data most probable. Equivalently, it minimises the cross-entropy, and so the KL divergence, from the data&rsquo;s empirical distribution to the model.</li>
+      <li>Conditional maximum likelihood generates the losses: a Gaussian output gives MSE (and learns the conditional mean), a Bernoulli output gives cross-entropy. As data grows, MLE is consistent and reaches the Cram&eacute;r&ndash;Rao floor.</li>
+      <li>MAP adds a log-prior to the log-likelihood. A Gaussian prior on the weights is weight decay, and a good prior beats the MLE on small samples: on the Fremont Bridge, last year&rsquo;s counts cut the error of a five-day estimate by more than a third.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>You estimate a variance by dividing by m and a colleague divides by m &minus; 1. Who has the lower mean squared error on Gaussian data?</summary><p>You do. Dividing by m &minus; 1 removes the bias but increases the variance more than it saves; for Gaussian data the MSE is lowest at a divisor of m + 1, and m is closer to that than m &minus; 1 is. Both are consistent, and the difference vanishes as m grows.</p></details>
+      <details class="q"><summary>Why does nobody maximise the product of the likelihoods directly?</summary><p>Because the product of many numbers below 1 underflows to zero in floating point, and its gradient is useless. The log turns the product into a sum of manageable numbers and, being increasing, keeps the same maximiser.</p></details>
+      <details class="q"><summary>A regression network is trained with mean absolute error instead of mean squared error. What does its output estimate?</summary><p>The conditional median of y given x, not the mean. On skewed targets, like hourly traffic, the median sits below the mean, so the network will predict systematically lower numbers than an MSE-trained one.</p></details>
+      <details class="q"><summary>What prior turns maximum likelihood into L2 weight decay, and how does &lambda; relate to it?</summary><p>An independent Gaussian prior N(0, &tau;&sup2;) on every weight. The negative log-prior is w<sup>&top;</sup>w/(2&tau;&sup2;); with Gaussian noise of variance &sigma;&sup2; the penalty in a squared-error loss is &lambda; = &sigma;&sup2;/&tau;&sup2;. A tighter prior means stronger decay.</p></details>
+      <details class="q"><summary>MAP with last year&rsquo;s counts beat the MLE at every hour for small n. Why does that advantage shrink as n grows, and when would the prior hurt?</summary><p>The data term grows with n while the prior is worth a fixed b pseudo-days, so MAP converges to the MLE. The prior hurts when it is wrong by much more than the day-to-day noise allows: once n is large, the bias b&delta;/(b + n) outweighs the variance it saves, as the 2020 pandemic prior shows.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../information-theory/">Next chapter: Information Theory: Entropy, KL &amp; Mutual Information &rarr;</a>
+      <a class="btn" href="../multivariate-gaussian/">&larr; Previous: The Multivariate Gaussian</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Goodfellow, I., Bengio, Y. &amp; Courville, A. (2016). <em>Deep Learning</em>. MIT Press: sections 5.4&ndash;5.6 (estimators, maximum likelihood, Bayesian statistics and MAP) and 6.2 (cost functions and output units).</li>
+      <li>Bishop, C. M. (2006). <em>Pattern Recognition and Machine Learning</em>. Springer: sections 1.2.4&ndash;1.2.6 and 3.3 (Bayesian linear regression).</li>
+      <li>Wasserman, L. (2004). <em>All of Statistics</em>. Springer: chapters 6 and 9 (point estimation, maximum likelihood, Fisher information).</li>
+      <li>Fisher, R. A. (1922). On the mathematical foundations of theoretical statistics. <em>Philosophical Transactions of the Royal Society A</em> 222: where maximum likelihood, consistency and efficiency were set out.</li>
+      <li>Rao, C. R. (1945). Information and the accuracy attainable in the estimation of statistical parameters. <em>Bulletin of the Calcutta Mathematical Society</em> 37; and Cram&eacute;r, H. (1946). <em>Mathematical Methods of Statistics</em>. Princeton University Press.</li>
+      <li>City of Seattle Open Data: &ldquo;Fremont Bridge Bicycle Counter&rdquo; (dataset 65db-xm6k), data.seattle.gov, hourly counts since October 2012.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+
+const FB = {"d25":[[61,3,5,3,7,1,6,5,4,1,3,2,7,1,4,4,3,3,7,1,6,3,6,4,1,3,0,2,0,2,2,3,5,5,1,4,1,2,4,4,2,6,4,5,2,5,7,3,5,3,4,4,4,4,3,5,3,5,3,4,6,3,5,5,3,5,7,7,3,0,0,6,3,5,5,3,11,5,1,5,3,5,8,3,5,4,8,15,5,5,8,2,10,5,4,8,11,0,4,7,6,9,22,10,5,16,9,7,6,4,8,8,13,10,10,10,12,15,9,12,10,11,13,8,12,19,14,7,9,12,10,6,1,16,13,10,8,19,21,13,12,12,17,17,17,7,10,21,17,9,5,12,24,10,10,14,14,15,18,10,13,7,8,16,20,21,12,22,16,15,11,8,12,31,3,10,12,18,6,7,10,5,9,21,8,9,9,7,11,9,8,6,10,9,5,6,2,23,4,7,12,8,11,5,9,12,10,13,8,10,4,9,14,10,16,4,11,11,15,14,12,10,8,8,9,19,15,3,7,6,22,5,10,11,2,4,0,5,7,6,9,2,6,2,3,1,2,9,4,0,7,2,8,4,0,0,0,5,3,2,1],[57,3,1,2,5,2,2,5,3,2,1,1,2,1,0,2,1,3,3,3,0,0,1,0,1,1,0,0,1,1,0,0,0,3,0,1,1,2,1,0,1,0,0,3,0,0,3,2,2,2,1,0,1,2,1,1,1,1,4,3,2,4,1,4,4,2,4,0,0,2,3,4,0,4,0,4,1,5,3,0,4,2,4,3,2,5,1,2,0,3,3,2,5,1,3,2,6,3,2,2,0,4,6,8,1,4,4,10,7,4,3,8,10,2,3,5,7,6,4,8,8,8,4,6,3,5,3,9,5,4,6,5,0,8,5,6,7,8,8,5,6,9,6,2,10,4,8,9,3,7,11,2,9,2,6,1,8,7,4,4,4,9,5,8,10,5,11,9,11,4,11,7,9,10,2,3,8,7,6,8,9,7,8,6,2,7,6,5,10,8,2,11,8,11,1,5,7,4,5,10,11,2,5,8,8,10,10,9,10,19,10,14,5,9,13,5,6,10,5,6,7,11,10,1,8,9,12,10,3,8,15,10,6,4,2,1,0,3,4,3,6,2,4,1,2,0,2,6,2,1,4,3,5,2,1,0,0,1,2,2,1],[20,5,4,1,3,3,0,4,3,1,2,3,0,0,1,2,1,2,1,1,0,3,0,1,1,0,0,3,1,1,1,0,0,2,2,2,0,2,1,1,1,0,2,1,3,3,3,1,1,2,4,1,1,3,0,2,2,1,1,1,4,1,2,1,3,3,4,1,1,1,2,1,1,1,1,2,3,3,2,0,1,0,1,4,2,1,3,2,1,3,3,1,3,2,3,5,0,1,1,2,3,3,3,1,4,5,11,2,4,2,6,4,3,5,5,3,5,2,5,4,3,11,4,2,2,5,6,7,2,2,3,1,0,1,2,3,4,5,2,1,3,6,4,5,2,7,8,4,3,3,1,3,5,5,2,0,2,5,3,2,3,3,4,4,3,7,6,7,3,8,10,4,6,9,2,4,2,6,2,6,10,4,7,0,5,0,3,5,7,10,8,8,0,5,3,4,4,1,7,8,8,3,4,3,18,7,3,9,13,4,11,2,5,8,17,4,11,8,13,7,4,8,7,3,4,5,4,9,11,6,9,5,4,4,4,0,0,1,3,5,4,0,2,0,3,0,0,3,2,2,3,0,3,2,2,0,0,0,2,3,0],[11,3,2,2,5,1,2,6,6,1,3,4,5,2,1,2,3,3,1,1,1,2,2,2,1,1,2,0,1,1,0,4,2,2,3,2,4,2,3,3,0,3,3,3,2,3,6,3,2,3,2,3,1,1,4,0,3,3,1,1,0,3,4,4,4,4,4,4,1,3,3,5,3,6,1,4,4,3,1,3,1,4,2,3,3,3,2,5,4,3,1,4,4,1,3,3,4,4,2,4,1,5,5,2,4,1,5,7,8,5,3,3,2,6,4,4,6,5,4,6,9,6,3,4,5,7,6,6,4,6,5,3,0,7,6,5,5,8,9,5,5,5,7,4,6,5,5,6,6,15,5,7,5,9,3,2,5,6,5,5,5,6,7,7,5,7,6,11,5,9,4,6,4,11,7,4,4,4,11,6,3,5,8,8,8,4,10,7,6,7,4,9,5,4,8,9,9,13,9,5,7,3,10,11,11,7,10,6,3,10,5,5,6,9,10,3,13,17,8,28,4,8,10,10,7,11,8,14,5,11,7,8,6,6,5,2,0,4,5,8,4,2,5,1,5,1,2,6,3,3,3,2,5,4,3,0,0,4,3,4,1],[6,3,3,6,6,5,10,3,5,9,4,7,6,4,10,6,9,3,2,6,6,7,4,2,6,1,4,5,3,6,8,7,5,5,10,5,13,13,3,3,5,9,7,6,10,4,11,3,3,12,4,10,6,3,7,4,5,4,4,10,8,10,5,4,12,5,8,6,4,9,6,9,6,6,14,5,9,10,6,9,7,12,2,4,10,4,8,5,7,4,5,11,9,6,14,8,10,3,8,9,6,11,2,2,6,5,6,3,7,7,10,8,4,7,11,8,12,5,9,16,8,4,7,12,11,7,12,6,10,17,16,9,2,12,17,16,14,15,15,17,18,20,10,12,17,16,16,10,12,9,18,12,6,11,18,10,15,10,22,15,16,22,5,11,15,14,12,10,20,14,18,8,17,6,17,11,8,28,9,19,20,17,12,5,15,10,16,12,17,13,17,16,7,19,19,11,9,12,14,22,16,10,13,16,17,23,10,11,8,18,4,18,11,13,23,11,10,18,9,15,11,7,7,8,14,5,18,14,8,7,9,9,8,8,9,6,0,5,8,11,7,5,5,3,9,3,5,10,6,8,7,5,7,7,8,1,0,4,7,9,4],[3,15,17,16,25,21,20,10,26,18,18,18,18,8,17,20,23,18,14,15,15,20,8,12,11,5,4,2,15,14,12,11,4,6,19,10,17,20,19,14,24,21,22,18,18,22,21,9,24,15,16,15,12,19,17,13,19,12,20,20,22,20,9,23,25,13,31,19,23,14,24,14,14,18,22,27,26,22,22,29,26,32,19,22,21,25,31,24,26,29,28,35,15,30,38,18,26,14,17,25,14,36,24,4,36,32,22,30,39,42,30,42,27,29,42,33,26,23,40,47,29,24,28,24,31,28,35,22,33,50,45,30,8,43,52,45,46,35,53,50,49,53,30,45,47,51,46,27,50,52,57,47,30,40,49,38,37,35,46,47,49,44,22,51,49,46,51,28,34,52,36,28,27,7,56,46,44,32,48,34,34,50,20,51,47,48,41,28,39,49,47,41,37,32,33,25,34,30,32,34,25,30,33,28,39,30,31,23,27,38,41,32,25,33,40,31,29,18,37,37,28,20,22,23,21,34,20,17,23,41,31,33,21,25,20,16,3,16,25,31,27,20,16,12,22,13,18,20,16,17,22,20,19,16,16,10,2,11,15,19,14],[1,51,32,72,90,83,79,35,81,79,75,74,62,18,67,64,62,49,62,65,54,69,35,39,46,19,10,28,51,53,44,49,26,25,63,47,74,35,58,32,75,81,72,70,77,87,81,77,68,84,66,72,52,66,73,70,49,53,62,106,77,78,51,76,101,71,88,77,58,75,91,92,79,71,114,105,105,82,91,130,125,117,107,81,78,112,121,87,105,146,117,109,95,94,134,120,103,67,41,102,74,129,82,12,133,140,74,98,104,156,144,147,114,152,168,152,133,111,133,163,139,67,73,113,138,125,120,76,118,156,144,98,29,126,162,144,142,123,159,157,155,170,107,149,199,169,160,108,154,160,162,164,113,156,175,116,95,113,144,154,133,127,60,138,145,149,153,107,128,134,139,127,103,31,128,115,172,113,117,143,139,135,108,114,138,142,141,86,128,129,125,108,90,82,126,77,115,87,115,130,136,98,92,87,129,117,101,70,115,109,96,111,56,92,124,92,93,73,104,119,80,86,79,111,77,121,78,36,78,127,116,104,66,75,62,55,19,51,72,97,84,58,53,45,69,44,57,64,53,53,68,63,56,53,51,30,12,40,51,62,45],[9,92,49,193,244,229,210,97,172,239,205,192,135,35,195,201,179,132,189,215,185,168,94,69,126,44,25,62,120,147,150,148,71,53,159,135,185,116,163,112,232,242,160,195,225,262,224,168,167,198,171,156,130,169,213,226,150,111,164,295,226,184,117,208,272,225,253,207,157,178,304,215,157,232,329,305,293,206,199,321,343,318,230,237,253,301,362,229,286,418,311,326,232,271,319,351,294,178,131,306,277,335,168,17,373,394,214,279,332,406,361,362,295,345,419,369,332,207,313,387,370,182,182,303,395,319,290,209,316,491,446,290,70,334,500,446,412,300,423,495,487,493,260,336,424,458,410,222,389,505,467,429,268,328,468,319,273,234,393,462,443,413,129,361,511,446,416,260,346,486,446,402,266,41,492,462,477,326,387,479,412,378,238,359,452,451,444,261,377,406,401,376,225,270,400,251,338,267,343,461,349,288,170,244,371,359,321,179,240,401,324,322,139,268,331,351,300,155,261,362,237,269,183,240,280,294,228,90,213,343,303,290,171,210,203,169,57,126,202,311,262,174,130,119,231,131,171,164,144,173,212,186,139,142,162,95,41,97,139,198,142],[9,183,100,387,437,383,428,206,357,412,375,382,238,45,376,352,331,247,349,375,318,314,175,197,235,76,54,120,264,271,234,266,129,125,313,223,278,173,291,221,373,399,280,306,414,439,425,263,322,375,290,320,228,318,381,385,259,199,341,462,370,352,195,408,363,378,451,317,286,281,478,370,256,416,486,457,448,302,398,535,536,525,345,444,396,461,552,359,519,610,484,545,354,480,515,535,512,245,248,513,426,521,299,36,584,616,383,423,498,624,533,533,424,495,669,598,514,335,558,613,502,271,256,509,567,557,455,321,551,776,672,447,118,557,794,672,640,501,707,786,738,767,441,635,736,723,639,394,615,743,717,721,490,557,727,378,400,414,656,745,697,658,226,608,778,645,638,419,532,729,570,551,354,77,665,682,674,465,617,730,668,607,426,565,747,697,690,458,648,783,637,659,453,472,674,479,630,438,561,732,588,528,290,464,671,548,541,393,479,619,576,571,260,446,540,564,536,251,455,564,415,385,304,370,436,489,369,170,345,511,503,473,287,352,326,270,91,213,333,496,416,279,218,199,367,206,274,275,237,272,337,300,240,235,257,149,63,162,234,316,227],[18,130,81,207,218,268,233,153,185,241,226,211,163,60,215,242,187,150,199,229,209,213,117,119,174,58,50,112,147,153,174,165,100,56,167,144,187,147,150,132,272,244,202,183,220,268,247,180,214,246,155,212,164,182,237,198,163,144,152,276,202,191,122,214,162,217,260,200,155,148,285,276,206,244,291,280,272,217,248,311,343,280,253,243,234,294,334,260,302,318,299,321,250,279,336,300,325,197,194,277,287,306,210,75,327,396,270,322,324,403,395,369,303,338,376,389,319,254,321,399,379,243,211,289,365,306,336,232,336,376,399,252,74,315,385,399,358,319,396,379,438,430,277,373,426,417,432,297,352,439,450,419,296,346,358,230,210,324,331,357,419,351,198,372,406,435,385,271,326,328,347,332,244,80,300,414,373,252,330,342,339,341,237,303,314,393,346,287,328,342,359,311,193,237,292,290,286,267,332,375,342,269,202,258,364,353,315,198,254,321,318,316,137,287,293,335,309,171,224,271,186,161,224,247,246,275,171,103,195,252,293,322,170,198,157,158,46,127,189,241,242,149,130,113,177,121,145,165,134,132,196,159,143,134,123,87,34,95,131,153,130],[30,68,30,84,79,108,94,66,85,87,105,100,84,56,91,102,92,84,72,75,95,97,67,46,65,36,24,41,75,68,83,78,58,40,78,89,81,93,75,74,158,132,104,62,104,106,103,86,67,99,63,106,92,87,123,106,89,99,65,160,83,86,70,94,91,105,144,113,82,47,154,111,111,131,131,143,138,193,132,143,167,194,132,121,108,156,180,176,160,204,128,188,147,160,183,142,142,108,116,159,158,193,139,127,162,196,142,194,161,169,193,166,191,182,189,164,190,144,178,195,183,224,114,182,194,168,142,133,189,211,205,136,44,169,215,205,194,188,216,213,227,234,164,200,231,261,246,180,213,239,187,232,171,183,191,109,129,177,192,182,220,200,88,186,206,240,211,172,163,214,197,151,152,160,184,193,190,158,151,186,201,195,137,125,203,190,183,179,163,170,174,174,126,77,165,128,175,144,136,199,181,138,131,149,150,184,116,100,126,153,187,141,66,153,135,167,177,125,104,146,85,43,152,120,182,138,84,45,90,106,162,165,104,99,83,82,26,77,95,129,125,73,79,58,96,62,71,100,68,71,100,80,86,68,67,45,17,59,68,81,69],[58,56,27,66,82,92,79,58,53,81,70,90,88,70,77,88,105,88,84,90,74,69,53,33,58,34,23,46,75,58,62,53,51,67,78,50,89,61,61,58,118,125,109,61,41,103,112,110,70,75,39,99,113,64,102,66,54,81,49,160,89,85,64,78,70,72,113,151,63,53,127,118,97,111,112,135,120,181,91,115,127,174,139,92,92,117,160,149,109,165,125,141,149,107,97,117,140,109,93,104,113,167,140,192,161,163,92,175,160,146,139,185,185,141,192,152,131,135,128,205,161,229,131,166,188,131,155,139,159,161,173,107,40,141,164,173,151,161,176,162,191,180,142,122,172,186,140,154,163,146,178,158,131,135,204,75,129,138,122,177,168,150,71,135,161,199,171,156,182,133,160,168,147,197,125,179,140,142,139,142,197,122,135,147,130,162,133,132,123,134,159,149,115,37,139,114,126,124,97,174,116,94,107,113,121,140,102,111,85,118,139,120,25,128,86,146,121,108,78,137,61,59,124,103,155,111,56,37,55,115,114,124,89,86,68,67,20,68,82,101,104,59,70,49,76,52,57,87,58,56,82,64,75,57,51,38,14,48,56,65,55],[77,62,21,81,97,104,95,54,77,86,70,84,94,104,96,81,75,75,84,74,87,79,55,40,62,29,33,53,71,63,74,86,55,53,96,68,79,72,41,51,116,147,115,67,57,106,95,131,68,89,68,87,107,77,121,84,49,80,47,152,93,96,49,95,56,75,100,176,64,39,132,119,104,103,129,140,136,185,83,106,151,166,165,94,94,127,154,171,136,172,106,144,136,121,117,117,105,113,90,111,123,144,158,199,143,179,107,169,146,156,140,180,156,156,198,164,142,147,151,162,172,234,134,168,147,157,156,150,167,162,162,103,40,141,164,162,150,167,177,162,178,176,147,152,175,154,140,115,129,177,156,166,145,131,141,116,137,140,140,172,122,120,55,154,143,176,162,157,183,138,181,150,129,184,123,152,132,159,131,162,178,138,145,110,156,165,171,155,146,145,159,131,171,56,150,100,154,137,104,152,121,111,99,105,133,183,152,89,83,124,134,135,31,102,127,135,123,75,70,108,65,32,95,95,186,93,58,33,60,124,115,132,92,84,73,66,20,68,80,108,102,63,70,48,81,50,61,89,56,59,81,67,76,56,54,39,16,53,56,70,56],[110,67,29,75,69,108,120,58,63,75,67,71,85,105,87,88,82,108,84,98,93,85,57,47,90,35,23,70,55,87,68,61,69,51,80,61,84,75,40,63,119,120,163,75,28,116,102,131,73,91,63,68,113,109,100,82,47,79,67,195,90,98,57,72,80,75,120,170,62,65,136,110,111,134,154,138,132,214,98,131,143,170,156,98,59,151,166,215,146,162,111,143,185,144,145,119,88,108,86,126,105,178,177,234,174,206,98,188,148,168,141,180,207,192,167,164,140,180,148,164,140,228,148,143,182,136,151,166,176,160,150,106,45,141,162,150,148,186,177,161,164,179,163,161,147,153,181,170,139,171,167,176,144,144,169,100,162,187,134,145,142,111,51,159,153,181,142,183,148,143,130,130,138,193,165,125,140,164,130,118,113,143,152,136,157,158,144,180,113,147,160,124,150,56,140,109,147,139,131,153,130,103,110,119,109,131,109,108,107,149,109,122,47,109,117,158,72,114,66,124,72,48,141,100,160,93,56,27,58,115,127,172,101,85,70,60,19,74,83,106,94,57,76,48,79,48,57,98,59,56,74,60,85,59,56,34,12,57,57,68,52],[111,47,42,103,117,139,133,94,96,127,90,83,107,117,99,132,104,126,102,160,117,86,32,61,89,35,26,65,86,72,81,65,88,64,108,69,113,77,57,82,164,182,183,83,59,120,135,134,94,98,79,79,137,121,123,98,66,86,83,214,96,117,60,102,95,109,176,209,53,58,165,73,156,158,189,156,195,310,115,156,191,195,224,105,92,196,208,218,179,194,140,175,221,169,163,143,134,138,123,127,155,191,253,277,213,216,133,261,172,207,183,185,207,170,204,214,144,190,183,201,184,248,172,203,187,174,167,191,209,165,179,111,48,153,168,179,157,201,192,165,196,190,176,160,179,203,186,191,146,149,186,161,181,155,152,119,148,182,140,161,146,147,81,165,141,172,159,187,152,157,155,140,168,219,168,168,143,190,139,138,211,134,154,186,181,138,164,165,108,149,200,164,144,62,148,124,148,162,171,155,144,140,134,127,128,189,166,181,117,161,122,97,38,140,93,186,113,78,66,120,56,44,161,123,182,102,29,67,72,99,157,133,114,98,73,70,20,84,93,110,109,61,85,58,83,54,61,108,67,60,88,67,94,66,58,38,13,65,63,71,61],[118,100,58,190,199,226,223,144,178,160,177,150,190,131,180,159,142,183,159,209,207,157,78,77,127,58,47,87,111,110,129,116,108,76,142,98,133,107,86,111,212,231,276,140,128,222,254,220,146,177,118,143,179,125,183,132,99,151,144,306,235,118,94,177,177,198,242,310,78,114,248,111,208,230,256,210,248,333,197,293,238,306,329,173,154,261,328,310,282,328,193,257,320,217,251,230,187,205,143,219,212,284,284,271,267,341,212,452,265,306,316,264,341,267,319,301,267,249,277,305,273,277,230,286,330,303,282,268,298,244,239,143,60,200,248,239,202,251,255,245,263,244,220,223,212,240,222,232,173,237,300,204,220,225,292,185,181,250,179,212,203,189,91,239,204,227,226,190,197,240,174,239,208,228,260,269,193,219,198,199,212,176,213,196,193,256,174,205,209,232,205,177,218,96,222,174,197,220,204,217,175,198,226,141,205,200,180,189,154,193,175,157,51,138,168,204,163,88,106,200,62,75,190,112,199,170,95,50,97,156,212,186,138,120,105,92,29,103,113,157,141,87,107,70,119,70,86,133,82,87,115,92,116,80,84,51,22,78,79,102,77],[68,153,104,295,355,365,363,238,286,328,306,328,262,134,301,313,272,259,294,331,322,265,159,172,197,80,79,148,232,222,247,220,130,110,302,216,243,156,169,197,366,414,405,239,269,396,402,273,264,315,274,267,223,165,337,297,159,228,249,572,356,315,182,316,332,348,404,426,199,228,419,241,298,427,462,419,503,520,351,505,499,527,450,315,296,462,574,434,435,616,435,486,459,461,446,413,368,313,273,362,399,534,389,253,520,579,364,525,456,607,546,527,463,444,586,596,523,436,477,639,522,311,302,540,582,511,397,337,513,368,351,235,83,280,376,351,336,347,354,373,387,403,303,313,381,392,356,308,321,388,349,357,346,256,381,235,335,357,252,322,385,308,128,287,345,347,346,295,289,338,304,321,251,256,326,313,319,274,279,336,346,325,292,278,358,331,316,272,316,357,322,290,302,160,302,276,313,297,292,423,301,230,232,208,253,360,291,197,212,343,257,250,80,251,230,289,273,108,132,210,127,105,217,164,223,193,130,87,144,240,237,266,179,175,152,132,44,130,165,235,205,133,137,99,172,103,131,172,119,128,167,141,149,118,123,75,33,98,114,149,113],[33,208,114,358,386,405,398,203,357,404,376,385,237,78,370,379,330,236,346,387,350,345,170,176,296,115,103,146,296,296,292,269,155,136,337,271,346,167,279,285,476,526,410,357,417,519,554,355,411,438,341,366,302,236,471,403,288,190,368,763,392,342,212,431,473,510,589,479,342,393,576,360,358,522,665,614,632,499,551,721,686,700,449,434,465,671,784,442,634,856,548,657,437,648,643,588,478,285,394,605,588,737,427,239,684,786,606,577,694,825,744,800,567,679,792,721,690,459,699,845,696,483,378,661,800,675,461,392,721,449,428,304,89,348,459,428,434,376,438,452,473,518,326,399,432,439,478,328,359,499,466,476,346,313,490,314,378,432,389,434,406,451,121,380,484,450,448,294,313,419,364,434,278,178,370,401,410,294,366,419,439,389,281,406,454,415,381,367,374,386,417,370,310,244,274,272,388,307,357,394,363,283,252,217,340,362,304,206,209,377,339,288,89,280,275,318,297,79,194,244,124,160,184,168,201,210,158,101,128,218,185,255,187,199,169,156,54,138,191,258,241,163,143,115,190,121,161,180,135,142,195,174,155,134,135,87,37,105,131,165,132],[24,95,56,159,202,207,198,92,161,208,195,169,115,49,173,196,182,99,174,206,189,183,80,96,153,56,63,68,153,142,139,99,65,72,183,156,175,90,133,139,222,258,208,193,211,287,223,153,222,178,197,194,158,151,254,232,131,96,166,406,210,161,156,130,276,336,367,299,166,194,384,250,230,337,422,343,403,394,292,449,421,427,321,203,293,426,467,316,387,492,364,441,322,398,372,400,259,184,220,312,376,457,289,165,434,503,402,370,421,488,496,537,354,466,500,496,412,268,454,555,481,328,253,444,533,471,312,296,426,302,316,213,70,244,307,316,304,290,310,304,351,366,252,215,328,312,332,255,321,304,280,291,267,226,294,292,350,322,227,260,313,315,90,272,277,323,324,224,255,224,327,268,241,161,314,300,288,215,284,311,300,286,257,300,393,352,303,216,233,247,295,228,282,137,166,162,256,202,255,312,236,179,131,181,212,213,147,141,131,237,187,180,52,160,118,185,163,40,91,133,96,73,130,108,112,115,92,75,88,164,139,148,136,138,117,108,37,100,133,173,166,106,104,80,129,83,105,131,93,97,134,115,111,93,92,60,25,77,91,112,92],[17,35,16,51,79,81,89,52,79,73,87,79,51,23,66,101,78,58,72,96,97,68,51,37,55,37,29,41,45,56,62,49,36,32,77,63,68,35,40,67,96,117,73,65,76,96,95,89,89,88,92,85,82,73,117,85,63,56,85,260,75,75,84,45,146,140,189,169,86,99,201,103,137,165,241,211,213,222,158,221,231,219,165,92,126,227,287,206,180,279,173,209,171,211,206,186,94,121,125,163,193,284,199,112,239,326,240,180,225,301,262,276,245,262,342,266,276,143,216,334,259,207,128,241,272,254,165,141,221,212,216,146,48,180,216,216,208,198,229,214,237,248,174,193,287,263,243,141,260,228,199,202,190,167,235,191,203,240,188,219,226,194,64,184,220,235,291,152,207,175,222,236,149,179,207,212,182,149,163,160,184,184,155,200,236,212,174,248,133,155,166,134,131,77,59,104,148,119,88,169,117,119,91,86,113,122,111,80,78,122,97,91,30,83,69,94,86,27,64,77,49,50,70,72,70,78,61,55,40,77,60,80,90,86,66,66,24,66,81,101,99,72,69,51,73,52,71,85,60,55,80,77,75,59,52,38,18,49,57,64,56],[15,23,24,44,55,65,53,33,32,47,48,59,45,19,52,56,39,46,32,39,41,41,31,19,34,15,30,22,27,41,30,28,28,29,40,28,43,26,23,43,53,70,60,41,53,55,49,54,51,37,56,43,40,30,57,47,24,35,37,120,14,56,50,42,66,75,98,87,32,55,97,53,70,74,130,93,135,142,72,117,123,181,90,41,72,115,197,139,124,145,103,135,105,156,112,108,65,92,97,82,119,140,126,76,154,253,151,164,156,203,167,224,151,157,204,231,199,111,172,203,187,169,106,128,197,189,116,143,136,147,155,102,35,123,149,155,145,146,152,148,169,173,127,166,161,180,229,179,180,215,197,185,169,141,169,160,161,125,161,185,206,124,59,128,138,160,149,146,135,134,118,151,129,68,135,122,113,119,114,109,129,103,77,84,117,138,117,103,81,97,107,82,71,38,46,58,74,74,99,90,64,70,55,52,75,70,99,40,70,72,88,82,29,58,44,78,61,21,36,63,18,32,68,60,42,58,38,51,30,59,58,65,60,53,42,42,16,46,50,62,65,44,48,33,48,32,44,58,36,36,53,48,51,36,35,27,8,33,36,40,36],[11,19,13,18,33,29,47,45,15,33,29,24,35,17,33,30,46,34,38,51,34,19,25,12,29,18,20,13,27,28,25,21,22,17,28,34,27,17,19,20,29,35,49,23,24,33,49,45,26,36,34,30,30,16,31,47,19,36,30,48,12,24,40,30,54,46,71,72,28,39,72,31,41,46,55,63,93,100,42,60,66,81,110,32,50,72,95,58,61,85,75,70,72,78,76,65,39,57,42,52,87,101,105,59,107,136,103,146,93,162,130,142,143,117,158,146,121,83,127,159,137,104,84,118,160,107,71,71,92,113,104,72,26,83,114,104,106,114,104,114,114,124,101,120,155,184,127,102,116,131,96,155,144,78,97,100,116,115,114,124,124,82,26,69,105,103,118,121,130,103,78,102,104,34,106,93,83,77,56,93,95,80,51,62,109,65,77,107,76,79,76,77,79,26,60,49,72,60,57,66,56,61,77,55,58,47,47,80,70,68,61,51,25,45,40,60,54,14,25,51,40,35,66,30,40,42,36,29,26,54,52,50,54,40,36,31,9,40,37,54,47,33,41,25,42,25,33,53,29,30,40,36,45,29,29,18,5,31,28,34,26],[12,12,19,26,12,23,38,35,19,24,34,22,23,14,21,25,25,27,18,28,22,29,23,9,20,14,24,19,11,23,19,17,27,9,16,18,26,26,10,21,35,29,26,17,33,29,23,28,22,11,16,20,21,12,26,30,18,26,16,33,13,40,34,32,24,23,29,52,12,26,38,24,47,24,46,37,41,80,26,39,34,55,67,18,24,43,54,50,28,48,36,46,80,53,65,39,27,43,32,46,49,42,59,28,38,57,48,102,55,40,74,78,97,57,100,53,73,74,60,64,56,49,48,57,73,73,51,103,51,64,64,42,20,42,66,64,62,93,54,65,71,70,82,45,70,58,87,98,49,60,58,82,117,44,71,59,62,105,68,45,60,21,35,44,60,57,57,62,37,75,61,63,71,44,63,58,55,63,25,55,48,42,59,42,71,66,47,87,30,64,79,58,63,22,42,52,43,57,25,52,54,51,111,30,39,46,18,58,32,61,29,61,30,31,31,48,56,14,50,34,30,31,35,30,36,26,37,28,25,44,50,36,45,25,27,25,7,35,25,42,38,24,36,13,30,20,24,42,16,23,29,28,38,16,20,12,3,28,16,26,22],[4,12,14,10,5,9,17,27,8,13,7,5,16,4,9,4,14,31,6,14,9,10,15,2,12,2,8,13,7,10,6,8,15,4,12,11,10,9,5,16,16,24,28,8,11,13,16,18,12,11,6,8,13,6,9,8,8,16,13,19,3,23,13,8,15,5,10,24,6,11,9,18,20,9,15,20,21,38,7,22,14,19,38,10,14,20,20,37,15,26,17,33,47,27,25,21,23,34,22,16,20,21,44,8,22,28,24,58,17,32,19,35,53,21,29,32,33,36,29,30,38,33,30,29,23,27,39,56,20,31,21,20,11,19,31,21,28,54,23,31,23,32,46,23,35,21,31,37,29,24,25,23,45,15,29,22,36,46,21,41,26,8,22,14,19,15,23,58,20,38,20,31,49,15,30,11,31,34,14,26,20,24,46,18,31,30,28,56,20,17,8,24,41,14,14,23,20,54,11,25,22,15,44,17,20,26,20,73,26,29,27,26,21,29,14,25,25,15,8,20,13,13,35,33,29,15,10,24,11,22,29,22,34,14,11,8,0,27,14,20,15,10,28,8,13,6,10,32,10,10,13,11,29,10,8,5,0,18,9,11,6]],"m24":[6.847328,3.679389,2.568702,2.637405,6.461832,22.29771,77.526718,198.896947,320.076336,199.412214,110.419847,97.896947,102.137405,107.312977,123.0,181.870229,304.114504,406.187023,246.534351,132.461832,78.60687,54.049618,34.381679,19.59542],"s24":[6.48012,4.509138,2.454365,1.880549,3.126541,7.626986,31.3171,79.275012,122.421224,72.680402,40.449092,41.993012,43.094298,59.32561,49.065076,64.773934,113.954031,175.214393,120.214998,76.899834,52.912087,37.398532,22.209605,21.321343],"m20":[4.080153,2.083969,1.614504,1.259542,5.076336,20.698473,65.263359,143.469466,183.263359,115.29771,78.969466,81.469466,96.461832,106.427481,121.98855,157.866412,222.465649,294.923664,213.366412,124.671756,68.51145,37.721374,18.824427,10.267176],"n25":261,"n24":262,"n20":262,"first":"2025-01-01","last":"2025-12-31"};
+const fmt0 = fmt; fmt = (v, d) => fmt0(v, d).replace(/^-/, '−');
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sum = a => { let s = 0; for (const v of a) s += v; return s; };
+const mean = a => sum(a) / a.length;
+const pvar = a => { const m = mean(a); let s = 0; for (const v of a) s += (v - m) ** 2; return s / a.length; };
+const sorted = a => Float64Array.from(a).sort();
+const median = a => { const s = sorted(a), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+const nf = (n, d) => (d ? n.toFixed(d) : String(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+const sgn = (v, d) => (v >= 0 ? '+' : '&minus;') + fmt(Math.abs(v), d);
+const SQ2PI = Math.sqrt(2 * Math.PI);
+const npdf = (x, m, s) => Math.exp(-0.5 * ((x - m) / s) ** 2) / (s * SQ2PI);
+function lgamma(z) { // Lanczos, g = 7
+  const g = 7, c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (z < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * z))) - lgamma(1 - z);
+  z -= 1; let x = c[0]; for (let i = 1; i < g + 2; i++) x += c[i] / (z + i); const t = z + g + 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+function sci(v, d) { if (v === 0) return '0'; const e = Math.floor(Math.log10(Math.abs(v))), m = v / 10 ** e; return `${m.toFixed(d == null ? 1 : d)} &times; 10<sup>${e < 0 ? '&minus;' + (-e) : e}</sup>`; }
+function sampleIdx(perm, n, r) { const N = perm.length; for (let i = 0; i < n; i++) { const j = i + Math.floor(r() * (N - i)); const t = perm[i]; perm[i] = perm[j]; perm[j] = t; } return perm.slice(0, n); }
+const iota = N => Array.from({ length: N }, (_, i) => i);
+const HR12 = h => { const a = h % 12 === 0 ? 12 : h % 12, b = (h + 1) % 12 === 0 ? 12 : (h + 1) % 12, s = h < 12 ? 'am' : 'pm', s2 = (h + 1) % 24 < 12 ? 'am' : 'pm'; return s === s2 ? `${a}&ndash;${b} ${s}` : `${a} ${s}&ndash;${b} ${s2}`; };
+function label(c, text, x, y, col, align, base, font) { c.save(); c.font = font || ('11px ' + css('--f-mono')); c.fillStyle = col; c.textAlign = align || 'left'; c.textBaseline = base || 'middle'; c.fillText(text, x, y); c.restore(); }
+function tri(v, x, py, col, r) { const c = v.ctx, px = v.X(x); r = r || 6; c.save(); c.beginPath(); c.moveTo(px, py - r); c.lineTo(px + r * 0.9, py + r * 0.6); c.lineTo(px - r * 0.9, py + r * 0.6); c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1; c.stroke(); c.restore(); }
+function fillCurve(v, f, col, alpha) { const c = v.ctx, N = 200; c.save(); c.globalAlpha = alpha; c.fillStyle = col; c.beginPath(); c.moveTo(v.X(v.xl[0]), v.Y(0)); for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N; c.lineTo(v.X(x), clamp(v.Y(f(x)), -2000, 4000)); } c.lineTo(v.X(v.xl[1]), v.Y(0)); c.closePath(); c.fill(); c.restore(); }
+const narrowOf = cv => cv.getBoundingClientRect().width < 520;
+
+const N25 = FB.n25, MU = FB.d25.map(mean), VAR = FB.d25.map(pvar), MAXH = FB.d25.map(a => Math.max(...a));
+
+/* ---------- hero: prior, likelihood, posterior for one hour's rate ---------- */
+const HB = 3;
+const HERO = { h: 17, n: 2, rng: mulberry32(11), perm: {} };
+function heroPerm(h) { if (!HERO.perm[h]) { const p = iota(N25); sampleIdx(p, N25, HERO.rng); HERO.perm[h] = p; } return HERO.perm[h]; }
+function drawHero() {
+  const cv = $('#hero-cv'), C = C0(), h = HERO.h, n = HERO.n, xs = heroPerm(h).slice(0, n).map(i => FB.d25[h][i]);
+  const m0 = FB.m24[h], s0 = FB.s24[h], truth = MU[h], xb = n ? mean(xs) : NaN, post = (HB * m0 + n * (n ? xb : 0)) / (HB + n);
+  const sPr = s0 / Math.sqrt(HB), sLik = n ? s0 / Math.sqrt(n) : 0, sPo = s0 / Math.sqrt(HB + n);
+  const xmax = Math.ceil(MAXH[h] * 1.04 / 50) * 50, peak = 1 / (sPo * SQ2PI);
+  const narrow = narrowOf(cv), v = frame(cv, [0, xmax], [0, peak * 1.18], { l: 14, r: 14, t: 16, b: 30 }), c = v.ctx;
+  axes(v, narrow ? 'cyclists / hour' : 'average cyclists in the hour', '', { fy: () => '', ny: 4 });
+  clip(v);
+  fillCurve(v, x => npdf(x, post, sPo), C.a, 0.16);
+  curve(v, x => npdf(x, m0, sPr), C.c, 2, [6, 4]);
+  if (n) curve(v, x => npdf(x, xb, sLik), C.b, 2);
+  curve(v, x => npdf(x, post, sPo), C.a, 2.8);
+  seg(v, truth, 0, truth, peak * 1.18, C.q, 1.4, [4, 4]);
+  v.ctx.restore();
+  // rug of revealed days
+  xs.forEach((x, i) => { const px = v.X(x), py = v.Y(0) - 7; c.beginPath(); c.arc(px, py, i === n - 1 ? 5 : 3.6, 0, 7); c.fillStyle = C.b; c.globalAlpha = i === n - 1 ? 1 : 0.65; c.fill(); c.globalAlpha = 1; if (i === n - 1) { c.strokeStyle = C.q; c.lineWidth = 1.4; c.stroke(); } });
+  // curve labels
+  const fs = (narrow ? '10.5px ' : '11.5px ') + css('--f-body');
+    [[C.c, 'prior (2024)', [6, 4]], [C.b, n ? 'likelihood' : 'likelihood (no days yet)', null], [C.a, 'posterior', null]].forEach(([col, t, dash], i) => { const y = v.pad.t + 10 + i * 17, x = v.pad.l + 6; c.save(); c.strokeStyle = col; c.lineWidth = 2.4; if (dash) c.setLineDash(dash); c.beginPath(); c.moveTo(x, y); c.lineTo(x + 22, y); c.stroke(); c.restore(); label(c, t, x + 28, y, C.q, 'left', 'middle', fs); });
+  label(c, 'truth', clamp(v.X(truth) + 5, 4, v.w - 40), v.pad.t + 8, C.q, 'left', 'middle', fs);
+  const err = e => `${e >= 0 ? '+' : '&minus;'}${nf(Math.abs(e))}`;
+  $('#hero-cap').innerHTML = n === 0 ? `<b>No days revealed yet.</b> The purple curve is the prior: last year&rsquo;s weekday average for ${HR12(h)}, ${tip(nf(m0, 1), `mean of the 2024 weekday counts for this hour\nover ${FB.n24} weekdays`)} cyclists, held with the confidence of ${HB} days of data. Press &ldquo;Add a day&rdquo;.`
+    : `<b>${n} day${n > 1 ? 's' : ''} of 2025, ${HR12(h)}.</b> MLE (the sample mean) ${tip(nf(xb, 1), `x̄ = (${xs.slice(0, 8).join(' + ')}${n > 8 ? ' + …' : ''}) / ${n}`)}, off by ${err(xb - truth)} &middot; MAP ${tip(nf(post, 1), `(b·m₀ + n·x̄)/(b + n)\n= (${HB} × ${fmt(m0, 1)} + ${n} × ${fmt(xb, 1)}) / ${HB + n}`)}, off by ${err(post - truth)} &middot; truth ${tip(nf(truth, 1), `mean of all ${N25} weekdays of 2025 at ${HR12(h).replace(/&ndash;/g, '–')}`)}. Each day is treated as Gaussian with last year&rsquo;s day-to-day spread, ${tip(nf(s0, 0), 'standard deviation of the 2024 weekday counts for this hour')}.`;
+}
+$('#hero-add').addEventListener('click', () => { HERO.n = Math.min(N25, HERO.n + 1); drawHero(); });
+$('#hero-add5').addEventListener('click', () => { HERO.n = Math.min(N25, HERO.n + 5); drawHero(); });
+$('#hero-reset').addEventListener('click', () => { HERO.perm = {}; HERO.n = 0; drawHero(); });
+seg1('[data-hh]', 'data-hh', k => { HERO.h = +k; HERO.n = Math.min(HERO.n, N25); drawHero(); });
+fig($('#hero-cv'), drawHero);
+
+/* ---------- 1. estimators ---------- */
+const POP = FB.d25[17], TRUTH = MU[17];
+const EST = [['sample mean', a => mean(a)], ['sample median', a => median(a)], ['midrange (min + max)/2', a => (Math.min(...a) + Math.max(...a)) / 2], ['first day only', a => a[0]]];
+const ES = { n: 5, est: EST.map(() => []), last: null, rng: mulberry32(7), perm: iota(POP.length) };
+function esDraw(k) { for (let r = 0; r < k; r++) { const s = sampleIdx(ES.perm, ES.n, ES.rng).map(i => POP[i]); ES.last = s; EST.forEach((e, j) => ES.est[j].push(e[1](s))); } }
+function esStats(j) { const a = ES.est[j], m = mean(a), v = pvar(a); return { m, bias: m - TRUTH, se: Math.sqrt(v), rmse: Math.sqrt(mean(a.map(x => (x - TRUTH) ** 2))) }; }
+function drawES() {
+  const cv = $('#es-cv'), C = C0(), narrow = narrowOf(cv), v = frame(cv, [0, 900], [0, 4], { l: 10, r: 12, t: 8, b: 30 }), c = v.ctx;
+  axes(v, 'estimate (cyclists)', '', { fy: () => '', sy: 1 });
+  const cnt = ES.est[0].length, bw = 15, nb = Math.ceil(900 / bw), cols = [C.b, C.a, C.c, C.lda];
+  EST.forEach((e, j) => {
+    const y0 = 4 - j - 1, hist = new Array(nb).fill(0); ES.est[j].forEach(x => { hist[clamp(Math.floor(x / bw), 0, nb - 1)]++; });
+    const mx = Math.max(1, ...hist);
+    c.save(); c.fillStyle = cols[j]; c.globalAlpha = 0.6;
+    hist.forEach((hc, b) => { if (!hc) return; const x0 = v.X(b * bw), x1 = v.X((b + 1) * bw), yb = v.Y(y0 + 0.06), yt = v.Y(y0 + 0.06 + 0.7 * hc / mx); c.fillRect(x0 + 0.5, yt, Math.max(1, x1 - x0 - 1), yb - yt); });
+    c.restore();
+    label(c, e[0], v.pad.l + 6, v.Y(y0 + 0.92), C.q, 'left', 'top', (narrow ? '11px ' : '12px ') + css('--f-body'));
+    if (ES.last) { const x = e[1](ES.last); c.beginPath(); c.arc(v.X(x), v.Y(y0 + 0.06) - 5, 5, 0, 7); c.strokeStyle = C.q; c.lineWidth = 1.6; c.stroke(); }
+  });
+  seg(v, TRUTH, 0, TRUTH, 4, C.q, 1.4, [4, 4]);
+  const rows = EST.map((e, j) => ({ e, s: cnt ? esStats(j) : null }));
+  const short = ['mean', 'median', 'midrange', 'first day'];
+  $('#es-n-o').textContent = ES.n;
+  $('#es-tbl').innerHTML = `<thead><tr><th></th><th>bias</th><th>s.e.</th><th>RMSE</th></tr></thead><tbody>${rows.map((r, j) => `<tr><td>${short[j]}</td>${r.s ? `<td>${tip(sgn(r.s.bias, 1), `average of ${nf(cnt)} estimates ${fmt(r.s.m, 1)}\nminus the truth ${fmt(TRUTH, 1)}`)}</td><td>${tip(fmt(r.s.se, 1), `standard deviation of the ${nf(cnt)} estimates`)}</td><td>${tip(fmt(r.s.rmse, 1), `√(average of (estimate − ${fmt(TRUTH, 1)})²)\n= √(bias² + s.e.²) = √(${fmt(r.s.bias ** 2, 0)} + ${fmt(r.s.se ** 2, 0)})`)}</td>` : '<td>&ndash;</td><td>&ndash;</td><td>&ndash;</td>'}</tr>`).join('')}</tbody>`;
+  const say = $('#es-say');
+  if (!cnt) { say.innerHTML = 'No samples yet. Draw one, then a thousand.'; $('#run-es').innerHTML = ''; return; }
+  const best = rows.map((r, j) => [r.s.rmse, j]).sort((a, b) => a[0] - b[0])[0][1];
+  if (ES.n === 1) say.innerHTML = `With one day per sample all four rules give the same number, the day itself, so their sampling distributions are identical: an error of about ${fmt(rows[0].s.rmse, 0)} cyclists. Raise m.`;
+  else if (cnt < 30) say.innerHTML = `${cnt} sample${cnt > 1 ? 's' : ''} so far: too few to see the shape of each sampling distribution. Press &ldquo;Draw 1,000 samples&rdquo;.`;
+  else say.innerHTML = `Over ${nf(cnt)} samples of ${ES.n} days, the <b>${short[best]}</b> has the smallest error (RMSE ${fmt(rows[best].s.rmse, 1)}). The mean is unbiased: its average guess is within ${fmt(Math.abs(rows[0].s.bias), 1)} of the truth, as it should be. The median aims at the typical day rather than the average day; over the whole year those differ (${fmt(median(POP), 0)} against ${fmt(TRUTH, 1)}), so as a guess at the mean it carries a small bias, here ${sgn(rows[1].s.bias, 1)}. &ldquo;First day only&rdquo; ignores ${ES.n - 1} of the ${ES.n} days, so its spread (${fmt(rows[3].s.se, 0)}) never shrinks with m.`;
+  const L = ES.last, show = L.slice(0, 6).join(' + ') + (L.length > 6 ? ' + &hellip;' : '');
+  $('#run-es').innerHTML = `<b>Running example</b>: the latest sample of m = ${ES.n} days gives g = mean = (${show}) / ${ES.n} = ${tip(fmt(mean(L), 1), 'the sample mean of this sample')}; the median is ${tip(fmt(median(L), 1), 'middle value of the sorted sample' + (L.length % 2 ? '' : '\n(average of the two middle values)'))}; the truth is ${fmt(TRUTH, 1)}.`;
+}
+$('#es-n').addEventListener('input', e => { ES.n = +e.target.value; ES.est = EST.map(() => []); esDraw(1000); drawES(); });
+$('#es-one').addEventListener('click', () => { esDraw(1); drawES(); });
+$('#es-many').addEventListener('click', () => { esDraw(1000); drawES(); });
+$('#es-clear').addEventListener('click', () => { ES.est = EST.map(() => []); ES.last = null; drawES(); });
+esDraw(1000);
+fig($('#es-cv'), drawES);
+
+/* ---------- 2. bias, variance and the divisor ---------- */
+const BV = { m: 5, c: 0, S: null };
+const bvExact = (m, c) => { const a = m - 1, d = m + c, b = a / d - 1, v = 2 * a / (d * d); return { a, d, E: a / d, b, v, mse: b * b + v }; };
+function bvSim() { const r = mulberry32(5 + BV.m), S = new Float64Array(5000); for (let k = 0; k < 5000; k++) { const x = []; for (let i = 0; i < BV.m; i++) x.push(gaussOf(r)); const mm = mean(x); let s = 0; for (const t of x) s += (t - mm) ** 2; S[k] = s; } BV.S = S; }
+function drawBV() {
+  const cv = $('#bv-cv'), C = C0(), m = BV.m, ymax = bvExact(m, -1).mse * 1.18, v = frame(cv, [-1, 3], [0, ymax], { l: 46, r: 14, t: 16, b: 32 }), c = v.ctx;
+  axes(v, 'c, where the divisor is m + c', 'error', { sx: 0.5 });
+  clip(v);
+  curve(v, x => bvExact(m, x).b ** 2, C.c, 2);
+  curve(v, x => bvExact(m, x).v, C.b, 2);
+  curve(v, x => bvExact(m, x).mse, C.a, 3);
+  seg(v, BV.c, 0, BV.c, ymax, C.q, 1.2, [4, 4]);
+  v.ctx.restore();
+  const narrow = narrowOf(cv), fs = (narrow ? '10px ' : '11px ') + css('--f-body');
+  [[-1, '÷(m−1): unbiased'], [0, '÷m: MLE'], [1, '÷(m+1): lowest MSE']].forEach(([x, t], i) => { const e = bvExact(m, x); dot(v, x, e.mse, C.a, 4); label(c, t, clamp(v.X(x) + (i ? 0 : 6), 4, v.w - 4), v.Y(e.mse) - 10 - (narrow && i === 1 ? 12 : 0), C.q, i === 0 ? 'left' : 'center', 'bottom', fs); });
+  const E = bvExact(m, BV.c);
+  dot(v, BV.c, E.mse, C.q, 6, true);
+  let sim = null;
+  if (BV.S) { const est = Array.from(BV.S, s => s / E.d), mm = mean(est), vv = pvar(est); sim = { E: mm, b: mm - 1, v: vv, mse: (mm - 1) ** 2 + vv }; [[sim.b ** 2, C.c], [sim.v, C.b], [sim.mse, C.a]].forEach(([y, col]) => { c.save(); c.beginPath(); const px = v.X(BV.c), py = v.Y(y); c.rect(px - 4, py - 4, 8, 8); c.fillStyle = col; c.fill(); c.strokeStyle = C.surf; c.stroke(); c.restore(); }); }
+  $('#bv-m-o').textContent = m; $('#bv-c-o').textContent = `${fmt(E.d, 2)} (c = ${BV.c >= 0 ? '+' : '−'}${fmt(Math.abs(BV.c), 2)})`;
+  const sv = k => sim ? `\nsimulated, 5,000 samples: ${fmt(sim[k], 4)}` : '';
+  $('#bv-e').innerHTML = tip(fmt(E.E, 3) + '&sigma;&sup2;', `E[S]/d = (m − 1)σ²/d = ${E.a}/${fmt(E.d, 2)}` + sv('E'));
+  $('#bv-b').innerHTML = tip(sgn(E.b, 3), `(m − 1)/d − 1 = ${E.a}/${fmt(E.d, 2)} − 1` + sv('b'));
+  $('#bv-v').innerHTML = tip(fmt(E.v, 3), `Var(S)/d² = 2(m − 1)/d² = ${2 * E.a}/${fmt(E.d * E.d, 2)}` + sv('v'));
+  $('#bv-mse').innerHTML = tip(fmt(E.mse, 3), `bias² + variance = ${fmt(E.b ** 2, 4)} + ${fmt(E.v, 4)}` + sv('mse'));
+  const u = bvExact(m, -1), ml = bvExact(m, 0), best = bvExact(m, 1);
+  $('#bv-say').innerHTML = (Math.abs(BV.c + 1) < 0.03 ? `Dividing by m &minus; 1 = ${m - 1} makes the estimator unbiased, but look at the price: its variance is the largest of the three marked choices, so its MSE (${fmt(u.mse, 3)}) is the worst.`
+    : Math.abs(BV.c) < 0.03 ? `This is maximum likelihood&rsquo;s choice, dividing by m. It is biased low by &sigma;&sup2;/m = ${fmt(1 / m, 3)}, yet its MSE (${fmt(ml.mse, 3)}) beats the unbiased version&rsquo;s ${fmt(u.mse, 3)}.`
+    : Math.abs(BV.c - 1) < 0.03 ? `The minimum: dividing by m + 1 gives MSE ${fmt(best.mse, 3)}, lower than both the unbiased (${fmt(u.mse, 3)}) and the MLE (${fmt(ml.mse, 3)}) versions. A little bias buys a bigger cut in variance.`
+    : BV.c > 1 ? `Past m + 1 you shrink too hard: the bias&sup2; curve climbs faster than the variance falls, so the MSE rises again.`
+    : `Between the marked choices, bias&sup2; and variance trade against each other. The lowest MSE is at d = m + 1 = ${m + 1}.`) + ` As m grows, all three curves squeeze together: the bias of every choice fades like 1/m.` + (sim ? ` The squares are the simulation; they sit on the exact curves.` : '');
+  $('#run-bv').innerHTML = `<b>Running example</b>: m = ${m}, d = ${fmt(E.d, 2)}: bias&sup2; = (${E.a}/${fmt(E.d, 2)} &minus; 1)&sup2; = ${tip(fmt(E.b ** 2, 4), `(${fmt(E.E, 4)} − 1)²`)}, Var = 2&middot;${E.a}/${fmt(E.d, 2)}&sup2; = ${tip(fmt(E.v, 4), `2(m − 1)σ⁴/d² with σ² = 1`)}, so MSE = ${tip('<b>' + fmt(E.mse, 4) + '</b>', 'bias² + Var')}${sim ? ` (simulated: ${fmt(sim.mse, 4)})` : ''}.`;
+}
+$('#bv-m').addEventListener('input', e => { BV.m = +e.target.value; BV.S = null; drawBV(); });
+$('#bv-c').addEventListener('input', e => { BV.c = +e.target.value; drawBV(); });
+$('#bv-sim').addEventListener('click', () => { bvSim(); drawBV(); });
+fig($('#bv-cv'), drawBV);
+
+/* ---------- 3. consistency ---------- */
+const CP = 0.3, CPEOPLE = 400, CM = 2000, CDRAW = 40, LM = Math.log10(CM);
+const CS = { e: 0.05, t: 0.6, est: 'mean', H: null, F: null, seed: 3 };
+function csNew() { const r = mulberry32(CS.seed++), H = new Uint16Array(CPEOPLE * CM), F = new Uint8Array(CPEOPLE); for (let p = 0; p < CPEOPLE; p++) { let h = 0; for (let m = 0; m < CM; m++) { const x = r() < CP ? 1 : 0; if (m === 0) F[p] = x; h += x; H[p * CM + m] = h; } } CS.H = H; CS.F = F; }
+const csM = () => Math.max(1, Math.round(10 ** (CS.t * LM)));
+const csEst = (p, m) => { const h = CS.H[p * CM + m - 1]; return CS.est === 'mean' ? h / m : CS.est === 'first' ? CS.F[p] : (h + 1) / (m + 2); };
+function csExact(m, e) {
+  if (CS.est === 'first') return (Math.abs(0 - CP) > e ? 1 - CP : 0) + (Math.abs(1 - CP) > e ? CP : 0);
+  let P = 0; const lp = Math.log(CP), lq = Math.log(1 - CP), lgm = lgamma(m + 1);
+  for (let k = 0; k <= m; k++) { const est = CS.est === 'mean' ? k / m : (k + 1) / (m + 2); if (Math.abs(est - CP) > e + 1e-12) P += Math.exp(lgm - lgamma(k + 1) - lgamma(m - k + 1) + k * lp + (m - k) * lq); }
+  return Math.min(1, P);
+}
+const CSTEPS = (() => { const s = new Set(); for (let i = 0; i <= 260; i++) s.add(Math.max(1, Math.round(10 ** (i / 260 * LM)))); return [...s].sort((a, b) => a - b); })();
+function drawCS() {
+  const cv = $('#cs-cv'), C = C0(), v = frame(cv, [0, LM], [0, 1], { l: 40, r: 14, t: 14, b: 32 }), c = v.ctx, m = csM();
+  axes(v, 'flips m (log scale)', 'estimate of P(heads)', { sx: 1, sy: 0.2, fx: x => nf(10 ** x) });
+  c.save(); c.fillStyle = C.a; c.globalAlpha = 0.14; c.fillRect(v.pad.l, v.Y(CP + CS.e), v.pw, v.Y(CP - CS.e) - v.Y(CP + CS.e)); c.restore();
+  clip(v);
+  for (let p = 0; p < CDRAW; p++) { c.save(); c.strokeStyle = C.b; c.globalAlpha = 0.38; c.lineWidth = 1.1; c.beginPath(); CSTEPS.forEach((mm, i) => { const x = v.X(Math.log10(mm)), y = v.Y(csEst(p, mm)); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); }
+  seg(v, 0, CP, LM, CP, C.q, 1.4, [5, 4]);
+  seg(v, Math.log10(m), 0, Math.log10(m), 1, C.q, 1.3);
+  v.ctx.restore();
+  let out = 0; for (let p = 0; p < CPEOPLE; p++) if (Math.abs(csEst(p, m) - CP) > CS.e + 1e-12) out++;
+  const P = csExact(m, CS.e), name = { mean: 'fraction of heads', first: 'first flip only', lap: 'Laplace&rsquo;s rule' }[CS.est];
+  $('#cs-e-o').textContent = fmt(CS.e, 3); $('#cs-m-o').textContent = nf(m);
+  $('#cs-out').innerHTML = tip(`${out} (${pct(out / CPEOPLE, 0)})`, `people whose estimate after ${m} flips\nis outside ${fmt(CP - CS.e, 3)} to ${fmt(CP + CS.e, 3)}`);
+  $('#cs-p').innerHTML = tip(fmt(P, 3), CS.est === 'first' ? 'x₁ is 0 or 1, never within ε of 0.3' : `Σ over k heads of C(m,k) 0.3ᵏ 0.7ᵐ⁻ᵏ\nfor every k whose estimate misses by more than ε`);
+  const se = Math.sqrt(CP * (1 - CP) / m);
+  $('#cs-say').innerHTML = CS.est === 'first' ? `Unbiased but useless: every person&rsquo;s estimate is frozen at their first flip, 0 or 1, so ${pct(P, 0)} of them miss by more than &epsilon; however many flips follow. Unbiasedness alone does not make an estimator improve.`
+    : CS.est === 'lap' ? `Laplace&rsquo;s rule starts every person at 1/2 (no flips yet), so it is biased: after m flips its average is (0.3m + 1)/(m + 2) = ${fmt((CP * m + 1) / (m + 2), 3)}, not 0.3. But the bias shrinks like 1/m and so does the variance, so the miss probability still falls to 0: biased, yet consistent. ${m < 30 ? 'Note how much calmer it is than the raw fraction in the first few flips.' : ''}`
+    : m < 20 ? `After only ${m} flip${m > 1 ? 's' : ''} the estimates are all over the place: the standard error is ${tip(fmt(se, 3), '√(0.3 × 0.7 / m)')}, and ${pct(P, 0)} of people miss by more than &epsilon;. Move m to the right.`
+    : P < 0.01 ? `By m = ${nf(m)} the band has captured almost everyone: the standard error is ${tip(fmt(se, 3), '√(0.3 × 0.7 / m)')}, small next to &epsilon; = ${fmt(CS.e, 3)}. Narrow &epsilon; and the band empties again for a while, but for every &epsilon; there is an m that refills it. That is consistency.`
+    : `At m = ${nf(m)} the standard error is ${tip(fmt(se, 3), '√(0.3 × 0.7 / m)')} and ${pct(P, 1)} of people still miss by more than &epsilon;. Keep moving m to the right: this probability heads to 0 for every &epsilon;, however small.`;
+  $('#run-cs').innerHTML = `<b>Running example</b>: ${name}, m = ${nf(m)}, &epsilon; = ${fmt(CS.e, 3)}: P(|&theta;&#770;<sub>m</sub> &minus; 0.3| &gt; &epsilon;) = ${tip('<b>' + fmt(P, 4) + '</b>', 'exact, from the binomial distribution')}; ${out} of ${CPEOPLE} simulated people are outside the band.`;
+}
+seg1('[data-ce]', 'data-ce', k => { CS.est = k; drawCS(); });
+$('#cs-e').addEventListener('input', e => { CS.e = +e.target.value; drawCS(); });
+$('#cs-m').addEventListener('input', e => { CS.t = +e.target.value; drawCS(); });
+$('#cs-new').addEventListener('click', () => { csNew(); drawCS(); });
+csNew();
+fig($('#cs-cv'), drawCS);
+
+/* ---------- 4. maximum likelihood ---------- */
+const ML0 = [1.2, 2.0, 2.6, 3.1, 3.4, 4.0, 4.9, 6.3];
+const ML = { P: ML0.map(x => [x, 0]), mu: 3.5, s: 2.4, mult: 1, v: null, mapV: null };
+const mlLL = (mu, s) => { let l = 0; for (const p of ML.P) l += -Math.log(s * SQ2PI) - 0.5 * ((p[0] - mu) / s) ** 2; return l * ML.mult; };
+const mlHat = () => { const xs = ML.P.map(p => p[0]), m = mean(xs); return { mu: m, s: Math.max(0.3, Math.sqrt(pvar(xs))) }; };
+function drawML() {
+  const cv = $('#ml-cv'), C = C0(), v = frame(cv, [0, 10], [0, Math.max(0.3, 1.15 / (ML.s * SQ2PI))], { l: 40, r: 14, t: 14, b: 32 }), c = v.ctx; ML.v = v;
+  axes(v, 'x', 'density', { ny: 5 });
+  clip(v);
+  fillCurve(v, x => npdf(x, ML.mu, ML.s), C.a, 0.12);
+  curve(v, x => npdf(x, ML.mu, ML.s), C.a, 2.5);
+  ML.P.forEach(p => seg(v, p[0], 0, p[0], npdf(p[0], ML.mu, ML.s), C.b, 2.2));
+  v.ctx.restore();
+  ML.P.forEach(p => dot(v, p[0], 0, C.b, 6));
+  const H = mlHat(), ll = mlLL(ML.mu, ML.s), llH = mlLL(H.mu, H.s);
+  drawMLmap(H);
+  const terms = ML.P.map(p => -Math.log(ML.s * SQ2PI) - 0.5 * ((p[0] - ML.mu) / ML.s) ** 2), n = ML.P.length * ML.mult;
+  $('#ml-mu-o').textContent = fmt(ML.mu, 2); $('#ml-s-o').textContent = fmt(ML.s, 2);
+  $('#ml-ll').innerHTML = tip(fmt(ll, 2), `Σ log N(xᵢ; μ, σ) over ${n} points` + (ML.mult > 1 ? `\n= 100 × (${fmt(ll / 100, 3)})` : ''));
+  const pr = Math.exp(ll);
+  $('#ml-pr').innerHTML = tip(pr === 0 ? '0 (underflow)' : sci(pr, 1), pr === 0 ? `the true value is e^${fmt(ll, 0)} ≈ 10^${fmt(ll / Math.LN10, 0)},\nfar below the smallest double, about 10^−308` : `Π N(xᵢ; μ, σ) = e^ℓ`);
+  $('#ml-mh').innerHTML = tip(fmt(H.mu, 3), `(${ML.P.map(p => fmt(p[0], 2)).join(' + ')}) / ${ML.P.length}`);
+  $('#ml-sh').innerHTML = tip(fmt(H.s, 3), `√( Σ(xᵢ − x̄)² / m ), dividing by m, not m − 1`);
+  const gap = llH - ll;
+  $('#ml-say').innerHTML = gap < 0.02 * ML.mult ? `You are at the peak: &mu; is the sample mean and &sigma; the root mean squared deviation. Any other setting makes the data less probable.${ML.mult > 1 ? ' The raw product has underflowed to zero, yet the log-likelihood is a perfectly ordinary number, which is why every library maximises the log.' : ' Now try &ldquo;Each point &times; 100&rdquo;.'}`
+    : `Your setting is ${tip(fmt(gap, 2), `ℓ(μ̂, σ̂) − ℓ(μ, σ) = ${fmt(llH, 2)} − (${fmt(ll, 2)})`)} log-units below the peak, so the data is ${gap > 700 ? 'astronomically' : tip(gap < 6.9 ? fmt(Math.exp(gap), 1) : sci(Math.exp(gap), 1), `e^${fmt(gap, 2)}`) + ' times'} less probable under it than under the best Gaussian. ${ML.s > H.s * 1.25 ? 'The curve is too wide: it spreads its probability thinly, so every stick is short.' : ML.s < H.s * 0.8 ? 'The curve is too narrow: points out in the tails get almost no density, and one tiny stick drags the product down.' : 'Shift &mu; towards the middle of the points.'}${ML.mult > 1 ? ' With 100 copies of each point the same gap is 100 times bigger: more data makes the likelihood far more decisive.' : ''}`;
+  $('#run-ml').innerHTML = `<b>Running example</b>: &#8467;(&mu; = ${fmt(ML.mu, 2)}, &sigma; = ${fmt(ML.s, 2)}) = ${ML.mult > 1 ? '100 &times; [' : ''}${terms.map(t => tip(fmt(t, 2), 'log N(xᵢ; μ, σ) = −log(σ√2π) − (xᵢ − μ)²/(2σ²)')).join(' + ')}${ML.mult > 1 ? ']' : ''} = ${tip('<b>' + fmt(ll, 2) + '</b>', 'the log-likelihood')}; at the maximum (&mu; = ${fmt(H.mu, 2)}, &sigma; = ${fmt(H.s, 2)}) it is ${fmt(llH, 2)}.`;
+}
+function drawMLmap(H) {
+  const cv = $('#ml-map'), C = C0(), v = frame(cv, [0, 10], [0.3, 4], { l: 40, r: 14, t: 10, b: 28 }), c = v.ctx; ML.mapV = v;
+  const nx = 100, ny = 37, llH = mlLL(H.mu, H.s), col = C.a;
+  axes(v, 'μ', 'σ', { sy: 1 });
+  c.save(); c.fillStyle = col;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const mu = (i + 0.5) / nx * 10, s = 0.3 + (j + 0.5) / ny * 3.7, a = Math.exp((mlLL(mu, s) - llH) / 3); if (a < 0.01) continue; c.globalAlpha = 0.08 + 0.85 * a; const x0 = Math.round(v.X(i / nx * 10)), x1 = Math.round(v.X((i + 1) / nx * 10)), y0 = Math.round(v.Y(0.3 + (j + 1) / ny * 3.7)), y1 = Math.round(v.Y(0.3 + j / ny * 3.7)); c.fillRect(x0, y0, x1 - x0, y1 - y0); }
+  c.restore();
+  star(v, H.mu, H.s, C.q, 9);
+  c.beginPath(); c.arc(v.X(ML.mu), v.Y(ML.s), 7, 0, 7); c.strokeStyle = C.b; c.lineWidth = 2.2; c.stroke();
+}
+draggable($('#ml-cv'), () => ML.v, () => ML.P, () => { ML.P.forEach(p => { p[1] = 0; }); drawML(); });
+$('#ml-map').addEventListener('click', e => { const v = ML.mapV; if (!v) return; const [px, py] = evPos($('#ml-map'), e); ML.mu = clamp(v.iX(px), 0, 10); ML.s = clamp(v.iY(py), 0.3, 4); $('#ml-mu').value = ML.mu; $('#ml-s').value = ML.s; drawML(); });
+$('#ml-mu').addEventListener('input', e => { ML.mu = +e.target.value; drawML(); });
+$('#ml-s').addEventListener('input', e => { ML.s = +e.target.value; drawML(); });
+$('#ml-best').addEventListener('click', () => { const H = mlHat(); ML.mu = H.mu; ML.s = H.s; $('#ml-mu').value = H.mu; $('#ml-s').value = H.s; drawML(); });
+seg1('[data-mc]', 'data-mc', k => { ML.mult = +k; drawML(); });
+fig($('#ml-cv'), drawML); fig($('#ml-map'), drawML);
+
+/* ---------- 5. MLE as KL ---------- */
+const KL = { h: 2, lam: 6 };
+function klData(h) { const c = FB.d25[h], K = Math.max(...c), ph = new Array(K + 1).fill(0); c.forEach(x => ph[x]++); for (let k = 0; k <= K; k++) ph[k] /= c.length; const lf = ph.reduce((s, p, k) => s + p * lgamma(k + 1), 0), Hh = -ph.reduce((s, p) => s + (p > 0 ? p * Math.log(p) : 0), 0); return { c, K, ph, m: mean(c), v: pvar(c), lf, H: Hh }; }
+const klCE = (D, lam) => lam - D.m * Math.log(lam) + D.lf;
+const ppmf = (k, lam) => Math.exp(k * Math.log(lam) - lam - lgamma(k + 1));
+function drawKL() {
+  const D = klData(KL.h), C = C0(), lam = KL.lam;
+  { const cv = $('#kl-cv'), K = Math.max(D.K, Math.ceil(lam + 3 * Math.sqrt(lam))), pm = Array.from({ length: K + 1 }, (_, k) => ppmf(k, lam)), ym = Math.max(...D.ph, ...pm) * 1.15;
+    const v = frame(cv, [-0.7, K + 0.7], [0, ym], { l: 44, r: 14, t: 14, b: 32 }), c = v.ctx; axes(v, 'cyclists in the hour, k', 'share of days', { sx: K > 24 ? 5 : K > 12 ? 2 : 1 });
+    const bw = Math.max(2, (v.X(1) - v.X(0)) * 0.7);
+    c.save(); c.fillStyle = C.b; c.globalAlpha = 0.75; D.ph.forEach((p, k) => { if (p > 0) c.fillRect(v.X(k) - bw / 2, v.Y(p), bw, v.Y(0) - v.Y(p)); }); c.restore();
+    c.save(); c.strokeStyle = C.a; c.lineWidth = 1.5; c.beginPath(); pm.forEach((p, k) => { k ? c.lineTo(v.X(k), v.Y(p)) : c.moveTo(v.X(k), v.Y(p)); }); c.stroke(); c.restore();
+    pm.forEach((p, k) => dot(v, k, p, C.a, 4)); }
+  { const cv = $('#kl-ce'), narrow = narrowOf(cv), v = frame(cv, [0.5, 12], [D.H - 0.2, D.H + 2.6], { l: 44, r: 14, t: 12, b: 28 }), c = v.ctx; axes(v, 'λ', narrow ? '' : 'cross-entropy (nats)', { sy: 1 });
+    clip(v); seg(v, 0.5, D.H, 12, D.H, C.q, 1.2, [5, 4]); curve(v, x => klCE(D, x), C.a, 2.4); v.ctx.restore();
+    star(v, D.m, klCE(D, D.m), C.q, 8); c.beginPath(); c.arc(v.X(lam), clamp(v.Y(klCE(D, lam)), 4, v.h - 4), 6, 0, 7); c.strokeStyle = C.b; c.lineWidth = 2.2; c.stroke();
+    label(c, 'entropy of the data', v.pad.l + 6, v.Y(D.H) - 9, C.muted, 'left', 'middle', '10.5px ' + css('--f-body')); }
+  const ce = klCE(D, lam), kl = ce - D.H, ceM = klCE(D, D.m), r = D.v / D.m;
+  $('#kl-l-o').textContent = fmt(lam, 2);
+  $('#kl-x').innerHTML = tip(fmt(ce, 3), `−Σₖ p̂(k) log Poisson(k; λ)\n= λ − x̄ log λ + mean(log k!)`);
+  $('#kl-d').innerHTML = tip(fmt(kl, 3), `cross-entropy − entropy of the data\n= ${fmt(ce, 3)} − ${fmt(D.H, 3)}`);
+  $('#kl-m').innerHTML = tip(fmt(D.m, 3), `total cyclists ${nf(sum(D.c))} / ${D.c.length} days`);
+  $('#kl-r').innerHTML = tip(fmt(r, 2), `variance ${fmt(D.v, 2)} / mean ${fmt(D.m, 2)}\na Poisson has exactly 1`);
+  const off = lam - D.m;
+  $('#kl-say').innerHTML = (Math.abs(off) < 0.02 ? `&lambda; is at the sample mean, the maximum-likelihood rate: no other Poisson is closer to the data. ` : `&lambda; is ${fmt(Math.abs(off), 2)} ${off > 0 ? 'above' : 'below'} the sample mean, so the model puts too much probability on ${off > 0 ? 'busy' : 'quiet'} nights and too little on the ones that happened; the cross-entropy is ${fmt(ce - ceM, 3)} nats above its minimum. `)
+    + `Even the best Poisson leaves a gap of ${fmt(ceM - D.H, 3)} nats to the entropy floor: it must have variance equal to its mean, but these counts have variance ${fmt(r, 1)} times their mean. Maximum likelihood finds the closest member of the family you chose; it cannot fix the family.`;
+  $('#run-kl').innerHTML = `<b>Running example</b>: ${HR12(KL.h)}, &lambda; = ${fmt(lam, 2)}: cross-entropy = &lambda; &minus; x&#772; log &lambda; + mean(log k!) = ${fmt(lam, 2)} &minus; ${fmt(D.m, 3)} &times; ${fmt(Math.log(lam), 3)} + ${fmt(D.lf, 3)} = ${tip('<b>' + fmt(ce, 3) + '</b>', 'nats per day')}; KL = ${fmt(ce, 3)} &minus; ${tip(fmt(D.H, 3), 'entropy of the 261 observed counts\n−Σ p̂(k) log p̂(k)')} = ${tip('<b>' + fmt(kl, 3) + '</b>', 'D_KL(p̂_data ‖ Poisson(λ))')}.`;
+}
+seg1('[data-kh]', 'data-kh', k => { KL.h = +k; drawKL(); });
+$('#kl-l').addEventListener('input', e => { KL.lam = +e.target.value; drawKL(); });
+$('#kl-best').addEventListener('click', () => { KL.lam = klData(KL.h).m; $('#kl-l').value = KL.lam; drawKL(); });
+fig($('#kl-cv'), drawKL); fig($('#kl-ce'), drawKL);
+
+/* ---------- 6. conditional likelihood ---------- */
+const GX = [0.6, 1.3, 2.1, 2.8, 3.5, 4.1, 4.9, 5.6, 6.4, 7.2, 8.1, 9.0], GE = [0.4, -0.8, 0.9, -0.3, 1.1, -1.2, 0.2, 0.7, -0.9, 0.5, -0.4, 1.0];
+const BX = [0.8, 1.6, 2.3, 3.0, 3.6, 4.2, 4.7, 5.1, 5.6, 6.2, 6.9, 7.5, 8.3, 9.1], BY = [0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1];
+const CD = { mode: 'g', G: GX.map((x, i) => [x, 1 + 0.55 * x + GE[i]]), B: BX.map((x, i) => [x, BY[i]]), g: { w: 0.3, b: 3, s: 1.5 }, bb: { w: 0.6, b: -2.5 }, v: null };
+const sig = z => 1 / (1 + Math.exp(-z));
+function gStats() { const P = CD.G, { w, b, s } = CD.g, mse = mean(P.map(p => (p[1] - (w * p[0] + b)) ** 2)); return { mse, nll: Math.log(s) + 0.5 * Math.log(2 * Math.PI) + mse / (2 * s * s) }; }
+function bStats() { const P = CD.B, { w, b } = CD.bb, yh = P.map(p => clamp(sig(w * p[0] + b), 1e-12, 1 - 1e-12)), t = P.map((p, i) => p[1] ? -Math.log(yh[i]) : -Math.log(1 - yh[i])); return { yh, t, nll: mean(t), acc: mean(P.map((p, i) => (yh[i] >= 0.5 ? 1 : 0) === p[1] ? 1 : 0)) }; }
+function olsG() { const P = CD.G, mx = mean(P.map(p => p[0])), my = mean(P.map(p => p[1])); let sxy = 0, sxx = 0; P.forEach(p => { sxy += (p[0] - mx) * (p[1] - my); sxx += (p[0] - mx) ** 2; }); const w = sxx > 0 ? sxy / sxx : 0; return { w, b: my - w * mx }; }
+function fitB() { let w = CD.bb.w, b = CD.bb.b; const P = CD.B, L = 1e-3; for (let it = 0; it < 60; it++) { let g0 = L * w, g1 = 0, h00 = L, h01 = 0, h11 = 1e-9; P.forEach(p => { const q = sig(w * p[0] + b), r = q - p[1], s = q * (1 - q); g0 += r * p[0]; g1 += r; h00 += s * p[0] * p[0]; h01 += s * p[0]; h11 += s; }); const det = h00 * h11 - h01 * h01; if (Math.abs(det) < 1e-14) break; const dw = (h11 * g0 - h01 * g1) / det, db = (h00 * g1 - h01 * g0) / det; w = clamp(w - dw, -3, 3); b = clamp(b - db, -15, 15); if (Math.abs(dw) + Math.abs(db) < 1e-10) break; } return { w, b }; }
+function cdSliders() { const G = CD.mode === 'g', st = G ? CD.g : CD.bb, W = $('#cd-w'), B = $('#cd-b'); W.min = G ? -1 : -3; W.max = G ? 2 : 3; B.min = G ? -3 : -15; B.max = G ? 6 : 15; B.step = G ? 0.01 : 0.05; W.value = st.w; B.value = st.b; $('#cd-s-ctrl').style.display = G ? '' : 'none'; if (G) $('#cd-s').value = CD.g.s; $('#cd-o-k').textContent = G ? 'MSE' : 'accuracy (ŷ ≥ 0.5 means 1)'; }
+function drawCD() {
+  const cv = $('#cd-cv'), C = C0(), G = CD.mode === 'g', v = frame(cv, [0, 10], G ? [-2, 9.5] : [-0.15, 1.15], { l: 40, r: 14, t: 14, b: 32 }), c = v.ctx; CD.v = v;
+  axes(v, 'x', 'y', G ? { sy: 2 } : { sy: 0.5 });
+  clip(v);
+  if (G) { const { w, b, s } = CD.g; [[2, 0.08], [1, 0.14]].forEach(([k, al]) => { c.save(); c.globalAlpha = al; c.fillStyle = C.a; c.beginPath(); c.moveTo(v.X(0), v.Y(b + k * s)); c.lineTo(v.X(10), v.Y(b + 10 * w + k * s)); c.lineTo(v.X(10), v.Y(b + 10 * w - k * s)); c.lineTo(v.X(0), v.Y(b - k * s)); c.closePath(); c.fill(); c.restore(); });
+    CD.G.forEach(p => seg(v, p[0], p[1], p[0], w * p[0] + b, C.muted, 1.2, [3, 3])); seg(v, 0, b, 10, b + 10 * w, C.a, 2.6); }
+  else { const { w, b } = CD.bb; CD.B.forEach(p => seg(v, p[0], p[1], p[0], sig(w * p[0] + b), C.muted, 1.2, [3, 3])); curve(v, x => sig(w * x + b), C.a, 2.6); seg(v, 0, 0.5, 10, 0.5, C.line, 1, [2, 4]); }
+  v.ctx.restore();
+  (G ? CD.G : CD.B).forEach(p => dot(v, p[0], p[1], C.b, 6));
+  const gs = gStats(), bs = bStats(), o = olsG(), mseO = mean(CD.G.map(p => (p[1] - (o.w * p[0] + o.b)) ** 2));
+  $('#cd-w-o').textContent = fmt(G ? CD.g.w : CD.bb.w, 2); $('#cd-b-o').textContent = fmt(G ? CD.g.b : CD.bb.b, 2); $('#cd-s-o').textContent = fmt(CD.g.s, 2);
+  $('#cd-cap').innerHTML = G ? `<span style="color:var(--cA)">&#9644;</span> prediction &ycirc; = wx + b, with bands at &plusmn;&sigma; and &plusmn;2&sigma;: the model says y is Gaussian around the line. Dashed: residuals. Drag the points.` : `<span style="color:var(--cA)">&#9644;</span> P(y = 1 | x) = &sigma;(wx + b). Dashed: the gap between each label and the predicted probability. Drag a point; it snaps to 0 or 1.`;
+  if (G) {
+    $('#cd-nll').innerHTML = tip(fmt(gs.nll, 3), `log σ + ½ log 2π + MSE/(2σ²)\n= ${fmt(Math.log(CD.g.s), 3)} + 0.919 + ${fmt(gs.mse, 3)}/${fmt(2 * CD.g.s ** 2, 3)}`);
+    $('#cd-o').innerHTML = tip(fmt(gs.mse, 3), `(1/${CD.G.length}) Σ (wxᵢ + b − yᵢ)²\nleast squares reaches ${fmt(mseO, 3)}`);
+    const onLine = Math.abs(CD.g.w - o.w) < 0.02 && Math.abs(CD.g.b - o.b) < 0.08, sOK = Math.abs(CD.g.s - Math.sqrt(gs.mse)) < 0.03;
+    $('#cd-say').innerHTML = onLine ? (sOK ? `This is the maximum-likelihood fit: the least-squares line (w = ${fmt(o.w, 3)}, b = ${fmt(o.b, 3)}) with &sigma; = &radic;MSE = ${fmt(Math.sqrt(gs.mse), 3)}. Now slide &sigma; alone: the negative log-likelihood rises, but the best line stays exactly where it is, because &sigma; only scales the MSE term.` : `The line is the least-squares line, which is also the maximum-likelihood line for <i>any</i> &sigma;. The NLL is not yet minimal because &sigma; = ${fmt(CD.g.s, 2)} is not &radic;MSE = ${fmt(Math.sqrt(gs.mse), 3)}.`)
+      : `Your line&rsquo;s MSE is ${fmt(gs.mse, 3)} against ${fmt(mseO, 3)} for least squares. Lowering the MSE and lowering the negative log-likelihood are the same move, whatever &sigma; is; press &ldquo;Fit&rdquo; to see both minimised at once.`;
+  } else {
+    $('#cd-nll').innerHTML = tip(fmt(bs.nll, 3), `−(1/${CD.B.length}) Σ [y log ŷ + (1 − y) log(1 − ŷ)]`);
+    $('#cd-o').innerHTML = tip(pct(bs.acc, 0), 'share of points on the right side of ŷ = 0.5');
+    const f = fitB(), nllF = (() => { const s = CD.bb; CD.bb = f; const r = bStats().nll; CD.bb = s; return r; })(), worst = bs.t.indexOf(Math.max(...bs.t));
+    $('#cd-say').innerHTML = (bs.nll - nllF < 0.002 ? `This is the maximum-likelihood fit (logistic regression): no other w and b give the observed labels a higher probability. ` : `The best possible cross-entropy here is ${fmt(nllF, 3)}; yours is ${fmt(bs.nll, 3)}. `)
+      + `The costliest point is at x = ${fmt(CD.B[worst][0], 1)}, a point labelled ${CD.B[worst][1]}, whose label the model gives probability ${fmt(CD.B[worst][1] ? bs.yh[worst] : 1 - bs.yh[worst], 3)}: it costs &minus;log of that, ${fmt(bs.t[worst], 2)} nats. Confident mistakes are punished hardest.`;
+  }
+  const gT = CD.g;
+  $('#run-cg').innerHTML = `<b>Running example</b>: &sigma; = ${fmt(gT.s, 2)}, line w = ${fmt(gT.w, 2)}, b = ${fmt(gT.b, 2)}: log ${fmt(gT.s, 2)} + &frac12; log 2&pi; + ${fmt(gs.mse, 3)}/(2 &times; ${fmt(gT.s, 2)}&sup2;) = ${fmt(Math.log(gT.s), 3)} + 0.919 + ${fmt(gs.mse / (2 * gT.s * gT.s), 3)} = ${tip('<b>' + fmt(gs.nll, 3) + '</b>', 'average negative log-likelihood (nats)')}.`;
+  $('#run-cb').innerHTML = `<b>Running example</b>: w = ${fmt(CD.bb.w, 2)}, b = ${fmt(CD.bb.b, 2)}: &minus;(1/${CD.B.length})[${bs.t.slice(0, 4).map((t, i) => tip('log ' + fmt(CD.B[i][1] ? bs.yh[i] : 1 - bs.yh[i], 2), `point at x = ${fmt(CD.B[i][0], 1)}, label ${CD.B[i][1]}\nŷ = σ(${fmt(CD.bb.w, 2)} × ${fmt(CD.B[i][0], 1)} + ${fmt(CD.bb.b, 2)}) = ${fmt(bs.yh[i], 3)}`)).join(' + ')} + &hellip;] = ${tip('<b>' + fmt(bs.nll, 3) + '</b>', 'binary cross-entropy (nats)')}${G ? ' (switch to 0&ndash;1 labels to steer it)' : ''}.`;
+}
+seg1('[data-cm]', 'data-cm', k => { CD.mode = k; cdSliders(); drawCD(); });
+$('#cd-w').addEventListener('input', e => { (CD.mode === 'g' ? CD.g : CD.bb).w = +e.target.value; drawCD(); });
+$('#cd-b').addEventListener('input', e => { (CD.mode === 'g' ? CD.g : CD.bb).b = +e.target.value; drawCD(); });
+$('#cd-s').addEventListener('input', e => { CD.g.s = +e.target.value; drawCD(); });
+$('#cd-fit').addEventListener('click', () => { if (CD.mode === 'g') { const o = olsG(); CD.g.w = o.w; CD.g.b = o.b; CD.g.s = clamp(Math.sqrt(mean(CD.G.map(p => (p[1] - (o.w * p[0] + o.b)) ** 2))), 0.2, 3); } else CD.bb = fitB(); cdSliders(); drawCD(); });
+draggable($('#cd-cv'), () => CD.v, () => CD.mode === 'g' ? CD.G : CD.B, () => { if (CD.mode === 'b') CD.B.forEach(p => { p[1] = p[1] > 0.5 ? 1 : 0; }); drawCD(); });
+cdSliders();
+fig($('#cd-cv'), drawCD);
+
+/* ---------- 7. efficiency and the Cramér–Rao bound ---------- */
+const CR = { d: 'g', m: 25, seed: 1, mean: null, med: null };
+const LB = 1 / Math.SQRT2;
+function crRun() { const r = mulberry32(100 + CR.seed), R = 2000, mE = new Float64Array(R), mD = new Float64Array(R), x = new Float64Array(CR.m);
+  for (let k = 0; k < R; k++) { for (let i = 0; i < CR.m; i++) { if (CR.d === 'g') x[i] = gaussOf(r); else { let u = r() - 0.5; while (u === -0.5) u = r() - 0.5; x[i] = -LB * Math.sign(u) * Math.log(1 - 2 * Math.abs(u)); } } mE[k] = mean(x); mD[k] = median(x); }
+  CR.mean = mE; CR.med = mD; }
+function drawCR() {
+  const cv = $('#cr-cv'), C = C0(), m = CR.m, bound = (CR.d === 'g' ? 1 : LB * LB) / m, half = 4 / Math.sqrt(m), nb = 41, bw = 2 * half / nb;
+  const hist = a => { const h = new Array(nb).fill(0); a.forEach(x => { const b = Math.floor((x + half) / bw); if (b >= 0 && b < nb) h[b]++; }); return h.map(c => c / (a.length * bw)); };
+  const hE = hist(CR.mean), hD = hist(CR.med), ymax = Math.max(...hE, ...hD, 1 / Math.sqrt(2 * Math.PI * bound)) * 1.12;
+  const v = frame(cv, [-half, half], [0, ymax], { l: 40, r: 14, t: 14, b: 32 }), c = v.ctx; axes(v, narrowOf(cv) ? 'estimate' : 'estimate of the centre (truth 0)', 'density', { nx: 6, fy: () => '' });
+  [[hE, C.b], [hD, C.a]].forEach(([h, col]) => { c.save(); c.fillStyle = col; c.globalAlpha = 0.22; c.strokeStyle = col; h.forEach((d, b) => { if (d) c.fillRect(v.X(-half + b * bw), v.Y(d), v.X(bw) - v.X(0), v.Y(0) - v.Y(d)); }); c.globalAlpha = 1; c.lineWidth = 2; c.beginPath(); h.forEach((d, b) => { const x0 = v.X(-half + b * bw), x1 = v.X(-half + (b + 1) * bw); if (!b) c.moveTo(x0, v.Y(0)); c.lineTo(x0, v.Y(d)); c.lineTo(x1, v.Y(d)); }); c.lineTo(v.X(half), v.Y(0)); c.stroke(); c.restore(); });
+  curve(v, x => npdf(x, 0, Math.sqrt(bound)), C.q, 2, [5, 4]);
+  const vm = pvar(CR.mean), vd = pvar(CR.med), win = vm < vd ? 'mean' : 'median', eff = bound / Math.min(vm, vd);
+  $('#cr-m-o').textContent = m;
+  $('#cr-vm').innerHTML = tip(fmt(m * vm, 3), `${m} × variance of 2,000 sample means\n= ${m} × ${fmt(vm, 5)}`);
+  $('#cr-vd').innerHTML = tip(fmt(m * vd, 3), `${m} × variance of 2,000 sample medians\n= ${m} × ${fmt(vd, 5)}`);
+  $('#cr-b').innerHTML = tip(fmt(m * bound, 3), CR.d === 'g' ? 'σ² = 1: Fisher information I = 1/σ² = 1' : 'b² = 1/2: Fisher information I = 1/b² = 2');
+  $('#cr-w').innerHTML = tip(pct(Math.min(1, eff), 0), `bound / Var(${win}) = ${fmt(bound, 5)} / ${fmt(Math.min(vm, vd), 5)}${eff > 1 ? '\nabove 100% only through simulation noise (about ±3%)' : ''}`);
+  $('#cr-say').innerHTML = CR.d === 'g'
+    ? `On Gaussian data the sample mean is the maximum-likelihood estimator and it sits on the Cram&eacute;r&ndash;Rao floor: m &times; Var &asymp; ${fmt(m * vm, 2)} against a bound of 1 (the rest is simulation noise of about &plusmn;3%). The median needs about ${fmt(vd / vm, 2)} times the variance${m >= 40 ? ', close to its large-sample value &pi;/2 &asymp; 1.57' : ''}: to match the mean&rsquo;s accuracy it needs ${fmt(vd / vm, 1)} times as much data.`
+    : `On Laplace data the tables turn. The mean still has m &times; Var &asymp; ${fmt(m * vm, 2)}, the data&rsquo;s variance of 1, but the bound is now 0.5, so the mean wastes half the information. The median is the maximum-likelihood estimator here: m &times; Var &asymp; ${fmt(m * vd, 2)}${m < 60 ? ', a little above the bound at this small m, falling towards 0.5 as m grows (try m = 200)' : ', close to the bound'}.`;
+  $('#run-cr').innerHTML = `<b>Running example</b>: ${CR.d === 'g' ? 'Gaussian, I = 1/&sigma;&sup2; = 1' : 'Laplace, I = 1/b&sup2; = 2'}, m = ${m}: bound = 1/(${m} &times; ${CR.d === 'g' ? 1 : 2}) = ${tip('<b>' + fmt(bound, 5) + '</b>', '1/(m I)')}; simulated Var(mean) = ${fmt(vm, 5)}, Var(median) = ${fmt(vd, 5)}.`;
+}
+seg1('[data-pd]', 'data-pd', k => { CR.d = k; crRun(); drawCR(); });
+$('#cr-m').addEventListener('input', e => { CR.m = +e.target.value; crRun(); drawCR(); });
+$('#cr-run').addEventListener('click', () => { CR.seed++; crRun(); drawCR(); });
+crRun();
+fig($('#cr-cv'), drawCR);
+
+/* ---------- 8. output units and conditional statistics ---------- */
+const OS = { loss: 'mse', h: 8, tau: 0.9, jit: FB.d25.map((a, h) => { const r = mulberry32(500 + h); return a.map(() => (r() - 0.5) * 0.7); }) };
+const SORT = FB.d25.map(a => sorted(a)), SD = VAR.map(Math.sqrt), MED = SORT.map(s => s[(s.length - 1) / 2]);
+const quant = (h, t) => SORT[h][Math.max(0, Math.ceil(t * SORT[h].length) - 1)];
+function osLoss(h, c) { const a = FB.d25[h]; let s = 0; if (OS.loss === 'mse') { for (const y of a) s += (y - c) ** 2; } else if (OS.loss === 'mae') { for (const y of a) s += Math.abs(y - c); } else if (OS.loss === 'pin') { for (const y of a) { const d = y - c; s += d >= 0 ? OS.tau * d : (OS.tau - 1) * d; } } else { const sd = SD[h]; for (const y of a) s += Math.log(sd) + 0.5 * Math.log(2 * Math.PI) + (y - c) ** 2 / (2 * sd * sd); } return s / a.length; }
+const osOpt = h => OS.loss === 'mae' ? MED[h] : OS.loss === 'pin' ? quant(h, OS.tau) : MU[h];
+function drawOS() {
+  const C = C0(), YM = Math.ceil(Math.max(...MAXH) / 100) * 100;
+  { const cv = $('#os-cv'), narrow = narrowOf(cv), v = frame(cv, [-0.6, 23.6], [0, YM], { l: 44, r: 12, t: 14, b: 32 }), c = v.ctx;
+    c.save(); c.fillStyle = C.soft; c.fillRect(v.X(OS.h - 0.5), v.pad.t, v.X(1) - v.X(0), v.ph); c.restore();
+    axes(v, narrow ? 'hour' : 'hour of the day', 'cyclists', { sx: narrow ? 6 : 3, fx: x => x + ':00' });
+    c.save(); c.fillStyle = C.muted; c.globalAlpha = 0.22; FB.d25.forEach((a, h) => a.forEach((y, i) => { c.fillRect(v.X(h + OS.jit[h][i]) - 1, v.Y(y) - 1, 2, 2); })); c.restore();
+    if (OS.loss === 'nll') { c.save(); c.globalAlpha = 0.2; c.fillStyle = C.a; c.beginPath(); for (let h = 0; h < 24; h++) c.lineTo(v.X(h), v.Y(MU[h] + SD[h])); for (let h = 23; h >= 0; h--) c.lineTo(v.X(h), v.Y(Math.max(0, MU[h] - SD[h]))); c.closePath(); c.fill(); c.restore(); }
+    if (OS.loss !== 'mse' && OS.loss !== 'nll') { c.save(); c.strokeStyle = C.b; c.lineWidth = 1.6; c.setLineDash([5, 4]); c.beginPath(); MU.forEach((m, h) => h ? c.lineTo(v.X(h), v.Y(m)) : c.moveTo(v.X(h), v.Y(m))); c.stroke(); c.restore(); }
+    c.save(); c.strokeStyle = C.a; c.lineWidth = 2.6; c.beginPath(); for (let h = 0; h < 24; h++) { const f = osOpt(h); h ? c.lineTo(v.X(h), v.Y(f)) : c.moveTo(v.X(h), v.Y(f)); } c.stroke(); c.restore();
+    for (let h = 0; h < 24; h++) dot(v, h, osOpt(h), C.a, h === OS.h ? 5.5 : 3.2); }
+  const h = OS.h, f = osOpt(h), lmin = osLoss(h, f);
+  { const cv = $('#os-loss'), lo = 0, hi = Math.ceil(MAXH[h] * 1.02 / 10) * 10, N = 160; let ymin = Infinity, ymax = -Infinity; const ys = []; for (let i = 0; i <= N; i++) { const cc = lo + (hi - lo) * i / N, y = osLoss(h, cc); ys.push(y); ymin = Math.min(ymin, y); ymax = Math.max(ymax, y); }
+    const v = frame(cv, [lo, hi], [ymin - (ymax - ymin) * 0.06, ymax], { l: 54, r: 14, t: 12, b: 28 }), c = v.ctx;
+    axes(v, 'prediction c', 'loss', { ny: 3, fy: y => y >= 1000 ? nf(y) : fmt(y, y >= 10 ? 0 : 2) });
+    clip(v); c.save(); c.strokeStyle = C.a; c.lineWidth = 2.4; c.beginPath(); ys.forEach((y, i) => { const x = v.X(lo + (hi - lo) * i / N); i ? c.lineTo(x, v.Y(y)) : c.moveTo(x, v.Y(y)); }); c.stroke(); c.restore();
+    seg(v, MU[h], v.yl[0], MU[h], v.yl[1], C.b, 1.2, [4, 4]); seg(v, MED[h], v.yl[0], MED[h], v.yl[1], C.c, 1.2, [2, 3]); v.ctx.restore();
+    star(v, f, lmin, C.q, 8); }
+  const lname = { mse: 'mean', mae: 'median', pin: `${fmt(OS.tau, 2)}-quantile`, nll: 'mean (&plusmn; s.d.)' }[OS.loss];
+  $('#os-h-o').innerHTML = HR12(h); $('#os-t-o').textContent = fmt(OS.tau, 2); $('#os-t-ctrl').style.display = OS.loss === 'pin' ? '' : 'none';
+  $('#os-f-k').innerHTML = `learned output: the ${lname}`;
+  $('#os-f').innerHTML = tip(OS.loss === 'nll' ? `${fmt(f, 0)} &plusmn; ${fmt(SD[h], 0)}` : fmt(f, OS.loss === 'mse' ? 1 : 0), OS.loss === 'mae' ? `the 131st of the 261 sorted counts` : OS.loss === 'pin' ? `the ${Math.max(1, Math.ceil(OS.tau * N25))}th of the 261 sorted counts\n(the smallest c with at least ${pct(OS.tau, 0)} of days at or below it)` : OS.loss === 'nll' ? 'mean and population s.d. of the 261 counts:\nthe minimisers of the Gaussian NLL' : 'Σ y / 261');
+  $('#os-mn').innerHTML = tip(fmt(MU[h], 1), `Σ y / ${N25}`); $('#os-md').innerHTML = tip(fmt(MED[h], 0), 'the middle of the 261 sorted counts');
+  $('#os-l').innerHTML = tip(OS.loss === 'mse' ? nf(lmin) : fmt(lmin, 2), { mse: 'average (y − c)² at its minimum = the variance', mae: 'average |y − c| at its minimum', pin: 'average pinball loss at its minimum', nll: 'log σ + ½ log 2π + 1/2, the best Gaussian NLL' }[OS.loss]);
+  $('#os-cap').innerHTML = `Grey dots: every weekday of 2025, one per hour (${nf(N25 * 24)} counts). <span style="color:var(--cA)">&#9644;</span> what a model with one output per hour learns under this loss${OS.loss === 'nll' ? ', with the learned &plusmn;1 s.d. band' : ''}${OS.loss === 'mae' || OS.loss === 'pin' ? ' &nbsp; <span style="color:var(--cB)">&#9476;</span> the mean, for comparison' : ''}. Below: the average loss for ${HR12(h)} against the prediction c; &#9733; marks the minimum, <span style="color:var(--cB)">&#9476;</span> the mean, <span style="color:var(--cC)">&#9476;</span> the median.`;
+  const below = MU.filter((m, i) => MED[i] < m).length;
+  $('#os-say').innerHTML = OS.loss === 'mse' ? `Squared error learns the conditional mean: at ${HR12(h)} the output is ${fmt(MU[h], 1)}, the plain average of that hour&rsquo;s 261 counts, and the minimum loss is the hour&rsquo;s variance. ${MED[h] < MU[h] ? `A tail of unusually busy days pulls the mean above the median (${fmt(MED[h], 0)}): a square punishes the big misses most.` : `Here a tail of quiet days (rain, holidays) pulls the mean below the median (${fmt(MED[h], 0)}): a square punishes the big misses most.`}`
+    : OS.loss === 'mae' ? `Absolute error learns the conditional median: ${fmt(MED[h], 0)} at ${HR12(h)}, against a mean of ${fmt(MU[h], 1)}. In ${below} of the 24 hours the median is below the mean: those hours have a tail of unusually busy days that drags the mean up but barely moves the median. In the other ${24 - below}, mostly around midday, a tail of quiet days drags the mean down instead.`
+    : OS.loss === 'pin' ? `The pinball loss with &tau; = ${fmt(OS.tau, 2)} learns the ${fmt(OS.tau, 2)}-quantile: at ${HR12(h)}, ${fmt(f, 0)} cyclists, a level ${pct(OS.tau, 0)} of days stay at or below. ${OS.tau >= 0.8 ? 'A planner sizing a bike lane for busy days wants this, not the mean.' : OS.tau <= 0.2 ? 'A low quantile describes the quiet days.' : 'Move &tau; to the ends to trace the spread.'}`
+    : `Two outputs per hour, a mean and a spread, trained on the Gaussian negative log-likelihood. The mean head learns exactly what squared error learns; the spread head learns each hour&rsquo;s standard deviation, from ${fmt(Math.min(...SD), 1)} at night to ${fmt(Math.max(...SD), 0)} at the morning peak. Squared error alone assumes the same noise everywhere, which these counts plainly violate.`;
+  $('#run-os').innerHTML = `<b>Running example</b>: ${HR12(h)}: arg min<sub>c</sub> (1/261)&Sigma;(y &minus; c)&sup2; = mean = ${tip(fmt(MU[h], 1), `${nf(sum(FB.d25[h]))} cyclists / 261 days`)}; arg min<sub>c</sub> (1/261)&Sigma;|y &minus; c| = median = ${tip(fmt(MED[h], 0), 'the 131st sorted count')}.`;
+}
+seg1('[data-ol]', 'data-ol', k => { OS.loss = k; drawOS(); });
+$('#os-h').addEventListener('input', e => { OS.h = +e.target.value; drawOS(); });
+$('#os-t').addEventListener('input', e => { OS.tau = +e.target.value; drawOS(); });
+fig($('#os-cv'), drawOS); fig($('#os-loss'), drawOS);
+
+/* ---------- 9. MAP as weight decay, Bayesian linear regression ---------- */
+const MP0 = [[-0.9, -0.1], [-0.68, -0.75], [-0.5, -0.55], [-0.22, -0.6], [0.02, 0.25], [0.3, 0.55], [0.5, 0.95], [0.8, 0.3]];
+const MP = { P: MP0.map(p => p.slice()), ll: -2, band: true, v: null }, DEG = 9, SIG = 0.2;
+const phi = x => { const f = [1]; for (let k = 1; k <= DEG; k++) f.push(f[k - 1] * x); return f; };
+function gsolve(A, b) { const n = b.length, M = A.map((r, i) => [...r, b[i]]); for (let col = 0; col < n; col++) { let p = col; for (let r = col + 1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[p][col])) p = r; [M[col], M[p]] = [M[p], M[col]]; const d = M[col][col] || 1e-300; for (let r = col + 1; r < n; r++) { const f = M[r][col] / d; if (f) for (let k = col; k <= n; k++) M[r][k] -= f * M[col][k]; } } const x = new Array(n).fill(0); for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / (M[r][r] || 1e-300); } return x; }
+function ridge(lam) { const F = MP.P.map(p => phi(p[0])), d = DEG + 1, A = Array.from({ length: d }, (_, i) => Array.from({ length: d }, (_, j) => sum(F.map(f => f[i] * f[j])) + (i === j ? lam : 0))), b = Array.from({ length: d }, (_, i) => sum(F.map((f, k) => f[i] * MP.P[k][1]))); const w = gsolve(A, b); return { w, A, F }; }
+const dotp = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
+function drawMP() {
+  const cv = $('#mp-cv'), C = C0(), v = frame(cv, [-1.05, 1.05], [-2, 2], { l: 40, r: 14, t: 14, b: 32 }), c = v.ctx; MP.v = v;
+  axes(v, 'x', 'y', { sx: 0.5, sy: 1 });
+  const lam = 10 ** MP.ll, R = ridge(lam), R0 = ridge(1e-9), f = x => dotp(R.w, phi(x)), f0 = x => dotp(R0.w, phi(x));
+  clip(v);
+  if (MP.band) { // predictive variance: σ² + φᵀ Σ φ with Σ = σ² A⁻¹
+    const N = 120, up = [], dn = [];
+    for (let i = 0; i <= N; i++) { const x = -1.05 + 2.1 * i / N, ph = phi(x), z = gsolve(R.A, ph), s = Math.sqrt(SIG * SIG * (1 + dotp(ph, z))); up.push([x, f(x) + 1.96 * s]); dn.push([x, f(x) - 1.96 * s]); }
+    c.save(); c.globalAlpha = 0.16; c.fillStyle = C.a; c.beginPath(); up.forEach((p, i) => { const py = clamp(v.Y(p[1]), -50, v.h + 50); i ? c.lineTo(v.X(p[0]), py) : c.moveTo(v.X(p[0]), py); }); dn.reverse().forEach(p => c.lineTo(v.X(p[0]), clamp(v.Y(p[1]), -50, v.h + 50))); c.closePath(); c.fill(); c.restore();
+  }
+  curve(v, f0, C.b, 1.8, [6, 4]);
+  curve(v, f, C.a, 2.8);
+  v.ctx.restore();
+  MP.P.forEach(p => dot(v, p[0], p[1], C.q, 6));
+  const nw = Math.sqrt(dotp(R.w, R.w)), nw0 = Math.sqrt(dotp(R0.w, R0.w)), sse = sum(MP.P.map(p => (p[1] - f(p[0])) ** 2)), mse = sse / MP.P.length, tau = SIG / Math.sqrt(lam);
+  $('#mp-l-o').innerHTML = `${fmt(MP.ll, 2)} (&lambda; = ${lam < 1e-3 ? sci(lam, 1) : fmt(lam, lam < 0.1 ? 4 : 2)})`;
+  $('#mp-w').innerHTML = tip(nw >= 1000 ? nf(nw) : fmt(nw, 2), '√(Σ wₖ²) over the 10 weights of the MAP fit');
+  $('#mp-w0').innerHTML = tip(nw0 >= 100 ? nf(nw0) : fmt(nw0, 1), '√(Σ wₖ²) with λ = 10⁻⁹:\nthe weights needed to thread every point');
+  $('#mp-e').innerHTML = tip(fmt(mse, 4), `(1/8) Σ (yᵢ − w·φ(xᵢ))²`);
+  $('#mp-t').innerHTML = tip(tau >= 1000 ? sci(tau, 1) : fmt(tau, 3), `τ = σ/√λ = 0.2/√${lam < 1e-3 ? lam.toExponential(1) : fmt(lam, 4)}`);
+  $('#mp-say').innerHTML = MP.ll < -6 ? `With &lambda; this small the prior is almost silent and MAP is maximum likelihood: ${tip('training error ' + (mse < 1e-6 ? '&asymp; 0' : fmt(mse, 4)), 'with 10 weights and 8 points the curve can pass through every point')}, a weight vector of length ${nw >= 100 ? nf(nw) : fmt(nw, 1)}, and wild swings between and beyond the points. The Bayesian band admits it: away from the data, the model has no idea.`
+    : MP.ll > 0.3 ? `The prior now dominates: each weight is believed to be within about ${fmt(tau, 2)} of zero, so the curve is pulled flat towards y = 0 and misses the data (training MSE ${fmt(mse, 3)}). Too strong a prior underfits, just as too much weight decay does.`
+    : `A moderate prior (&tau; = ${fmt(tau, 2)}) keeps the weights small (&Vert;w&Vert; = ${fmt(nw, 2)} instead of ${nw0 >= 100 ? nf(nw0) : fmt(nw0, 1)}), and the curve is smooth: it gives up a little training error (MSE ${fmt(mse, 4)}) to stop chasing every point. The band is narrow near the data and widens where there is none. Drag a point far away and watch the MAP curve stay calm.`;
+  $('#run-mp').innerHTML = `<b>Running example</b>: J(w<sub>MAP</sub>) = &Sigma;(y &minus; w<sup>&top;</sup>&phi;)&sup2; + &lambda;w<sup>&top;</sup>w = ${tip(fmt(sse, 4), 'sum of squared errors on the 8 points')} + ${lam < 1e-3 ? sci(lam, 1) : fmt(lam, 4)} &times; ${tip(fmt(nw * nw, 3), 'wᵀw')} = ${tip('<b>' + fmt(sse + lam * nw * nw, 4) + '</b>', 'the smallest value any w can reach')}; &lambda; = &sigma;&sup2;/&tau;&sup2; = 0.04/${tau > 1000 ? sci(tau * tau, 1) : fmt(tau * tau, 4)}.`;
+}
+$('#mp-l').addEventListener('input', e => { MP.ll = +e.target.value; drawMP(); });
+seg1('[data-mb]', 'data-mb', k => { MP.band = k === '1'; drawMP(); });
+$('#mp-reset').addEventListener('click', () => { MP.P = MP0.map(p => p.slice()); drawMP(); });
+draggable($('#mp-cv'), () => MP.v, () => MP.P, drawMP);
+fig($('#mp-cv'), drawMP);
+
+/* ---------- project: Fremont Bridge, MLE vs MAP ---------- */
+const NS = [1, 2, 3, 5, 7, 10, 14, 20, 30], RR = 2000;
+const XB = (() => { const r = mulberry32(2025), perm = iota(N25), out = new Float64Array(24 * NS.length * RR); let o = 0;
+  for (let h = 0; h < 24; h++) { const a = FB.d25[h]; for (const n of NS) for (let k = 0; k < RR; k++) { let s = 0; for (let i = 0; i < n; i++) { const j = i + Math.floor(r() * (N25 - i)); const t = perm[i]; perm[i] = perm[j]; perm[j] = t; s += a[perm[i]]; } out[o++] = s / n; } }
+  return out; })();
+const PJ = { h: 17, n: 5, b: 5, pr: '24', ni: 3, hand: [], rng: mulberry32(99), perm: iota(N25) };
+const prior = h => (PJ.pr === '24' ? FB.m24 : FB.m20)[h];
+function mcRMSE(h, k, m0, b) { const n = NS[k], base = (h * NS.length + k) * RR, mu = MU[h]; let s = 0; for (let r = 0; r < RR; r++) { const x = XB[base + r], e = (b ? (b * m0 + n * x) / (b + n) : x) - mu; s += e * e; } return Math.sqrt(s / RR); }
+const vxb = (h, n) => VAR[h] / n * (N25 - n) / (N25 - 1);
+const exRMSE = (h, n, m0, b) => Math.sqrt((b * b * (m0 - MU[h]) ** 2 + n * n * vxb(h, n)) / (b + n) ** 2);
+function pjDraw() { PJ.hand = sampleIdx(PJ.perm, PJ.n, PJ.rng).map(i => FB.d25[PJ.h][i]); }
+function drawPJ() {
+  const C = C0(), h = PJ.h, n = PJ.n, b = PJ.b, m0 = prior(h), mu = MU[h], xs = PJ.hand, xb = mean(xs), mp = (b * m0 + n * xb) / (b + n);
+  { const cv = $('#pj-line'), narrow = narrowOf(cv), xmax = Math.max(Math.ceil(MAXH[h] * 1.04 / 10) * 10, 10), v = frame(cv, [0, xmax], [0, 1], { l: 14, r: 14, t: 8, b: 28 }), c = v.ctx;
+    axes(v, 'cyclists', '', { fy: () => '', sy: 2 });
+    const stack = {}; xs.forEach(x => { const key = Math.round(v.X(x) / 7); stack[key] = (stack[key] || 0) + 1; const py = v.Y(0) - 6 - (stack[key] - 1) * 7; c.beginPath(); c.arc(v.X(x), py, 3.4, 0, 7); c.fillStyle = C.b; c.globalAlpha = 0.8; c.fill(); c.globalAlpha = 1; });
+    const marks = [[mu, C.q, 'truth'], [m0, C.c, PJ.pr === '24' ? '2024' : '2020'], [xb, C.b, 'MLE'], [mp, C.a, 'MAP']], fs = (narrow ? '10px ' : '11px ') + css('--f-mono');
+    marks.forEach(([x, col, t], i) => { const ly = v.pad.t + 8 + i * (v.ph - 26) / 4.2; seg(v, x, v.iY(ly + 6), x, v.iY(v.Y(0) - 2), col, 1.2, [2, 3], 0.7); tri(v, x, ly + 10, col, 5); const px = v.X(x), right = px < v.w - 70; label(c, `${t} ${fmt(x, 0)}`, px + (right ? 8 : -8), ly + 10, col, right ? 'left' : 'right', 'middle', fs); }); }
+  { const cv = $('#pj-rmse'), ymax = Math.max(exRMSE(h, 1, m0, 0), mcRMSE(h, 0, m0, 0)) * 1.12, v = frame(cv, [0, 31], [0, ymax], { l: 46, r: 14, t: 14, b: 32 }), c = v.ctx;
+    axes(v, 'days in the hand, n', 'RMSE (cyclists)', { sx: 5 });
+    clip(v);
+    const line = (bb, col) => { c.save(); c.strokeStyle = col; c.lineWidth = 2.4; c.beginPath(); for (let k = 1; k <= 30; k++) { const y = exRMSE(h, k, m0, bb); k > 1 ? c.lineTo(v.X(k), v.Y(y)) : c.moveTo(v.X(k), v.Y(y)); } c.stroke(); c.restore(); };
+    line(0, C.b); line(b, C.a);
+    seg(v, n, 0, n, ymax, C.q, 1.2, [4, 4]);
+    v.ctx.restore();
+    NS.forEach((nn, k) => { dot(v, nn, mcRMSE(h, k, m0, 0), C.b, 4.2); dot(v, nn, mcRMSE(h, k, m0, b), C.a, 4.2); }); }
+  const eMl = exRMSE(h, n, m0, 0), eMp = exRMSE(h, n, m0, b), k = NS.indexOf(n), bs = VAR[h] / (m0 - mu) ** 2;
+  $('#pj-h-o').innerHTML = HR12(h); $('#pj-n-o').textContent = n; $('#pj-b-o').textContent = b + (b === 0 ? ' (MAP = MLE)' : '');
+  const err = e => `${e >= 0 ? '+' : '&minus;'}${fmt(Math.abs(e), 1)}`;
+  $('#pj-ml').innerHTML = tip(`${fmt(xb, 1)} <small>${err(xb - mu)}</small>`, `x̄ = (${xs.slice(0, 10).join(' + ')}${n > 10 ? ' + …' : ''}) / ${n}\ntruth ${fmt(mu, 2)}`);
+  $('#pj-mp').innerHTML = tip(`${fmt(mp, 1)} <small>${err(mp - mu)}</small>`, `(${b} × ${fmt(m0, 1)} + ${n} × ${fmt(xb, 1)}) / ${b + n}\ntruth ${fmt(mu, 2)}`);
+  $('#pj-r').innerHTML = tip(`${fmt(eMl, 0)} vs ${fmt(eMp, 0)}`, `from the bias–variance formula` + (k >= 0 ? `\nsimulated over 2,000 hands: ${fmt(mcRMSE(h, k, m0, 0), 1)} vs ${fmt(mcRMSE(h, k, m0, b), 1)}` : `\n(dots only at n = ${NS.join(', ')})`));
+  $('#pj-bs').innerHTML = tip(bs > 999 ? '&gt; 999 days' : fmt(bs, 1) + ' days', `s² / δ² = ${fmt(VAR[h], 1)} / (${fmt(m0, 1)} − ${fmt(mu, 1)})²\n(uses this year's data: an explanation, not a tuning rule)`);
+  const rel = Math.abs(m0 - mu) / mu;
+  $('#pj-say').innerHTML = (b === 0 ? `With b = 0 the prior carries no weight and MAP is the MLE. ` : eMp < eMl ? `At ${HR12(h)} with n = ${n}, MAP&rsquo;s typical error is ${fmt(eMl - eMp, 1)} cyclists smaller (${pct(1 - eMp / eMl, 0)} less). ` : `Here the prior hurts: MAP&rsquo;s typical error is ${fmt(eMp - eMl, 1)} cyclists <i>larger</i> than the MLE&rsquo;s. `)
+    + `Last ${PJ.pr === '24' ? 'year&rsquo;s' : 'pandemic year&rsquo;s'} rate is off by ${pct(rel, 0)} (&delta; = ${fmt(m0 - mu, 1)}), while one day&rsquo;s count varies by &plusmn;${fmt(SD[h], 0)}, so the best strength is about ${bs > 999 ? 'unlimited' : fmt(bs, 1) + ' days'}${b > 0 ? (b > bs * 1.5 ? `; your b = ${b} trusts the prior too much` : b < bs / 1.5 ? `; your b = ${b} could trust it more` : `; your b = ${b} is close`) : ''}. As n grows the two curves converge: the data outgrows the prior.`;
+  $('#run-pj').innerHTML = `<b>Running example</b>: ${HR12(h)}, b = ${b}, m<sub>0</sub> = ${fmt(m0, 1)}, n = ${n}: &lambda;<sub>MAP</sub> = (${b} &times; ${fmt(m0, 1)} + ${n} &times; ${fmt(xb, 1)}) / (${b} + ${n}) = ${tip('<b>' + fmt(mp, 1) + '</b>', `prior Gamma(α = ${fmt(b * m0 + 1, 1)}, β = ${b})\nposterior Gamma(${fmt(b * m0 + 1 + n * xb, 1)}, ${b + n}); its mode`)}; the truth is ${fmt(mu, 1)}.`;
+  $('#run-pm').innerHTML = `<b>Running example</b>: &delta; = ${fmt(m0, 1)} &minus; ${fmt(mu, 1)} = ${fmt(m0 - mu, 1)}, Var(x&#772;) = ${tip(fmt(vxb(h, n), 1), `${fmt(VAR[h], 1)}/${n} × (${N25} − ${n})/${N25 - 1}`)}: MSE = (${b}&sup2; &times; ${fmt((m0 - mu) ** 2, 0)} + ${n}&sup2; &times; ${fmt(vxb(h, n), 1)}) / ${b + n}&sup2; = ${fmt(eMp * eMp, 0)}, so RMSE = ${tip('<b>' + fmt(eMp, 2) + '</b>', 'the teal line at this n')}${k >= 0 ? ` (simulated: ${fmt(mcRMSE(h, k, m0, b), 2)})` : ''}.`;
+  drawHours();
+}
+function pjTable() { const b = PJ.b; return NS.map((n, k) => { let a = 0, m4 = 0, w = 0; for (let h = 0; h < 24; h++) { const e0 = mcRMSE(h, k, MU[h], 0), e1 = mcRMSE(h, k, prior(h), b); a += e0 / MU[h]; m4 += e1 / MU[h]; if (e1 < e0) w++; } return { n, mle: a / 24, map: m4 / 24, wins: w }; }); }
+function drawHours() {
+  const C = C0(), k = PJ.ni, n = NS[k], b = PJ.b, cv = $('#pj-hours'), narrow = narrowOf(cv);
+  const r0 = MU.map((m, h) => mcRMSE(h, k, m, 0) / m), r1 = MU.map((m, h) => mcRMSE(h, k, prior(h), b) / m), ym = Math.min(1.5, Math.max(...r0, ...r1) * 1.1);
+  const v = frame(cv, [-0.6, 23.6], [0, ym], { l: 42, r: 10, t: 12, b: 30 }), c = v.ctx; axes(v, '', 'RMSE / rate', { sx: narrow ? 6 : 3, fx: x => x + ':00', fy: y => fmt(y * 100, 0) + '%' });
+  const bw = (v.X(1) - v.X(0)) * 0.36;
+  clip(v); for (let h = 0; h < 24; h++) { [[r0[h], C.b, -1], [r1[h], C.a, 0]].forEach(([y, col, o]) => { c.fillStyle = col; c.globalAlpha = h === PJ.h ? 1 : 0.75; c.fillRect(v.X(h) + o * bw, v.Y(y), bw - 0.5, v.Y(0) - v.Y(y)); }); } c.globalAlpha = 1; v.ctx.restore();
+  const T = pjTable();
+  $('#pj-race').innerHTML = `<thead><tr><th>n</th><th>MLE</th><th>MAP</th><th>MAP wins</th></tr></thead><tbody>${T.map((r, i) => `<tr${i === k ? ' class="win"' : ''}><td>${r.n}</td><td>${tip(pct(r.mle, 1), `average over the 24 hours of\nRMSE / rate, 2,000 hands each`)}</td><td>${tip(pct(r.map, 1), `b = ${b}, prior ${PJ.pr === '24' ? '2024' : '2020'}`)}</td><td>${r.wins} of 24</td></tr>`).join('')}</tbody>`;
+  const r = T[k], worst = r1.map((x, h) => [x - r0[h], h]).sort((a, b2) => b2[0] - a[0])[0];
+  $('#pj-hsay').innerHTML = b === 0 ? 'With b = 0, MAP is the MLE in every hour. Raise b above.'
+    : `With ${n} day${n > 1 ? 's' : ''} per hand, MAP with the ${PJ.pr === '24' ? '2024' : '2020'} prior beats the MLE in ${r.wins} of 24 hours, and the average relative error ${r.map < r.mle ? "falls" : "rises"} from ${pct(r.mle, 1)} to ${pct(r.map, 1)}. ${worst[0] > 0 ? `Its worst hour is ${HR12(worst[1])}, where the prior is ${pct(Math.abs(prior(worst[1]) - MU[worst[1]]) / MU[worst[1]], 0)} off.` : `It never loses.`} ${PJ.pr === '20' ? 'Even a pandemic-year prior helps at very small n, because one day is so noisy; but it is soon outgrown.' : ''}`;
+}
+$('#pj-h').addEventListener('input', e => { PJ.h = +e.target.value; pjDraw(); drawPJ(); });
+$('#pj-n').addEventListener('input', e => { PJ.n = +e.target.value; pjDraw(); drawPJ(); });
+$('#pj-b').addEventListener('input', e => { PJ.b = +e.target.value; drawPJ(); });
+$('#pj-draw').addEventListener('click', () => { pjDraw(); drawPJ(); });
+seg1('[data-pp]', 'data-pp', k => { PJ.pr = k; drawPJ(); });
+seg1('[data-pn]', 'data-pn', k => { PJ.ni = +k; drawHours(); });
+pjDraw();
+fig($('#pj-line'), drawPJ); fig($('#pj-rmse'), drawPJ); fig($('#pj-hours'), drawHours);
+{ const disp = VAR.map((v, h) => v / MU[h]), lo = Math.min(...disp), hi = Math.max(...disp);
+  $('#pj-honest').innerHTML = `The page&rsquo;s simulation uses the same random-number generator, seed and order of draws as the script, so its table above (with b = 5 and the 2024 prior) reproduces the printed relative errors. Two honest caveats. First, the Poisson model is wrong in an instructive way: a Poisson count has variance equal to its mean, and the night hours come close (variance &divide; mean as low as ${fmt(lo, 1)}), but at the commuting peaks the ratio reaches ${fmt(hi, 0)}, because weather, season and holidays swing the traffic far more than chance alone would. The MLE (the sample mean) is still unbiased for the rate, and the MAP is still a weighted average, but a Poisson likelihood is far too confident about one day&rsquo;s count, so the prior strength b has to be measured in real days of noise, as the bias&ndash;variance formula does. Second, &ldquo;the truth&rdquo; is defined as the 2025 weekday average, holidays included, and the &ldquo;best b&rdquo; uses this year&rsquo;s data, which a real planner would not have; it explains the result rather than tuning it.`; }
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+window.__x7 = { pjTable, mcRMSE, exRMSE, MU, VAR, klData, klCE, PJ, ML, CD, CR, MP, ridge, fitB, olsG, gStats, bStats };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
