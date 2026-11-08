@@ -1,0 +1,1301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on Bayesian model comparison and the evidence approximation: the marginal likelihood as Occam's razor, Bayes factors and model averaging, the Occam factor, the exact evidence for Bayesian linear regression, empirical Bayes and MacKay's re-estimation of alpha and beta, the effective number of parameters, and evidence versus cross-validation, ending with choosing a polynomial degree for NASA's GISTEMP global temperature record, verified against scikit-learn.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Bayesian Model Comparison &amp; the Evidence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.cf-track.one::after { display: none; }
+table.zoo td, table.zoo th { font-size: 0.88rem; vertical-align: top; }
+table.race tr.win td { background: color-mix(in srgb, var(--lda) 12%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+table.hand tr.cur td { font-weight: 700; background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.duo > * { min-width: 0; }
+.duo-p { aspect-ratio: 1.7 / 1; }
+@media (max-width: 560px) { .duo { grid-template-columns: minmax(0, 1fr); } .duo-p { aspect-ratio: 2.2 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Model evidence <span>&middot; Occam&rsquo;s razor, computed</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Occam</a>
+      <a href="#compare">Comparing</a>
+      <a href="#occam">Occam factor</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#empirical">Empirical Bayes</a>
+      <a href="#maximise">Re-estimation</a>
+      <a href="#gamma">&gamma;</a>
+      <a href="#cv">vs CV</a>
+      <a href="#project">Temperature project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.2e · model comparison</div>
+      <h1>Bayesian Model Comparison</h1>
+      <div class="sub">The evidence, the Occam factor and empirical Bayes</div>
+      <p class="lead">A curve of degree 9 always fits the training points at least as well as a curve of degree 3. So how can the training data alone ever prefer the simpler one? Bayes has an answer: score each model by the <em>evidence</em>, the probability it gave to the data before seeing it, averaged over everything the model could have believed. A flexible model spreads its bets over so many possible datasets that it gives yours very little. On the right, <strong>drag any dot</strong> and watch the bars, the probability of each degree given the data, move.</p>
+      <dl class="facts">
+        <div><dt>The idea</dt><dd>Score a model by how probable it made the data, averaged over its own prior</dd></div>
+        <div><dt>Occam for free</dt><dd>Complex models spread their probability thin, and pay for it automatically</dd></div>
+        <div><dt>In practice</dt><dd>Set the degree, the weight penalty &alpha; and the noise level &beta; from the training data alone</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Ten data points with the most probable polynomial; drag the points"></canvas></div>
+      <div class="plot" style="aspect-ratio:4/1; margin-top:8px"><canvas id="hero-bars" aria-label="Posterior probability of each polynomial degree"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Occam&rsquo;s razor, computed</a></li>
+    <li><a href="#compare"><i>02</i>Bayes factors and averaging</a></li>
+    <li><a href="#occam"><i>03</i>The Occam factor</a></li>
+    <li><a href="#evidence"><i>04</i>The evidence for regression</a></li>
+    <li><a href="#empirical"><i>05</i>Empirical Bayes: tuning α</a></li>
+    <li><a href="#maximise"><i>06</i>The re-estimation loop</a></li>
+    <li><a href="#gamma"><i>07</i>Effective parameters γ</a></li>
+    <li><a href="#cv"><i>08</i>Evidence vs cross-validation</a></li>
+    <li><a href="#project"><i>09</i>How wiggly is warming?</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Occam&rsquo;s razor, computed</h2>
+    <div class="prose">
+      <p>Think of a model as a machine that, before you collect anything, says how likely each possible dataset is. Those probabilities must add up to 1 over <em>all</em> datasets. A rigid model bets heavily on a few datasets. A flexible model can explain almost anything, so it has to spread the same total over many more, and gives each one less. When the data land where the rigid model bet, it wins; when they land elsewhere, only the flexible one can catch them. That number, the probability a model gave to the data you actually saw, is its <em class="term">evidence</em>, or <em class="term">marginal likelihood</em>.</p>
+      <p>Start with the simplest case: 20 tosses of a coin. Three models compete. <b>Fair</b> says the chance of heads is exactly &frac12;. <b>Nearly fair</b> says it is somewhere near &frac12; (a Beta(10, 10) prior). <b>Anything goes</b> says every chance from 0 to 1 is equally plausible (a uniform prior). <strong>Slide the number of heads</strong> and see which model the data favour.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} p(\mathcal{D}\mid \mathcal{M}_i) = \int &amp; p(\mathcal{D}\mid \mathbf{w}, \mathcal{M}_i) \\ &amp; \times p(\mathbf{w}\mid \mathcal{M}_i)\; d\mathbf{w} \end{aligned} \]</div><div class="read"><b>Read it as:</b> a model &#x2133;<sub>i</sub> has parameters w (here, one number: the chance of heads) and a prior over them. Its evidence is the likelihood of the data, averaged over that prior. It is not the best fit; it is the <em>average</em> fit, weighted by how much the model believed each setting beforehand. A fixed model with no free parameters (Fair) has no integral: its evidence is just its likelihood.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The evidence for model i is the integral of the likelihood times the prior over the weights.&rdquo;</em></div><div class="eq-run" id="run-co"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="co-cv" aria-label="Probability each model gives to every possible number of heads"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> Fair &nbsp; <span style="color:var(--lda)">&#9644;</span> Nearly fair &nbsp; <span style="color:var(--cB)">&#9644;</span> Anything goes. Each curve is that model&rsquo;s probability for every possible count of heads; each adds up to 1.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="co-k">Heads in 20 tosses</label><output id="co-k-o"></output></div><input type="range" id="co-k" min="0" max="20" step="1" value="11"></div>
+        <div class="stats"><div class="stat"><div class="v" id="co-e0"></div><div class="k">Fair: p(D)</div></div><div class="stat"><div class="v" id="co-e1"></div><div class="k">Nearly fair</div></div><div class="stat"><div class="v" id="co-e2"></div><div class="k">Anything goes</div></div></div>
+        <p class="note" id="co-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARE -->
+<section class="chap" id="compare">
+  <div class="wrap">
+    <div class="tag">Comparing models</div>
+    <h2>Posterior odds, Bayes factors and averaging</h2>
+    <div class="prose">
+      <p>Bayes&rsquo; rule works on models just as it works on parameters. Give each model a prior probability (often equal), multiply by its evidence, and normalise. The ratio of two evidences is the <em class="term">Bayes factor</em>: how far the data alone move the odds from one model to the other. A Bayes factor above about 20 (a log above 3) is usually called strong.</p>
+      <p>Choosing the single best model is itself an approximation. The full Bayesian answer keeps every model and <em>averages</em> their predictions, each weighted by its posterior probability. In practice one model often dominates the mixture, and picking it changes little.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(\mathcal{M}_i\mid\mathcal{D}) &amp;\propto p(\mathcal{M}_i)\, p(\mathcal{D}\mid\mathcal{M}_i) \\ \text{Bayes factor} &amp;= \frac{p(\mathcal{D}\mid\mathcal{M}_1)}{p(\mathcal{D}\mid\mathcal{M}_2)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the posterior probability of a model is its prior probability times its evidence, rescaled so all the models add up to 1. With equal priors, the posterior odds equal the Bayes factor.</div><div class="eq-say"><b>Say it</b><em>&ldquo;p of model i given D is proportional to p of model i times the evidence for model i.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(t\mid \mathbf{x}, \mathcal{D}) = \sum_{i} \,&amp; p(t\mid \mathbf{x}, \mathcal{M}_i, \mathcal{D}) \\ &amp; \times p(\mathcal{M}_i\mid\mathcal{D}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> to predict, ask every model and weight its answer by how much the data now trust it. This is a <em>mixture</em>, so it can be broader or even two-peaked when models disagree.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The predictive distribution is the sum over models of each model&rsquo;s prediction times its posterior probability.&rdquo;</em></div><div class="eq-run" id="run-avg"></div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>Does the evidence pick the right model? Not on every dataset: an unlucky sample can favour the wrong one. But <em>on average</em> it does. If the data really come from &#x2133;<sub>1</sub>, the expected log Bayes factor in its favour is a Kullback&ndash;Leibler divergence, which is never negative. <strong>Choose where the data come from, then draw a thousand datasets</strong> and look at the spread of log Bayes factors.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &amp;\mathbb{E}_{\mathcal{D}\sim p(\mathcal{D}\mid\mathcal{M}_1)}\!\left[\ln \frac{p(\mathcal{D}\mid\mathcal{M}_1)}{p(\mathcal{D}\mid\mathcal{M}_2)}\right] \\ &amp;\quad = \mathrm{KL}\big(p(\mathcal{D}\mid\mathcal{M}_1)\,\big\Vert\, p(\mathcal{D}\mid\mathcal{M}_2)\big) \\ &amp;\quad \ge 0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> average the log Bayes factor over all the datasets the true model would generate. The result is the KL divergence between the two models&rsquo; distributions over datasets: zero only if they are the same model, positive otherwise. This guarantee holds only if one of the candidates really did generate the data.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected log Bayes factor, under the true model, is the KL divergence from the true model&rsquo;s evidence to the other&rsquo;s, and it is at least zero.&rdquo;</em></div><div class="eq-run" id="run-bf"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="True model"><button type="button" data-bt="fair" aria-pressed="true">Data from Fair</button><button type="button" data-bt="any">Data from Anything goes</button></div></div>
+        <div class="plot ar-16x10"><canvas id="bf-cv" aria-label="Histogram of log Bayes factors over simulated datasets"></canvas></div>
+        <figcaption>Each bar counts simulated datasets by their log Bayes factor, ln p(D | Fair) &minus; ln p(D | Anything goes). <span style="color:var(--cA)">&#9644;</span> Fair wins &nbsp; <span style="color:var(--cB)">&#9644;</span> Anything goes wins. The dashed line is the exact average.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="bf-n">Tosses per dataset</label><output id="bf-n-o"></output></div><input type="range" id="bf-n" min="5" max="200" step="5" value="20"></div>
+        <div class="btns"><button type="button" class="btn primary" id="bf-draw">Draw 1,000 more datasets</button><button type="button" class="btn" id="bf-clear">Clear</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="bf-right"></div><div class="k">datasets where the true model wins</div></div><div class="stat"><div class="v" id="bf-mean"></div><div class="k">average log Bayes factor</div></div><div class="stat"><div class="v" id="bf-kl"></div><div class="k">exact KL</div></div></div>
+        <p class="note" id="bf-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- OCCAM FACTOR -->
+<section class="chap" id="occam">
+  <div class="wrap">
+    <div class="tag">Why it works</div>
+    <h2>The Occam factor</h2>
+    <div class="prose">
+      <p>Why does averaging punish flexibility? Picture one parameter with a flat prior of width &Delta;w<sub>prior</sub>. After the data arrive the likelihood is a narrow peak of width &Delta;w<sub>post</sub>. The evidence averages the likelihood over the prior, and the peak fills only a sliver of it, so the evidence is about the best-fit likelihood times the fraction &Delta;w<sub>post</sub>/&Delta;w<sub>prior</sub>. That fraction, always below 1, is the <em class="term">Occam factor</em>: the penalty for how much of its prior the model had to throw away to fit the data.</p>
+      <p>Here the data are n draws from a Gaussian with unknown mean &mu; and known spread 1, and the prior on &mu; is flat on &minus;L to L. <strong>Widen the prior, then add data</strong>, and see the two parts of the evidence pull against each other.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ p(\mathcal{D}) \simeq p(\mathcal{D}\mid w_{\text{MAP}})\, \frac{\Delta w_{\text{post}}}{\Delta w_{\text{prior}}} \]</div><div class="read"><b>Read it as:</b> evidence &asymp; best fit &times; Occam factor. A sharper peak (more data) or a wider prior (a vaguer model) makes the factor smaller.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The evidence is roughly the likelihood at the best w, times delta-w-posterior over delta-w-prior.&rdquo;</em></div><div class="eq-run" id="run-oc"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \ln p(\mathcal{D}) \simeq {} &amp; \ln p(\mathcal{D}\mid \mathbf{w}_{\text{MAP}}) \\ &amp; + M \ln\!\left(\frac{\Delta w_{\text{post}}}{\Delta w_{\text{prior}}}\right) \end{aligned} \]</div><div class="read"><b>Read it as:</b> with M parameters, each roughly equally constrained, the log penalty is M times as big. Adding parameters improves the first term (better fit) but makes the second more negative (each new parameter is another negative log). The best model balances them, at an intermediate complexity.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Log evidence is about the log best-fit likelihood plus M times the log of the posterior-to-prior width ratio.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="oc-cv" aria-label="Flat prior and likelihood peak for the mean of a Gaussian"></canvas></div><figcaption><span style="color:var(--muted)">&#9632;</span> the flat prior, width &Delta;w<sub>prior</sub> = 2L &nbsp; <span style="color:var(--cB)">&#9644;</span> the likelihood, scaled to peak at 1 &nbsp; <span style="color:var(--lda)">&#9632;</span> a box of the same area: its width is &Delta;w<sub>post</sub> &nbsp; ticks: the data</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="oc-L">Prior half-width L</label><output id="oc-L-o"></output></div><input type="range" id="oc-L" min="-0.7" max="2" step="0.02" value="0.6"></div>
+        <div class="ctrl"><div class="top"><label for="oc-n">Data points n</label><output id="oc-n-o"></output></div><input type="range" id="oc-n" min="1" max="100" step="1" value="8"></div>
+        <div class="stats"><div class="stat"><div class="v" id="oc-fit"></div><div class="k">ln best fit</div></div><div class="stat"><div class="v" id="oc-occ"></div><div class="k">ln Occam factor</div></div><div class="stat"><div class="v" id="oc-ev"></div><div class="k">ln evidence (exact)</div></div></div>
+        <p class="note" id="oc-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>Two warnings fall out of this picture. First, the evidence depends on the prior&rsquo;s width even when the fit does not: make the prior a thousand times wider and the evidence drops by a factor of a thousand per parameter. So the priors in a model comparison must be chosen with care. Second, an <em>improper</em> prior (flat over the whole line, with infinite width) gives zero evidence, and comparisons become meaningless; you can take a proper prior and let it widen only if you compare models with the same limit.</p></div>
+  </div>
+</section>
+
+<!-- EVIDENCE FUNCTION -->
+<section class="chap" id="evidence">
+  <div class="wrap">
+    <div class="tag">Linear regression</div>
+    <h2>Evaluating the evidence function</h2>
+    <div class="prose">
+      <p>Now the real model of chapter 1.2d: a linear model y(x, w) = w&#x1D40;&phi;(x) with a Gaussian prior on the weights, precision &alpha;, and Gaussian noise of precision &beta;. Here &phi;(x) holds the powers 1, x, &hellip;, x<sup>d</sup>, so a polynomial of degree d has M = d + 1 weights. Because everything is Gaussian, the integral over w can be done exactly by completing the square, and the evidence has a closed form. The posterior mean m<sub>N</sub> and precision A are the ones from the last chapter.</p>
+      <p>The points below come from sin(&pi;x) plus noise of spread 0.25, so the true &beta; = 16; for now &alpha; is fixed at 0.005. <strong>Step through the degrees</strong> and compare two curves: the best-fit likelihood, which only ever climbs, and the evidence, which rises and then falls. You can drag the points.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(\mathbf{t}\mid\alpha,\beta) &amp;= \int p(\mathbf{t}\mid\mathbf{w},\beta) \\ &amp;\qquad \times p(\mathbf{w}\mid\alpha)\,d\mathbf{w} \\ E(\mathbf{w}) &amp;= E(\mathbf{m}_N) \\ &amp;\quad + \tfrac12(\mathbf{w}-\mathbf{m}_N)^{\!\top} \\ &amp;\qquad \times \mathbf{A}\,(\mathbf{w}-\mathbf{m}_N) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the evidence integrates the weights out. The exponent of likelihood &times; prior, &minus;E(w), is a quadratic bowl in w: its value at the bottom m<sub>N</sub> plus a Gaussian-shaped part with curvature A. Integrating a Gaussian is easy: it leaves (2&pi;)<sup>M/2</sup>|A|<sup>&minus;1/2</sup>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;E of w equals E at m-N plus a half times w minus m-N, transposed, A, w minus m-N.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} E(\mathbf{m}_N) &amp;= \tfrac{\beta}{2}\lVert \mathbf{t}-\boldsymbol{\Phi}\mathbf{m}_N\rVert^2 \\ &amp;\quad + \tfrac{\alpha}{2}\,\mathbf{m}_N^{\!\top}\mathbf{m}_N \\ \mathbf{A} &amp;= \alpha\mathbf{I} + \beta\boldsymbol{\Phi}^{\!\top}\boldsymbol{\Phi} \\ \mathbf{m}_N &amp;= \beta\mathbf{A}^{-1}\boldsymbol{\Phi}^{\!\top}\mathbf{t} \end{aligned} \]</div><div class="read"><b>Read it as:</b> E at the bottom of the bowl is the regularised sum-of-squares error: misfit to the targets plus a weight penalty. A is the posterior precision, and m<sub>N</sub> is the posterior mean (the ridge solution).</div><div class="eq-say"><b>Say it</b><em>&ldquo;E at m-N is beta over two times the squared residual plus alpha over two times m-N squared.&rdquo;</em></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \ln p(\mathbf{t}\mid\alpha,\beta) = {} &amp; \tfrac{M}{2}\ln\alpha + \tfrac{N}{2}\ln\beta \\ &amp; - E(\mathbf{m}_N) - \tfrac12 \ln\lvert\mathbf{A}\rvert \\ &amp; - \tfrac{N}{2}\ln(2\pi) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the log evidence. &minus;E(m<sub>N</sub>) rewards a good regularised fit. &minus;&frac12; ln|A| is the Occam factor in disguise: |A| measures how sharply the data pin the weights down, and every well-determined weight adds to it. M/2 ln &alpha; and N/2 ln &beta; come from the normalising constants of the prior and the noise.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Log evidence is M over two log alpha, plus N over two log beta, minus E at m-N, minus a half log det A, minus N over two log two pi.&rdquo;</em></div><div class="eq-run" id="run-ef"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="ef-cv" aria-label="Polynomial fit with its predictive band; drag the points"></canvas></div>
+        <div class="plot ar-3x1" style="margin-top:8px"><canvas id="ef-curve" aria-label="Log evidence and best-fit log likelihood against degree"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9644;</span> posterior mean, shaded &plusmn;1 predictive standard deviation &nbsp; <span style="color:var(--muted)">- -</span> the true sin(&pi;x). Lower plot: <span style="color:var(--cA)">&#9644;</span> ln evidence &nbsp; <span style="color:var(--cB)">&#9644;</span> best-fit ln likelihood ln p(t | w<sub>ML</sub>, &beta;)</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ef-d">Polynomial degree d</label><output id="ef-d-o"></output></div><input type="range" id="ef-d" min="0" max="9" step="1" value="3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ef-lnev"></div><div class="k">ln evidence</div></div><div class="stat"><div class="v" id="ef-ml"></div><div class="k">best-fit ln likelihood</div></div></div>
+        <div class="coefs" id="ef-terms"></div>
+        <div class="btns"><button type="button" class="btn" id="ef-new">New data</button></div>
+        <p class="note" id="ef-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- EMPIRICAL BAYES -->
+<section class="chap" id="empirical">
+  <div class="wrap">
+    <div class="tag">The evidence approximation</div>
+    <h2>Empirical Bayes: let the data set &alpha;</h2>
+    <div class="prose">
+      <p>The fully Bayesian treatment would put priors on &alpha; and &beta; too and integrate over them, along with w. That integral has no closed form. The <em class="term">evidence approximation</em> takes a shortcut: if the data pin the hyperparameters down well, their posterior is a sharp peak at some (&alpha;&#770;, &beta;&#770;), and we can simply plug those values in. To find the peak with a flat-ish hyperprior, maximise the evidence p(t | &alpha;, &beta;). Statisticians call this <em class="term">empirical Bayes</em> or <em class="term">type-2 maximum likelihood</em>: maximum likelihood, one level up.</p>
+      <p>The striking part: &alpha; is a regularisation strength, which you would normally tune on held-out data. Here it is chosen from the training data alone. <strong>Slide &alpha;</strong> and watch the evidence and the error on 400 fresh test points (which the evidence never sees). Here &beta; stays at its true value, 16.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &amp;p(t\mid\mathbf{t}) = \iiint p(t\mid\mathbf{w},\beta) \\ &amp;\quad \times p(\mathbf{w}\mid\mathbf{t},\alpha,\beta) \\ &amp;\quad \times p(\alpha,\beta\mid\mathbf{t})\,d\mathbf{w}\,d\alpha\,d\beta \end{aligned} \]</div><div class="read"><b>Read it as:</b> the honest prediction averages over everything we don&rsquo;t know: the weights, and the hyperparameters too. (Inputs are left out of the notation to keep it short.)</div><div class="eq-say"><b>Say it</b><em>&ldquo;The predictive for t is the triple integral of the noise model, the weight posterior and the hyperparameter posterior.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(t\mid\mathbf{t}) &amp;\simeq p(t\mid\mathbf{t},\hat\alpha,\hat\beta) \\ (\hat\alpha,\hat\beta) &amp;= \arg\max_{\alpha,\beta}\ p(\mathbf{t}\mid\alpha,\beta) \end{aligned} \]</div><div class="read"><b>Read it as:</b> if p(&alpha;, &beta; | t) is a narrow spike, replace the outer integrals by the value at the spike. With a nearly flat prior on the hyperparameters, the spike is where the evidence peaks.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The predictive is approximately the one at alpha-hat and beta-hat, the values that maximise the evidence.&rdquo;</em></div><div class="eq-run" id="run-eb"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Degree"><button type="button" data-ed="3">Degree 3</button><button type="button" data-ed="6">Degree 6</button><button type="button" data-ed="9" aria-pressed="true">Degree 9</button></div></div>
+        <div class="plot ar-16x10"><canvas id="eb-cv" aria-label="Fit at the chosen alpha"></canvas></div>
+        <div class="duo" style="margin-top:8px"><div class="plot ar-3x1 duo-p"><canvas id="eb-ev" aria-label="Log evidence against log alpha"></canvas></div><div class="plot ar-3x1 duo-p"><canvas id="eb-err" aria-label="Training and test error against log alpha"></canvas></div></div>
+        <figcaption>Left: <span style="color:var(--cA)">&#9644;</span> ln evidence against log&#8321;&#8320; &alpha;. Right: root-mean-square error on <span style="color:var(--cB)">&#9644;</span> the 12 training points and <span style="color:var(--qda)">&#9644;</span> 400 test points. Vertical line: your &alpha;; dotted: &alpha;&#770;.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="eb-a">&alpha;, the weight precision (log scale)</label><output id="eb-a-o"></output></div><input type="range" id="eb-a" min="-6" max="2" step="0.05" value="-4"></div>
+        <div class="btns"><button type="button" class="btn primary" id="eb-best">Jump to &alpha;&#770;</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="eb-lnev"></div><div class="k">ln evidence</div></div><div class="stat"><div class="v" id="eb-te"></div><div class="k">test RMS error</div></div><div class="stat"><div class="v" id="eb-ah"></div><div class="k">&alpha;&#770; from evidence</div></div></div>
+        <p class="note" id="eb-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MAXIMISE -->
+<section class="chap" id="maximise">
+  <div class="wrap">
+    <div class="tag">The algorithm</div>
+    <h2>Maximising the evidence: a fixed-point loop</h2>
+    <div class="prose">
+      <p>Set the derivatives of the log evidence to zero. The tricky term is ln|A|. Write the eigenvalues of &beta;&Phi;&#x1D40;&Phi; as &lambda;<sub>i</sub>; then A has eigenvalues &alpha; + &lambda;<sub>i</sub>, so ln|A| = &Sigma; ln(&alpha; + &lambda;<sub>i</sub>) and its derivative in &alpha; is &Sigma; 1/(&alpha; + &lambda;<sub>i</sub>). Gather the terms and one quantity keeps appearing, &gamma;. The conditions for the peak don&rsquo;t give &alpha; and &beta; directly, because m<sub>N</sub> and &gamma; depend on them. So iterate: guess, compute m<sub>N</sub> and &gamma;, update, repeat. This is MacKay&rsquo;s re-estimation, and it is what scikit-learn&rsquo;s <span class="mono">BayesianRidge</span> runs.</p>
+      <p>The map shows ln p(t | &alpha;, &beta;) for the 12 points above. <strong>Click anywhere to start the loop there</strong>, then press Step.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &amp;\left(\beta\boldsymbol{\Phi}^{\!\top}\boldsymbol{\Phi}\right)\mathbf{u}_i = \lambda_i\mathbf{u}_i \\ &amp;\gamma = \sum_{i} \frac{\lambda_i}{\alpha+\lambda_i} \end{aligned} \]</div><div class="read"><b>Read it as:</b> &lambda;<sub>i</sub> measures how strongly the data constrain the weights along eigen-direction u<sub>i</sub>. Each direction contributes between 0 and 1 to &gamma;. Because the &lambda;<sub>i</sub> scale with &beta;, they must be recomputed whenever &beta; changes (by rescaling, not re-solving).</div><div class="eq-say"><b>Say it</b><em>&ldquo;Gamma is the sum over i of lambda-i over alpha plus lambda-i.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \alpha &amp;= \frac{\gamma}{\mathbf{m}_N^{\!\top}\mathbf{m}_N} \\ \frac{1}{\beta} &amp;= \frac{1}{N-\gamma}\sum_{n=1}^{N}\big(t_n - \mathbf{m}_N^{\!\top}\boldsymbol{\phi}(\mathbf{x}_n)\big)^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> the new &alpha; is the number of well-determined weights divided by the squared size of the weights. The new noise variance is the mean squared residual, but dividing by N &minus; &gamma; instead of N, because &gamma; of the N data points&rsquo; worth of information was spent fitting the weights.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Alpha is gamma over m-N dot m-N; one over beta is the sum of squared residuals over N minus gamma.&rdquo;</em></div><div class="eq-run" id="run-mx"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Degree"><button type="button" data-md="1">Degree 1</button><button type="button" data-md="3">Degree 3</button><button type="button" data-md="9" aria-pressed="true">Degree 9</button></div></div>
+        <div class="plot ar-16x10"><canvas id="mx-cv" aria-label="Log evidence over alpha and beta with the re-estimation path; click to start"></canvas></div>
+        <figcaption>Colour: ln p(t | &alpha;, &beta;), darker is higher (contours every 2 nats below the peak). <span style="color:var(--ink)">&#9679;</span> path of the loop &nbsp; <span style="color:var(--lda)">&#9733;</span> the peak, found by running the loop to convergence &nbsp; dashed: the true &beta; = 16.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="mx-step">Step</button><button type="button" class="btn" id="mx-run">Run to convergence</button><button type="button" class="btn" id="mx-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="mx-it"></div><div class="k">iterations</div></div><div class="stat"><div class="v" id="mx-g"></div><div class="k">&gamma;, of M weights</div></div><div class="stat"><div class="v" id="mx-lnev"></div><div class="k">ln evidence</div></div></div>
+        <div class="tbl-wrap"><table class="hand" id="mx-tbl"></table></div>
+        <p class="note" id="mx-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- GAMMA -->
+<section class="chap" id="gamma">
+  <div class="wrap">
+    <div class="tag">Interpretation</div>
+    <h2>The effective number of parameters</h2>
+    <div class="prose">
+      <p>What is &gamma;? Look at the posterior in weight space. The prior is a round bowl centred on zero, the same in every direction. The likelihood is a long ellipse: narrow along directions the data measure well (large &lambda;<sub>i</sub>), wide along directions they barely touch (small &lambda;<sub>i</sub>). Along a well-measured direction, &lambda;<sub>i</sub> &#8811; &alpha;, so the posterior sits at the maximum-likelihood value and the direction counts almost 1 toward &gamma;. Along a poorly measured one, &lambda;<sub>i</sub> &#8810; &alpha;, so the prior pulls the weight to zero and it counts almost 0. So &gamma; is the number of weights the <em>data</em>, not the prior, have determined.</p>
+      <p>Here a straight line t = w&#8320; + w&#8321;x is fitted to 8 points whose x values are centred on zero, so the two axes are the eigen-directions: the intercept is measured by every point, the slope only by how spread out the x values are. <strong>Squeeze the x values together, then raise &alpha;</strong>.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &amp;\gamma = \sum_{i=1}^{M} \frac{\lambda_i}{\alpha+\lambda_i}, \qquad 0 \le \gamma \le M \\ &amp;\text{at the peak: } 2\alpha E_W(\mathbf{m}_N) = \gamma \end{aligned} \]</div><div class="read"><b>Read it as:</b> each direction&rsquo;s ratio is between 0 (set by the prior) and 1 (set by the data); &gamma; adds them up. At the evidence peak, the update &alpha; = &gamma;/m<sub>N</sub>&#x1D40;m<sub>N</sub> says that the weight penalty 2&alpha;E<sub>W</sub>, with E<sub>W</sub> = &frac12;m<sub>N</sub>&#x1D40;m<sub>N</sub>, equals the number of well-determined weights.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Gamma, between zero and M, is the sum of lambda-i over alpha plus lambda-i.&rdquo;</em></div><div class="eq-run" id="run-gm"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="gm-cv" aria-label="Prior circles, likelihood ellipses and the posterior mean in weight space"></canvas></div>
+        <figcaption><span style="color:var(--muted)">&#9711;</span> prior contours (round, about 0) &nbsp; <span style="color:var(--cB)">&#9711;</span> likelihood contours about <span style="color:var(--cB)">&#9679;</span> w<sub>ML</sub> &nbsp; <span style="color:var(--lda)">&#9733;</span> posterior mean m<sub>N</sub>. The dashes show how far the prior has pulled each coordinate towards zero.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="gm-a">&alpha;, the weight precision (log scale)</label><output id="gm-a-o"></output></div><input type="range" id="gm-a" min="-1" max="3" step="0.05" value="1"></div>
+        <div class="ctrl"><div class="top"><label for="gm-s">Spread of the x values</label><output id="gm-s-o"></output></div><input type="range" id="gm-s" min="0.05" max="1.5" step="0.01" value="0.4"></div>
+        <div class="coefs" id="gm-bars"></div>
+        <div class="stats"><div class="stat"><div class="v" id="gm-g"></div><div class="k">&gamma;, of 2 weights</div></div><div class="stat"><div class="v" id="gm-b"></div><div class="k">noise estimate 1/&beta;</div></div></div>
+        <p class="note" id="gm-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>The &beta; update now reads naturally. Each well-determined weight uses up one data point&rsquo;s worth of freedom, just as the sample mean uses one when you estimate a variance with N &minus; 1 instead of N. When there are many more data points than weights, every direction becomes well determined, &gamma; &rarr; M, and the updates simplify to the ones below. They need no eigenvalues at all, which makes them easy to use on big data.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &amp;N \gg M: \quad \gamma \to M \\ &amp;\alpha = \frac{M}{2E_W(\mathbf{m}_N)} \\ &amp;\beta = \frac{N}{2E_D(\mathbf{m}_N)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> with plenty of data, &alpha; is the number of weights over twice the weight penalty, and &beta; is N over the sum of squared residuals (E<sub>D</sub> = &frac12;&Vert;t &minus; &Phi;m<sub>N</sub>&Vert;&sup2;): the plain maximum-likelihood noise estimate.</div><div class="eq-say"><b>Say it</b><em>&ldquo;For large N, alpha is M over two E-W, and beta is N over two E-D.&rdquo;</em></div></div>
+  </div>
+</section>
+
+<!-- CV -->
+<section class="chap" id="cv">
+  <div class="wrap">
+    <div class="tag">Choosing</div>
+    <h2>Evidence versus cross-validation</h2>
+    <div class="prose">
+      <p>Cross-validation (chapter 1.10) answers a similar question a different way: hold some data out, train on the rest, and score the predictions. It assumes almost nothing about the model, but it costs a refit per fold, wastes data in each fold, and is noisy when data are few. The evidence uses every data point at once, needs one fit per model, and can tune many hyperparameters by gradient. The price is trust: it is only as good as the model&rsquo;s assumptions, including the prior. If no candidate is close to the truth, the evidence can be confidently wrong.</p>
+      <p>Below, each experiment draws a fresh dataset from sin(&pi;x) + noise, picks a degree from 0 to 9 twice, by maximum evidence (with &alpha; and &beta; tuned by the loop above) and by leave-one-out cross-validation of least squares, then scores both picks on 400 fresh test points. <strong>Run 200 experiments</strong>, then change the amount of data.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{LOO} &amp;= \sqrt{\frac1N\sum_{n=1}^{N}\left(\frac{t_n - y(\mathbf{x}_n)}{1-H_{nn}}\right)^{\!2}} \\ \mathbf{H} &amp;= \boldsymbol{\Phi}(\boldsymbol{\Phi}^{\!\top}\boldsymbol{\Phi})^{-1}\boldsymbol{\Phi}^{\!\top} \end{aligned} \]</div><div class="read"><b>Read it as:</b> for least squares, leave-one-out needs no refitting. H<sub>nn</sub> says how much point n pulls the fit towards itself; dividing its residual by 1 &minus; H<sub>nn</sub> gives exactly the error it would have had if it had been left out.</div><div class="eq-say"><b>Say it</b><em>&ldquo;LOO is the root mean of each residual divided by one minus its leverage, squared.&rdquo;</em></div><div class="eq-run" id="run-cv"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="duo"><div class="plot ar-3x1 duo-p"><canvas id="cv-ev" aria-label="Log evidence by degree for one dataset"></canvas></div><div class="plot ar-3x1 duo-p"><canvas id="cv-loo" aria-label="Leave-one-out error by degree for one dataset"></canvas></div></div>
+        <div class="plot ar-3x1" style="margin-top:8px"><canvas id="cv-hist" aria-label="How often each method chose each degree"></canvas></div>
+        <figcaption>Top, for one dataset: <span style="color:var(--cA)">&#9644;</span> ln evidence and <span style="color:var(--cB)">&#9644;</span> leave-one-out RMS error by degree (stars mark the picks). Bottom: how often each degree was picked by <span style="color:var(--cA)">&#9632;</span> the evidence and <span style="color:var(--cB)">&#9632;</span> cross-validation.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cv-n">Training points N</label><output id="cv-n-o"></output></div><input type="range" id="cv-n" min="8" max="80" step="1" value="12"></div>
+        <div class="ctrl"><div class="top"><label for="cv-s">Noise spread</label><output id="cv-s-o"></output></div><input type="range" id="cv-s" min="0.05" max="0.6" step="0.01" value="0.25"></div>
+        <div class="btns"><button type="button" class="btn primary" id="cv-run">Run 200 experiments</button><button type="button" class="btn" id="cv-new">New dataset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cv-te"></div><div class="k">test RMS, evidence pick</div></div><div class="stat"><div class="v" id="cv-tc"></div><div class="k">test RMS, CV pick</div></div></div>
+        <p class="note" id="cv-say"></p>
+      </div></div>
+    </div>
+    <div class="tbl-wrap block"><table class="zoo">
+      <thead><tr><th></th><th>Evidence (empirical Bayes)</th><th>Cross-validation</th></tr></thead>
+      <tbody>
+        <tr><td><b>Data used</b></td><td>all of it, for fitting and scoring</td><td>each fold scores on data it did not train on</td></tr>
+        <tr><td><b>Cost</b></td><td>one fit per model; hyperparameters by a loop or gradient</td><td>one fit per fold per setting; a grid search over hyperparameters</td></tr>
+        <tr><td><b>Many hyperparameters</b></td><td>fine: one &alpha; per weight is possible (automatic relevance determination)</td><td>hard: the grid explodes</td></tr>
+        <tr><td><b>Depends on the prior</b></td><td>yes, strongly; improper priors break it</td><td>no</td></tr>
+        <tr><td><b>Wrong model family</b></td><td>can be confidently wrong</td><td>still measures real predictive error</td></tr>
+        <tr><td><b>Answers</b></td><td>which model best explains the data you have</td><td>which model predicts held-out data from the same source best</td></tr>
+      </tbody></table></div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: how wiggly is the global temperature record?</h2>
+    <div class="prose">
+      <p>NASA&rsquo;s GISTEMP v4 is one of the standard records of Earth&rsquo;s surface temperature. For every year since 1880 it gives the global mean anomaly: how much warmer or cooler than the 1951&ndash;1980 average the planet was, combining thousands of land stations with sea-surface measurements. We take the <strong>146 annual means from 1880 to 2025</strong> and ask a model-comparison question: how much of the shape is a smooth trend, and which polynomial degree does the data support?</p>
+      <p>The years are rescaled to z between &minus;1 and 1 and the basis is the Legendre polynomials P&#8320;(z), &hellip;, P<sub>d</sub>(z), which span the same curves as the powers of z but are far better conditioned at high degree. For every degree from 0 to 15 the page runs the re-estimation loop to find &alpha;&#770; and &beta;&#770;, reports the log evidence, and also runs 10-fold cross-validation (with the same folds as the Python reference). <strong>The table fills in when you scroll here</strong>; then pick a degree below.</p>
+    </div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-tbl"></table></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Training years"><button type="button" data-pm="all" aria-pressed="true">Fit 1880&ndash;2025</button><button type="button" data-pm="fc">Fit to 2005, forecast 2006&ndash;2025</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pj-cv" aria-label="GISTEMP annual anomalies with the fitted polynomial and its predictive band"></canvas></div>
+        <div class="duo" style="margin-top:8px"><div class="plot ar-3x1 duo-p"><canvas id="pj-ev" aria-label="Log evidence by degree"></canvas></div><div class="plot ar-3x1 duo-p"><canvas id="pj-cvp" aria-label="Cross-validation error by degree"></canvas></div></div>
+        <figcaption id="pj-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-d">Polynomial degree d</label><output id="pj-d-o"></output></div><input type="range" id="pj-d" min="0" max="15" step="1" value="9"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-lnev"></div><div class="k">ln evidence</div></div><div class="stat"><div class="v" id="pj-g"></div><div class="k">&gamma;, of M weights</div></div><div class="stat"><div class="v" id="pj-sd"></div><div class="k">noise sd 1/&radic;&beta;&#770;</div></div><div class="stat"><div class="v" id="pj-err"></div><div class="k" id="pj-err-k">10-fold CV RMSE</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>The same project in Python</h3>
+<pre class="code"><code>import json, sys
+import numpy as np
+from numpy.polynomial import legendre
+from sklearn.linear_model import BayesianRidge, LinearRegression
+
+D = json.load(open(sys.argv[1] + "x015-data.json"))   # NASA GISTEMP v4, global annual means 1880-2025
+year, t, fold = np.array(D["year"]), np.array(D["t"]), np.array(D["fold"])   # fold: KFold(10, shuffle, seed 0)
+z = (year - 1952.5) / 72.5                             # years rescaled to [-1, 1]
+
+def evidence_fit(X, y):                                # MacKay's fixed-point updates (Bishop 3.5.2)
+    N, M = X.shape; d = np.linalg.eigvalsh(X.T @ X); a, b = 1.0, 1 / np.var(y)
+    for _ in range(1000):
+        A = a * np.eye(M) + b * X.T @ X; m = b * np.linalg.solve(A, X.T @ y)
+        g = np.sum(b * d / (a + b * d))                # effective number of parameters
+        a2, b2 = g / (m @ m), (N - g) / np.sum((y - X @ m) ** 2)
+        if abs(np.log(a2 / a)) + abs(np.log(b2 / b)) &lt; 1e-12: break
+        a, b = a2, b2
+    E = b / 2 * np.sum((y - X @ m) ** 2) + a / 2 * m @ m
+    lnev = M / 2 * np.log(a) + N / 2 * np.log(b) - E - np.linalg.slogdet(A)[1] / 2 - N / 2 * np.log(2 * np.pi)
+    return lnev, g, a, b, m
+
+print("deg   ln p(t|a,b)    gamma    alpha     beta   sklearn ln ev   CV RMSE: LS    Bayes   forecast RMSE")
+for M in range(16):
+    X = legendre.legvander(z, M)                       # Legendre polynomials P0..PM
+    lnev, g, a, b, m = evidence_fit(X, t)
+    br = BayesianRidge(fit_intercept=False, compute_score=True, max_iter=1000, tol=1e-12,
+                       alpha_1=0, alpha_2=0, lambda_1=0, lambda_2=0).fit(X, t)   # sklearn: alpha=beta, lambda=alpha
+    se = np.zeros(2)
+    for k in range(10):
+        tr, te = fold != k, fold == k
+        ls = LinearRegression(fit_intercept=False).fit(X[tr], t[tr])
+        se += [np.sum((t[te] - ls.predict(X[te])) ** 2), np.sum((t[te] - X[te] @ evidence_fit(X[tr], t[tr])[4]) ** 2)]
+    old = year &lt;= 2005                                 # fit 1880-2005, forecast 2006-2025
+    mf = evidence_fit(X[old], t[old])[4]
+    fc = np.sqrt(np.mean((t[~old] - X[~old] @ mf) ** 2))
+    print(f"{M:3d} {lnev:12.4f} {g:9.4f} {a:8.3f} {b:8.3f} {br.scores_[-1]:13.4f} {np.sqrt(se[0] / len(t)):12.5f} "
+          f"{np.sqrt(se[1] / len(t)):8.5f} {fc:12.4f}")</code></pre>
+<pre class="code out"><code id="pj-out">deg   ln p(t|a,b)    gamma    alpha     beta   sklearn ln ev   CV RMSE: LS    Bayes   forecast RMSE
+  0     -74.1312    0.8427  170.792    6.265      -74.1312      0.40132  0.40216       0.8927
+  1      25.9534    1.9944    5.499   26.465       25.9534      0.19542  0.19542       0.4786
+  2      91.4696    2.9944    6.306   68.307       91.4696      0.12404  0.12404       0.1920
+  3      94.0286    3.9879    8.322   73.021       94.0286      0.12035  0.12036       0.1684
+  4      99.5809    4.9794   10.194   81.281       99.5809      0.11380  0.11380       0.3524
+  5      99.1393    5.9659   12.102   82.940       99.1393      0.11356  0.11357       0.1631
+  6      97.7987    6.9470   14.019   83.377       97.7987      0.11373  0.11374       0.6938
+  7     102.8705    7.9306   15.613   91.910      102.8705      0.10947  0.10941       0.5404
+  8     102.9755    8.9050   17.448   94.123      102.9755      0.10858  0.10847       0.4832
+  9     107.3249    9.8860   18.638  102.725      107.3249      0.10437  0.10434       0.4414
+ 10     106.3144   10.8505   20.463  103.299      106.3144      0.10695  0.10670       0.4570
+ 11     104.9197   11.8076   22.269  103.171      104.9197      0.10676  0.10642       0.4827
+ 12     103.2228   12.7557   24.097  102.449      103.2228      0.10775  0.10731       0.4866
+ 13     101.6266   13.6954   25.908  101.776      101.6266      0.10803  0.10754       0.4828
+ 14     100.6828   14.6322   27.497  102.098      100.6828      0.10664  0.10635       0.5516
+ 15     101.2475   15.5722   28.976  104.773      101.2475      0.11411  0.11226       0.5281</code></pre>
+    <p class="note" id="pj-check" style="max-width:72ch; margin-top:14px"></p>
+    <p class="note" style="max-width:72ch; margin-top:12px">Two honest caveats. Both the evidence and random 10-fold cross-validation treat the yearly noise as independent, but temperature anomalies are autocorrelated (El Ni&ntilde;o years cluster), so neighbouring years leak information into each other&rsquo;s folds and the evidence is over-confident: the Bayes factors in the table are larger than the data truly justify. And both criteria answer an <em>interpolation</em> question. The forecast column shows that the degree they prefer, 9, extrapolates badly; the best twenty-year forecasts come from low degrees, and a polynomial is the wrong tool for forecasting a physical system anyway.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>The evidence p(D | &#x2133;) is the likelihood averaged over the model&rsquo;s prior. Its probabilities add up to 1 over all datasets, so a flexible model must spread them thin: Occam&rsquo;s razor, automatically.</li>
+      <li>Evidence &asymp; best fit &times; Occam factor &Delta;w<sub>post</sub>/&Delta;w<sub>prior</sub>, once per well-determined parameter. Priors matter: wider priors always cost, and improper ones break the comparison.</li>
+      <li>For Bayesian linear regression the evidence is exact: ln p(t | &alpha;, &beta;) = M/2 ln &alpha; + N/2 ln &beta; &minus; E(m<sub>N</sub>) &minus; &frac12; ln|A| &minus; N/2 ln 2&pi;.</li>
+      <li>Empirical Bayes maximises it over &alpha; and &beta; with a simple loop: &gamma; = &Sigma; &lambda;<sub>i</sub>/(&alpha; + &lambda;<sub>i</sub>), &alpha; = &gamma;/m<sub>N</sub>&#x1D40;m<sub>N</sub>, 1/&beta; = residuals/(N &minus; &gamma;). It tunes regularisation without a validation set.</li>
+      <li>&gamma; counts the weights the data, not the prior, have pinned down. The evidence is efficient but trusts the model; cross-validation is costly but trusts only the data. On 146 years of global temperatures both pick degree 9, and neither tells you how to forecast.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A degree-9 polynomial always fits the training points at least as well as a degree-3 one. How can its evidence be lower?</summary><p>The evidence is not the best fit but the fit averaged over the prior. Most of the degree-9 prior describes wild curves that fit the data badly, so the average is low. In Occam-factor terms, the better fit is outweighed by the extra penalty for six more parameters, each squeezed from its prior width to a much narrower posterior width.</p></details>
+      <details class="q"><summary>You double the width of a flat prior on one parameter, and the likelihood peak lies well inside both priors. What happens to the evidence?</summary><p>It halves. The best fit and &Delta;w<sub>post</sub> are unchanged, but &Delta;w<sub>prior</sub> doubles, so the Occam factor halves (ln evidence drops by ln 2 &asymp; 0.69).</p></details>
+      <details class="q"><summary>The loop converges with &gamma; = 3.2 for a model with 10 weights. What does that tell you?</summary><p>Only about three directions in weight space are determined by the data; the other seven are held near zero by the prior. The noise estimate uses N &minus; 3.2 degrees of freedom.</p></details>
+      <details class="q"><summary>On average, does the evidence favour the model that generated the data? Always?</summary><p>On average yes: the expected log Bayes factor in favour of the true model is a KL divergence, which is never negative. But for individual datasets the wrong model can win, and if none of the candidates generated the data the guarantee does not apply at all.</p></details>
+      <details class="q"><summary>Name one situation where you would trust cross-validation over the evidence.</summary><p>When you doubt the model&rsquo;s assumptions: for example correlated noise, a wrong noise model, or a prior chosen for convenience. The evidence scores models under their own assumptions; cross-validation measures real predictive error on held-out data.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../logistic-regression/">Next chapter: Logistic Regression &rarr;</a>
+      <a class="btn" href="../bayesian-linear-regression/">&larr; Previous: Bayesian Linear Regression</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Bishop, C. M. (2006). <em>Pattern Recognition and Machine Learning</em>. Springer. Sections 3.4 and 3.5: Bayesian model comparison and the evidence approximation.</li>
+      <li>MacKay, D. J. C. (1992). Bayesian interpolation. <em>Neural Computation</em> 4(3): the evidence framework, the re-estimation formulas and &gamma;.</li>
+      <li>MacKay, D. J. C. (2003). <em>Information Theory, Inference, and Learning Algorithms</em>. Cambridge University Press. Chapter 28: model comparison and Occam&rsquo;s razor.</li>
+      <li>Kass, R. E. &amp; Raftery, A. E. (1995). Bayes factors. <em>Journal of the American Statistical Association</em> 90(430).</li>
+      <li>Tipping, M. E. (2001). Sparse Bayesian learning and the relevance vector machine. <em>JMLR</em> 1: the evidence with one &alpha; per weight.</li>
+      <li>Lenssen, N. et al. (2019). Improvements in the GISTEMP uncertainty model. <em>J. Geophys. Res. Atmos.</em> 124; data: GISTEMP Team (2025), GISS Surface Temperature Analysis (GISTEMP), version 4, NASA Goddard Institute for Space Studies.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- x015 core: Bayesian linear regression evidence, in an eigenbasis ---------- */
+// Jacobi eigen-decomposition of a small symmetric matrix: A = V diag(d) V^T (V's columns are eigenvectors)
+function eigSym(A0) {
+  const n = A0.length, A = A0.map(r => r.slice()), V = A.map((_, i) => A.map((_, j) => i === j ? 1 : 0));
+  for (let sweep = 0; sweep < 100; sweep++) {
+    let off = 0, tot = 0; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const q = A[i][j] * A[i][j]; tot += q; if (i !== j) off += q; }
+    if (off <= 1e-30 * tot || off === 0) break;
+    for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
+      const apq = A[p][q]; if (Math.abs(apq) < 1e-300) continue;
+      const th = (A[q][q] - A[p][p]) / (2 * apq), tt = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), c = 1 / Math.sqrt(tt * tt + 1), s = tt * c;
+      for (let k = 0; k < n; k++) { const akp = A[k][p], akq = A[k][q]; A[k][p] = c * akp - s * akq; A[k][q] = s * akp + c * akq; }
+      for (let k = 0; k < n; k++) { const apk = A[p][k], aqk = A[q][k]; A[p][k] = c * apk - s * aqk; A[q][k] = s * apk + c * aqk; }
+      for (let k = 0; k < n; k++) { const vkp = V[k][p], vkq = V[k][q]; V[k][p] = c * vkp - s * vkq; V[k][q] = s * vkp + c * vkq; }
+    }
+  }
+  return { d: A.map((r, i) => Math.max(0, r[i])), V };
+}
+const powRow = (x, M) => { const r = [1]; for (let j = 1; j <= M; j++) r.push(r[j - 1] * x); return r; };
+const legRow = (z, M) => { const r = [1]; if (M >= 1) r.push(z); for (let n = 1; n < M; n++) r.push(((2 * n + 1) * z * r[n] - n * r[n - 1]) / (n + 1)); return r; };
+// everything the evidence needs from (Phi, t), precomputed once
+function prep(Phi, t) {
+  const N = Phi.length, M = Phi[0].length, G = Array.from({ length: M }, () => new Array(M).fill(0)), pt = new Array(M).fill(0); let tt = 0;
+  for (let n = 0; n < N; n++) { const r = Phi[n]; tt += t[n] * t[n]; for (let i = 0; i < M; i++) { pt[i] += r[i] * t[n]; for (let j = i; j < M; j++) G[i][j] += r[i] * r[j]; } }
+  for (let i = 0; i < M; i++) for (let j = 0; j < i; j++) G[i][j] = G[j][i];
+  const { d, V } = eigSym(G), u = d.map((_, k) => { let s = 0; for (let i = 0; i < M; i++) s += V[i][k] * pt[i]; return s; });
+  let mt = 0; for (const v of t) mt += v; mt /= N; let vt = 0; for (const v of t) vt += (v - mt) ** 2; vt /= N;
+  return { Phi, t, N, M, d, V, u, tt, vt };
+}
+// posterior and log evidence at (alpha, beta): Bishop eqs 3.53-3.54, 3.86, 3.91
+function ev(P, a, b) {
+  const { N, M, d, u, tt } = P; let mm = 0, cu = 0, cdc = 0, logdet = 0, g = 0; const c = new Array(M);
+  for (let k = 0; k < M; k++) { const A = a + b * d[k]; c[k] = b * u[k] / A; mm += c[k] * c[k]; cu += c[k] * u[k]; cdc += c[k] * c[k] * d[k]; logdet += Math.log(A); g += b * d[k] / A; }
+  const sse = Math.max(0, tt - 2 * cu + cdc), Ed = b / 2 * sse, Ew = a / 2 * mm;
+  const lnev = M / 2 * Math.log(a) + N / 2 * Math.log(b) - Ed - Ew - logdet / 2 - N / 2 * Math.log(2 * Math.PI);
+  return { a, b, c, mm, sse, Ed, Ew, E: Ed + Ew, logdet, g, lnev, N, M };
+}
+const weights = (P, R) => { const w = new Array(P.M).fill(0); for (let i = 0; i < P.M; i++) for (let k = 0; k < P.M; k++) w[i] += P.V[i][k] * R.c[k]; return w; };
+// predictive mean and variance at basis row phi: Bishop eqs 3.58-3.59
+function pred(P, R, phi) {
+  let mu = 0, s = 1 / R.b; for (let k = 0; k < P.M; k++) { let p = 0; for (let i = 0; i < P.M; i++) p += P.V[i][k] * phi[i]; mu += p * R.c[k]; s += p * p / (R.a + R.b * P.d[k]); }
+  return [mu, s];
+}
+// MacKay's fixed-point re-estimation: Bishop eqs 3.92, 3.95
+function reest(P, a, b) { const R = ev(P, a, b); return [R.g / Math.max(R.mm, 1e-300), (P.N - R.g) / Math.max(R.sse, 1e-300)]; }
+function optimise(P, a0, b0, maxIt, keepPath) {
+  let a = a0 == null ? 1 : a0, b = b0 == null ? 1 / P.vt : b0; const path = keepPath ? [[a, b]] : null; let it = 0;
+  for (; it < (maxIt || 1000); it++) {
+    const [a2, b2] = reest(P, a, b); if (!isFinite(a2) || !isFinite(b2) || a2 <= 0 || b2 <= 0) break;
+    const done = Math.abs(Math.log(a2 / a)) + Math.abs(Math.log(b2 / b)) < 1e-12; if (done) break;
+    a = Math.min(1e12, a2); b = Math.min(1e12, b2); if (path) path.push([a, b]);
+  }
+  const R = ev(P, a, b); R.it = it; R.path = path; return R;
+}
+// least squares through the eigenbasis (pseudo-inverse: directions with tiny eigenvalues dropped)
+function lsW(P) { const dm = Math.max(...P.d), w = new Array(P.M).fill(0); for (let k = 0; k < P.M; k++) { if (P.d[k] <= 1e-11 * dm) continue; const ck = P.u[k] / P.d[k]; for (let i = 0; i < P.M; i++) w[i] += P.V[i][k] * ck; } return w; }
+// leave-one-out residuals of least squares from the hat matrix (no refitting)
+function looLS(P) {
+  const dm = Math.max(...P.d), w = lsW(P); let s = 0, ok = true;
+  for (let n = 0; n < P.N; n++) { const r = P.Phi[n]; let h = 0, f = 0; for (let i = 0; i < P.M; i++) f += r[i] * w[i];
+    for (let k = 0; k < P.M; k++) { if (P.d[k] <= 1e-11 * dm) continue; let p = 0; for (let i = 0; i < P.M; i++) p += P.V[i][k] * r[i]; h += p * p / P.d[k]; }
+    if (h > 1 - 1e-9) { ok = false; break; } s += ((P.t[n] - f) / (1 - h)) ** 2; }
+  return ok ? Math.sqrt(s / P.N) : Infinity;
+}
+const dotv = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+// log-gamma (Lanczos), log-binomials, log-sum-exp
+function lgam(x) { const g = 7, C = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (x < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - lgam(1 - x); x -= 1; let a = C[0]; const t = x + g + 0.5; for (let i = 1; i < 9; i++) a += C[i] / (x + i); return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a); }
+const lbeta = (a, b) => lgam(a) + lgam(b) - lgam(a + b);
+const lchoose = (n, k) => lgam(n + 1) - lgam(k + 1) - lgam(n - k + 1);
+function lse(a) { const m = Math.max(...a); if (!isFinite(m)) return m; let s = 0; for (const v of a) s += Math.exp(v - m); return m + Math.log(s); }
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const SUP = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+// a positive number from its natural log, in scientific notation (html or plain text)
+function sciL(ln, html) {
+  const l10 = ln / Math.LN10, e = Math.floor(l10), m = Math.pow(10, l10 - e);
+  if (e >= -2 && e <= 3) return fmt(Math.exp(ln), e >= 1 ? 1 : 3 - Math.max(e, 0));
+  let ms = fmt(m, 2), ee = e; if (ms === '10.00') { ms = '1.00'; ee++; }
+  return html ? `${ms}&times;10<sup>${ee}</sup>` : `${ms}×10${String(ee).split('').map(c => SUP[c]).join('')}`;
+}
+const pct = (p, d) => fmt(p * 100, d == null ? 0 : d) + '%';
+const sgn = (v, d) => (v >= 0 ? '+' : '−') + fmt(Math.abs(v), d);
+const nm = v => v < 0 ? '−' + fmt(-v, 2) : fmt(v, 2);
+function iso(v, G, lev, col, lw) {
+  const c = v.ctx, { F, nx, ny, step } = G; c.save(); c.strokeStyle = col; c.lineWidth = lw; c.lineCap = 'round'; c.beginPath();
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const a = F[j * nx + i] - lev, b = F[j * nx + i + 1] - lev, d = F[(j + 1) * nx + i] - lev, e = F[(j + 1) * nx + i + 1] - lev, x0 = v.pad.l + i * step, y0 = v.pad.t + j * step, P = [];
+    if ((a > 0) !== (b > 0)) P.push([x0 + step * a / (a - b), y0]);
+    if ((b > 0) !== (e > 0)) P.push([x0 + step, y0 + step * b / (b - e)]);
+    if ((d > 0) !== (e > 0)) P.push([x0 + step * d / (d - e), y0 + step]);
+    if ((a > 0) !== (d > 0)) P.push([x0, y0 + step * a / (a - d)]);
+    if (P.length >= 2) { c.moveTo(P[0][0], P[0][1]); c.lineTo(P[1][0], P[1][1]); }
+    if (P.length === 4) { c.moveTo(P[2][0], P[2][1]); c.lineTo(P[3][0], P[3][1]); }
+  }
+  c.stroke(); c.restore();
+}
+function poly(v, xs, ys, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); let on = false; xs.forEach((x, i) => { const y = ys[i]; if (!isFinite(y)) { on = false; return; } const px = v.X(x), py = clamp(v.Y(y), -2000, 4000); on ? c.lineTo(px, py) : c.moveTo(px, py); on = true; }); c.stroke(); c.restore(); }
+function band(v, xs, lo, hi, col, alpha) { const c = v.ctx; c.save(); c.fillStyle = col; c.globalAlpha = alpha; c.beginPath(); xs.forEach((x, i) => { const px = v.X(x), py = clamp(v.Y(hi[i]), -2000, 4000); i ? c.lineTo(px, py) : c.moveTo(px, py); }); for (let i = xs.length - 1; i >= 0; i--) c.lineTo(v.X(xs[i]), clamp(v.Y(lo[i]), -2000, 4000)); c.closePath(); c.fill(); c.restore(); }
+function label(v, text, x, y, col, align, base, font) { const c = v.ctx; c.save(); c.font = font || ('11px ' + css('--f-mono')); c.fillStyle = col; c.textAlign = align || 'left'; c.textBaseline = base || 'middle'; c.fillText(text, x, y); c.restore(); }
+const range = (a, b, n) => Array.from({ length: n }, (_, i) => a + (b - a) * i / (n - 1));
+const argmax = a => a.reduce((bi, v, i) => v > a[bi] ? i : bi, 0);
+const argmin = a => a.reduce((bi, v, i) => v < a[bi] ? i : bi, 0);
+const rms = (P, w) => { let s = 0; P.Phi.forEach((r, n) => { s += (P.t[n] - dotv(r, w)) ** 2; }); return Math.sqrt(s / P.N); };
+const fitW = (P, R) => weights(P, R);
+
+/* ---------- the toy dataset: sin(πx) + noise, shared by the polynomial labs ---------- */
+const TRUE_F = x => Math.sin(Math.PI * x), A_FIX = 5e-3, B_TRUE = 16;
+function genToy(seed, N, sd) { const r = mulberry32(seed), P = []; for (let i = 0; i < N; i++) { const x = -0.95 + 1.9 * (i + 0.15 + 0.7 * r()) / N; P.push([+x.toFixed(3), +(TRUE_F(x) + sd * gaussOf(r)).toFixed(3)]); } return P; }
+function genTest(seed, n, sd) { const r = mulberry32(seed), X = [], T = []; for (let i = 0; i < n; i++) { const x = -1 + 2 * r(); X.push(x); T.push(TRUE_F(x) + sd * gaussOf(r)); } return { X, T }; }
+let TOY = genToy(4, 12, 0.25), toySeed = 4;
+const TEST = genTest(99, 400, 0.25);
+const prepPts = (pts, d) => prep(pts.map(p => powRow(p[0], d)), pts.map(p => p[1]));
+const testRMS = (w, d, S) => { let s = 0; S.X.forEach((x, i) => { s += (S.T[i] - dotv(powRow(x, d), w)) ** 2; }); return Math.sqrt(s / S.X.length); };
+const XS = range(-1, 1, 161);
+function drawFit(v, P, R, d, C, col) {
+  const mu = [], lo = [], hi = []; XS.forEach(x => { const [m, s2] = pred(P, R, powRow(x, d)); mu.push(m); lo.push(m - Math.sqrt(s2)); hi.push(m + Math.sqrt(s2)); });
+  band(v, XS, lo, hi, col, 0.16); poly(v, XS, mu, col, 2.6);
+}
+function toyAxes(cv) { const v = frame(cv, [-1.05, 1.05], [-1.9, 1.9], { l: 38 }); axes(v, 'x', 't', { sx: 0.5, sy: 1 }); return v; }
+
+/* ---------- hero: posterior over degrees, with draggable points ---------- */
+const HP = TOY.map(p => p.slice());
+let heroV = null;
+function heroCalc() { const out = []; for (let d = 0; d <= 9; d++) { const P = prepPts(HP, d), R = ev(P, A_FIX, B_TRUE); out.push({ d, P, R }); } const L = lse(out.map(o => o.R.lnev)); out.forEach(o => { o.post = Math.exp(o.R.lnev - L); }); return out; }
+function drawHero() {
+  const C = C0(), H = heroCalc(), best = argmax(H.map(o => o.post)), v = heroV = toyAxes($('#hero-cv'));
+  clip(v); curve(v, TRUE_F, C.muted, 1.3, [5, 5]);
+  const second = argmax(H.map((o, i) => i === best ? -1 : o.post));
+  if (H[second].post > 0.05) { const mu = XS.map(x => dotv(powRow(x, second), fitW(H[second].P, H[second].R))); poly(v, XS, mu, C.b, 1.6, [6, 4], 0.85); }
+  drawFit(v, H[best].P, H[best].R, best, C, C.lda);
+  HP.forEach(p => dot(v, p[0], p[1], C.q, 5.2));
+  v.ctx.restore();
+  // bars
+  const bv = frame($('#hero-bars'), [-0.6, 9.6], [0, 1], { l: 38, r: 10, t: 8, b: 20 }), c = bv.ctx;
+  axes(bv, '', '', { sx: 1, sy: 0.5, fx: x => 'd=' + Math.round(x), fy: y => fmt(y, 1) });
+  H.forEach((o, i) => { const x0 = bv.X(i - 0.36), x1 = bv.X(i + 0.36), y0 = bv.Y(0), y1 = bv.Y(o.post); c.fillStyle = i === best ? C.lda : C.muted; c.globalAlpha = i === best ? 0.9 : 0.45; c.fillRect(x0, y1, x1 - x0, y0 - y1); c.globalAlpha = 1; });
+  const pb = H[best].post;
+  $('#hero-cap').innerHTML = `Bars: p(degree | data) for degrees 0&ndash;9, equal prior odds, with &alpha; = 0.005 and &beta; = 16 fixed. Most probable: <b>degree ${best}</b>, ${tip('p = ' + fmt(pb, 2), `e^ln p(t|d=${best}) / Σ_d e^ln p(t|d)\nln evidence = ${fmt(H[best].R.lnev, 2)}`)}${H[second].post > 0.05 ? `; dashed: runner-up, degree ${second} (${fmt(H[second].post, 2)})` : ''}. Its band is &plusmn;1 predictive standard deviation; the faint dashes are the true curve. Drag points off the curve and the evidence may switch to a more flexible degree.`;
+}
+draggable($('#hero-cv'), () => heroV, () => HP, drawHero);
+fig($('#hero-cv'), drawHero); fig($('#hero-bars'), drawHero);
+
+/* ---------- 1. coins: three models' evidence ---------- */
+const CO = { n: 20, k: 11 };
+const coinModels = [
+  { name: 'Fair', col: 'a', lseq: (k, n) => n * Math.log(0.5), mean: () => 0.5 },
+  { name: 'Nearly fair', col: 'lda', lseq: (k, n) => lbeta(k + 10, n - k + 10) - lbeta(10, 10), mean: (k, n) => (k + 10) / (n + 20) },
+  { name: 'Anything goes', col: 'b', lseq: (k, n) => lbeta(k + 1, n - k + 1), mean: (k, n) => (k + 1) / (n + 2) }];
+function coinPost(k, n) { const l = coinModels.map(m => m.lseq(k, n)), L = lse(l); return { l, p: l.map(x => Math.exp(x - L)) }; }
+function drawCO() {
+  const C = C0(), { n, k } = CO, v = frame($('#co-cv'), [-0.8, n + 0.8], [0, 0.2], { l: 46, b: 32 });
+  axes(v, 'number of heads in 20 tosses', 'p(count | model)', { sx: 2, sy: 0.05 });
+  const c = v.ctx; c.save(); c.fillStyle = C.q; c.globalAlpha = 0.07; c.fillRect(v.X(k - 0.5), v.pad.t, v.X(k + 0.5) - v.X(k - 0.5), v.ph); c.restore();
+  coinModels.forEach(m => { const xs = [], ys = []; for (let j = 0; j <= n; j++) { xs.push(j); ys.push(Math.exp(lchoose(n, j) + m.lseq(j, n))); } poly(v, xs, ys, C[m.col], 2.2); xs.forEach((x, i) => dot(v, x, ys[i], C[m.col], i === k ? 6 : 2.6)); });
+  label(v, 'you saw ' + k, v.X(k), v.pad.t + 10, C.q, 'center');
+  const { l, p } = coinPost(k, n), win = argmax(p);
+  $('#co-k-o').textContent = `${k} of ${n}`;
+  ['#co-e0', '#co-e1', '#co-e2'].forEach((id, i) => { $(id).innerHTML = tip(sciL(l[i], true), `probability of this exact sequence of ${n} tosses\nln p(D | ${coinModels[i].name}) = ${fmt(l[i], 3)}\nposterior with equal priors: ${fmt(p[i], 3)}`); });
+  const bf = l[win] - Math.max(...l.filter((_, i) => i !== win)), ru = argmax(p.map((x, i) => i === win ? -1 : x));
+  $('#co-say').innerHTML = `<b>${coinModels[win].name}</b> wins: p(model | data) = ${fmt(p[win], 2)}, ${tip('a Bayes factor of ' + fmt(Math.exp(bf), Math.exp(bf) < 10 ? 1 : 0), `p(D | ${coinModels[win].name}) / p(D | ${coinModels[ru].name}) = e^${fmt(bf, 3)}`)} over ${coinModels[ru].name}. ` +
+    (win === 0 ? `A count near 10 is exactly what Fair bet on, and it spent nothing on other counts. The flexible models <i>could</i> explain it too, but they gave it less probability, because they also had to save some for counts far from 10.`
+      : win === 1 ? `${k} heads is a little off &frac12;. Fair gave such counts too little probability, Anything goes spread itself over every count; Nearly fair hedged in just the right place.`
+        : `${k} heads in ${n} is surprising under both near-&frac12; models. Only Anything goes kept probability out here, and now it collects.`) + ' Note that every model&rsquo;s curve adds up to 1: no model can be good everywhere.';
+  $('#run-co').innerHTML = `<b>Running example</b>: for Anything goes, p(D) = &int;&#8320;&sup1; p<sup>${k}</sup>(1&minus;p)<sup>${n - k}</sup> dp = ${k}!&middot;${n - k}!/${n + 1}! = ${tip(sciL(l[2], true), `Beta function B(${k + 1}, ${n - k + 1})\nln = ${fmt(l[2], 4)}`)}. Fair has no integral: (&frac12;)<sup>${n}</sup> = ${tip(sciL(l[0], true), '1 / 2^' + n)}. Their ratio, the Bayes factor, is ${tip(fmt(Math.exp(l[0] - l[2]), 2), `e^(${fmt(l[0], 3)} − (${fmt(l[2], 3)}))`)} in favour of ${l[0] > l[2] ? 'Fair' : 'Anything goes'}.`;
+  drawAvg();
+}
+$('#co-k').addEventListener('input', e => { CO.k = +e.target.value; drawCO(); });
+fig($('#co-cv'), drawCO);
+
+function drawAvg() {
+  const { n, k } = CO, { p } = coinPost(k, n), means = coinModels.map(m => m.mean(k, n)), avg = p.reduce((s, x, i) => s + x * means[i], 0);
+  $('#run-avg').innerHTML = `<b>Running example</b>: with ${k} heads in ${n} from the lab above, the chance the next toss is heads is ${tip(fmt(p[0], 2), 'p(Fair | D)')} &times; 0.5 + ${tip(fmt(p[1], 2), 'p(Nearly fair | D)')} &times; ${tip(fmt(means[1], 3), `posterior mean under Beta(10,10): (${k}+10)/(${n}+20)`)} + ${tip(fmt(p[2], 2), 'p(Anything goes | D)')} &times; ${tip(fmt(means[2], 3), `Laplace's rule: (${k}+1)/(${n}+2)`)} = ${tip('<b>' + fmt(avg, 3) + '</b>', 'a model-averaged prediction')}.`;
+}
+
+/* ---------- 2. Bayes factors over many datasets ---------- */
+const BF = { truth: 'fair', n: 20, vals: [], rng: mulberry32(2024) };
+const lnBF = (k, n) => n * Math.log(0.5) - lbeta(k + 1, n - k + 1);   // ln p(D|Fair) − ln p(D|Anything)
+function bfExact(n, truth) {
+  let kl = 0, right = 0; for (let k = 0; k <= n; k++) { const lf = lchoose(n, k) + n * Math.log(0.5), la = lchoose(n, k) + lbeta(k + 1, n - k + 1), pt = Math.exp(truth === 'fair' ? lf : la), b = lnBF(k, n) * (truth === 'fair' ? 1 : -1); kl += pt * b; if (b > 0) right += pt; }
+  return { kl, right };
+}
+function bfDraw() { const r = BF.rng, n = BF.n; for (let s = 0; s < 1000; s++) { const p = BF.truth === 'fair' ? 0.5 : r(); let k = 0; for (let i = 0; i < n; i++) if (r() < p) k++; BF.vals.push(k); } drawBF(); }
+function drawBF() {
+  const C = C0(), n = BF.n, all = []; for (let k = 0; k <= n; k++) all.push(lnBF(k, n));
+  const lo = Math.min(...all), hi = Math.max(...all), nb = 28, w = (hi - lo) / nb || 1, cnt = new Array(nb).fill(0);
+  BF.vals.forEach(k => { cnt[Math.min(nb - 1, Math.floor((lnBF(k, n) - lo) / w))]++; });
+  const ymax = Math.max(10, ...cnt) * 1.12, v = frame($('#bf-cv'), [lo - w, hi + w], [0, ymax], { l: 46 });
+  axes(v, 'ln Bayes factor, Fair : Anything goes', 'datasets', { nx: 6 });
+  const c = v.ctx; cnt.forEach((m, i) => { if (!m) return; const a = lo + i * w, mid = a + w / 2; c.fillStyle = mid > 0 ? C.a : C.b; c.globalAlpha = 0.8; c.fillRect(v.X(a) + 1, v.Y(m), v.X(a + w) - v.X(a) - 2, v.Y(0) - v.Y(m)); c.globalAlpha = 1; });
+  seg(v, 0, 0, 0, ymax, C.q, 1.2);
+  const ex = bfExact(n, BF.truth), meanFav = BF.truth === 'fair' ? ex.kl : -ex.kl; seg(v, meanFav, 0, meanFav, ymax, C.q, 1.6, [5, 4]);
+  label(v, 'Fair wins →', v.X(0) + 6, v.pad.t + 12, C.a); label(v, '← Anything wins', v.X(0) - 6, v.pad.t + 12, C.b, 'right');
+  $('#bf-n-o').textContent = n;
+  const N = BF.vals.length, sgnT = BF.truth === 'fair' ? 1 : -1, fav = BF.vals.map(k => sgnT * lnBF(k, n)), mean = N ? fav.reduce((s, x) => s + x, 0) / N : NaN, right = N ? fav.filter(x => x > 0).length / N : NaN;
+  const T = BF.truth === 'fair' ? 'Fair' : 'Anything goes';
+  $('#bf-right').innerHTML = N ? tip(pct(right), `${fav.filter(x => x > 0).length} of ${N} simulated datasets\nexact probability: ${pct(ex.right, 1)}`) : '—';
+  $('#bf-mean').innerHTML = N ? tip(fmt(mean, 2), `average over ${N} datasets of\nln p(D|${T}) − ln p(D|other)`) : '—';
+  $('#bf-kl').innerHTML = tip(fmt(ex.kl, 3), `Σ over k = 0…${n} of p(k|${T}) × ln[p(k|${T}) / p(k|other)]`);
+  $('#bf-say').innerHTML = !N ? `No datasets yet. Press the button to toss ${n} coins a thousand times, each time with a coin from ${T}.`
+    : BF.truth === 'fair' ? `The evidence backs Fair on ${pct(right)} of datasets, but never strongly: the best it can do with ${n} tosses is a log Bayes factor of ${tip(fmt(hi, 2), `exactly ${n / 2} heads: ln BF = ${fmt(hi, 3)}`)}. Support for a simple model grows only slowly, about &frac12; ln n, so ${n < 100 ? 'try 200 tosses' : 'even 200 tosses give only modest odds'}. The average, ${fmt(mean, 2)}, sits close to the exact KL ${fmt(ex.kl, 2)}.`
+      : `When the coin&rsquo;s bias is truly random, most datasets land far from ${n / 2} heads and the evidence against Fair is overwhelming (log Bayes factors down to ${fmt(lo, 1)}). The ${pct(1 - right)} that land near ${n / 2} still fool it. Average ${fmt(mean, 2)} versus exact KL ${fmt(ex.kl, 2)}: positive, as promised.`;
+  $('#run-bf').innerHTML = `<b>Running example</b>: n = ${n}, data from ${T}: KL = &Sigma;<sub>k</sub> p(k | ${T}) ln[p(k | ${T})/p(k | other)] = ${tip(fmt(ex.kl, 3), `${n + 1} terms, one per possible count`)} nats, so on average the data favour the true model by a factor of about e<sup>${fmt(ex.kl, 2)}</sup> &asymp; ${fmt(Math.exp(ex.kl), 1)}.`;
+}
+seg1('[data-bt]', 'data-bt', t => { BF.truth = t; BF.vals = []; bfDraw(); });
+$('#bf-n').addEventListener('input', e => { BF.n = +e.target.value; BF.vals = []; bfDraw(); });
+$('#bf-draw').addEventListener('click', bfDraw);
+$('#bf-clear').addEventListener('click', () => { BF.vals = []; drawBF(); });
+fig($('#bf-cv'), drawBF);
+
+/* ---------- 3. the Occam factor: Gaussian mean, flat prior ---------- */
+const OC = { lL: 0.6, n: 8, xs: (() => { const r = mulberry32(21); return Array.from({ length: 100 }, () => +(1.2 + gaussOf(r)).toFixed(3)); })() };
+function ocCalc() {
+  const L = Math.pow(10, OC.lL), n = OC.n, x = OC.xs.slice(0, n), xb = x.reduce((s, v) => s + v, 0) / n;
+  const ll = mu => -n / 2 * Math.log(2 * Math.PI) - 0.5 * x.reduce((s, v) => s + (v - mu) ** 2, 0);
+  const map = clamp(xb, -L, L), fit = ll(map), dpost = Math.sqrt(2 * Math.PI / n), dprior = 2 * L, occ = Math.log(dpost / dprior);
+  const s = 1 / Math.sqrt(n), a = Math.max(-L, xb - 14 * s), b = Math.min(L, xb + 14 * s), lo = a < b ? a : -L, hi = a < b ? b : L, K = 2000, h = (hi - lo) / K, terms = [];
+  for (let i = 0; i <= K; i++) { const wgt = i === 0 || i === K ? 1 : i % 2 ? 4 : 2; terms.push(ll(lo + i * h) + Math.log(wgt * h / 3)); }
+  const exact = lse(terms) - Math.log(2 * L);
+  return { L, n, x, xb, map, fit, dpost, dprior, occ, exact, ll };
+}
+function drawOC() {
+  const C = C0(), o = ocCalc(), v = frame($('#oc-cv'), [-4, 5], [0, 1.4], { l: 40, b: 32 }); axes(v, 'μ, the unknown mean', 'height', { sx: 1, sy: 0.5 });
+  clip(v); const c = v.ctx;
+  c.save(); c.fillStyle = C.muted; c.globalAlpha = 0.14; c.fillRect(v.X(-o.L), v.Y(1.22), v.X(o.L) - v.X(-o.L), v.Y(0) - v.Y(1.22)); c.restore();
+  seg(v, -o.L, 0, -o.L, 1.22, C.muted, 1.4, [4, 3]); seg(v, o.L, 0, o.L, 1.22, C.muted, 1.4, [4, 3]);
+  c.save(); c.fillStyle = C.lda; c.globalAlpha = 0.28; c.fillRect(v.X(o.xb - o.dpost / 2), v.Y(1), v.X(o.xb + o.dpost / 2) - v.X(o.xb - o.dpost / 2), v.Y(0) - v.Y(1)); c.restore();
+  const lmax = o.ll(o.xb); curve(v, mu => Math.exp(o.ll(mu) - lmax), C.b, 2.4);
+  o.x.forEach(xi => seg(v, xi, 0, xi, 0.06, C.q, 1.2, null, 0.7));
+  if (Math.abs(o.map - o.xb) > 1e-9) { dot(v, o.map, Math.exp(o.ll(o.map) - lmax), C.bad, 5); }
+  v.ctx.restore();
+  const yb = v.Y(1.22) - 8, Lv = o.L > 4.6 ? `prior runs to ±${fmt(o.L, o.L < 10 ? 1 : 0)} →` : `Δw_prior = ${fmt(o.dprior, 2)}`;
+  label(v, Lv, o.L > 4.6 ? v.X(4.9) : v.X(0), Math.max(v.pad.t + 8, yb), C.muted, o.L > 4.6 ? 'right' : 'center');
+  label(v, `Δw_post = ${fmt(o.dpost, 2)}`, v.X(o.xb), v.Y(1) - 10, C.q, 'center');
+  $('#oc-L-o').textContent = fmt(o.L, o.L < 1 ? 2 : o.L < 10 ? 1 : 0); $('#oc-n-o').textContent = o.n;
+  $('#oc-fit').innerHTML = tip(fmt(o.fit, 2), `ln p(D | μ_MAP), μ_MAP = ${fmt(o.map, 3)}\n= −${o.n}/2 ln 2π − ½ Σ (xᵢ − μ_MAP)²`);
+  $('#oc-occ').innerHTML = tip(fmt(o.occ, 2), `ln(Δw_post / Δw_prior) = ln(${fmt(o.dpost, 3)} / ${fmt(o.dprior, 3)})\nΔw_post = √(2π/n): the width of a box\nwith the likelihood's height and area`);
+  $('#oc-ev').innerHTML = tip(fmt(o.exact, 2), `ln[(1/2L) ∫ p(D|μ) dμ over −L…L]\nby Simpson's rule on 2,001 points\napproximation: ${fmt(o.fit + o.occ, 3)}`);
+  const inside = Math.abs(o.xb) + 2.5 / Math.sqrt(o.n) < o.L, gap = (o.fit + o.occ) - o.exact;
+  $('#oc-say').innerHTML = Math.abs(o.xb) > o.L ? `The prior is too narrow: it rules out the region where the data put &mu; (x&#772; = ${fmt(o.xb, 2)}). The best fit allowed, at the edge &mu; = ${fmt(o.map, 2)} (red dot), is poor, and the box picture over-counts: approximation ${fmt(o.fit + o.occ, 2)} against the exact ${fmt(o.exact, 2)}.`
+    : !inside ? `The prior edge cuts into the likelihood peak, so the box picture is only rough here (approximation ${fmt(o.fit + o.occ, 2)}, exact ${fmt(o.exact, 2)}). Widen the prior a little and they agree.`
+      : `The peak fills ${tip('1/' + fmt(o.dprior / o.dpost, o.dprior / o.dpost < 10 ? 1 : 0), 'Δw_prior / Δw_post')} of the prior, so ${tip('best fit × Occam factor', `${fmt(o.fit, 3)} + (${fmt(o.occ, 3)}) = ${fmt(o.fit + o.occ, 3)}`)} ${Math.abs(gap) < 0.0005 ? 'matches the exact evidence to three decimals' : 'is within ' + fmt(Math.abs(gap), 3) + ' of the exact evidence'}. ${o.L > 20 ? 'This prior is vague, and the evidence pays for every unit of width: double L and ln evidence falls by another ln 2 = 0.69.' : `More data makes the peak narrower, so the Occam factor shrinks like 1/&radic;n, while the fit term grows with n.`}`;
+  $('#run-oc').innerHTML = `<b>Running example</b>: n = ${o.n}, x&#772; = ${fmt(o.xb, 3)}: p(D | w<sub>MAP</sub>) = e<sup>${fmt(o.fit, 2)}</sup>, &Delta;w<sub>post</sub> = &radic;(2&pi;/${o.n}) = ${fmt(o.dpost, 3)}, &Delta;w<sub>prior</sub> = 2L = ${fmt(o.dprior, 3)}, so ln p(D) &asymp; ${fmt(o.fit, 2)} + ln(${fmt(o.dpost, 3)}/${fmt(o.dprior, 3)}) = ${tip(fmt(o.fit + o.occ, 3), 'best fit + log Occam factor')}; exact: ${tip(fmt(o.exact, 3), 'numerical integral of the likelihood over the prior')}.`;
+}
+$('#oc-L').addEventListener('input', e => { OC.lL = +e.target.value; drawOC(); });
+$('#oc-n').addEventListener('input', e => { OC.n = +e.target.value; drawOC(); });
+fig($('#oc-cv'), drawOC);
+
+/* ---------- 4. the evidence function for polynomials ---------- */
+const EF = { d: 3 };
+let efV = null;
+function efAll() { return Array.from({ length: 10 }, (_, d) => { const P = prepPts(TOY, d), R = ev(P, A_FIX, B_TRUE), w = lsW(P), sse = Math.pow(rms(P, w), 2) * P.N, ml = P.N / 2 * Math.log(B_TRUE) - P.N / 2 * Math.log(2 * Math.PI) - B_TRUE / 2 * sse; return { d, P, R, ml, sse }; }); }
+function drawEF() {
+  const C = C0(), A = efAll(), d = EF.d, cur = A[d], v = efV = toyAxes($('#ef-cv'));
+  clip(v); curve(v, TRUE_F, C.muted, 1.3, [5, 5]); drawFit(v, cur.P, cur.R, d, C, C.lda); TOY.forEach(p => dot(v, p[0], p[1], C.q, 5.2)); v.ctx.restore();
+  const lev = A.map(o => o.R.lnev), lml = A.map(o => o.ml), top = Math.max(...lml, ...lev), bot = Math.max(Math.min(...lev), top - 70);
+  const cv = frame($('#ef-curve'), [-0.4, 9.4], [bot - 3, top + 5], { l: 44, b: 26, t: 10 }); axes(cv, 'degree d', '', { sx: 1, ny: 4 }); clip(cv);
+  const ds = A.map(o => o.d); poly(cv, ds, lml, C.b, 2); poly(cv, ds, lev, C.a, 2.4);
+  ds.forEach(i => { dot(cv, i, lml[i], C.b, i === d ? 5 : 2.8); dot(cv, i, lev[i], C.a, i === d ? 5.5 : 2.8); });
+  const be = argmax(lev); star(cv, be, lev[be], C.lda, 9); cv.ctx.restore();
+  const R = cur.R, M = R.M, N = R.N;
+  $('#ef-d-o').textContent = d + (d === 1 ? ' (a line)' : '');
+  $('#ef-lnev').innerHTML = tip(fmt(R.lnev, 2), 'sum of the six terms below');
+  $('#ef-ml').innerHTML = tip(fmt(cur.ml, 2), `ln p(t | w_ML, β): least squares, no prior\nN/2 ln β − N/2 ln 2π − β/2 × ${fmt(cur.sse, 4)}
+the least-squares residual sum`);
+  const terms = [['M/2 ln α', M / 2 * Math.log(R.a), `${M}/2 × ln ${R.a}`, C.muted], ['N/2 ln β', N / 2 * Math.log(R.b), `${N}/2 × ln ${R.b}`, C.muted], ['−β E_D: misfit', -R.Ed, `β/2 × ‖t − Φm_N‖² = 8 × ${fmt(R.sse, 4)}`, C.b], ['−α E_W: weights', -R.Ew, `α/2 × m_Nᵀm_N = 0.0025 × ${fmt(R.mm, 3)}`, C.b], ['−½ ln|A|: Occam', -R.logdet / 2, `½ Σᵢ ln(α + β dᵢ) over ${M} eigenvalues`, C.lda], ['−N/2 ln 2π', -N / 2 * Math.log(2 * Math.PI), 'a constant', C.muted]];
+  const mx = Math.max(...terms.map(t => Math.abs(t[1])));
+  $('#ef-terms').innerHTML = '<span class="mini-h">The six terms of ln evidence</span>' + terms.map(t => { const w = Math.abs(t[1]) / mx * 50; return `<div class="cf"><span>${t[0]}</span><span class="cf-track"><i style="left:${t[1] < 0 ? 50 - w : 50}%;width:${w}%;background:${t[3]}"></i></span><span class="num">${tip(fmt(t[1], 2), t[2])}</span></div>`; }).join('');
+  const prev = d > 0 ? A[d - 1] : null, gainFit = prev ? cur.ml - prev.ml : 0, gainEv = prev ? R.lnev - prev.R.lnev : 0;
+  $('#ef-say').innerHTML = (be === d ? `Degree ${d} has the <b>highest evidence</b> of the ten. ` : `The evidence prefers degree ${be} over degree ${d} by a factor of ${tip(sciL(lev[be] - lev[d], true), `e^(${fmt(lev[be], 2)} − (${fmt(lev[d], 2)}))`)}. `) +
+    (prev ? (gainEv < 0 ? `Going from degree ${d - 1} to ${d} improved the best fit by ${fmt(gainFit, 2)} nats but the evidence ${gainEv < -0.005 ? 'fell by ' + fmt(-gainEv, 2) : 'barely moved'}: the extra weight&rsquo;s Occam factor cost more than it bought.` : `Going from degree ${d - 1} to ${d} improved the best fit by ${fmt(gainFit, 2)} nats and the evidence by ${fmt(gainEv, 2)}: this weight earns its keep.`) : 'A constant can&rsquo;t follow the wave at all: the misfit term dominates.') +
+    (d >= 7 ? ' Notice the band: away from the points, a high-degree polynomial is unsure where to go.' : '');
+  $('#run-ef').innerHTML = `<b>Running example</b>: d = ${d}, so M = ${M}, N = ${N}: ln p = ${M}/2 ln 0.005 + ${N}/2 ln 16 &minus; ${fmt(R.E, 2)} &minus; &frac12;(${fmt(R.logdet, 2)}) &minus; ${N}/2 ln 2&pi; = ${tip(fmt(M / 2 * Math.log(R.a), 2) + ' + ' + fmt(N / 2 * Math.log(R.b), 2) + ' − ' + fmt(R.E, 2) + ' − ' + fmt(R.logdet / 2, 2) + ' − ' + fmt(N / 2 * Math.log(2 * Math.PI), 2), `E(m_N) = β E_D + α E_W = ${fmt(R.Ed, 3)} + ${fmt(R.Ew, 4)}\nln|A| = Σ ln(α + β dᵢ)`)} = ${tip('<b>' + fmt(R.lnev, 2) + '</b>', 'the green curve at this degree')}.`;
+}
+function toyChanged() { drawEF(); drawEB(); MX.path = null; drawMX(); }
+draggable($('#ef-cv'), () => efV, () => TOY, toyChanged);
+$('#ef-d').addEventListener('input', e => { EF.d = +e.target.value; drawEF(); });
+$('#ef-new').addEventListener('click', () => { toySeed = toySeed * 7 % 997 + 3; TOY = genToy(toySeed, 12, 0.25); toyChanged(); });
+fig($('#ef-cv'), drawEF); fig($('#ef-curve'), drawEF);
+
+/* ---------- 5. empirical Bayes over α (β fixed at its true value) ---------- */
+const EB = { d: 9, la: -4 };
+const LA = range(-6, 2, 161);
+function ebAlphaHat(P) { let a = 1; for (let i = 0; i < 2000; i++) { const R = ev(P, a, B_TRUE), a2 = clamp(R.g / R.mm, 1e-8, 1e8); if (Math.abs(Math.log(a2 / a)) < 1e-12) break; a = a2; } return a; }
+function drawEB() {
+  const C = C0(), d = EB.d, P = prepPts(TOY, d), a = Math.pow(10, EB.la), R = ev(P, a, B_TRUE), ah = ebAlphaHat(P), Rh = ev(P, ah, B_TRUE);
+  const v = toyAxes($('#eb-cv')); clip(v); curve(v, TRUE_F, C.muted, 1.3, [5, 5]); drawFit(v, P, R, d, C, C.lda); TOY.forEach(p => dot(v, p[0], p[1], C.q, 5.2)); v.ctx.restore();
+  const lev = [], tr = [], te = []; LA.forEach(l => { const Rl = ev(P, Math.pow(10, l), B_TRUE), w = weights(P, Rl); lev.push(Rl.lnev); tr.push(rms(P, w)); te.push(testRMS(w, d, TEST)); });
+  const top = Math.max(...lev), ve = frame($('#eb-ev'), [-6, 2], [Math.max(Math.min(...lev), top - 30) - 1, top + 2], { l: 40, b: 26, t: 10 }); axes(ve, 'log₁₀ α', 'ln evidence', { sx: 2, ny: 3 }); clip(ve);
+  poly(ve, LA, lev, C.a, 2.4); seg(ve, EB.la, -1e3, EB.la, 1e3, C.q, 1.3); seg(ve, Math.log10(ah), -1e3, Math.log10(ah), 1e3, C.lda, 1.4, [2, 3]); dot(ve, EB.la, R.lnev, C.a, 4.5); ve.ctx.restore();
+  const vr = frame($('#eb-err'), [-6, 2], [0, Math.min(1.2, Math.max(...te) * 1.08)], { l: 40, b: 26, t: 10 }); axes(vr, 'log₁₀ α', 'RMS error', { sx: 2, ny: 3 }); clip(vr);
+  poly(vr, LA, tr, C.b, 2); poly(vr, LA, te, C.bad, 2.4); seg(vr, EB.la, -9, EB.la, 9, C.q, 1.3); seg(vr, Math.log10(ah), -9, Math.log10(ah), 9, C.lda, 1.4, [2, 3]); seg(vr, -6, 0.25, 2, 0.25, C.muted, 1, [3, 4]); vr.ctx.restore();
+  const w = weights(P, R), teNow = testRMS(w, d, TEST), teHat = testRMS(weights(P, Rh), d, TEST), ib = argmin(te);
+  $('#eb-a-o').textContent = sciL(Math.log(a), false); $('#eb-lnev').innerHTML = tip(fmt(R.lnev, 2), `ln p(t | α = ${sciL(Math.log(a))}, β = 16)`);
+  $('#eb-te').innerHTML = tip(fmt(teNow, 3), `RMS over 400 fresh points\nnoise alone gives about 0.25\nbest on the grid: ${fmt(te[ib], 3)} at log₁₀ α = ${fmt(LA[ib], 2)}`);
+  $('#eb-ah').innerHTML = tip(sciL(Math.log(ah), true), `fixed point of α = γ / m_Nᵀm_N with β = 16\nγ = ${fmt(Rh.g, 2)} of ${P.M} weights`);
+  const la = EB.la, lah = Math.log10(ah);
+  $('#eb-say').innerHTML = (la < lah - 1.2 ? `&alpha; is far below &alpha;&#770;: the weights are almost free, so the curve chases the noise. Training error ${fmt(tr[LA.indexOf(LA.reduce((b, x) => Math.abs(x - la) < Math.abs(b - la) ? x : b))], 3)}, test error ${fmt(teNow, 3)}.`
+    : la > lah + 1.2 ? `&alpha; is far above &alpha;&#770;: the prior crushes the weights towards zero and the curve underfits. Test error ${fmt(teNow, 3)}.`
+      : `Near the evidence peak. `) + ` At &alpha;&#770; the test error is ${tip(fmt(teHat, 3), 'test RMS of the posterior mean at α̂')}, against ${fmt(te[ib], 3)} for the best &alpha; you could pick by peeking at the test set. ${teHat <= 1.15 * te[ib] ? 'The evidence got that close without seeing a single test point.' : 'Not the very best: with only 12 points the evidence peak is itself a noisy estimate, but it is found from the training data alone and it rules out the disasters at either end.'}${d === 9 ? '' : ' Try degree 9: with the right &alpha;, even a flexible model behaves.'}`;
+  const [pm, ps] = pred(P, Rh, powRow(0.5, d));
+  $('#run-eb').innerHTML = `<b>Running example</b>: degree ${d}, &beta; = 16: the evidence peaks at &alpha;&#770; = ${tip(sciL(Math.log(ah), true), 'by the fixed-point loop of the next section, β held at 16')}, where ln p(t | &alpha;&#770;, &beta;) = ${fmt(Rh.lnev, 2)}. Plugging &alpha;&#770; in, the prediction at x = 0.5 is ${tip(fmt(pm, 3) + ' &plusmn; ' + fmt(Math.sqrt(ps), 3), `mean m_Nᵀφ(0.5); sd √(1/β + φᵀA⁻¹φ)\ntrue sin(π/2) = 1`)}.`;
+}
+$('#eb-a').addEventListener('input', e => { EB.la = +e.target.value; drawEB(); });
+seg1('[data-ed]', 'data-ed', d => { EB.d = +d; drawEB(); });
+$('#eb-best').addEventListener('click', () => { const ah = Math.log10(ebAlphaHat(prepPts(TOY, EB.d))); EB.la = clamp(Math.round(ah / 0.05) * 0.05, -6, 2); $('#eb-a').value = EB.la; drawEB(); });
+fig($('#eb-cv'), drawEB); fig($('#eb-ev'), drawEB); fig($('#eb-err'), drawEB);
+
+/* ---------- 6. the re-estimation loop on the (α, β) map ---------- */
+const MX = { d: 9, start: [1.5, 0], path: null };
+const MXR = { x: [-6, 3], y: [-0.5, 3] };
+let mxV = null, mxTimer = 0;
+function mxP() { return prepPts(TOY, MX.d); }
+function drawMX() {
+  const C = C0(), P = mxP(); if (!MX.path) MX.path = [[Math.pow(10, MX.start[0]), Math.pow(10, MX.start[1])]];
+  const peak = optimise(P), v = mxV = frame($('#mx-cv'), MXR.x, MXR.y, { l: 44, b: 32 });
+  const step = 6, nx = Math.ceil(v.pw / step) + 1, ny = Math.ceil(v.ph / step) + 1, F = new Float64Array(nx * ny);
+  for (let j = 0; j < ny; j++) { const lb = v.iY(v.pad.t + j * step); for (let i = 0; i < nx; i++) F[j * nx + i] = ev(P, Math.pow(10, v.iX(v.pad.l + i * step)), Math.pow(10, lb)).lnev; }
+  const top = peak.lnev, c = v.ctx; c.save();
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) { const val = F[j * nx + i] - top; c.globalAlpha = 0.04 + 0.62 * Math.exp(val / 8); c.fillStyle = C.lda; c.fillRect(v.pad.l + i * step, v.pad.t + j * step, step + 0.5, step + 0.5); }
+  c.restore();
+  const G = { F, nx, ny, step }; for (let k = 1; k <= 10; k++) iso(v, G, top - 2 * k, C.q, k === 1 ? 1.1 : 0.6);
+  axes(v, 'log₁₀ α', 'log₁₀ β', { sx: 1, sy: 0.5 });
+  clip(v); seg(v, MXR.x[0], Math.log10(B_TRUE), MXR.x[1], Math.log10(B_TRUE), C.muted, 1.2, [5, 4]);
+  const pts = MX.path.map(p => [clamp(Math.log10(p[0]), MXR.x[0] - 0.3, MXR.x[1] + 0.3), clamp(Math.log10(p[1]), MXR.y[0] - 0.3, MXR.y[1] + 0.3)]);
+  poly(v, pts.map(p => p[0]), pts.map(p => p[1]), C.q, 1.6); pts.forEach((p, i) => dot(v, p[0], p[1], C.q, i === pts.length - 1 ? 5.5 : 3.2));
+  star(v, Math.log10(peak.a), Math.log10(peak.b), C.lda, 10); v.ctx.restore();
+  label(v, 'true β', v.X(MXR.x[1]) - 4, v.Y(Math.log10(B_TRUE)) - 9, C.muted, 'right');
+  // numbers for the current iterate
+  const it = MX.path.length - 1, [a, b] = MX.path[it], R = ev(P, a, b), [a2, b2] = reest(P, a, b);
+  const conv = Math.abs(Math.log(a2 / a)) + Math.abs(Math.log(b2 / b)) < 1e-9;
+  $('#mx-it').textContent = it; $('#mx-g').innerHTML = tip(`${fmt(R.g, 2)} of ${P.M}`, `Σ λᵢ/(α + λᵢ), λᵢ = β dᵢ\n${P.d.map(dd => fmt(b * dd / (a + b * dd), 3)).join(' + ')}`);
+  $('#mx-lnev').innerHTML = tip(fmt(R.lnev, 2), `ln p(t | α, β) at the current point\npeak: ${fmt(peak.lnev, 3)}`);
+  const rows = MX.path.slice(-6).map((p, k) => { const Rk = ev(P, p[0], p[1]), idx = it - Math.min(5, it) + k; return `<tr${idx === it ? ' class="cur"' : ''}><td>${idx}</td><td class="num">${fmt(Rk.g, 3)}</td><td class="num">${sciL(Math.log(p[0]), true)}</td><td class="num">${fmt(p[1], p[1] < 10 ? 3 : 2)}</td><td class="num">${fmt(Rk.lnev, 3)}</td></tr>`; }).join('');
+  $('#mx-tbl').innerHTML = `<thead><tr><th>step</th><th>&gamma;</th><th>&alpha;</th><th>&beta;</th><th>ln ev</th></tr></thead><tbody>${rows}</tbody>`;
+  const evs = MX.path.map(p => ev(P, p[0], p[1]).lnev), mono = evs.every((e, i) => i === 0 || e >= evs[i - 1] - 1e-9);
+  $('#mx-say').innerHTML = it === 0 ? `Start: &alpha; = ${sciL(Math.log(a), true)}, &beta; = ${fmt(b, 2)} (noise sd ${fmt(1 / Math.sqrt(b), 2)}). Press Step: one update of &alpha; and &beta; from the two formulas.`
+    : conv ? `Converged after ${it} steps at &alpha;&#770; = ${sciL(Math.log(a), true)}, &beta;&#770; = ${fmt(b, 2)}: a noise sd of ${tip(fmt(1 / Math.sqrt(b), 3), '1/√β̂')} (the truth is 0.25). ${R.g < 0.8 * P.M ? 'Only ' : ''}${fmt(R.g, 1)} of the ${P.M} weights are determined by the data${R.g < 0.8 * P.M ? '; the prior holds the rest near zero, which is why this flexible model doesn&rsquo;t overfit' : ''}. Click elsewhere: every start ends at the same star.`
+      : `Step ${it}: ln evidence ${fmt(evs[0], 2)} &rarr; ${fmt(evs[it], 2)}. ${mono ? 'Every step so far has gone uphill.' : 'Not every step went uphill: the updates are a fixed-point scheme, not guaranteed ascent.'} Keep stepping, or run to convergence.`;
+  $('#run-mx').innerHTML = `<b>Running example</b>: at step ${it}, &gamma; = ${tip(fmt(R.g, 3), 'sum of λᵢ/(α+λᵢ) over the ' + P.M + ' eigenvalues')}, m<sub>N</sub>&#x1D40;m<sub>N</sub> = ${fmt(R.mm, 3)}, residuals ${fmt(R.sse, 4)}. Next: &alpha; = ${fmt(R.g, 3)}/${fmt(R.mm, 3)} = ${tip(sciL(Math.log(a2), true), 'the new α')}, 1/&beta; = ${fmt(R.sse, 4)}/(${P.N} &minus; ${fmt(R.g, 3)}) = ${tip(fmt(1 / b2, 4), 'the new noise variance; β = ' + fmt(b2, 2))}.`;
+}
+function mxStep() { const P = mxP(), [a, b] = MX.path[MX.path.length - 1], [a2, b2] = reest(P, a, b); if (!(a2 > 0 && b2 > 0 && isFinite(a2) && isFinite(b2))) return false; const done = Math.abs(Math.log(a2 / a)) + Math.abs(Math.log(b2 / b)) < 1e-9; if (!done) MX.path.push([clamp(a2, 1e-12, 1e12), clamp(b2, 1e-12, 1e12)]); drawMX(); return !done; }
+$('#mx-step').addEventListener('click', () => { clearInterval(mxTimer); mxStep(); });
+$('#mx-run').addEventListener('click', () => { clearInterval(mxTimer); let n = 0; mxTimer = setInterval(() => { if (!mxStep() || ++n > 400) clearInterval(mxTimer); }, 70); });
+$('#mx-reset').addEventListener('click', () => { clearInterval(mxTimer); MX.start = [1.5, 0]; MX.path = null; drawMX(); });
+$('#mx-cv').addEventListener('click', e => { if (!mxV) return; const [px, py] = evPos($('#mx-cv'), e); const x = mxV.iX(px), y = mxV.iY(py); if (x < MXR.x[0] || x > MXR.x[1] || y < MXR.y[0] || y > MXR.y[1]) return; clearInterval(mxTimer); MX.start = [x, y]; MX.path = null; drawMX(); });
+$('#mx-cv').style.cursor = 'crosshair';
+seg1('[data-md]', 'data-md', d => { clearInterval(mxTimer); MX.d = +d; MX.path = null; drawMX(); });
+fig($('#mx-cv'), drawMX);
+
+/* ---------- 7. γ in weight space: a line with two weights ---------- */
+const GM = { la: 1, s: 0.4, beta: 6.25 };
+const GBASE = (() => { const b = [-1.6, -1.1, -0.6, -0.2, 0.25, 0.65, 1.05, 1.55], m = b.reduce((s, v) => s + v, 0) / 8, sd = Math.sqrt(b.reduce((s, v) => s + (v - m) ** 2, 0) / 8); return b.map(v => (v - m) / sd); })();
+const GNOISE = (() => { const r = mulberry32(5); return GBASE.map(() => gaussOf(r)); })();
+function gmCalc() {
+  const s = GM.s, a = Math.pow(10, GM.la), b = GM.beta, x = GBASE.map(v => s * v), t = x.map((xi, i) => 0.5 + 1.0 * xi + 0.4 * GNOISE[i]), N = 8;
+  const sxx = x.reduce((q, v) => q + v * v, 0), w0 = t.reduce((q, v) => q + v, 0) / N, w1 = x.reduce((q, v, i) => q + v * t[i], 0) / sxx;
+  const l0 = b * N, l1 = b * sxx, r0 = l0 / (a + l0), r1 = l1 / (a + l1), m0 = r0 * w0, m1 = r1 * w1, g = r0 + r1;
+  const sse = t.reduce((q, v, i) => q + (v - m0 - m1 * x[i]) ** 2, 0);
+  let ah = 1; for (let i = 0; i < 500; i++) { const q0 = l0 / (ah + l0), q1 = l1 / (ah + l1), mm = (q0 * w0) ** 2 + (q1 * w1) ** 2, a2 = (q0 + q1) / mm; if (Math.abs(Math.log(a2 / ah)) < 1e-12) break; ah = a2; }
+  return { s, a, b, x, t, sxx, w0, w1, l0, l1, r0, r1, m0, m1, g, sse, ah, N };
+}
+function drawGM() {
+  const C = C0(), o = gmCalc(), v = frame($('#gm-cv'), [-1.2, 2.2], [-1.2, 2.6], { l: 40, b: 32 }, true); axes(v, 'w₀ (intercept)', 'w₁ (slope)', { sx: 0.5, sy: 0.5 });
+  clip(v); const c = v.ctx, px = v.X(1) - v.X(0);
+  seg(v, -9, 0, 9, 0, C.muted, 1); seg(v, 0, -9, 0, 9, C.muted, 1);
+  [1, 2].forEach(k => { c.save(); c.strokeStyle = C.muted; c.lineWidth = 1.3; c.beginPath(); c.arc(v.X(0), v.Y(0), k / Math.sqrt(o.a) * px, 0, 7); c.stroke(); c.restore(); });
+  [1, 2].forEach(k => { c.save(); c.strokeStyle = C.b; c.lineWidth = 1.6; c.beginPath(); c.ellipse(v.X(o.w0), v.Y(o.w1), Math.min(4000, k / Math.sqrt(o.l0) * px), Math.min(4000, k / Math.sqrt(o.l1) * px), 0, 0, 7); c.stroke(); c.restore(); });
+  seg(v, o.w0, o.w1, o.m0, o.w1, C.lda, 1.4, [3, 3]); seg(v, o.m0, o.w1, o.m0, o.m1, C.lda, 1.4, [3, 3]);
+  dot(v, o.w0, o.w1, C.b, 5); star(v, o.m0, o.m1, C.lda, 10);
+  v.ctx.restore();
+  if (o.w1 > 2.6 || o.w1 < -1.2) label(v, `w_ML off the plot: slope ${fmt(o.w1, 2)}`, v.pad.l + 8, v.pad.t + 12, C.b);
+  $('#gm-a-o').textContent = sciL(Math.log(o.a), false); $('#gm-s-o').textContent = fmt(o.s, 2);
+  const bar = (name, r, how) => `<div class="cf"><span>${name}</span><span class="cf-track one"><i style="left:0;width:${r * 100}%;background:var(--lda)"></i></span><span class="num">${tip(fmt(r, 3), how)}</span></div>`;
+  $('#gm-bars').innerHTML = '<span class="mini-h">How much of each direction the data determine, &lambda;/(&alpha; + &lambda;)</span>' + bar('intercept w₀', o.r0, `λ₀ = β × N = ${fmt(o.b, 2)} × 8 = ${fmt(o.l0, 2)}\n${fmt(o.l0, 2)} / (${sciL(Math.log(o.a))} + ${fmt(o.l0, 2)})`) + bar('slope w₁', o.r1, `λ₁ = β × Σx² = ${fmt(o.b, 2)} × ${fmt(o.sxx, 3)} = ${fmt(o.l1, 3)}\n${fmt(o.l1, 3)} / (${sciL(Math.log(o.a))} + ${fmt(o.l1, 3)})`);
+  $('#gm-g').innerHTML = tip(fmt(o.g, 3), `${fmt(o.r0, 3)} + ${fmt(o.r1, 3)}`);
+  $('#gm-b').innerHTML = tip(fmt(o.sse / (o.N - o.g), 3), `Σ (tₙ − m_Nᵀφₙ)² / (N − γ) = ${fmt(o.sse, 3)} / (8 − ${fmt(o.g, 3)})\nthe true noise variance is 0.4² = 0.16`);
+  $('#gm-say').innerHTML = o.r1 < 0.2 ? `The slope is barely measured (&lambda;&#8321; = ${fmt(o.l1, 2)} against &alpha; = ${sciL(Math.log(o.a), true)}): the likelihood ellipse is tall, and the prior pulls the slope almost to zero. It counts only ${fmt(o.r1, 2)} towards &gamma;. The intercept, measured by all 8 points, still counts ${fmt(o.r0, 2)}.`
+    : o.g > 1.9 ? `Both directions are well determined (&lambda; &#8811; &alpha;): the posterior mean sits almost on w<sub>ML</sub> and &gamma; &asymp; 2. The prior hardly matters. Now squeeze the x values together.`
+      : `In between: the ${o.r0 < o.r1 ? 'intercept' : 'slope'} is the less certain direction, so the prior pulls it further (dashes). &gamma; = ${fmt(o.g, 2)} says the data have pinned down about ${fmt(o.g, 1)} of the 2 weights.`;
+  $('#run-gm').innerHTML = `<b>Running example</b>: &beta; = 6.25, N = 8, &Sigma;x&sup2; = ${fmt(o.sxx, 3)}: &lambda;&#8320; = ${fmt(o.l0, 1)}, &lambda;&#8321; = ${fmt(o.l1, 2)}, so &gamma; = ${fmt(o.l0, 1)}/(${sciL(Math.log(o.a), true)} + ${fmt(o.l0, 1)}) + ${fmt(o.l1, 2)}/(${sciL(Math.log(o.a), true)} + ${fmt(o.l1, 2)}) = ${tip(fmt(o.g, 3), 'the two bars added')}. Here 2&alpha;E<sub>W</sub> = &alpha;m<sub>N</sub>&#x1D40;m<sub>N</sub> = ${tip(fmt(o.a * (o.m0 * o.m0 + o.m1 * o.m1), 3), `${sciL(Math.log(o.a))} × ${fmt(o.m0 * o.m0 + o.m1 * o.m1, 4)}`)}; the two are equal only at the evidence-optimal &alpha;&#770; = ${tip(sciL(Math.log(o.ah), true), 'fixed point of α = γ / m_Nᵀm_N, β held at 6.25')}.`;
+}
+$('#gm-a').addEventListener('input', e => { GM.la = +e.target.value; drawGM(); });
+$('#gm-s').addEventListener('input', e => { GM.s = +e.target.value; drawGM(); });
+fig($('#gm-cv'), drawGM);
+
+/* ---------- 8. evidence versus cross-validation ---------- */
+const CVS = { N: 12, s: 0.25, seed: 31, res: null, trials: null, busy: false };
+function cvOne(pts, test) {
+  const dmax = Math.min(9, pts.length - 2), rows = [];
+  for (let d = 0; d <= dmax; d++) { const P = prepPts(pts, d), R = optimise(P), loo = looLS(P); rows.push({ d, P, R, loo }); }
+  const de = argmax(rows.map(r => r.R.lnev)), dc = argmin(rows.map(r => r.loo));
+  const out = { rows, de, dc };
+  if (test) { out.te = testRMS(weights(rows[de].P, rows[de].R), de, test); out.tc = testRMS(lsW(rows[dc].P), dc, test); }
+  return out;
+}
+function cvNewData() { CVS.res = cvOne(genToy(CVS.seed, CVS.N, CVS.s), genTest(CVS.seed + 5000, 400, CVS.s)); }
+function cvRun() {
+  if (CVS.busy) return; CVS.busy = true; const T = { e: new Array(10).fill(0), c: new Array(10).fill(0), te: 0, tc: 0, n: 0, N: CVS.N, s: CVS.s, ew: 0 };
+  CVS.trials = T; let k = 0; const base = 1000 + Math.floor(Math.random() * 1e6);
+  const chunk = () => { for (let j = 0; j < 20 && k < 200; j++, k++) { const r = cvOne(genToy(base + k, CVS.N, CVS.s), genTest(base + k + 7e6, 400, CVS.s)); T.e[r.de]++; T.c[r.dc]++; T.te += r.te; T.tc += r.tc; T.n++; if (r.te < r.tc) T.ew++; }
+    drawCV(); if (k < 200) setTimeout(chunk, 0); else { CVS.busy = false; drawCV(); } };
+  chunk();
+}
+function drawCV() {
+  const C = C0(); if (!CVS.res) cvNewData(); const r = CVS.res, ds = r.rows.map(o => o.d), lev = r.rows.map(o => o.R.lnev), loo = r.rows.map(o => o.loo);
+  const top = Math.max(...lev), bot = Math.max(Math.min(...lev), top - 40);
+  const ve = frame($('#cv-ev'), [-0.4, 9.4], [bot - 2, top + 3], { l: 42, b: 26, t: 10 }); axes(ve, 'degree', 'ln evidence', { sx: 1, ny: 3 }); clip(ve);
+  poly(ve, ds, lev, C.a, 2.4); ds.forEach(i => dot(ve, i, lev[i], C.a, 3)); star(ve, r.de, lev[r.de], C.lda, 9); ve.ctx.restore();
+  const lmin = Math.min(...loo.filter(isFinite)), lcap = Math.max(lmin * 3, 0.6), vl = frame($('#cv-loo'), [-0.4, 9.4], [0, lcap], { l: 42, b: 26, t: 10 }); axes(vl, 'degree', 'LOO RMS', { sx: 1, ny: 3 }); clip(vl);
+  poly(vl, ds, loo.map(x => Math.min(x, lcap * 1.5)), C.b, 2.4); ds.forEach(i => dot(vl, i, Math.min(loo[i], lcap * 0.985), C.b, loo[i] > lcap ? 4 : 3, loo[i] > lcap)); star(vl, r.dc, loo[r.dc], C.lda, 9); vl.ctx.restore();
+  const T = CVS.trials, vh = frame($('#cv-hist'), [-0.6, 9.6], [0, T && T.n ? Math.max(...T.e, ...T.c) * 1.12 : 100], { l: 42, b: 26, t: 10 }); axes(vh, 'degree picked', 'experiments', { sx: 1, ny: 3, fy: y => fmt(y, 0) });
+  if (T) { const c = vh.ctx; for (let d = 0; d <= 9; d++) { [[T.e[d], C.a, -0.38], [T.c[d], C.b, 0.02]].forEach(([m, col, off]) => { if (!m) return; c.fillStyle = col; c.globalAlpha = 0.85; c.fillRect(vh.X(d + off), vh.Y(m), vh.X(d + off + 0.36) - vh.X(d + off), vh.Y(0) - vh.Y(m)); c.globalAlpha = 1; }); } }
+  else label(vh, 'press “Run 200 experiments”', vh.X(4.5), vh.Y(50), C.muted, 'center');
+  $('#cv-n-o').textContent = CVS.N; $('#cv-s-o').textContent = fmt(CVS.s, 2);
+  const has = T && T.n > 0;
+  $('#cv-te').innerHTML = has ? tip(fmt(T.te / T.n, 3), `mean over ${T.n} experiments (N = ${T.N}, noise ${fmt(T.s, 2)})\nposterior mean at the evidence's α̂, β̂`) : tip(fmt(r.te, 3), `this dataset: degree ${r.de}, posterior mean`);
+  $('#cv-tc').innerHTML = has ? tip(fmt(T.tc / T.n, 3), `mean over ${T.n} experiments\nleast squares at the CV-picked degree`) : tip(fmt(r.tc, 3), `this dataset: degree ${r.dc}, least squares`);
+  const spread = a => { const n = a.reduce((s, v) => s + v, 0), m = a.reduce((s, v, i) => s + v * i, 0) / n; return Math.sqrt(a.reduce((s, v, i) => s + v * (i - m) ** 2, 0) / n); };
+  const mode = a => argmax(a);
+  $('#cv-say').innerHTML = !has ? `On this dataset the evidence picks degree <b>${r.de}</b> and leave-one-out picks degree <b>${r.dc}</b>. One dataset proves little; run the experiments.`
+    : T.n < 200 ? `Running&hellip; ${T.n} of 200.`
+      : `Over 200 datasets of ${T.N} points, the evidence most often picks degree ${mode(T.e)} (${pct(T.e[mode(T.e)] / T.n)}) and CV degree ${mode(T.c)} (${pct(T.c[mode(T.c)] / T.n)}). The evidence&rsquo;s picks are ${spread(T.e) < spread(T.c) ? 'less' : 'more'} scattered (spread ${fmt(spread(T.e), 2)} against ${fmt(spread(T.c), 2)} degrees). Its model also predicts ${T.te < T.tc ? 'better' : 'worse'} on fresh data, on average ${fmt(T.te / T.n, 3)} against ${fmt(T.tc / T.n, 3)}, and wins ${pct(T.ew / T.n)} of the head-to-heads${T.te < T.tc ? ', partly because its pick comes with a tuned &alpha; that tames the extra degrees, while least squares has no prior at all' : ''}. ${T.N <= 15 ? 'Now give both methods more data.' : 'With more data the two tend to agree; try very few points.'}`;
+  const o = r.rows[r.dc], w = lsW(o.P); let hmax = 0; const dm = Math.max(...o.P.d); o.P.Phi.forEach(row => { let h = 0; for (let k = 0; k < o.P.M; k++) { if (o.P.d[k] <= 1e-11 * dm) continue; let p = 0; for (let i = 0; i < o.P.M; i++) p += o.P.V[i][k] * row[i]; h += p * p / o.P.d[k]; } hmax = Math.max(hmax, h); });
+  $('#run-cv').innerHTML = `<b>Running example</b>: on the dataset shown, degree ${r.dc} has LOO = ${tip(fmt(o.loo, 3), `√(1/${o.P.N} Σ (rₙ / (1 − Hₙₙ))²)\nin-sample RMS: ${fmt(rms(o.P, w), 3)}`)}, the lowest of the ${r.rows.length} degrees tried. Its leverages H<sub>nn</sub> add up to M = ${o.P.M}; the largest is ${tip(fmt(hmax, 3), 'that point\'s residual is inflated by 1/(1 − H) = ' + fmt(1 / (1 - hmax), 2))}.`;
+}
+$('#cv-n').addEventListener('input', e => { CVS.N = +e.target.value; CVS.res = null; CVS.trials = null; drawCV(); });
+$('#cv-s').addEventListener('input', e => { CVS.s = +e.target.value; CVS.res = null; CVS.trials = null; drawCV(); });
+$('#cv-new').addEventListener('click', () => { CVS.seed++; CVS.res = null; drawCV(); });
+$('#cv-run').addEventListener('click', cvRun);
+fig($('#cv-ev'), drawCV); fig($('#cv-loo'), drawCV); fig($('#cv-hist'), drawCV);
+
+/* ---------- 9. project: GISTEMP ---------- */
+const GT = {"year":[1880,1881,1882,1883,1884,1885,1886,1887,1888,1889,1890,1891,1892,1893,1894,1895,1896,1897,1898,1899,1900,1901,1902,1903,1904,1905,1906,1907,1908,1909,1910,1911,1912,1913,1914,1915,1916,1917,1918,1919,1920,1921,1922,1923,1924,1925,1926,1927,1928,1929,1930,1931,1932,1933,1934,1935,1936,1937,1938,1939,1940,1941,1942,1943,1944,1945,1946,1947,1948,1949,1950,1951,1952,1953,1954,1955,1956,1957,1958,1959,1960,1961,1962,1963,1964,1965,1966,1967,1968,1969,1970,1971,1972,1973,1974,1975,1976,1977,1978,1979,1980,1981,1982,1983,1984,1985,1986,1987,1988,1989,1990,1991,1992,1993,1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025],"t":[-0.17,-0.09,-0.11,-0.18,-0.28,-0.33,-0.31,-0.36,-0.18,-0.11,-0.36,-0.22,-0.27,-0.31,-0.3,-0.23,-0.11,-0.11,-0.28,-0.18,-0.08,-0.16,-0.28,-0.37,-0.47,-0.26,-0.22,-0.38,-0.42,-0.48,-0.44,-0.44,-0.37,-0.34,-0.15,-0.14,-0.36,-0.46,-0.3,-0.27,-0.27,-0.18,-0.28,-0.26,-0.27,-0.22,-0.11,-0.22,-0.2,-0.36,-0.15,-0.09,-0.16,-0.28,-0.13,-0.2,-0.15,-0.03,0.0,-0.02,0.12,0.18,0.06,0.09,0.2,0.09,-0.07,-0.03,-0.11,-0.11,-0.17,-0.07,0.01,0.08,-0.13,-0.14,-0.19,0.05,0.06,0.03,-0.02,0.06,0.03,0.05,-0.2,-0.11,-0.06,-0.02,-0.08,0.05,0.03,-0.08,0.01,0.16,-0.07,-0.01,-0.1,0.18,0.07,0.16,0.26,0.32,0.14,0.31,0.16,0.12,0.18,0.32,0.39,0.27,0.45,0.41,0.22,0.23,0.31,0.45,0.33,0.47,0.61,0.38,0.39,0.53,0.63,0.62,0.53,0.68,0.64,0.66,0.54,0.66,0.72,0.61,0.65,0.67,0.75,0.89,1.01,0.91,0.85,0.98,1.01,0.85,0.89,1.17,1.28,1.18],"fold":[6,5,2,4,5,6,4,0,1,9,2,5,4,4,7,4,1,6,2,7,8,9,0,6,0,8,0,0,6,7,3,7,7,1,6,6,9,1,6,9,0,5,5,0,2,2,5,9,3,7,2,0,4,6,1,6,3,7,9,2,3,2,0,2,8,7,4,9,4,8,9,0,8,2,6,6,2,8,0,8,8,8,8,1,1,3,4,9,9,1,1,1,3,5,3,5,6,3,1,7,4,5,4,9,5,1,5,2,5,7,2,5,0,7,3,8,1,9,3,0,4,5,2,3,3,8,4,7,4,3,0,2,7,4,7,5,9,3,9,6,3,8,0,1,1,8]};
+const PJ = { d: 9, mode: 'all', done: false, rows: null };
+const zOf = y => (y - 1952.5) / 72.5;
+function pjFit(idx, d) { return prep(idx.map(i => legRow(zOf(GT.year[i]), d)), idx.map(i => GT.t[i])); }
+function pjCompute() {
+  const all = GT.year.map((_, i) => i), old = all.filter(i => GT.year[i] <= 2005), nw = all.filter(i => GT.year[i] > 2005), rows = [];
+  for (let d = 0; d <= 15; d++) {
+    const P = pjFit(all, d), R = optimise(P); let se = 0, seb = 0;
+    for (let k = 0; k < 10; k++) { const tr = all.filter(i => GT.fold[i] !== k), te = all.filter(i => GT.fold[i] === k), Pt = pjFit(tr, d), w = lsW(Pt), wb = weights(Pt, optimise(Pt));
+      te.forEach(i => { const r = legRow(zOf(GT.year[i]), d); se += (GT.t[i] - dotv(r, w)) ** 2; seb += (GT.t[i] - dotv(r, wb)) ** 2; }); }
+    const Po = pjFit(old, d), Ro = optimise(Po), wo = weights(Po, Ro); let sf = 0; nw.forEach(i => { sf += (GT.t[i] - dotv(legRow(zOf(GT.year[i]), d), wo)) ** 2; });
+    rows.push({ d, P, R, cv: Math.sqrt(se / all.length), cvb: Math.sqrt(seb / all.length), Po, Ro, fc: Math.sqrt(sf / nw.length) });
+  }
+  const L = lse(rows.map(r => r.R.lnev)); rows.forEach(r => { r.post = Math.exp(r.R.lnev - L); });
+  PJ.rows = rows; PJ.done = true;
+}
+function drawPJTable() {
+  if (!PJ.done) { $('#pj-tbl').innerHTML = '<tbody><tr><td>Scroll here to compute&hellip;</td></tr></tbody>'; return; }
+  const rows = PJ.rows, be = argmax(rows.map(r => r.R.lnev)), bc = argmin(rows.map(r => r.cv)), bf = argmin(rows.map(r => r.fc));
+  $('#pj-tbl').innerHTML = `<thead><tr><th>degree</th><th>ln p(t | &alpha;&#770;, &beta;&#770;)</th><th>p(degree | data)</th><th>&gamma;</th><th>&alpha;&#770;</th><th>&beta;&#770;</th><th>CV RMSE, least squares</th><th>CV RMSE, Bayes</th><th>forecast RMSE 2006&ndash;25</th></tr></thead><tbody>` +
+    rows.map(r => `<tr${r.d === be ? ' class="win"' : ''}${r.d === PJ.d ? ' style="outline:2px solid var(--ink);outline-offset:-2px"' : ''}><td>${r.d}${r.d === be ? ' &#9733;' : ''}</td><td class="num">${tip(fmt(r.R.lnev, 4), `M/2 ln α + N/2 ln β − E(m_N) − ½ ln|A| − N/2 ln 2π\nM = ${r.R.M}, N = 146, ${r.R.it} loop steps`)}</td><td class="num">${tip(r.post < 1e-3 ? sciL(Math.log(r.post), true) : fmt(r.post, 3), 'equal prior over degrees 0–15:\ne^(ln ev) / Σ e^(ln ev)')}</td><td class="num">${fmt(r.R.g, 4)}</td><td class="num">${fmt(r.R.a, 3)}</td><td class="num">${fmt(r.R.b, 3)}</td><td class="num"${r.d === bc ? ' style="font-weight:700"' : ''}>${tip(fmt(r.cv, 5), '√(Σ held-out squared errors / 146)\n10 folds, least squares on the other 9')}</td><td class="num">${fmt(r.cvb, 5)}</td><td class="num"${r.d === bf ? ' style="font-weight:700"' : ''}>${tip(fmt(r.fc, 4), 'fit 1880–2005 with its own α̂, β̂,\nthen RMS error on the 20 years 2006–2025')}</td></tr>`).join('') + '</tbody>';
+}
+function drawPJ() {
+  const C = C0(); drawPJTable(); if (!PJ.done) return;
+  const r = PJ.rows[PJ.d], fc = PJ.mode === 'fc', P = fc ? r.Po : r.P, R = fc ? r.Ro : r.R, d = PJ.d;
+  const v = frame($('#pj-cv'), [1876, 2029], [-0.75, 1.75], { l: 42, b: 32 }); axes(v, 'year', '°C vs 1951–80', { sx: 20, sy: 0.5 }); clip(v);
+  const ys = range(1880, 2025, 291), mu = [], s1 = [], s2 = []; ys.forEach(y => { const [m, s] = pred(P, R, legRow(zOf(y), d)); mu.push(m); s1.push(Math.sqrt(s)); s2.push(Math.sqrt(s)); });
+  band(v, ys, mu.map((m, i) => m - 2 * s2[i]), mu.map((m, i) => m + 2 * s2[i]), C.lda, 0.1); band(v, ys, mu.map((m, i) => m - s1[i]), mu.map((m, i) => m + s1[i]), C.lda, 0.16);
+  if (fc) { const c = v.ctx; c.save(); c.fillStyle = C.muted; c.globalAlpha = 0.08; c.fillRect(v.X(2005.5), v.pad.t, v.X(2029) - v.X(2005.5), v.ph); c.restore(); }
+  poly(v, ys, mu, C.lda, 2.4);
+  let inBand = 0, nNew = 0; GT.year.forEach((y, i) => { const held = fc && y > 2005; dot(v, y, GT.t[i], held ? C.bad : C.q, 2.6); if (held) { nNew++; const k = ys.findIndex(q => q >= y); if (Math.abs(GT.t[i] - mu[k]) <= 2 * s2[k]) inBand++; } });
+  v.ctx.restore();
+  if (fc) label(v, 'forecast', v.X(2015.5), v.pad.t + 10, C.muted, 'center');
+  const rows = PJ.rows, ds = rows.map(o => o.d), lev = rows.map(o => fc ? o.Ro.lnev : o.R.lnev), errs = rows.map(o => fc ? o.fc : o.cv), be = argmax(lev), bc = argmin(errs);
+  const top = Math.max(...lev), ve = frame($('#pj-ev'), [-0.5, 15.5], [top - 60, top + 8], { l: 42, b: 26, t: 10 }); axes(ve, 'degree', 'ln evidence', { sx: 3, ny: 3 }); clip(ve);
+  poly(ve, ds, lev, C.a, 2.2); ds.forEach(i => dot(ve, i, lev[i], C.a, i === d ? 5 : 2.6)); star(ve, be, lev[be], C.lda, 9); ve.ctx.restore();
+  const emin = Math.min(...errs), vc = frame($('#pj-cvp'), [-0.5, 15.5], [0, fc ? 1 : 0.45], { l: 42, b: 26, t: 10 }); axes(vc, 'degree', fc ? 'forecast RMSE' : 'CV RMSE', { sx: 3, ny: 3 }); clip(vc);
+  poly(vc, ds, errs, C.b, 2.2); ds.forEach(i => dot(vc, i, errs[i], C.b, i === d ? 5 : 2.6)); star(vc, bc, errs[bc], C.lda, 9); vc.ctx.restore();
+  $('#pj-d-o').textContent = d; $('#pj-lnev').innerHTML = tip(fmt(R.lnev, 2), fc ? 'on the 126 years 1880–2005' : 'on all 146 years');
+  $('#pj-g').innerHTML = tip(`${fmt(R.g, 2)} of ${R.M}`, `Σ λᵢ/(α̂ + λᵢ); α̂ = ${fmt(R.a, 3)}`);
+  $('#pj-sd').innerHTML = tip(fmt(1 / Math.sqrt(R.b), 3) + ' °C', `1/√β̂ = 1/√${fmt(R.b, 3)}`);
+  $('#pj-err-k').textContent = fc ? 'forecast RMSE 2006–2025' : '10-fold CV RMSE';
+  $('#pj-err').innerHTML = fc ? tip(fmt(r.fc, 3) + ' °C', `RMS error on the 20 held-out years\n${inBand} of ${nNew} inside the ±2 sd band`) : tip(fmt(r.cv, 4) + ' °C', 'least squares, the same 10 folds as Python');
+  $('#pj-cap').innerHTML = `Dots: GISTEMP annual means${fc ? ' (<span style="color:var(--qda)">red</span>: the 20 forecast years, unseen by the fit)' : ''}. <span style="color:var(--lda)">&#9644;</span> posterior mean at &alpha;&#770;, &beta;&#770;, shaded &plusmn;1 and &plusmn;2 predictive sd. Small plots: ${fc ? 'ln evidence of the 1880&ndash;2005 fit, and the forecast error' : 'ln evidence and 10-fold CV error'} by degree; stars mark the best.`;
+  const pb = rows[be].post;
+  $('#pj-say').innerHTML = fc ? `Fitted to 1880&ndash;2005, the evidence favours degree ${be}, but the best forecast of the next 20 years comes from degree ${bc} (${fmt(errs[bc], 3)} &deg;C). Degree ${d} misses by ${fmt(r.fc, 3)} &deg;C, and ${inBand} of the ${nNew} new years fall inside its &plusmn;2 sd band. ${r.fc > 0.3 ? (inBand >= 0.9 * nNew ? 'The band does widen past 2005, so it still covers most of the new years, but it is so wide that the forecast says little, and the mean curve has swung away from the data.' : 'High-degree polynomials swing wildly past the end of the data, and the band, built on the model&rsquo;s own assumptions, is too confident about it.') : 'A low degree keeps the trend going roughly straight, which is the safest guess a polynomial can make.'}`
+    : (d === be ? `Degree ${d} has the highest evidence (posterior probability ${fmt(pb, 2)} among degrees 0&ndash;15), and cross-validation ${bc === be ? `agrees: its lowest error is also at degree ${bc}` : `prefers degree ${bc}`}.`
+      : `Degree ${be} has the highest evidence; degree ${d} trails by ${fmt(lev[be] - lev[d], 1)} nats, a Bayes factor of ${sciL(lev[be] - lev[d], true)}. Cross-validation&rsquo;s minimum is at degree ${bc}.`) +
+      ' ' + (d <= 1 ? 'A straight line misses the mid-century plateau and the recent acceleration.' : d >= 12 ? 'The extra wiggles buy little: &gamma; keeps rising, but the evidence falls.' : `&gamma; = ${fmt(R.g, 2)} of ${R.M}: with 146 points almost every weight is well determined, so empirical Bayes barely shrinks, and the choice of degree comes down to the Occam factor.`);
+  // check against the Python reference printed on the page
+  const ref = $('#pj-out').textContent.split('\n').slice(1).map(l => l.trim().split(/\s+/).map(Number)).filter(a => a.length >= 9);
+  if (ref.length === 16) { let dl = 0, dg = 0, dc = 0, df = 0; ref.forEach(a => { const q = rows[a[0]]; dl = Math.max(dl, Math.abs(q.R.lnev - a[1]), Math.abs(q.R.lnev - a[5])); dg = Math.max(dg, Math.abs(q.R.g - a[2])); dc = Math.max(dc, Math.abs(q.cv - a[6]), Math.abs(q.cvb - a[7])); df = Math.max(df, Math.abs(q.fc - a[8])); });
+    $('#pj-check').innerHTML = `<b>Checked live against the output above.</b> Across all 16 degrees, the page&rsquo;s ln evidence differs from both numpy and scikit-learn&rsquo;s <span class="mono">BayesianRidge</span> by at most ${tip(fmt(dl, 5), 'the Python values are printed to 4 decimals, so anything under 0.00005 is rounding')}, &gamma; by at most ${fmt(dg, 5)}, the CV errors by at most ${fmt(dc, 6)} and the forecast errors by at most ${fmt(df, 5)}: rounding in the printout, nothing more. The page diagonalises &Phi;&#x1D40;&Phi; with its own Jacobi solver instead of numpy&rsquo;s LAPACK, and runs the same loop with the same stopping rule. (Note that scikit-learn names the hyperparameters the other way round: its <span class="mono">alpha_</span> is our &beta;, its <span class="mono">lambda_</span> our &alpha;.)`; }
+}
+$('#pj-d').addEventListener('input', e => { PJ.d = +e.target.value; drawPJ(); });
+seg1('[data-pm]', 'data-pm', m => { PJ.mode = m; drawPJ(); });
+fig($('#pj-cv'), drawPJ); fig($('#pj-ev'), drawPJ); fig($('#pj-cvp'), drawPJ);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+drawHero(); drawCO(); bfDraw(); drawOC(); drawEF(); drawEB(); drawMX(); drawGM(); drawCV(); drawPJ();
+{ const go = () => { if (!PJ.done) { pjCompute(); drawPJ(); } }; const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { go(); io.disconnect(); } }, { rootMargin: '600px' }) : null; if (io) io.observe($('#project')); else go(); }
+{ const io2 = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { if (!CVS.trials) cvRun(); io2.disconnect(); } }, { rootMargin: '300px' }) : null; if (io2) io2.observe($('#cv')); }
+window.__x015 = { prep, ev, optimise, PJ, CVS, MX, EB, GM, OC, BF, CO, TOY, pjCompute, cvRun, efAll, ocCalc, gmCalc };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

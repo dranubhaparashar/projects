@@ -1,0 +1,1526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on Gaussian processes for regression: Bayesian linear regression revisited as a distribution over functions, the GP prior and the kernel as a covariance, conditioning a joint Gaussian, the predictive mean and variance, the mean as a sum of kernel bumps and why kernels must be valid, learning hyperparameters by maximising the marginal likelihood, composite kernels for trend, seasons and noise, the O(N cubed) cost, and a project that forecasts Mauna Loa CO2 with a composite kernel, verified against scikit-learn.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Gaussian Processes for Regression</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.duo { aspect-ratio: 2.1 / 1; }
+.duo-tall { aspect-ratio: 16 / 10; }
+.k-strip { aspect-ratio: 4.2 / 1; margin-top: 8px; }
+.pj-main { aspect-ratio: 16 / 9; }
+.pj-comp { aspect-ratio: 16 / 8; }
+table.race td.num, table.race th { text-align: right; }
+table.race th:first-child, table.race td:first-child { text-align: left; }
+table.race tr.sel td { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+table.zoo td, table.zoo th { font-size: 0.88rem; vertical-align: top; }
+table.hp td, table.hp th { font-size: 0.86rem; }
+table.hp td.num { font-family: var(--f-mono); text-align: right; white-space: nowrap; }
+@media (max-width: 640px) {
+  .duo { aspect-ratio: 1 / 1.6; }
+  .duo-tall { aspect-ratio: 1 / 1.15; }
+  .k-strip { aspect-ratio: 2.4 / 1; }
+  .pj-main { aspect-ratio: 1 / 1.05; }
+  .pj-comp { aspect-ratio: 1 / 1.1; }
+}
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Gaussian Processes <span>&middot; a prior over functions</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Functions, not weights</a>
+      <a href="#prior">GP prior</a>
+      <a href="#condition">Conditioning</a>
+      <a href="#regression">GP regression</a>
+      <a href="#bumps">Kernel bumps</a>
+      <a href="#learn">Hyperparameters</a>
+      <a href="#compose">Composite kernels</a>
+      <a href="#cost">Cost</a>
+      <a href="#project">CO&#8322; project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.9b · Gaussian processes</div>
+      <h1>Gaussian Processes for Regression</h1>
+      <div class="sub">A prior over functions, not over weights</div>
+      <p class="lead">Bayesian linear regression put a Gaussian belief on a handful of weights and let the curve follow. A Gaussian process skips the weights. It puts the belief straight onto the <em>function</em>: any finite set of its values is jointly Gaussian, and a single function, the kernel, says how strongly two values move together. Conditioning on data is then ordinary Gaussian algebra, and the answer comes with error bars that open up wherever the data run out. On the right, twelve functions drawn from the posterior drift through the points. <strong>Click anywhere to add a point</strong> and watch them all bend to pass through it.</p>
+      <dl class="facts">
+        <div><dt>The prior</dt><dd>f ~ GP(0, k): the kernel k(x, x&prime;) is the covariance of f(x) and f(x&prime;)</dd></div>
+        <div><dt>The answer</dt><dd>Predictive mean k<sup>&top;</sup>C<sup>&minus;1</sup>t and variance c &minus; k<sup>&top;</sup>C<sup>&minus;1</sup>k, in closed form</dd></div>
+        <div><dt>In practice</dt><dd>Forecasting, geostatistics (kriging), Bayesian optimisation, surrogate models</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="fig-head"><div class="btns"><button type="button" class="btn" id="hero-undo">Undo</button><button type="button" class="btn" id="hero-clear">Clear</button><button type="button" class="btn" id="hero-pause">Pause</button></div></div>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Functions drawn from a Gaussian-process posterior; click to add data points"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Linear regression, seen as functions</a></li>
+    <li><a href="#prior"><i>02</i>The kernel is a covariance</a></li>
+    <li><a href="#condition"><i>03</i>Conditioning a Gaussian</a></li>
+    <li><a href="#regression"><i>04</i>Predictive mean and variance</a></li>
+    <li><a href="#bumps"><i>05</i>A sum of kernel bumps</a></li>
+    <li><a href="#learn"><i>06</i>Learning the hyperparameters</a></li>
+    <li><a href="#compose"><i>07</i>Trend, seasons and noise</a></li>
+    <li><a href="#cost"><i>08</i>The price of exactness</a></li>
+    <li><a href="#project"><i>09</i>Forecasting Mauna Loa CO₂</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Linear regression, seen as functions</h2>
+    <div class="prose">
+      <p>Start from chapter 1.2d's model, y(x) = w<sup>&top;</sup>&phi;(x), with M fixed basis functions and a Gaussian prior on the weights. Every weight vector drawn from the prior is a whole function, so the prior over w is secretly a prior over functions. Now ask a different question: not &ldquo;what are the weights?&rdquo; but &ldquo;what does the prior say about the function's <em>values</em> at the inputs x<sub>1</sub>, &hellip;, x<sub>N</sub>?&rdquo;</p>
+      <p>Stack those values into a vector y = &Phi;w. A fixed matrix times a Gaussian vector is Gaussian, so y is Gaussian, with mean 0 and a covariance that depends only on the inputs. Each entry of that covariance is a function of two inputs, the <em class="term">kernel</em>. The weights have disappeared from the answer. Here the basis is M Gaussian bumps of width 0.5, packed into [&minus;3, 3], with each weight's prior variance scaled so the total stays fixed. <strong>Slide M upwards</strong> and watch the covariance with the probe settle onto one smooth curve.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{y} &= \boldsymbol\Phi \mathbf{w}, \quad \mathbf{w} \sim \mathcal{N}(\mathbf{0}, \alpha^{-1}\mathbf{I}) \\ \mathbb{E}[\mathbf{y}] &= \boldsymbol\Phi\, \mathbb{E}[\mathbf{w}] = \mathbf{0} \\ \operatorname{cov}[\mathbf{y}] &= \boldsymbol\Phi\, \mathbb{E}[\mathbf{w}\mathbf{w}^{\top}]\, \boldsymbol\Phi^{\top} \\ &= \tfrac{1}{\alpha}\boldsymbol\Phi\boldsymbol\Phi^{\top} = \mathbf{K} \end{aligned} \]</div><div class="read"><b>Read it as:</b> &Phi; is the design matrix, one row &phi;(x<sub>n</sub>)<sup>&top;</sup> per input. y lists the function's values at the N inputs. Its mean is zero because the weights' mean is zero, and its covariance is the <em>Gram matrix</em> K, which needs only the inputs. So y ~ N(0, K): a Gaussian over function values, with no w in sight.</div><div class="eq-say"><b>Say it</b><em>&ldquo;y is Phi w, with w Gaussian, mean zero, covariance alpha-inverse I. Then y has mean zero and covariance one over alpha, Phi Phi-transpose, which we call K.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} K_{nm} &= k(x_n, x_m) \\ &= \tfrac{1}{\alpha}\, \boldsymbol\phi(x_n)^{\top} \boldsymbol\phi(x_m) \\ &\xrightarrow{M \to \infty} \sigma_f^2 \exp\!\big(\!-\tfrac{(x_n - x_m)^2}{4 s^2}\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the kernel is an inner product of feature vectors, divided by &alpha;. Pack the bumps of width s ever more densely, shrink each weight's variance in proportion, and the sum over bumps becomes an integral that can be done exactly: a smooth Gaussian of the distance x &minus; x&prime;. That limit uses <em>infinitely many</em> basis functions, yet it costs one exponential to evaluate.</div><div class="eq-say"><b>Say it</b><em>&ldquo;K n m is k of x-n and x-m, one over alpha times phi of x-n dotted with phi of x-m. As M goes to infinity it becomes sigma-f squared times e to the minus the squared distance over four s squared.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-w1" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="plot duo"><canvas id="w1-cv" aria-label="Functions drawn from a Gaussian prior on the weights of M basis functions, and the covariance they imply"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--lda)"></i>draws y(x) = w&#7488;&phi;(x), shaded &plusmn;2 prior sd</span><span><i class="sw" style="background:var(--muted)"></i>the M bumps (bottom) and the limit's &plusmn;2 sd (dashed)</span></span> Right: k(x<sub>0</sub>, x&prime;) from the basis (solid) and its M &rarr; &infin; limit (dashed). Shaded edges: no bump centres there.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="w1-m">Number of basis functions M</label><output id="w1-m-o"></output></div><input type="range" id="w1-m" min="1" max="40" step="1" value="6"></div>
+        <div class="ctrl"><div class="top"><label for="w1-x">Probe x<sub>0</sub></label><output id="w1-x-o"></output></div><input type="range" id="w1-x" min="-4" max="4" step="0.05" value="0.6"></div>
+        <div class="btns"><button type="button" class="btn" id="w1-new">New draws</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="w1-sd"></div><div class="k">prior sd at x<sub>0</sub></div></div><div class="stat"><div class="v" id="w1-lim"></div><div class="k">limit, M &rarr; &infin;</div></div><div class="stat"><div class="v" id="w1-gap"></div><div class="k">largest gap in k</div></div></div>
+        <p class="note" id="w1-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRIOR -->
+<section class="chap" id="prior">
+  <div class="wrap">
+    <div class="tag">Before any data</div>
+    <h2>The GP prior: a kernel is a covariance</h2>
+    <div class="prose">
+      <p>Turn the previous section around. Instead of choosing basis functions and deriving a kernel, <em>choose the kernel</em> and never mention weights at all. A <em class="term">Gaussian process</em> is a probability distribution over functions y(x) such that the values at <em>any</em> finite set of inputs are jointly Gaussian. Because a Gaussian is pinned down by its mean and covariance, a GP is pinned down by a mean function (we take it to be zero, for lack of better knowledge) and a covariance function, the kernel. Any kernel that always yields a valid covariance matrix will do.</p>
+      <p>To draw a function from the prior, pick a grid of inputs, build K entry by entry from the kernel, and sample N(0, K): that is all the five curves below are. The kernel Bishop uses throughout has four knobs: &theta;<sub>0</sub> scales a smooth bump, &theta;<sub>1</sub> sets how fast it decays (the length-scale is 1/&radic;&theta;<sub>1</sub>), &theta;<sub>2</sub> adds a random constant and &theta;<sub>3</sub> a random straight line. <strong>Click through the six settings of Bishop's figure</strong>, then switch the bump to an exponential.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(\mathbf{y}) &= \mathcal{N}(\mathbf{y} \mid \mathbf{0}, \mathbf{K}) \\ K_{nm} &= k(x_n, x_m) \\ k(\mathbf{x}, \mathbf{x}') &= \theta_0\, e^{-\frac{\theta_1}{2}\lVert \mathbf{x}-\mathbf{x}'\rVert^2} \\ &\quad + \theta_2 + \theta_3\, \mathbf{x}^{\top}\mathbf{x}' \end{aligned} \]</div><div class="read"><b>Read it as:</b> the GP's values at the inputs are Gaussian with covariance matrix K. Bishop's kernel is a sum of three valid kernels: a Gaussian bump of height &theta;<sub>0</sub>, a constant &theta;<sub>2</sub>, and a linear kernel &theta;<sub>3</sub>x<sup>&top;</sup>x&prime;. Each term, sampled alone, draws one kind of function: a smooth wiggle, a flat offset, a line through the origin. Their sum draws their sum.</div><div class="eq-say"><b>Say it</b><em>&ldquo;y is Gaussian with mean zero and covariance K. The kernel is theta-nought e to the minus theta-one over two times the squared distance, plus theta-two, plus theta-three x-transpose x-prime.&rdquo;</em></div><div class="eq-run" id="run-pr"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} k_{\text{exp}}(x, x') &= \theta_0 \exp\!\Big(\!-\tfrac{\theta_1}{2}\,\lvert x - x'\rvert\Big) \\ \rho(x, x') &= \frac{k(x, x')}{\sqrt{k(x,x)\,k(x',x')}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the exponential kernel decays with the distance itself rather than its square. Its graph has a corner at x = x&prime;, and that corner makes the functions rough: this is the Ornstein&ndash;Uhlenbeck process, which Uhlenbeck and Ornstein used for a particle in Brownian motion. The correlation &rho; says how to read any kernel: divide by the two standard deviations and you get how tightly y(x) and y(x&prime;) move together.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The exponential kernel is theta-nought e to the minus theta-one over two times the absolute distance. The correlation rho of y at x and y at x-prime is k over the square root of k at x, x times k at x-prime, x-prime.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Bishop's six settings"><button type="button" data-pp="0" aria-pressed="true">(1, 4, 0, 0)</button><button type="button" data-pp="1">(9, 4, 0, 0)</button><button type="button" data-pp="2">(1, 64, 0, 0)</button><button type="button" data-pp="3">(1, 0.25, 0, 0)</button><button type="button" data-pp="4">(1, 4, 10, 0)</button><button type="button" data-pp="5">(1, 4, 0, 5)</button></div></div>
+        <div class="plot duo"><canvas id="pr-cv" aria-label="Functions drawn from a Gaussian-process prior and the covariance matrix of the kernel"></canvas></div>
+        <figcaption>Left: five draws, shaded &plusmn;2 prior sd. Right: k(x, x&prime;) for x, x&prime; in [&minus;1, 1]; <span style="color:var(--lda)">blue</span> positive, <span style="color:var(--cB)">orange</span> negative, darker is larger. The buttons are the six panels of Bishop's Figure 6.5, as (&theta;<sub>0</sub>, &theta;<sub>1</sub>, &theta;<sub>2</sub>, &theta;<sub>3</sub>).</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Kernel shape"><button type="button" data-pk="gauss" aria-pressed="true">Gaussian bump</button><button type="button" data-pk="exp">Exponential</button></div>
+        <div class="ctrl"><div class="top"><label for="pr-0">&theta;<sub>0</sub>, height of the bump term</label><output id="pr-0-o"></output></div><input type="range" id="pr-0" min="-1" max="1" step="0.02" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="pr-1">&theta;<sub>1</sub>, inverse squared length-scale</label><output id="pr-1-o"></output></div><input type="range" id="pr-1" min="-1" max="2" step="0.02" value="0.6"></div>
+        <div class="ctrl"><div class="top"><label for="pr-2">&theta;<sub>2</sub>, constant</label><output id="pr-2-o"></output></div><input type="range" id="pr-2" min="0" max="10" step="0.5" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="pr-3">&theta;<sub>3</sub>, linear</label><output id="pr-3-o"></output></div><input type="range" id="pr-3" min="0" max="10" step="0.5" value="0"></div>
+        <div class="btns"><button type="button" class="btn" id="pr-new">New draws</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pr-s0"></div><div class="k">prior sd at x = 0</div></div><div class="stat"><div class="v" id="pr-s1"></div><div class="k">prior sd at x = 1</div></div><div class="stat"><div class="v" id="pr-r"></div><div class="k">corr of y(0), y(0.5)</div></div></div>
+        <p class="note" id="pr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONDITION -->
+<section class="chap" id="condition">
+  <div class="wrap">
+    <div class="tag">The engine</div>
+    <h2>Conditioning: how one reading informs another</h2>
+    <div class="prose">
+      <p>Everything a GP does with data comes from one fact about Gaussians: if two quantities are jointly Gaussian and you learn one of them, the other is still Gaussian, with a shifted mean and a smaller variance. Take the simplest case. We read a noisy value t<sub>1</sub> = y(0) + noise at x<sub>1</sub> = 0, and ask about y(x<sub>2</sub>) somewhere else. The kernel (here a squared exponential with length-scale 1) says how correlated they are; the correlation decides how far the reading pulls y(x<sub>2</sub>), and how much it narrows it.</p>
+      <p>On the left is the joint Gaussian of the pair; the vertical line is &ldquo;what we saw&rdquo;, and the purple slice through the ellipse is the conditional distribution. On the right is the same computation done for every x at once, which is already GP regression with a single point. <strong>Slide the distance and the observed value</strong>, then add noise.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \begin{pmatrix} \mathbf{a} \\ \mathbf{b} \end{pmatrix} &\sim \mathcal{N}\!\left(\begin{pmatrix} \boldsymbol\mu_a \\ \boldsymbol\mu_b \end{pmatrix}, \begin{pmatrix} \boldsymbol\Sigma_{aa} & \boldsymbol\Sigma_{ab} \\ \boldsymbol\Sigma_{ba} & \boldsymbol\Sigma_{bb} \end{pmatrix}\right) \\ \boldsymbol\mu_{a \mid b} &= \boldsymbol\mu_a + \boldsymbol\Sigma_{ab}\boldsymbol\Sigma_{bb}^{-1}(\mathbf{b} - \boldsymbol\mu_b) \\ \boldsymbol\Sigma_{a \mid b} &= \boldsymbol\Sigma_{aa} - \boldsymbol\Sigma_{ab}\boldsymbol\Sigma_{bb}^{-1}\boldsymbol\Sigma_{ba} \end{aligned} \]</div><div class="read"><b>Read it as:</b> split a Gaussian vector into a part we will learn (b) and a part we want (a). Seeing b moves a's mean by the surprise b &minus; &mu;<sub>b</sub>, scaled by how strongly a and b co-vary relative to b's own variance. The covariance shrinks by an amount that does not depend on the value of b at all, only on <em>where</em> b was measured. This is the result from chapter 0.6, and the rest of the chapter is this formula with kernel entries plugged in.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The mean of a given b is mu-a plus Sigma-a-b, Sigma-b-b inverse, times b minus mu-b. The covariance of a given b is Sigma-a-a minus Sigma-a-b, Sigma-b-b inverse, Sigma-b-a.&rdquo;</em></div><div class="eq-run" id="run-cd"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot duo"><canvas id="cd-cv" aria-label="Joint Gaussian of a noisy reading and a function value, and the conditional distribution as a function of x"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--lda)"></i>joint ellipses (1 and 2 sd); posterior mean and &plusmn;2 sd band</span><span><i class="sw" style="background:var(--cB)"></i>the reading t&#8321;, with &plusmn;2 noise sd</span><span><i class="sw" style="background:var(--cC)"></i>the conditional of y(x&#8322;): mean &plusmn; 2 sd, and its density</span></span> Dashed grey: the prior's &plusmn;2 sd.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cd-d">Distance x<sub>2</sub> &minus; x<sub>1</sub></label><output id="cd-d-o"></output></div><input type="range" id="cd-d" min="0" max="4" step="0.02" value="0.8"></div>
+        <div class="ctrl"><div class="top"><label for="cd-t">Observed t<sub>1</sub></label><output id="cd-t-o"></output></div><input type="range" id="cd-t" min="-2.5" max="2.5" step="0.05" value="1.5"></div>
+        <div class="ctrl"><div class="top"><label for="cd-n">Noise sd &sigma;<sub>n</sub></label><output id="cd-n-o"></output></div><input type="range" id="cd-n" min="0" max="1.2" step="0.01" value="0.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="cd-r"></div><div class="k">corr of y(x<sub>1</sub>), y(x<sub>2</sub>)</div></div><div class="stat"><div class="v" id="cd-m"></div><div class="k">conditional mean</div></div><div class="stat"><div class="v" id="cd-s"></div><div class="k">conditional sd</div></div></div>
+        <p class="note" id="cd-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- REGRESSION -->
+<section class="chap" id="regression">
+  <div class="wrap">
+    <div class="tag">The payoff</div>
+    <h2>GP regression: the predictive mean and variance</h2>
+    <div class="prose">
+      <p>Now with N readings. Each target is the function plus independent Gaussian noise, t<sub>n</sub> = y(x<sub>n</sub>) + &epsilon;<sub>n</sub>, with noise precision &beta; (variance &sigma;<sub>n</sub>&sup2; = 1/&beta;). The function values are N(0, K) and the noise adds &beta;<sup>&minus;1</sup> to the diagonal, so the targets are N(0, C<sub>N</sub>) with C<sub>N</sub> = K + &beta;<sup>&minus;1</sup>I. To predict at a new input x, append it: the N + 1 values (t, t<sub>N+1</sub>) are jointly Gaussian with a bordered covariance, and the previous section's formula gives the answer in one line.</p>
+      <p>Two things to notice. The mean is a weighted sum of the targets, and the variance does not depend on the targets at all, only on where they were taken. And there is a second kernel here: switch to &ldquo;9 Gaussian bumps&rdquo; and the kernel is built from chapter 1.2d's basis, so the GP reproduces that chapter's Bayesian regression exactly, trap included. <strong>Click to add points, drag them, and move the probe outside [0, 1]</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(\mathbf{t} \mid \mathbf{y}) &= \mathcal{N}(\mathbf{t} \mid \mathbf{y}, \beta^{-1}\mathbf{I}) \\ p(\mathbf{t}) &= \textstyle\int p(\mathbf{t}\mid\mathbf{y})\, p(\mathbf{y})\, d\mathbf{y} \\ &= \mathcal{N}(\mathbf{t} \mid \mathbf{0}, \mathbf{C}_N) \\ C(x_n, x_m) &= k(x_n, x_m) + \beta^{-1}\delta_{nm} \end{aligned} \]</div><div class="read"><b>Read it as:</b> given the function values, targets scatter around them with variance 1/&beta;. Integrating the function out adds the two independent Gaussians: covariances add, so the targets' covariance is the kernel matrix plus noise on the diagonal (&delta;<sub>nm</sub> is 1 when n = m and 0 otherwise). This p(t) is also the <em>marginal likelihood</em> we will maximise later.</div><div class="eq-say"><b>Say it</b><em>&ldquo;t given y is Gaussian around y with variance one over beta. The marginal of t is Gaussian with mean zero and covariance C-N, whose entries are k of x-n, x-m plus beta-inverse delta-n-m.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{C}_{N+1} &= \begin{pmatrix} \mathbf{C}_N & \mathbf{k} \\ \mathbf{k}^{\top} & c \end{pmatrix} \\ c &= k(x, x) + \beta^{-1} \\ m(x) &= \mathbf{k}^{\top}\mathbf{C}_N^{-1}\mathbf{t} \\ \sigma^2(x) &= c - \mathbf{k}^{\top}\mathbf{C}_N^{-1}\mathbf{k} \end{aligned} \]</div><div class="read"><b>Read it as:</b> k lists k(x<sub>n</sub>, x), the new input's covariance with each training input. Conditioning t<sub>N+1</sub> on t (a = new point, b = training targets) gives a Gaussian predictive with this mean and variance. The variance starts at c, the prior's, and k<sup>&top;</sup>C<sub>N</sub><sup>&minus;1</sup>k is how much the data explain away; it is large only when x is close to training inputs.</div><div class="eq-say"><b>Say it</b><em>&ldquo;C-N-plus-one is C-N bordered by k and c. The predictive mean is k-transpose C-N-inverse t; the variance is c minus k-transpose C-N-inverse k.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-rg" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Data"><button type="button" data-rd="sine">Sine, 10 points</button><button type="button" data-rd="gap">With a gap</button><button type="button" data-rd="clear">Clear</button></div><div class="seg" role="group" aria-label="View"><button type="button" data-rv="band" aria-pressed="true">Band</button><button type="button" data-rv="draws">Draws</button><button type="button" data-rv="both">Both</button></div></div>
+        <div class="plot ar-16x10"><canvas id="rg-cv" aria-label="Gaussian-process regression: click to add points, drag them; move the mouse to probe x"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--lda)"></i>predictive mean m(x); inner band &plusmn;2 sd of y(x), outer band &plusmn;2&sigma;(x) for a new target</span><span><i class="sw" style="background:var(--cA)"></i>truth sin(2&pi;x)</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Kernel"><button type="button" data-rk="se" aria-pressed="true">Squared exponential</button><button type="button" data-rk="bump">9 Gaussian bumps (ch. 1.2d)</button></div>
+        <div class="ctrl"><div class="top"><label for="rg-l" id="rg-l-lab">Length-scale &ell;</label><output id="rg-l-o"></output></div><input type="range" id="rg-l" min="-1.7" max="0" step="0.02" value="-0.7"></div>
+        <div class="ctrl"><div class="top"><label for="rg-f" id="rg-f-lab">Signal sd &sigma;<sub>f</sub></label><output id="rg-f-o"></output></div><input type="range" id="rg-f" min="0.2" max="3" step="0.05" value="1"></div>
+        <div class="ctrl"><div class="top"><label for="rg-n">Noise sd &sigma;<sub>n</sub> = &beta;<sup>&minus;&frac12;</sup></label><output id="rg-n-o"></output></div><input type="range" id="rg-n" min="-2" max="0" step="0.02" value="-0.7"></div>
+        <div class="ctrl"><div class="top"><label for="rg-x">Probe x</label><output id="rg-x-o"></output></div><input type="range" id="rg-x" min="-0.4" max="1.4" step="0.01" value="1.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="rg-m"></div><div class="k">mean m(x)</div></div><div class="stat"><div class="v" id="rg-s"></div><div class="k">predictive sd &sigma;(x)</div></div><div class="stat"><div class="v" id="rg-ml"></div><div class="k">log marginal likelihood</div></div></div>
+        <p class="note" id="rg-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BUMPS -->
+<section class="chap" id="bumps">
+  <div class="wrap">
+    <div class="tag">Another view</div>
+    <h2>The mean is a sum of kernel bumps</h2>
+    <div class="prose">
+      <p>Read the mean formula from the right. a = C<sub>N</sub><sup>&minus;1</sup>t is a fixed vector once the data are in, so m(x) = &Sigma;<sub>n</sub> a<sub>n</sub>k(x<sub>n</sub>, x): one copy of the kernel centred on each training input, scaled by a<sub>n</sub>, added up. Read it from the left instead, and m(x) = &Sigma;<sub>n</sub> w<sub>n</sub>(x) t<sub>n</sub>, a weighted sum of the targets: the GP's version of chapter 1.2d's equivalent kernel. Same number, two stories.</p>
+      <p>Both stories need C<sub>N</sub> to be invertible, and the variance needs more: k must make K positive semidefinite for <em>every</em> set of inputs, or some combination of function values would have negative variance. Plenty of innocent-looking similarities fail. exp(&minus;|r|<sup>p</sup>) is a valid kernel for powers up to 2 and invalid beyond. <strong>Switch to the cube</strong>, lower the noise, and watch the arithmetic break.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} m(x) &= \textstyle\sum_{n=1}^{N} a_n\, k(x_n, x) \\ &= \textstyle\sum_{n=1}^{N} w_n(x)\, t_n \\ \mathbf{a} &= \mathbf{C}_N^{-1}\mathbf{t}, \quad \mathbf{w}(x) = \mathbf{C}_N^{-1}\mathbf{k}(x) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the first line is a basis-function model with one basis function per data point, k(x<sub>n</sub>, &middot;). The second line is a linear smoother: the weights w<sub>n</sub>(x) depend on the inputs and on x, never on the targets. With a constant kernel term and little noise, the weights add to about 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;m of x is the sum over n of a-n times k of x-n and x, where a is C-N-inverse t. Equivalently it is the sum of w-n of x times t-n, where w of x is C-N-inverse k of x.&rdquo;</em></div><div class="eq-run" id="run-bu"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{u}^{\top}\mathbf{K}\,\mathbf{u} &= \operatorname{var}\Big[\textstyle\sum_n u_n\, y(x_n)\Big] \\ &\ge 0 \ \ \text{for every } \mathbf{u} \\ \mathbf{C}_N &= \mathbf{K} + \beta^{-1}\mathbf{I} \\ \lambda_i(\mathbf{C}_N) &= \lambda_i(\mathbf{K}) + \beta^{-1} \end{aligned} \]</div><div class="read"><b>Read it as:</b> any weighted sum of function values is itself a random number, and its variance is u<sup>&top;</sup>Ku, which cannot be negative. So K must be positive semidefinite: all its eigenvalues &lambda;<sub>i</sub> &ge; 0. Noise shifts every eigenvalue up by 1/&beta;, so C<sub>N</sub> is safely positive definite whenever K is semidefinite and the noise is positive. Chapter 1.9a's rules (sums, products, positive scalings of valid kernels) build valid kernels safely.</div><div class="eq-say"><b>Say it</b><em>&ldquo;u-transpose K u is the variance of the sum of u-n y of x-n, so it is never negative. The eigenvalues of C-N are those of K plus beta-inverse.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="View"><button type="button" data-bv="bumps" aria-pressed="true">Bumps a&#8345;k(x&#8345;, x)</button><button type="button" data-bv="weights">Weights on the targets</button></div></div>
+        <div class="plot duo-tall"><canvas id="bu-cv" aria-label="Posterior mean built from kernel bumps, with the bump heights or target weights below; drag the points"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--lda)"></i>mean m(x), shaded &plusmn;2 sd of y(x)</span><span><i class="sw" style="background:var(--cA)"></i>positive</span><span><i class="sw" style="background:var(--cB)"></i>negative bump or weight</span><span><i class="sw" style="background:var(--qda)"></i>red ticks: computed variance below zero</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Kernel"><button type="button" data-bk="se" aria-pressed="true">exp(&minus;r&sup2;/2&ell;&sup2;), valid</button><button type="button" data-bk="cube">exp(&minus;|r/&ell;|&sup3;), not valid</button></div>
+        <div class="ctrl"><div class="top"><label for="bu-l">Length-scale &ell;</label><output id="bu-l-o"></output></div><input type="range" id="bu-l" min="0.3" max="3.5" step="0.05" value="1.5"></div>
+        <div class="ctrl"><div class="top"><label for="bu-n">Noise sd &sigma;<sub>n</sub></label><output id="bu-n-o"></output></div><input type="range" id="bu-n" min="-2.3" max="0" step="0.02" value="-1"></div>
+        <div class="ctrl"><div class="top"><label for="bu-x">Probe x (weights view)</label><output id="bu-x-o"></output></div><input type="range" id="bu-x" min="0" max="10" step="0.05" value="4"></div>
+        <div class="btns"><button type="button" class="btn" id="bu-reset">Reset points</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="bu-ev"></div><div class="k">smallest eigenvalue of K</div></div><div class="stat"><div class="v" id="bu-a"></div><div class="k">largest |a<sub>n</sub>|</div></div><div class="stat"><div class="v" id="bu-v"></div><div class="k">variance of y at the probe</div></div></div>
+        <p class="note" id="bu-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- LEARN -->
+<section class="chap" id="learn">
+  <div class="wrap">
+    <div class="tag">Fitting the kernel</div>
+    <h2>Learning the hyperparameters</h2>
+    <div class="prose">
+      <p>The kernel's knobs, the length-scale &ell;, the signal sd &sigma;<sub>f</sub> and the noise sd &sigma;<sub>n</sub>, are <em class="term">hyperparameters</em>: they shape the prior rather than the fitted curve. A GP comes with its own way to set them, the one chapter 1.2e used for &alpha; and &beta;. The probability of the data with the function integrated out, p(t | &theta;) = N(t | 0, C<sub>N</sub>), is available in closed form, so choose the &theta; that makes the observed targets most probable. This is <em class="term">type-II maximum likelihood</em>, or empirical Bayes.</p>
+      <p>Its logarithm splits into a data-fit term, which rewards kernels under which the targets are unsurprising, and a complexity term, &minus;&frac12;ln|C<sub>N</sub>|, which penalises kernels that spread their probability over too many possible data sets. The surface is not concave, and it often has several peaks, each a different story about the same points. The map below is ln p(t) over &ell; and &sigma;<sub>n</sub> for twelve points, with &sigma;<sub>f</sub> fixed at 1. <strong>Click the map to pick hyperparameters, then press Climb.</strong></p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\ln p(\mathbf{t} \mid \boldsymbol\theta) = -\tfrac12 \mathbf{t}^{\top}\mathbf{C}_N^{-1}\mathbf{t} \\ &\qquad - \tfrac12 \ln\lvert\mathbf{C}_N\rvert - \tfrac{N}{2}\ln(2\pi) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the log density of a zero-mean Gaussian with covariance C<sub>N</sub>(&theta;), evaluated at the observed targets. The first term is the data fit; the second, the log-determinant, measures the volume of data sets the model finds plausible, so it falls as the model becomes more flexible; the third is a constant. With a Cholesky factor C<sub>N</sub> = LL<sup>&top;</sup>, ln|C<sub>N</sub>| = 2&Sigma; ln L<sub>ii</sub>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The log marginal likelihood is minus a half t-transpose C-N-inverse t, minus a half log det C-N, minus N over two log two pi.&rdquo;</em></div><div class="eq-run" id="run-ml"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\frac{\partial \ln p(\mathbf{t}\mid\boldsymbol\theta)}{\partial\theta_i} = -\tfrac12 \operatorname{Tr}\Big(\mathbf{C}_N^{-1}\frac{\partial \mathbf{C}_N}{\partial\theta_i}\Big) \\ &\qquad + \tfrac12\, \mathbf{t}^{\top}\mathbf{C}_N^{-1}\frac{\partial \mathbf{C}_N}{\partial\theta_i}\mathbf{C}_N^{-1}\mathbf{t} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the gradient needs only the derivative of each kernel entry with respect to the hyperparameter, so any gradient optimiser can climb the surface. The trace term pulls towards simpler kernels, the quadratic term towards a better fit. Once C<sub>N</sub><sup>&minus;1</sup> is known (cost N&sup3;), each extra hyperparameter costs only N&sup2;. We work with ln &ell; and ln &sigma;<sub>n</sub> so that they stay positive.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The derivative is minus a half the trace of C-N-inverse times dC by d-theta-i, plus a half t-transpose C-N-inverse, dC by d-theta-i, C-N-inverse t.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot duo"><canvas id="ml-cv" aria-label="Map of the log marginal likelihood over length-scale and noise; click to choose hyperparameters"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw dot" style="background:var(--cA)"></i>global maximum</span><span><i class="sw dot" style="background:var(--cB)"></i>other local maxima</span><span><i class="sw dot" style="background:var(--cC)"></i>your choice (ringed), with the Climb path in black</span></span> Right: the fit at your choice, bands &plusmn;2 sd of y(x) and of a new target.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ml-l">Length-scale &ell; (log scale)</label><output id="ml-l-o"></output></div><input type="range" id="ml-l" min="-1" max="1.5" step="0.01" value="0.48"></div>
+        <div class="ctrl"><div class="top"><label for="ml-n">Noise sd &sigma;<sub>n</sub> (log scale)</label><output id="ml-n-o"></output></div><input type="range" id="ml-n" min="-2" max="0.2" step="0.01" value="-0.52"></div>
+        <div class="btns"><button type="button" class="btn primary" id="ml-climb">Climb the gradient</button><button type="button" class="btn" id="ml-new">New data</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ml-v"></div><div class="k">ln p(t | &theta;)</div></div><div class="stat"><div class="v" id="ml-fit"></div><div class="k">data fit</div></div><div class="stat"><div class="v" id="ml-cx"></div><div class="k">complexity</div></div></div>
+        <p class="note" id="ml-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px">
+      <p>Three refinements, all in Bishop's section. <b>Priors on &theta;.</b> Add ln p(&theta;) to the objective and maximise the log posterior instead; a gentle prior keeps &ell; away from absurd values when the data are few. <b>Being fully Bayesian.</b> Strictly, one should average predictions over p(&theta; | t) rather than pick one &theta;; that integral has no closed form, and needs sampling or approximations (chapter 1.2e met the same trade-off). <b>Noise that varies.</b> The model above assumes one noise level everywhere. For <em class="term">heteroscedastic</em> data, model ln &beta;(x) itself with a second Gaussian process, so the noise can be larger in some regions than others.</p>
+    </div>
+  </div>
+</section>
+
+<!-- COMPOSE -->
+<section class="chap" id="compose">
+  <div class="wrap">
+    <div class="tag">Building kernels</div>
+    <h2>Composite kernels: trend, seasons and noise</h2>
+    <div class="prose">
+      <p>Valid kernels can be combined into new valid kernels (chapter 1.9a): add two and you get the covariance of the sum of two independent GPs; multiply two and each modulates the other; scale one by a positive constant and you rescale its functions. This turns kernel design into describing the data in words. Rasmussen and Williams' classic model for atmospheric CO&#8322; reads: a smooth long-term <b>trend</b>, plus a yearly <b>seasonal</b> cycle whose shape slowly drifts, plus <b>medium-term</b> irregularities of many sizes, plus <b>noise</b>.</p>
+      <p>The seasonal term is the interesting one. A periodic kernel says &ldquo;dates exactly a year apart behave alike&rdquo;; multiplying it by a squared exponential with a long decay length relaxes that to &ldquo;nearby years behave alike&rdquo;. <strong>Switch the components on and off</strong> and change the seasonal decay.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} k &= k_{\text{trend}} + k_{\text{seas}} \\ &\quad + k_{\text{med}} + k_{\text{noise}} \\ k_{\text{trend}} &= \theta_1^2 \exp\!\big(\!-\tfrac{r^2}{2\theta_2^2}\big) \\ k_{\text{seas}} &= \theta_3^2 \exp\!\Big(\!-\tfrac{r^2}{2\theta_4^2} - \tfrac{2\sin^2(\pi r)}{\theta_5^2}\Big) \\ k_{\text{med}} &= \theta_6^2 \Big(1 + \tfrac{r^2}{2\theta_8\theta_7^2}\Big)^{-\theta_8} \\ k_{\text{noise}} &= \theta_9^2 \exp\!\big(\!-\tfrac{r^2}{2\theta_{10}^2}\big) + \theta_{11}^2\,\delta_{tt'} \end{aligned} \]</div><div class="read"><b>Read it as:</b> r = |t &minus; t&prime;| in years. Each &theta; with an even-looking role is an amplitude (in ppm for the project) and the others are length-scales in years. The seasonal term is a periodic kernel with period 1 year and smoothness &theta;<sub>5</sub>, times a decay with length &theta;<sub>4</sub>. The <em>rational quadratic</em> is a mixture of squared exponentials of many length-scales, with &theta;<sub>8</sub> setting the mix. The last line models measurement noise that is slightly correlated over a month or two, plus white noise.</div><div class="eq-say"><b>Say it</b><em>&ldquo;k is a squared-exponential trend, plus a periodic kernel times a squared-exponential decay for the seasons, plus a rational quadratic for medium-term wiggles, plus a short squared exponential and white noise.&rdquo;</em></div><div class="eq-run" id="run-cp"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Components"><button type="button" data-cp="trend" aria-pressed="true">Trend</button><button type="button" data-cp="seas" aria-pressed="true">Seasons</button><button type="button" data-cp="med" aria-pressed="true">Medium-term</button><button type="button" data-cp="noise" aria-pressed="true">Noise</button></div></div>
+        <div class="plot duo-tall"><canvas id="cp-cv" aria-label="A draw from a composite kernel and its parts"></canvas></div>
+        <div class="plot k-strip"><canvas id="cp-k" aria-label="Correlation of the composite kernel against the time lag"></canvas></div>
+        <figcaption>Top: one draw over 20 years from the sum of the components switched on. Middle: the four independent draws it is made of. Bottom: correlation against lag, k(&tau;)/k(0), for the sum (solid) and for each part on its own (dashed). Amplitudes here are illustrative: trend 3, seasons 1, medium-term 0.6, noise 0.2.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cp-d">Seasonal decay &theta;<sub>4</sub> (years)</label><output id="cp-d-o"></output></div><input type="range" id="cp-d" min="0" max="2" step="0.02" value="1.48"></div>
+        <div class="ctrl"><div class="top"><label for="cp-p">Periodic smoothness &theta;<sub>5</sub></label><output id="cp-p-o"></output></div><input type="range" id="cp-p" min="0.3" max="3" step="0.05" value="1"></div>
+        <div class="btns"><button type="button" class="btn" id="cp-new">New draw</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cp-r1"></div><div class="k">seasons: corr 1 year apart</div></div><div class="stat"><div class="v" id="cp-rh"></div><div class="k">seasons: corr &frac12; year apart</div></div><div class="stat"><div class="v" id="cp-sd"></div><div class="k">prior sd of the sum</div></div></div>
+        <p class="note" id="cp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- COST -->
+<section class="chap" id="cost">
+  <div class="wrap">
+    <div class="tag">Choosing</div>
+    <h2>The price of exactness, and when to pay it</h2>
+    <div class="prose">
+      <p>The weight-space and function-space views give the same predictions whenever the kernel comes from M basis functions, but they cost different things. Bayesian linear regression inverts an M &times; M matrix; a GP inverts the N &times; N matrix C<sub>N</sub>, which takes time proportional to N&sup3; and memory proportional to N&sup2;. After that, each prediction costs N for the mean and N&sup2; for the variance. So a GP wins when the natural basis is large or infinite and the data are modest (hundreds to a few thousand points), and loses when N is in the millions. <strong>Press the button</strong> to measure the cube in your own browser.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{GP: } & O(N^3) \text{ train} \\ & O(N) \text{ mean}, \ O(N^2) \text{ var} \\ \text{basis: } & O(M^3) \text{ train} \\ & O(M) \text{ mean}, \ O(M^2) \text{ var} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the two views trade the number of data points for the number of basis functions. Factorising (Cholesky) is the expensive step and is done once per set of hyperparameters, so learning &theta; by gradient ascent pays it at every step. For large N, practical GPs use approximations: a subset of the data, or a few hundred <em>inducing points</em> that summarise it (sparse GPs), or kernels with special structure.</div><div class="eq-say"><b>Say it</b><em>&ldquo;A GP costs N cubed to train and N or N squared per prediction; a basis-function model costs M cubed and M or M squared.&rdquo;</em></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="ct-cv" aria-label="Time to factorise a covariance matrix against its size, on log scales"></canvas></div>
+        <figcaption>Dots: measured Cholesky time in this browser, best of three for small N. Blue dashed: least-squares fit. Grey dotted: an exact N&sup3; line through the largest point.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="ct-go">Time the factorisation</button><span class="note" id="ct-prog" style="align-self:center"></span></div>
+        <div class="stats"><div class="stat"><div class="v" id="ct-b"></div><div class="k">measured exponent</div></div><div class="stat"><div class="v" id="ct-t"></div><div class="k">largest N timed</div></div><div class="stat"><div class="v" id="ct-p"></div><div class="k">extrapolated, N = 100,000</div></div></div>
+        <p class="note" id="ct-say"></p>
+      </div></div>
+    </div>
+    <div class="tbl-wrap block"><table class="zoo">
+      <thead><tr><th>Model</th><th>What you choose</th><th>Error bars</th><th>Training cost</th><th>Reach for it when</th></tr></thead>
+      <tbody>
+        <tr><td><b>Bayesian linear regression</b> (1.2d)</td><td>M basis functions, &alpha;, &beta;</td><td>yes, but can collapse far from the basis</td><td>O(NM&sup2; + M&sup3;)</td><td>you know a good small basis, or N is huge</td></tr>
+        <tr><td><b>Gaussian process</b></td><td>a kernel and its hyperparameters</td><td>yes, revert to the prior away from data</td><td>O(N&sup3;)</td><td>small to medium data where calibrated uncertainty matters: forecasting, experiment design, Bayesian optimisation</td></tr>
+        <tr><td><b>Kriging</b> (geostatistics)</td><td>a variogram, i.e. a kernel over space</td><td>yes (the &ldquo;kriging variance&rdquo;)</td><td>O(N&sup3;)</td><td>the same mathematics, developed for ore reserves and maps; several outputs at once is <em>co-kriging</em></td></tr>
+        <tr><td><b>Kernel ridge / SVR</b> (1.9a)</td><td>a kernel, a penalty</td><td>no</td><td>O(N&sup3;), or less for SVR's sparse solution</td><td>you need the GP mean (kernel ridge gives exactly it) without the variance</td></tr>
+        <tr><td><b>Neural network</b></td><td>an architecture</td><td>not by default</td><td>roughly linear in N per epoch</td><td>large data; a wide network with random weights is itself close to a GP (Neal, 1996)</td></tr>
+      </tbody></table></div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: forecasting Mauna Loa CO&#8322;</h2>
+    <div class="prose">
+      <p>Since March 1958 the observatory on Mauna Loa, Hawai&#699;i, has measured the carbon dioxide in the air: first Charles David Keeling of Scripps, now NOAA's Global Monitoring Laboratory, which publishes the monthly means freely. There are <span id="pj-nm"></span> of them, through <span id="pj-last"></span>. Chapter 1.2d forecast them with hinge basis functions; here we use the composite kernel of the previous section, exactly as Rasmussen and Williams did, with every hyperparameter learned by maximising the marginal likelihood in scikit-learn. The mean function is the constant average of the training months.</p>
+      <p>The classic kernel has a weakness that only shows when you extrapolate. Its trend is a squared exponential, so beyond the data it can only carry the recent slope for about one length-scale before it drifts back towards the mean. So we also try a second kernel that replaces part of the trend with a <b>Bayesian quadratic</b>, written as a kernel exactly as in the first section: (&sigma;<sub>0</sub>&sup2; + &tau;&tau;&prime;)&sup2; = &sigma;<sub>0</sub>&#8308; + 2&sigma;<sub>0</sub>&sup2;&tau;&tau;&prime; + &tau;&sup2;&tau;&prime;&sup2; is &phi;(&tau;)<sup>&top;</sup>&phi;(&tau;&prime;) for the basis &phi;(&tau;) = (&sigma;<sub>0</sub>&sup2;, &radic;2&sigma;<sub>0</sub>&tau;, &tau;&sup2;). <strong>Move the cut-off and switch kernels</strong>: the shaded region is data the model never saw.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} y(t) &= \mu_0 + f(t) + \varepsilon(t) \\ f &\sim \mathcal{GP}(0, k) \\ k_{\text{quad}}(t, t') &= c\,(\sigma_0^2 + \tau\tau')^2 \\ \tau &= t - 1990 \\ k &= k_{\text{quad}} + k_{\text{trend}} + k_{\text{seas}} \\ &\quad + k_{\text{med}} + k_{\text{noise}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> each month's reading is a constant &mu;<sub>0</sub> plus a GP plus noise, and the GP's kernel is the sum from the composite-kernel section. The second kernel adds k<sub>quad</sub>, a quadratic in the years since 1990 whose three coefficients have Gaussian priors with sds set by c and &sigma;<sub>0</sub>; with it, the squared-exponential &ldquo;trend&rdquo; only has to describe smooth deviations from a quadratic. That gives 13 hyperparameters instead of 11, all learned.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The reading is mu-nought plus a Gaussian process plus noise. The quadratic kernel is c times sigma-nought squared plus tau tau-prime, all squared, with tau the years since 1990; the full kernel adds it to the trend, seasonal, medium-term and noise kernels.&rdquo;</em></div><div class="eq-run" id="run-pj"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Training data end"><button type="button" data-pc="1990">Train to 1990</button><button type="button" data-pc="2000">2000</button><button type="button" data-pc="2010" aria-pressed="true">2010</button><button type="button" data-pc="2020">2020</button><button type="button" data-pc="2100">All data</button></div></div>
+        <div class="plot pj-main"><canvas id="pj-cv" aria-label="Mauna Loa CO2 with the Gaussian-process forecast and its 95% band"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--muted)"></i>training months</span><span><i class="sw" style="background:var(--cB)"></i>held-out months</span><span><i class="sw" style="background:var(--lda)"></i>GP forecast, shaded 95% band</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Kernel"><button type="button" data-pk2="rw">Classic (R&amp;W, 11 &theta;)</button><button type="button" data-pk2="q" aria-pressed="true">+ quadratic trend (13 &theta;)</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-ml"></div><div class="k">ln p(y | &theta;)</div></div><div class="stat"><div class="v" id="pj-rm"></div><div class="k">held-out RMSE (ppm)</div></div><div class="stat"><div class="v" id="pj-cov"></div><div class="k">held-out months inside 95%</div></div><div class="stat"><div class="v" id="pj-30"></div><div class="k" id="pj-30k">forecast, Jan 2030</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>What the kernel learned</h3>
+    <div class="prose"><p>Every number below was chosen by maximising ln p(y | &theta;) on the training months alone. They read like a description of the data: a seasonal swing of about 2.5&ndash;3 ppm whose shape is stable over a century or more, medium-term wobbles of under a ppm, and measurement noise of about 0.2 ppm. Below the table, the posterior mean is split into its parts: each is K<sub>j</sub>(t, X)a for one kernel component j.</p></div>
+    <div class="tbl-wrap block"><table class="hand hp" id="pj-hp"></table></div>
+    <div class="lab" style="margin-top:14px">
+      <figure>
+        <div class="plot pj-comp"><canvas id="pj-comp" aria-label="The forecast split into trend, seasonal and medium-term components"></canvas></div>
+        <figcaption>Posterior means of the components; shading marks the months after the cut-off.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="pj-opt">Re-learn the hyperparameters here</button></div>
+        <p class="note" id="pj-prog">Runs L-BFGS in your browser on the current kernel and cut-off, from the same starting kernel as scikit-learn, using the analytic gradient of the previous section. It takes about 15 seconds for the 1990 cut-off, a minute for 2010 and up to two minutes for all the data, because every step factorises an N &times; N matrix.</p>
+      </div></div>
+    </div>
+
+    <h3>Backtest: two kernels, four cut-offs</h3>
+    <div class="prose"><p>One cut-off can be lucky. Both kernels, with their own learned hyperparameters, are scored on every held-out month and on the first ten years after each cut-off (6.75 years for 2020). Computed in your browser.</p></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-bt"></table></div>
+    <p class="note" id="pj-btsay" style="max-width:72ch"></p>
+
+    <h3>The same project in scikit-learn</h3>
+<pre class="code"><code>import numpy as np, json
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import (RBF, ExpSineSquared, RationalQuadratic,
+                                              WhiteKernel, DotProduct, ConstantKernel as C)
+
+J = json.load(open("co2_mm_mlo.json"))                 # NOAA GML monthly means, Mauna Loa
+y = np.array(J["co2"]); k = np.arange(len(y))
+t = J["y0"] + (J["m0"] - 1 + k + 0.5) / 12             # mid-month, in years
+X = (t - 1990)[:, None]                                # years since 1990
+
+seasons = 2.0**2 * RBF(100.0) * ExpSineSquared(1.0, 1.0, periodicity_bounds="fixed")
+medium = 0.5**2 * RationalQuadratic(length_scale=1.0, alpha=1.0)
+noise = 0.1**2 * RBF(0.1) + WhiteKernel(0.1**2, noise_level_bounds=(1e-5, 1e5))
+kernels = {"R&amp;W": 50.0**2 * RBF(50.0) + seasons + medium + noise,             # Rasmussen &amp; Williams 5.4.3
+           "R&amp;W+quad": C(1e-3) * DotProduct(30.0)**2 + 2.0**2 * RBF(10.0)    # Bayesian quadratic trend
+                       + seasons + medium + noise}
+
+def fit(name, cut):
+    tr = t &lt; cut; mu0 = y[tr].mean()                   # constant mean = training average
+    gp = GaussianProcessRegressor(kernels[name]).fit(X[tr], y[tr] - mu0)   # L-BFGS on log-theta
+    return gp, mu0, tr
+
+out = {}
+for name in kernels:
+    for cut in (1990, 2000, 2010, 2020, 2100):
+        gp, mu0, tr = fit(name, cut)
+        r = dict(theta=np.exp(gp.kernel_.theta).tolist(), mu0=mu0, lml=gp.log_marginal_likelihood_value_)
+        line = f"{name:8s} cut {cut}: N {tr.sum()}  log ML {r['lml']:9.3f}"
+        if cut &lt; 2100:
+            for tag, h in (("all", ~tr), ("10y", ~tr &amp; (t &lt; cut + 10))):
+                m, s = gp.predict(X[h], return_std=True); e = y[h] - (m + mu0)
+                r[tag] = [int(h.sum()), np.sqrt(np.mean(e**2)), np.mean(np.abs(e) &lt; 1.96 * s)]
+                line += f"  {tag}: RMSE {r[tag][1]:.3f} in95 {r[tag][2]:.3f}"
+        q = np.array([2030 + 1/24, 2040 + 1/24, min(cut, 2026) + 0.5]); m, s = gp.predict((q - 1990)[:, None], return_std=True)
+        r["check"] = [q.tolist(), (m + mu0).tolist(), s.tolist()]
+        if cut == 2100: line += f"  Jan 2030 {m[0]+mu0:.2f} +/- {1.96*s[0]:.2f}, Jan 2040 {m[1]+mu0:.2f} +/- {1.96*s[1]:.2f}"
+        print(line, flush=True); out[f"{name}|{cut}"] = r
+    print(f"  learned on all data: {gp.kernel_}")
+json.dump(out, open("gp_co2_fits.json", "w"))</code></pre>
+<pre class="code out"><code id="pj-out">R&amp;W      cut 1990: N 382  log ML   -87.410  all: RMSE 6.485 in95 0.776  10y: RMSE 2.531 in95 0.283
+R&amp;W      cut 2000: N 502  log ML  -116.630  all: RMSE 13.770 in95 0.202  10y: RMSE 2.973 in95 0.542
+R&amp;W      cut 2010: N 622  log ML  -141.960  all: RMSE 5.388 in95 0.323  10y: RMSE 2.969 in95 0.542
+R&amp;W      cut 2020: N 742  log ML  -185.605  all: RMSE 0.535 in95 1.000  10y: RMSE 0.535 in95 1.000
+R&amp;W      cut 2100: N 823  log ML  -217.299  Jan 2030 438.46 +/- 2.25, Jan 2040 460.87 +/- 8.39
+  learned on all data: 62.2**2 * RBF(length_scale=37.2) + 2.45**2 * RBF(length_scale=124) * ExpSineSquared(length_scale=1.34, periodicity=1) + 0.644**2 * RationalQuadratic(alpha=0.565, length_scale=1.12) + 0.194**2 * RBF(length_scale=0.113) + WhiteKernel(noise_level=0.041)
+R&amp;W+quad cut 1990: N 382  log ML   -87.184  all: RMSE 10.947 in95 0.027  10y: RMSE 3.863 in95 0.100
+R&amp;W+quad cut 2000: N 502  log ML  -116.792  all: RMSE 1.597 in95 0.997  10y: RMSE 0.468 in95 0.992
+R&amp;W+quad cut 2010: N 622  log ML  -140.271  all: RMSE 2.217 in95 0.985  10y: RMSE 1.419 in95 0.975
+R&amp;W+quad cut 2020: N 742  log ML  -180.666  all: RMSE 0.603 in95 1.000  10y: RMSE 0.603 in95 1.000
+R&amp;W+quad cut 2100: N 823  log ML  -211.800  Jan 2030 438.85 +/- 1.73, Jan 2040 467.04 +/- 3.63
+  learned on all data: 0.0274**2 * DotProduct(sigma_0=26.3) ** 2 + 0.816**2 * RBF(length_scale=6.53) + 2.44**2 * RBF(length_scale=124) * ExpSineSquared(length_scale=1.33, periodicity=1) + 0.449**2 * RationalQuadratic(alpha=3.55e+04, length_scale=0.864) + 0.201**2 * RBF(length_scale=0.12) + WhiteKernel(noise_level=0.0415)</code></pre>
+    <p class="note" id="pj-check" style="max-width:72ch"></p>
+  </div>
+</section>
+
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>A Gaussian prior on the weights of a linear model is a Gaussian prior on its function values, with covariance K = &alpha;<sup>&minus;1</sup>&Phi;&Phi;<sup>&top;</sup>; a Gaussian process takes the kernel k(x, x&prime;) as the starting point and drops the weights.</li>
+      <li>A GP is a distribution over functions whose values at any finite set of inputs are jointly Gaussian; mean zero and a kernel define it, and the kernel must make every K positive semidefinite.</li>
+      <li>With Gaussian noise, the targets are N(0, C<sub>N</sub>), C<sub>N</sub> = K + &beta;<sup>&minus;1</sup>I, and conditioning gives the predictive mean k<sup>&top;</sup>C<sub>N</sub><sup>&minus;1</sup>t and variance c &minus; k<sup>&top;</sup>C<sub>N</sub><sup>&minus;1</sup>k, which reverts to the prior far from the data.</li>
+      <li>Hyperparameters are learned by maximising ln p(t | &theta;) = &minus;&frac12;t<sup>&top;</sup>C<sub>N</sub><sup>&minus;1</sup>t &minus; &frac12;ln|C<sub>N</sub>| &minus; (N/2)ln 2&pi;, a data fit plus a built-in complexity penalty; the surface can have several peaks.</li>
+      <li>Kernels add and multiply, so a model can be described in words (trend + drifting seasons + wiggles + noise); the price of exactness is O(N&sup3;) time.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A model has one basis function, &phi;(x) = x, and prior w ~ N(0, 1/&alpha;) with &alpha; = 4. What kernel does it define, and what do draws from the GP look like?</summary><p>k(x, x&prime;) = &alpha;<sup>&minus;1</sup>&phi;(x)&phi;(x&prime;) = xx&prime;/4. Every draw is a straight line through the origin with a random slope of sd 0.5; the prior sd at x is |x|/2, so it is zero at the origin. It is Bishop's &theta;<sub>3</sub> term on its own.</p></details>
+      <details class="q"><summary>You have one noisy reading t<sub>1</sub> = 2 at x = 0, squared-exponential kernel with &sigma;<sub>f</sub> = 1 and &ell; = 1, noise variance 0.25. What is the predictive mean of y at x = 1?</summary><p>k(0, 1) = e<sup>&minus;1/2</sup> &asymp; 0.607 and C<sub>1</sub> = 1 + 0.25 = 1.25, so m = 0.607 &times; 2 / 1.25 &asymp; 0.970. The variance of y(1) is 1 &minus; 0.607&sup2;/1.25 &asymp; 0.706.</p></details>
+      <details class="q"><summary>Why does the predictive variance not depend on the observed targets, and when is that a weakness?</summary><p>For jointly Gaussian variables the conditional covariance &Sigma;<sub>aa</sub> &minus; &Sigma;<sub>ab</sub>&Sigma;<sub>bb</sub><sup>&minus;1</sup>&Sigma;<sub>ba</sub> involves only covariances, which depend on the inputs. The targets enter only through the hyperparameters, if they are learned. So a GP with fixed &theta; cannot become less certain when the data surprise it, and a single noise level cannot say that some regions are noisier than others (heteroscedastic noise needs a second GP).</p></details>
+      <details class="q"><summary>The marginal likelihood surface has two peaks: a short length-scale with small noise, and a long length-scale with large noise. What does each say, and how would you choose?</summary><p>The first says the wiggles are real signal; the second says they are noise around a smooth trend. The higher peak is preferred by the data, and the ratio of their marginal likelihoods is the Bayes factor between the two readings. With few points the difference can be small; then restart the optimiser from several points, compare the peaks, and consider a prior on &theta; or held-out data.</p></details>
+      <details class="q"><summary>Why can a GP use &ldquo;infinitely many basis functions&rdquo; while Bayesian linear regression cannot?</summary><p>Predictions need only the kernel's values at the training and test inputs: an N &times; N matrix and an N-vector. The basis can be infinite as long as the inner products &phi;(x)<sup>&top;</sup>&phi;(x&prime;) have a closed form, as the squared exponential does. The cost then scales with N rather than with the number of basis functions.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../gp-classification-rvm/">Next chapter: GP Classification, ARD &amp; the Relevance Vector Machine &rarr;</a>
+      <a class="btn" href="../svm-theory/">&larr; Previous: SVM Theory: the Dual, Valid Kernels, Paths &amp; Regression</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Bishop, C. M. (2006). <em>Pattern Recognition and Machine Learning</em>. Springer. &sect;6.4 (Gaussian processes), &sect;6.4.1&ndash;6.4.3 (linear regression revisited, GP regression, learning the hyperparameters).</li>
+      <li>Rasmussen, C. E. &amp; Williams, C. K. I. (2006). <em>Gaussian Processes for Machine Learning</em>. MIT Press. Chapter 2 (regression), chapter 5 (model selection; &sect;5.4.3, the Mauna Loa CO&#8322; kernel). Free at gaussianprocess.org/gpml.</li>
+      <li>Williams, C. K. I. &amp; Rasmussen, C. E. (1996). Gaussian processes for regression. <em>Advances in Neural Information Processing Systems</em> 8.</li>
+      <li>MacKay, D. J. C. (1998). Introduction to Gaussian processes. In C. M. Bishop (ed.), <em>Neural Networks and Machine Learning</em>, NATO ASI Series F 168, Springer.</li>
+      <li>Neal, R. M. (1996). <em>Bayesian Learning for Neural Networks</em>. Lecture Notes in Statistics 118, Springer: wide random networks converge to GPs.</li>
+      <li>Cressie, N. (1993). <em>Statistics for Spatial Data</em>, revised ed. Wiley: kriging and co-kriging.</li>
+      <li>Snelson, E. &amp; Ghahramani, Z. (2006). Sparse Gaussian processes using pseudo-inputs. <em>NIPS</em> 18; Titsias, M. (2009). Variational learning of inducing variables in sparse Gaussian processes. <em>AISTATS</em>.</li>
+      <li>Pedregosa, F. et al. (2011). Scikit-learn: machine learning in Python. <em>JMLR</em> 12, 2825&ndash;2830 (GaussianProcessRegressor, used for the reference run).</li>
+      <li>Lan, X., Tans, P. &amp; Thoning, K. W. Trends in atmospheric carbon dioxide: Mauna Loa monthly means. NOAA Global Monitoring Laboratory, gml.noaa.gov/ccgg/trends/ (with Keeling, R., Scripps Institution of Oceanography); file co2_mm_mlo.csv, public domain.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- dense linear algebra on flat Float64Arrays (row-major, n x n) ---------- */
+/* Cholesky: returns lower-triangular L (flat) with A = L L^T, or null when A is not positive definite */
+function cholF(A, n) {
+  const L = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) {
+    const ri = i * n;
+    for (let j = 0; j <= i; j++) {
+      const rj = j * n; let s = A[ri + j];
+      for (let k = 0; k < j; k++) s -= L[ri + k] * L[rj + k];
+      if (i === j) { if (!(s > 0)) return null; L[ri + i] = Math.sqrt(s); }
+      else L[ri + j] = s / L[rj + j];
+    }
+  }
+  return L;
+}
+/* solve L y = b (forward) and L^T x = y (backward) */
+function fwdF(L, n, b) { const y = new Float64Array(n); for (let i = 0; i < n; i++) { let s = b[i]; const ri = i * n; for (let k = 0; k < i; k++) s -= L[ri + k] * y[k]; y[i] = s / L[ri + i]; } return y; }
+function bwdF(L, n, y) { const x = new Float64Array(n); for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let k = i + 1; k < n; k++) s -= L[k * n + i] * x[k]; x[i] = s / L[i * n + i]; } return x; }
+const cholSolveF = (L, n, b) => bwdF(L, n, fwdF(L, n, b));
+function logdetF(L, n) { let s = 0; for (let i = 0; i < n; i++) s += Math.log(L[i * n + i]); return 2 * s; }
+/* inverse of A = L L^T from its Cholesky factor */
+function invCholF(L, n) {
+  const Li = new Float64Array(n * n); // L^-1, lower triangular
+  for (let j = 0; j < n; j++) { Li[j * n + j] = 1 / L[j * n + j]; for (let i = j + 1; i < n; i++) { let s = 0; const ri = i * n; for (let k = j; k < i; k++) s -= L[ri + k] * Li[k * n + j]; Li[ri + j] = s / L[ri + i]; } }
+  const Ai = new Float64Array(n * n); // (L^-1)^T L^-1
+  for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { let s = 0; for (let k = i; k < n; k++) s += Li[k * n + i] * Li[k * n + j]; Ai[i * n + j] = s; Ai[j * n + i] = s; }
+  return Ai;
+}
+/* eigenvalues of a small symmetric matrix (cyclic Jacobi) */
+function eigSym(A0, n) {
+  const A = Float64Array.from(A0);
+  for (let sweep = 0; sweep < 60; sweep++) {
+    let off = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += A[i * n + j] ** 2; if (off < 1e-26) break;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+      const apq = A[p * n + q]; if (Math.abs(apq) < 1e-300) continue;
+      const th = (A[q * n + q] - A[p * n + p]) / (2 * apq), t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < n; k++) { const akp = A[k * n + p], akq = A[k * n + q]; A[k * n + p] = c * akp - s * akq; A[k * n + q] = s * akp + c * akq; }
+      for (let k = 0; k < n; k++) { const apk = A[p * n + k], aqk = A[q * n + k]; A[p * n + k] = c * apk - s * aqk; A[q * n + k] = s * apk + c * aqk; }
+    }
+  }
+  return Array.from({ length: n }, (_, i) => A[i * n + i]).sort((a, b) => a - b);
+}
+
+/* ---------- a Gaussian process with kernel k(x, x') and noise variance s2n ----------
+   gpFit(xs, ts, k, s2n) -> { n, L, a (= C^-1 t), lml, fit, cplx, pred(x) -> {m, v (latent f), vt (= v + s2n)}, kv(x) } or null */
+function gpFit(xs, ts, k, s2n) {
+  const n = xs.length, C = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { const v = k(xs[i], xs[j]) + (i === j ? s2n : 0); C[i * n + j] = v; C[j * n + i] = v; }
+  const L = n ? cholF(C, n) : new Float64Array(0); if (!L) return null;
+  const a = n ? cholSolveF(L, n, ts) : new Float64Array(0);
+  let fit = 0; for (let i = 0; i < n; i++) fit += ts[i] * a[i]; fit *= -0.5;
+  const cplx = n ? -0.5 * logdetF(L, n) : 0, lml = fit + cplx - 0.5 * n * Math.log(2 * Math.PI);
+  const kv = x => { const r = new Float64Array(n); for (let i = 0; i < n; i++) r[i] = k(xs[i], x); return r; };
+  const pred = x => { const kx = kv(x); let m = 0; for (let i = 0; i < n; i++) m += kx[i] * a[i]; const u = n ? fwdF(L, n, kx) : kx; let q = 0; for (let i = 0; i < n; i++) q += u[i] * u[i]; const v = k(x, x) - q; return { m, v, vt: v + s2n, kx }; };
+  return { n, C, L, a, lml, fit, cplx, pred, kv, xs, ts, k, s2n };
+}
+/* posterior (or prior, when g is null) over a grid: mean, covariance Cholesky for sampling */
+function gridPost(g, k, grid, jit) {
+  const G = grid.length, K = new Float64Array(G * G), mu = new Float64Array(G);
+  for (let i = 0; i < G; i++) for (let j = 0; j <= i; j++) { const v = k(grid[i], grid[j]); K[i * G + j] = v; K[j * G + i] = v; }
+  if (g && g.n) {
+    const n = g.n, V = []; // V_j = L^-1 k(X, grid_j)
+    for (let j = 0; j < G; j++) { const kx = g.kv(grid[j]); let m = 0; for (let i = 0; i < n; i++) m += kx[i] * g.a[i]; mu[j] = m; V.push(fwdF(g.L, n, kx)); }
+    for (let i = 0; i < G; i++) for (let j = 0; j <= i; j++) { let s = 0; const vi = V[i], vj = V[j]; for (let q = 0; q < n; q++) s += vi[q] * vj[q]; K[i * G + j] -= s; if (i !== j) K[j * G + i] -= s; }
+  }
+  const sd = new Float64Array(G); for (let i = 0; i < G; i++) sd[i] = Math.sqrt(Math.max(0, K[i * G + i]));
+  let L = null, e = jit || 1e-8, scale = 0; for (let i = 0; i < G; i++) scale = Math.max(scale, K[i * G + i]);
+  for (let tries = 0; tries < 8 && !L; tries++) { const A = Float64Array.from(K); for (let i = 0; i < G; i++) A[i * G + i] += e * Math.max(scale, 1e-12); L = cholF(A, G); e *= 10; }
+  return { G, mu, sd, L, K };
+}
+/* one sample from gridPost: mu + L z */
+function gridSample(P, z) { const G = P.G, f = new Float64Array(G); if (!P.L) return f; for (let i = 0; i < G; i++) { let s = P.mu[i]; const ri = i * G; for (let k = 0; k <= i; k++) s += P.L[ri + k] * z[k]; f[i] = s; } return f; }
+
+/* ---------- L-BFGS minimiser with backtracking line search (for hyperparameters in log space) ----------
+   fg(x) -> [f, grad]; runs `step()` one iteration at a time so the page can stay responsive */
+function lbfgs(fg, x0, opt) {
+  opt = Object.assign({ m: 8, maxIter: 200, gtol: 1e-5, ftol: 1e-10 }, opt || {});
+  let x = Float64Array.from(x0), [f, g] = fg(x), it = 0, nfev = 1, done = false, msg = '';
+  const S = [], Y = [], R = [];
+  function step() {
+    if (done) return true;
+    const n = x.length, q = Float64Array.from(g), al = [];
+    for (let i = S.length - 1; i >= 0; i--) { let a = 0; for (let j = 0; j < n; j++) a += S[i][j] * q[j]; a *= R[i]; al[i] = a; for (let j = 0; j < n; j++) q[j] -= a * Y[i][j]; }
+    let gam = 1; if (S.length) { const l = S.length - 1; let sy = 0, yy = 0; for (let j = 0; j < n; j++) { sy += S[l][j] * Y[l][j]; yy += Y[l][j] * Y[l][j]; } gam = sy / yy; }
+    else { let gn = 0; for (let j = 0; j < n; j++) gn += g[j] * g[j]; gam = 0.1 / Math.max(1e-12, Math.sqrt(gn)); }
+    for (let j = 0; j < n; j++) q[j] *= gam;
+    for (let i = 0; i < S.length; i++) { let b = 0; for (let j = 0; j < n; j++) b += Y[i][j] * q[j]; b *= R[i]; for (let j = 0; j < n; j++) q[j] += S[i][j] * (al[i] - b); }
+    let dg = 0; for (let j = 0; j < n; j++) dg -= q[j] * g[j];
+    if (dg >= 0) { S.length = 0; Y.length = 0; R.length = 0; for (let j = 0; j < n; j++) q[j] = g[j] * 0.01; dg = 0; for (let j = 0; j < n; j++) dg -= q[j] * g[j]; }
+    let t = 1, xn, fn, gn;
+    for (let ls = 0; ls < 30; ls++) { xn = x.map((v, j) => v - t * q[j]); [fn, gn] = fg(xn); nfev++; if (isFinite(fn) && fn <= f + 1e-4 * t * dg) break; t *= 0.5; }
+    if (!(isFinite(fn) && fn <= f + 1e-4 * t * dg)) { done = true; msg = 'line search stalled'; return true; }
+    const s = xn.map((v, j) => v - x[j]), y = gn.map((v, j) => v - g[j]); let sy = 0; for (let j = 0; j < n; j++) sy += s[j] * y[j];
+    if (sy > 1e-12) { S.push(s); Y.push(y); R.push(1 / sy); if (S.length > opt.m) { S.shift(); Y.shift(); R.shift(); } }
+    const df = f - fn; x = xn; f = fn; g = gn; it++;
+    let gmax = 0; for (let j = 0; j < n; j++) gmax = Math.max(gmax, Math.abs(g[j]));
+    if (gmax < opt.gtol) { done = true; msg = 'gradient below tolerance'; }
+    else if (df < opt.ftol * Math.max(1, Math.abs(f))) { done = true; msg = 'no further improvement'; }
+    else if (it >= opt.maxIter) { done = true; msg = 'iteration limit'; }
+    return done;
+  }
+  return { step, get x() { return x; }, get f() { return f; }, get g() { return g; }, get it() { return it; }, get nfev() { return nfev; }, get done() { return done; }, get msg() { return msg; } };
+}
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), ink: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const sum = a => a.reduce((s, v) => s + v, 0);
+const f1 = v => fmt(v, 1), f2 = v => fmt(v, 2), f3 = v => fmt(v, 3), f4 = v => fmt(v, 4);
+const nf = n => n.toLocaleString('en-GB');
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sg = (v, d) => (v > 0 ? '+' : v < 0 ? '&minus;' : '') + fmt(Math.abs(v), d == null ? 2 : d);
+const gf = v => { const a = Math.abs(v); return a >= 1000 ? nf(Math.round(v)) : a >= 10 ? fmt(v, 1) : a >= 1 ? fmt(v, 2) : a >= 0.01 ? fmt(v, 3) : a === 0 ? '0' : v.toExponential(1); };
+const linspace = (a, b, n) => Array.from({ length: n }, (_, i) => a + (b - a) * i / (n - 1));
+const LOG2PI = Math.log(2 * Math.PI);
+const lg = v => +Math.pow(10, v).toPrecision(2);
+const zs = (r, n) => Array.from({ length: n }, () => gaussOf(r));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* several views on one canvas */
+function subView(v, xl, yl, pad) {
+  const w = v.w, h = v.h, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  return { ctx: v.ctx, w, h, pad, pw, ph, xl, yl, X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph, iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function panes(cv, n, stackBelow, ratios) {
+  const base = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), W = base.w, H = base.h, stacked = W < (stackBelow || 560);
+  const rs = ratios || Array(n).fill(1), tot = sum(rs); let acc = 0;
+  const rects = rs.map(r => { const f0 = acc / tot; acc += r; const f1_ = acc / tot; return stacked ? { x: 0, y: f0 * H, w: W, h: (f1_ - f0) * H } : { x: f0 * W, y: 0, w: (f1_ - f0) * W, h: H }; });
+  return { base, rects, stacked };
+}
+function paneView(base, R, xl, yl, pin) {
+  pin = Object.assign({ l: 42, r: 10, t: 24, b: 28 }, pin || {});
+  return subView(base, xl, yl, { l: R.x + pin.l, r: base.w - R.x - R.w + pin.r, t: R.y + pin.t, b: base.h - R.y - R.h + pin.b });
+}
+function title(v, text, col) { const c = v.ctx; c.save(); c.font = '600 12px ' + css('--f-body'); c.fillStyle = col || css('--ink'); c.textAlign = 'left'; c.textBaseline = 'bottom'; c.fillText(text, v.pad.l, v.pad.t - 6); c.restore(); }
+function label(v, x, y, text, col, align, base) { const c = v.ctx; c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = col || css('--muted'); c.textAlign = align || 'left'; c.textBaseline = base || 'middle'; c.fillText(text, v.X(x), v.Y(y)); c.restore(); }
+function fillBand(v, xs, lo, hi, col, alpha) { const c = v.ctx; c.save(); c.globalAlpha = alpha; c.fillStyle = col; c.beginPath(); for (let i = 0; i < xs.length; i++) c.lineTo(v.X(xs[i]), clamp(v.Y(hi[i]), -4000, 4000)); for (let i = xs.length - 1; i >= 0; i--) c.lineTo(v.X(xs[i]), clamp(v.Y(lo[i]), -4000, 4000)); c.closePath(); c.fill(); c.restore(); }
+function pline(v, xs, ys, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); for (let i = 0; i < xs.length; i++) { const py = clamp(v.Y(ys[i]), -4000, 4000); i ? c.lineTo(v.X(xs[i]), py) : c.moveTo(v.X(xs[i]), py); } c.stroke(); c.restore(); }
+function vline(v, x, col, lw, dash) { seg(v, x, v.yl[0], x, v.yl[1], col, lw || 1.2, dash); }
+function ring(v, x, y, col, r) { const c = v.ctx; c.save(); c.beginPath(); c.arc(v.X(x), v.Y(y), r || 8, 0, 7); c.strokeStyle = col; c.lineWidth = 1.8; c.stroke(); c.restore(); }
+function ebar(v, x, lo, hi, col, lw) { const c = v.ctx, px = v.X(x); c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.6; c.beginPath(); c.moveTo(px, v.Y(lo)); c.lineTo(px, v.Y(hi)); c.moveTo(px - 4, v.Y(lo)); c.lineTo(px + 4, v.Y(lo)); c.moveTo(px - 4, v.Y(hi)); c.lineTo(px + 4, v.Y(hi)); c.stroke(); c.restore(); }
+function ellPts(m, S, k) { const a = S[0][0], b = S[0][1], d = S[1][1], T = (a + d) / 2, D = Math.sqrt(((a - d) / 2) ** 2 + b * b), l1 = T + D, l2 = Math.max(T - D, 0), th = 0.5 * Math.atan2(2 * b, a - d), ct = Math.cos(th), st = Math.sin(th), P = [];
+  for (let i = 0; i <= 90; i++) { const f = i / 90 * 2 * Math.PI, u = k * Math.sqrt(l1) * Math.cos(f), w = k * Math.sqrt(l2) * Math.sin(f); P.push([m[0] + u * ct - w * st, m[1] + u * st + w * ct]); } return P; }
+function ell(v, m, S, k, col, lw, dash, fillA) { const c = v.ctx, P = ellPts(m, S, k); c.save(); c.beginPath(); P.forEach((p, i) => i ? c.lineTo(v.X(p[0]), v.Y(p[1])) : c.moveTo(v.X(p[0]), v.Y(p[1]))); c.closePath(); if (fillA) { c.globalAlpha = fillA; c.fillStyle = col; c.fill(); c.globalAlpha = 1; } c.strokeStyle = col; c.lineWidth = lw || 1.6; if (dash) c.setLineDash(dash); c.stroke(); c.restore(); }
+function hexRgb(c) { c = c.trim(); if (c[0] === '#') { if (c.length === 4) c = '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3]; return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)]; } const m = c.match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : [80, 80, 200]; }
+/* image over the box [x0,x1]x[y0,y1] of a view: f(i, j) for i = column (x), j = row (y, bottom up) returns [colour index, alpha] */
+function imgMap(v, box, nx, ny, f, cols) {
+  const [x0, x1, y0, y1] = box, oc = document.createElement('canvas'); oc.width = nx; oc.height = ny;
+  const g = oc.getContext('2d'), im = g.createImageData(nx, ny), rgb = cols.map(hexRgb);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const [ci, a] = f(i, ny - 1 - j), o = (j * nx + i) * 4, cc = rgb[ci]; im.data[o] = cc[0]; im.data[o + 1] = cc[1]; im.data[o + 2] = cc[2]; im.data[o + 3] = Math.round(255 * clamp(a, 0, 1)); }
+  g.putImageData(im, 0, 0); const c = v.ctx; c.save(); c.imageSmoothingEnabled = true; c.drawImage(oc, v.X(x0), v.Y(y1), v.X(x1) - v.X(x0), v.Y(y0) - v.Y(y1)); c.restore();
+}
+function frameBox(v, col) { const c = v.ctx; c.save(); c.strokeStyle = col || css('--line'); c.lineWidth = 1; c.strokeRect(v.pad.l + 0.5, v.pad.t + 0.5, v.pw - 1, v.ph - 1); c.restore(); }
+/* kernels */
+const kSE = (sf2, l) => (x, z) => sf2 * Math.exp(-0.5 * (x - z) * (x - z) / (l * l));
+const dragFlag = { moved: false };
+
+/* ======================= hero: posterior functions that breathe ======================= */
+const HE = { P: [[-2.3, -0.7], [-1.6, 0.4], [-0.2, 1.1], [0.35, 0.6], [2.1, -0.9]], l: 0.75, sf: 1, sn: 0.08, grid: linspace(-3, 3, 121), K: 12, A: null, B: null, post: null, t: 0, run: !reduced, vis: true, last: 0 };
+function heroPost() {
+  const k = kSE(HE.sf * HE.sf, HE.l), g = gpFit(HE.P.map(p => p[0]), Float64Array.from(HE.P.map(p => p[1])), k, HE.sn * HE.sn);
+  HE.g = g; HE.post = gridPost(g, k, HE.grid, 1e-7);
+  if (!HE.A) { const r = mulberry32(5); HE.A = Array.from({ length: HE.K }, () => zs(r, HE.grid.length)); HE.B = Array.from({ length: HE.K }, () => zs(r, HE.grid.length)); HE.ph = Array.from({ length: HE.K }, () => r() * 6.283); }
+}
+let heroV = null;
+function drawHero() {
+  if (!HE.post) heroPost();
+  const C = C0(), v = heroV = frame($('#hero-cv'), [-3, 3], [-3, 3], { l: 30, r: 10, t: 10, b: 26 }); axes(v, 'x', 'f(x)', { sx: 1, sy: 1 }); clip(v);
+  const P = HE.post, xs = HE.grid, mu = Array.from(P.mu), sd = Array.from(P.sd), s2n = HE.sn;
+  fillBand(v, xs, mu.map((m, i) => m - 2 * Math.hypot(sd[i], s2n)), mu.map((m, i) => m + 2 * Math.hypot(sd[i], s2n)), C.lda, 0.1);
+  fillBand(v, xs, mu.map((m, i) => m - 2 * sd[i]), mu.map((m, i) => m + 2 * sd[i]), C.lda, 0.12);
+  for (let s = 0; s < HE.K; s++) { const a = HE.t * 0.55 + HE.ph[s], ca = Math.cos(a), sa = Math.sin(a), z = HE.A[s].map((u, i) => ca * u + sa * HE.B[s][i]); pline(v, xs, gridSample(P, z), s % 3 ? C.lda : C.c, 1.15, null, 0.55); }
+  pline(v, xs, mu, C.lda, 2.6);
+  HE.P.forEach(p => dot(v, p[0], p[1], C.b, 5.2));
+  v.ctx.restore();
+  let lo = 0, hi = 0; sd.forEach((s, i) => { if (s < sd[lo]) lo = i; if (s > sd[hi]) hi = i; });
+  const n = HE.P.length;
+  $('#hero-cap').innerHTML = n ? `${n} point${n > 1 ? 's' : ''}, squared-exponential kernel with length-scale 0.75. Twelve functions drawn from the posterior all thread through the data; between and beyond the points they fan out to the prior's spread. The sd of f runs from ${tip(f3(sd[lo]), `smallest √(k(x,x) − kᵀC⁻¹k) on the grid, at x = ${f2(xs[lo])}`)} near the data to ${tip(f2(sd[hi]), `largest, at x = ${f2(xs[hi])}; the prior sd is 1`)} far from them.`
+    : 'No data: these are twelve draws from the prior, a Gaussian process with mean 0 and sd 1 everywhere. Click to add a point.';
+}
+function heroLoop(ts) { if (HE.run && HE.vis) { const dt = HE.last ? Math.min(0.1, (ts - HE.last) / 1000) : 0; HE.t += dt; drawHero(); } HE.last = ts; requestAnimationFrame(heroLoop); }
+$('#hero-cv').addEventListener('click', e => { if (!heroV) return; const [px, py] = evPos($('#hero-cv'), e); const x = heroV.iX(px), y = heroV.iY(py); if (x < -3 || x > 3 || y < -3 || y > 3 || HE.P.length >= 40) return; HE.P.push([x, y]); heroPost(); drawHero(); });
+$('#hero-cv').style.cursor = 'crosshair';
+$('#hero-undo').addEventListener('click', () => { HE.P.pop(); heroPost(); drawHero(); });
+$('#hero-clear').addEventListener('click', () => { HE.P = []; heroPost(); drawHero(); });
+$('#hero-pause').addEventListener('click', e => { HE.run = !HE.run; e.target.textContent = HE.run ? 'Pause' : 'Play'; });
+if (reduced) $('#hero-pause').textContent = 'Play';
+if ('IntersectionObserver' in window) new IntersectionObserver(es => { HE.vis = es[0].isIntersecting; }).observe($('#hero-cv'));
+fig($('#hero-cv'), drawHero); requestAnimationFrame(heroLoop);
+
+/* ======================= 1. linear regression revisited (PRML 6.4.1) ======================= */
+const W1 = { M: 6, x0: 0.6, s: 0.5, sf: 1, z: zs(mulberry32(17), 6 * 60) };
+function w1Basis(M) { const D = 6 / M, cs = Array.from({ length: M }, (_, j) => -3 + (j + 0.5) * D), s = W1.s, sw2 = W1.sf * W1.sf * D / (s * Math.sqrt(Math.PI));
+  const phi = x => cs.map(c => Math.exp(-0.5 * (x - c) ** 2 / (s * s))); return { cs, D, sw2, phi, k: (x, z) => { const a = phi(x), b = phi(z); let q = 0; for (let j = 0; j < M; j++) q += a[j] * b[j]; return sw2 * q; } }; }
+const kLim = (x, z) => W1.sf * W1.sf * Math.exp(-((x - z) ** 2) / (4 * W1.s * W1.s));
+let w1D = null;
+function drawW1() {
+  const C = C0(), B = w1Basis(W1.M), xs = linspace(-4, 4, 241), Pn = panes($('#w1-cv'), 2, 640, [1.35, 1]);
+  const va = paneView(Pn.base, Pn.rects[0], [-4, 4], [-3.2, 3.2], { l: 34, t: 24 }), vb = paneView(Pn.base, Pn.rects[1], [-4, 4], [-0.25, 1.35], { l: 40, t: 24 });
+  w1D = va;
+  axes(va, 'x', '', { sx: 1, sy: 1 }); title(va, `Six functions drawn from the prior, M = ${W1.M}`); clip(va);
+  const c = va.ctx; c.save(); c.fillStyle = C.soft; c.globalAlpha = 0.5; c.fillRect(va.pad.l, va.pad.t, va.X(-3) - va.pad.l, va.ph); c.fillRect(va.X(3), va.pad.t, va.pad.l + va.pw - va.X(3), va.ph); c.restore();
+  const sdb = xs.map(x => Math.sqrt(B.k(x, x)));
+  fillBand(va, xs, sdb.map(s => -2 * s), sdb.map(s => 2 * s), C.lda, 0.12);
+  pline(va, xs, xs.map(() => 2 * W1.sf), C.muted, 1.2, [5, 4]); pline(va, xs, xs.map(() => -2 * W1.sf), C.muted, 1.2, [5, 4]);
+  B.cs.forEach((cc, j) => pline(va, xs, xs.map(x => -3.2 + 0.55 * Math.exp(-0.5 * (x - cc) ** 2 / (W1.s * W1.s))), C.muted, 1, null, 0.7));
+  for (let d = 0; d < 6; d++) { const w = B.cs.map((_, j) => Math.sqrt(B.sw2) * W1.z[d * 60 + j]); pline(va, xs, xs.map(x => { const p = B.phi(x); let s = 0; for (let j = 0; j < W1.M; j++) s += w[j] * p[j]; return s; }), d ? C.lda : C.c, d ? 1.3 : 2, null, d ? 0.65 : 1); }
+  vline(va, W1.x0, C.ink, 1, [3, 3]); va.ctx.restore();
+  axes(vb, "x′", '', { sx: 1, sy: 0.5 }); title(vb, `Covariance with the probe: k(${f2(W1.x0)}, x′)`); clip(vb);
+  pline(vb, xs, xs.map(z => kLim(W1.x0, z)), C.muted, 1.6, [5, 4]); pline(vb, xs, xs.map(z => B.k(W1.x0, z)), C.lda, 2.4);
+  vline(vb, W1.x0, C.ink, 1, [3, 3]); vb.ctx.restore();
+  const k00 = B.k(W1.x0, W1.x0), x1 = W1.x0 + 0.5, k01 = B.k(W1.x0, x1), l01 = kLim(W1.x0, x1);
+  let gap = 0; xs.forEach(z => { if (Math.abs(z) <= 3) gap = Math.max(gap, Math.abs(B.k(W1.x0, z) - kLim(W1.x0, z))); });
+  $('#w1-m-o').textContent = W1.M; $('#w1-x-o').textContent = f2(W1.x0);
+  $('#w1-sd').innerHTML = tip(f3(Math.sqrt(k00)), `√k(x₀, x₀) = √(σ_w² Σⱼ φⱼ(x₀)²)\n= √(${f4(B.sw2)} × ${f4(k00 / B.sw2)}) at x₀ = ${f2(W1.x0)}`);
+  $('#w1-lim').innerHTML = tip(f3(W1.sf), 'with bumps everywhere (M → ∞) the prior sd is σ_f = 1 at every x');
+  $('#w1-gap').innerHTML = tip(f3(gap), `largest |k_basis(x₀, x′) − k_SE(x₀, x′)| over x′ in [−3, 3]`);
+  $('#run-w1').innerHTML = `<b>Running example</b>: M = ${W1.M} bumps of width s = 0.5, spaced &Delta; = ${f3(B.D)} apart, each weight with prior variance &alpha;<sup>&minus;1</sup> = ${tip(f4(B.sw2), `σ_f² Δ / (s√π) = 6/${W1.M} / (0.5 × 1.7725)\nchosen so the total prior variance stays near 1 as M grows`)}. Between x = ${f2(W1.x0)} and x&prime; = ${f2(x1)}: k = &alpha;<sup>&minus;1</sup>&phi;(x)<sup>&top;</sup>&phi;(x&prime;) = ${tip(f4(k01), `Σⱼ ${f4(B.sw2)} φⱼ(${f2(W1.x0)}) φⱼ(${f2(x1)}) over ${W1.M} bumps`)}; the limit with infinitely many bumps is exp(&minus;0.5&sup2;/(4 &times; 0.5&sup2;)) = ${tip(f4(l01), 'exp(−(x − x′)² / 4s²) = exp(−0.25)')}.`;
+  const out = Math.abs(W1.x0) > 3.2, mid = Math.abs(W1.x0) < 2.4;
+  let s;
+  if (out) s = `The probe is outside the bumps' range [&minus;3, 3]. Every &phi;<sub>j</sub>(x) is nearly 0 there, so the prior sd has fallen to ${f3(Math.sqrt(k00))}: the model is sure the function is 0 where it has no basis functions. Adding more bumps inside [&minus;3, 3] cannot fix that; this is the trap from chapter 1.2d. A kernel defined directly, like the dashed limit, has no edges.`;
+  else if (W1.M <= 3) s = `With ${W1.M === 1 ? 'one bump' : W1.M + ' bumps'} the prior can only make ${W1.M === 1 ? 'a single hump' : 'a few humps'}: the functions all look alike, the band dips between the centres, and the covariance with the probe (right, solid) is far from the smooth dashed curve. <strong>Add basis functions.</strong>`;
+  else if (gap > 0.05) s = `${W1.M} bumps. The draws look more varied, but the covariance still ripples with the spacing of the centres (largest gap from the limit: ${f3(gap)}). The band is narrower between bumps and wider on top of them.`;
+  else s = `With ${W1.M} bumps the covariance k(x<sub>0</sub>, x&prime;) is within ${f3(gap)} of the dashed curve, a smooth Gaussian of x &minus; x&prime;. The weights have become a detour: ${W1.M} random numbers per function, yet all that matters for predictions is this one function of two inputs. ${mid ? '' : 'Near the edge of [&minus;3, 3] the band still thins, because there are bumps on one side only.'}`;
+  $('#w1-say').innerHTML = s;
+}
+$('#w1-m').addEventListener('input', e => { W1.M = +e.target.value; drawW1(); });
+$('#w1-x').addEventListener('input', e => { W1.x0 = +e.target.value; drawW1(); });
+$('#w1-new').addEventListener('click', () => { W1.z = zs(mulberry32(Math.floor(Math.random() * 1e9)), 360); drawW1(); });
+fig($('#w1-cv'), drawW1);
+
+/* ======================= 2. the GP prior and its kernel (PRML 6.4, eq. 6.63) ======================= */
+const PR = { th: [1, 4, 0, 0], kind: 'gauss', grid: linspace(-1, 1, 101), z: null, r: mulberry32(29) };
+const prK = () => { const [a, b, c, d] = PR.th; return PR.kind === 'gauss' ? (x, z) => a * Math.exp(-0.5 * b * (x - z) ** 2) + c + d * x * z : (x, z) => a * Math.exp(-0.5 * b * Math.abs(x - z)) + c + d * x * z; };
+const PR_PRE = [[1, 4, 0, 0], [9, 4, 0, 0], [1, 64, 0, 0], [1, 0.25, 0, 0], [1, 4, 10, 0], [1, 4, 0, 5]];
+function prSync() { const [a, b, c, d] = PR.th; $('#pr-0').value = Math.log10(a); $('#pr-1').value = Math.log10(b); $('#pr-2').value = c; $('#pr-3').value = d; }
+function drawPR() {
+  const C = C0(), k = prK(), G = PR.grid.length, P = gridPost(null, k, PR.grid, 1e-9), Pn = panes($('#pr-cv'), 2, 640, [1.5, 1]);
+  if (!PR.z) PR.z = Array.from({ length: 5 }, () => zs(PR.r, G));
+  const fs = PR.z.map(z => gridSample(P, z)), sd = Array.from(P.sd); let ym = 2.5; fs.forEach(f => f.forEach(v => { ym = Math.max(ym, Math.abs(v) * 1.08); })); sd.forEach(s => { ym = Math.max(ym, 2.05 * s); }); ym = Math.min(ym, 14);
+  const va = paneView(Pn.base, Pn.rects[0], [-1, 1], [-ym, ym], { l: 34, t: 24 }); axes(va, 'x', '', { sx: 0.5 }); title(va, 'Five functions drawn from the GP prior'); clip(va);
+  fillBand(va, PR.grid, sd.map(s => -2 * s), sd.map(s => 2 * s), C.lda, 0.1);
+  fs.forEach((f, i) => pline(va, PR.grid, Array.from(f), [C.lda, C.b, C.a, C.c, C.bad][i], 1.7, null, 0.9)); va.ctx.restore();
+  const R = Pn.rects[1], side = Math.min(R.w - 52, R.h - 50), vb = paneView(Pn.base, R, [-1, 1], [-1, 1], { l: 40, t: 24, r: Math.max(10, R.w - 40 - side), b: Math.max(26, R.h - 24 - side) });
+  let km = 0; for (let i = 0; i < G * G; i++) km = Math.max(km, Math.abs(P.K[i]));
+  imgMap(vb, [-1, 1, -1, 1], G, G, (i, j) => { const val = P.K[i * G + j]; return [val >= 0 ? 0 : 1, 0.92 * Math.abs(val) / km]; }, [C.lda, C.b]);
+  axes(vb, '', '', { sx: 1, sy: 1 }); title(vb, "Covariance k(x, x′)"); frameBox(vb);
+  const s0 = Math.sqrt(k(0, 0)), s1 = Math.sqrt(k(1, 1)), r05 = k(0, 0.5) / Math.sqrt(k(0, 0) * k(0.5, 0.5)), [a, b, c, d] = PR.th;
+  $('#pr-0-o').textContent = gf(a); $('#pr-1-o').textContent = gf(b); $('#pr-2-o').textContent = gf(c); $('#pr-3-o').textContent = gf(d);
+  $('#pr-s0').innerHTML = tip(f2(s0), `√k(0, 0) = √(θ₀ + θ₂) = √(${gf(a)} + ${gf(c)})`);
+  $('#pr-s1').innerHTML = tip(f2(s1), `√k(1, 1) = √(θ₀ + θ₂ + θ₃·1·1) = √(${gf(a)} + ${gf(c)} + ${gf(d)})`);
+  $('#pr-r').innerHTML = tip(f3(r05), `k(0, 0.5) / √(k(0,0) k(0.5,0.5))\n= ${f3(k(0, 0.5))} / √(${f3(k(0, 0))} × ${f3(k(0.5, 0.5))})`);
+  const e = PR.kind === 'gauss' ? `exp(&minus;&theta;<sub>1</sub>/2 &middot; 0.5&sup2;) = ${tip(f3(Math.exp(-0.125 * b)), `exp(−${gf(b)} × 0.25 / 2)`)}` : `exp(&minus;&theta;<sub>1</sub>/2 &middot; 0.5) = ${tip(f3(Math.exp(-0.25 * b)), `exp(−${gf(b)} × 0.5 / 2)`)}`;
+  $('#run-pr').innerHTML = `<b>Running example</b>: &theta; = (${gf(a)}, ${gf(b)}, ${gf(c)}, ${gf(d)}). For x = 0 and x&prime; = 0.5: k = ${gf(a)} &times; ${e} + ${gf(c)} + ${gf(d)} &times; 0 &times; 0.5 = ${tip(f3(k(0, 0.5)), 'θ₀ κ(0.5) + θ₂ + θ₃ · 0 · 0.5')}. The covariance matrix of the ${G} grid values is built from exactly this formula, entry by entry, and the five draws are L z with L its Cholesky factor and z standard normal.`;
+  const ell = 1 / Math.sqrt(b);
+  let s;
+  if (PR.kind === 'exp') s = `The <b>exponential kernel</b> makes jagged functions: its covariance has a corner at x = x&prime;, so neighbouring values are correlated but the path is continuous and nowhere smooth. It is the Ornstein&ndash;Uhlenbeck process, a mean-reverting Brownian motion. Same &theta;, same draws z; only the kernel's shape changed.`;
+  else if (b >= 30) s = `&theta;<sub>1</sub> = ${gf(b)} is large, so the length-scale 1/&radic;&theta;<sub>1</sub> = ${f2(ell)} is short: values more than about ${f2(2 * ell)} apart are nearly independent, and the functions wiggle fast. The heat map's ridge along the diagonal is narrow.`;
+  else if (b <= 0.5) s = `&theta;<sub>1</sub> = ${gf(b)} is small, so the length-scale ${f2(ell)} is longer than the whole plot: every value is strongly tied to every other and the draws are almost straight. The heat map is nearly uniform.`;
+  else if (d > 0.5 && d >= c) s = `The linear term &theta;<sub>3</sub>xx&prime; = ${gf(d)}xx&prime; adds a random straight line through the origin to every draw: the spread grows towards x = &plusmn;1 (sd ${f2(s1)} at x = 1 against ${f2(s0)} at 0), and the heat map turns <span style="color:var(--cB)">orange</span> where x and x&prime; have opposite signs, because a tilted line moves those ends in opposite directions.`;
+  else if (c > 0.5) s = `The constant &theta;<sub>2</sub> = ${gf(c)} adds a random offset with sd ${f2(Math.sqrt(c))} to every draw: the functions keep their wiggles but float up and down as a whole, and every entry of the covariance rises by ${gf(c)}.`;
+  else s = `&theta;<sub>0</sub> = ${gf(a)} sets the vertical scale (sd ${f2(Math.sqrt(a))}) and &theta;<sub>1</sub> = ${gf(b)} the length-scale ${f2(ell)}: points closer than that move together. <strong>Try Bishop's six settings</strong>, then switch the kernel to exponential.`;
+  $('#pr-say').innerHTML = s;
+}
+$('#pr-0').addEventListener('input', e => { PR.th[0] = lg(+e.target.value); drawPR(); });
+$('#pr-1').addEventListener('input', e => { PR.th[1] = lg(+e.target.value); drawPR(); });
+$('#pr-2').addEventListener('input', e => { PR.th[2] = +e.target.value; drawPR(); });
+$('#pr-3').addEventListener('input', e => { PR.th[3] = +e.target.value; drawPR(); });
+seg1('[data-pk]', 'data-pk', v => { PR.kind = v; drawPR(); });
+$$('[data-pp]').forEach(b => b.addEventListener('click', () => { PR.th = PR_PRE[+b.getAttribute('data-pp')].slice(); prSync(); $$('[data-pp]').forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); drawPR(); }));
+$('#pr-new').addEventListener('click', () => { PR.z = null; drawPR(); });
+fig($('#pr-cv'), drawPR);
+
+/* ======================= 3. conditioning a Gaussian: one point informs another ======================= */
+const CD = { d: 0.8, t1: 1.5, sn: 0.2 };
+let cdD = null;
+function drawCD() {
+  const C = C0(), k = (x, z) => Math.exp(-0.5 * (x - z) ** 2), rho = k(0, CD.d), s11 = 1 + CD.sn ** 2, m2 = rho / s11 * CD.t1, v2 = 1 - rho * rho / s11, sd2 = Math.sqrt(v2);
+  const Pn = panes($('#cd-cv'), 2, 640, [1, 1.35]);
+  const va = paneView(Pn.base, Pn.rects[0], [-3, 3], [-3, 3], { l: 34, t: 24 }); cdD = va;
+  axes(va, 't₁', 'f₂', { sx: 1, sy: 1 }); title(va, 'Joint Gaussian of (t₁, f₂)'); clip(va);
+  const S = [[s11, rho], [rho, 1]];
+  ell(va, [0, 0], S, 1, C.lda, 1.6, null, 0.1); ell(va, [0, 0], S, 2, C.lda, 1.2, [4, 3], 0.05);
+  vline(va, CD.t1, C.b, 1.6);
+  { const c = va.ctx, ys = linspace(-3, 3, 121), px0 = va.X(CD.t1); c.save(); c.strokeStyle = C.c; c.lineWidth = 2; c.beginPath(); ys.forEach((y, i) => { const p = Math.exp(-0.5 * (y - m2) ** 2 / v2); const px = px0 + 34 * p; i ? c.lineTo(px, va.Y(y)) : c.moveTo(px, va.Y(y)); }); c.stroke(); c.restore(); }
+  ebar(va, CD.t1, m2 - 2 * sd2, m2 + 2 * sd2, C.c, 2.2); dot(va, CD.t1, m2, C.c, 5.5);
+  va.ctx.restore();
+  const vb = paneView(Pn.base, Pn.rects[1], [-3, 5], [-3, 3], { l: 34, t: 24 }); axes(vb, 'x', 'f(x)', { sx: 1, sy: 1 }); title(vb, 'The same thing as functions of x'); clip(vb);
+  const xs = linspace(-3, 5, 161), mu = xs.map(x => k(x, 0) * CD.t1 / s11), sdv = xs.map(x => Math.sqrt(Math.max(0, 1 - k(x, 0) ** 2 / s11)));
+  pline(vb, xs, xs.map(() => 2), C.muted, 1.1, [5, 4]); pline(vb, xs, xs.map(() => -2), C.muted, 1.1, [5, 4]);
+  fillBand(vb, xs, mu.map((m, i) => m - 2 * sdv[i]), mu.map((m, i) => m + 2 * sdv[i]), C.lda, 0.14);
+  pline(vb, xs, mu, C.lda, 2.4);
+  if (CD.sn > 0.005) ebar(vb, 0, CD.t1 - 2 * CD.sn, CD.t1 + 2 * CD.sn, C.b, 1.4);
+  dot(vb, 0, CD.t1, C.b, 6);
+  vline(vb, CD.d, C.c, 1, [3, 3]); ebar(vb, CD.d, m2 - 2 * sd2, m2 + 2 * sd2, C.c, 2.2); dot(vb, CD.d, m2, C.c, 5.5);
+  vb.ctx.restore();
+  $('#cd-d-o').textContent = f2(CD.d); $('#cd-t-o').textContent = f2(CD.t1); $('#cd-n-o').textContent = f2(CD.sn);
+  $('#cd-r').innerHTML = tip(f3(rho), `k(0, ${f2(CD.d)}) = exp(−${f2(CD.d)}² / 2)\nthe correlation of f(0) and f(${f2(CD.d)})`);
+  $('#cd-m').innerHTML = tip(f3(m2), `k(x₂, x₁) / (k(x₁, x₁) + σ²) × t₁\n= ${f3(rho)} / ${f3(s11)} × ${f2(CD.t1)}`);
+  $('#cd-s').innerHTML = tip(f3(sd2), `√(k(x₂,x₂) − k(x₂,x₁)² / (k(x₁,x₁) + σ²))\n= √(1 − ${f3(rho)}² / ${f3(s11)})`);
+  $('#run-cd').innerHTML = `<b>Running example</b>: a = f(x<sub>2</sub>) at x<sub>2</sub> = ${f2(CD.d)}, b = t<sub>1</sub>, the noisy reading at x<sub>1</sub> = 0. &Sigma;<sub>ab</sub> = k(${f2(CD.d)}, 0) = ${f3(rho)}, &Sigma;<sub>bb</sub> = 1 + ${f2(CD.sn)}&sup2; = ${f3(s11)}. Mean: 0 + ${f3(rho)} / ${f3(s11)} &times; ${f2(CD.t1)} = ${tip(f3(m2), 'Σ_ab Σ_bb⁻¹ t₁')}. Variance: 1 &minus; ${f3(rho)}&sup2; / ${f3(s11)} = ${tip(f3(v2), 'Σ_aa − Σ_ab² / Σ_bb')}, so sd ${f3(sd2)}.`;
+  let s;
+  if (rho > 0.9 && CD.sn < 0.15) s = `x<sub>2</sub> = ${f2(CD.d)} is so close to the observed point that f(x<sub>2</sub>) is almost pinned: the ellipse on the left is a thin diagonal cigar, and the vertical slice through it is narrow (sd ${f3(sd2)}, against 1 before the reading).`;
+  else if (rho < 0.05) s = `At distance ${f2(CD.d)} the correlation is only ${f3(rho)}: the ellipse is round, the slice is the whole prior, and the reading at x = 0 tells us nothing about f(x<sub>2</sub>). Far from data, a GP falls back to its prior.`;
+  else if (CD.sn > 0.6) s = `With noise sd ${f2(CD.sn)} the reading itself is unreliable, so the update is timid: f(x<sub>2</sub>) moves only ${f3(m2)} towards t<sub>1</sub> = ${f2(CD.t1)}, and even at x = 0 the curve does not pass through the point.`;
+  else s = `Correlation ${f3(rho)}: seeing t<sub>1</sub> = ${f2(CD.t1)} drags f(x<sub>2</sub>) to ${f3(m2)} and shrinks its sd from 1 to ${f3(sd2)}. The left panel is a slice through a 2-D Gaussian; the right panel does the same slice for every x at once. <strong>Drag the distance slider</strong> and watch both change together.`;
+  $('#cd-say').innerHTML = s;
+}
+$('#cd-d').addEventListener('input', e => { CD.d = +e.target.value; drawCD(); });
+$('#cd-t').addEventListener('input', e => { CD.t1 = +e.target.value; drawCD(); });
+$('#cd-n').addEventListener('input', e => { CD.sn = +e.target.value; drawCD(); });
+fig($('#cd-cv'), drawCD);
+
+/* ======================= 4. GP regression: predictive mean and variance (PRML 6.4.2) ======================= */
+const RG_SINE = (() => { const r = mulberry32(64); return Array.from({ length: 10 }, (_, i) => { const x = (i + 0.2 + 0.6 * r()) / 10; return [x, Math.sin(2 * Math.PI * x) + 0.2 * gaussOf(r)]; }); })();
+const RG_GAP = RG_SINE.filter(p => p[0] < 0.35 || p[0] > 0.72);
+const RG = { P: RG_SINE.map(p => p.slice()), kind: 'se', l: 0.2, sf: 1, sn: 0.2, x: 1.2, view: 'band', z: null, r: mulberry32(65), grid: linspace(-0.4, 1.4, 121) };
+const bumpCs = linspace(0, 1, 9);
+function rgK() { if (RG.kind === 'se') return kSE(RG.sf * RG.sf, RG.l); const s = RG.l * 0.5, w2 = RG.sf * RG.sf; return (x, z) => { let q = 0; for (const c of bumpCs) q += Math.exp(-0.5 * ((x - c) ** 2 + (z - c) ** 2) / (s * s)); return w2 * q; }; }
+let rgV = null;
+function rgFit() { const k = rgK(); return { k, g: gpFit(RG.P.map(p => p[0]), Float64Array.from(RG.P.map(p => p[1])), k, RG.sn * RG.sn) }; }
+function drawRG() {
+  const C = C0(), { k, g } = rgFit(), xs = RG.grid, v = rgV = frame($('#rg-cv'), [-0.4, 1.4], [-2.6, 2.6], { l: 34, r: 12, t: 12, b: 28 }); axes(v, 'x', 't', { sx: 0.2, sy: 1 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.soft; c.globalAlpha = 0.45; c.fillRect(v.pad.l, v.pad.t, v.X(0) - v.pad.l, v.ph); c.fillRect(v.X(1), v.pad.t, v.pad.l + v.pw - v.X(1), v.ph); c.restore();
+  const pr = xs.map(x => g.pred(x)), mu = pr.map(p => p.m), sf_ = pr.map(p => Math.sqrt(Math.max(0, p.v))), st = pr.map(p => Math.sqrt(Math.max(0, p.vt)));
+  if (RG.view !== 'draws') { fillBand(v, xs, mu.map((m, i) => m - 2 * st[i]), mu.map((m, i) => m + 2 * st[i]), C.lda, 0.1); fillBand(v, xs, mu.map((m, i) => m - 2 * sf_[i]), mu.map((m, i) => m + 2 * sf_[i]), C.lda, 0.16); }
+  curve(v, x => Math.sin(2 * Math.PI * x), C.a, 1.5, [2, 4]);
+  if (RG.view !== 'band') { const P = gridPost(g, k, xs, 1e-7); if (!RG.z) RG.z = Array.from({ length: 6 }, () => zs(RG.r, xs.length)); RG.z.forEach(z => pline(v, xs, Array.from(gridSample(P, z)), C.lda, 1.2, null, 0.6)); }
+  pline(v, xs, mu, C.lda, 2.7);
+  if (RG.kind === 'bump') bumpCs.forEach(cx => seg(v, cx, -2.6, cx, -2.42, C.muted, 2));
+  RG.P.forEach(p => dot(v, p[0], p[1], C.b, 5));
+  const p0 = g.pred(RG.x); vline(v, RG.x, C.ink, 1, [3, 3]); dot(v, RG.x, p0.m, C.lda, 5.5);
+  v.ctx.restore();
+  const n = RG.P.length, sd0 = Math.sqrt(Math.max(0, p0.vt)), q = p0.vt - (k(RG.x, RG.x) + RG.sn * RG.sn);
+  $('#rg-l-o').textContent = f3(RG.l); $('#rg-f-o').textContent = f2(RG.sf); $('#rg-n-o').textContent = f3(RG.sn); $('#rg-x-o').textContent = f2(RG.x);
+  $('#rg-m').innerHTML = tip(f3(p0.m), `m(x) = kᵀ C⁻¹ t = Σₙ k(xₙ, x) aₙ\nwith a = C⁻¹t, N = ${n}`);
+  $('#rg-s').innerHTML = tip(f3(sd0), `σ(x) = √(c − kᵀC⁻¹k) = √(${f3(k(RG.x, RG.x) + RG.sn ** 2)} − ${f3(-q)})\nc = k(x, x) + σₙ²`);
+  $('#rg-ml').innerHTML = tip(f2(g.lml), `ln p(t) = −½ tᵀC⁻¹t − ½ ln|C| − (N/2) ln 2π\n= ${f2(g.fit)} + ${f2(g.cplx)} − ${f2(0.5 * n * LOG2PI)}`);
+  const near = Array.from(p0.kx).map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, 3), kv = near.map(q => `k(${f2(RG.P[q[1]][0])}, x) = ${f3(q[0])}`).join(', ');
+  $('#run-rg').innerHTML = n ? `<b>Running example</b>: N = ${n}, probe x = ${f2(RG.x)}. The vector k holds k(x<sub>n</sub>, x) for every training input; its ${n > 3 ? 'three largest entries are' : 'entries are'} ${kv}. With a = C<sub>N</sub><sup>&minus;1</sup>t (${n > 3 ? 'first three entries ' : ''}${Array.from(g.a).slice(0, 3).map(f2).join(', ')}), the mean is k<sup>&top;</sup>a = ${tip(f3(p0.m), 'Σₙ k(xₙ, x) aₙ over all ' + n + ' points')}. Variance c &minus; k<sup>&top;</sup>C<sub>N</sub><sup>&minus;1</sup>k = ${f3(k(RG.x, RG.x) + RG.sn ** 2)} &minus; ${tip(f3(-q), 'kᵀC⁻¹k, computed as ‖L⁻¹k‖² with C = LLᵀ')} = ${f3(p0.vt)}, so &sigma; = ${f3(sd0)}, of which the noise accounts for ${f3(RG.sn)}&sup2; = ${f4(RG.sn ** 2)}.` : '<b>Running example</b>: no data, so m(x) = 0 and &sigma;&sup2;(x) = c = k(x, x) + &sigma;<sub>n</sub>&sup2; everywhere. Click the plot to add a point.';
+  const outside = RG.x < -0.05 || RG.x > 1.05, fshare = p0.v / Math.max(1e-12, p0.vt);
+  let s;
+  if (!n) s = 'No data: the band is the prior, &plusmn;2 sd everywhere. Click to add points.';
+  else if (RG.kind === 'bump' && outside) s = `<b>The trap again.</b> This kernel is built from nine Gaussian bumps on [0, 1], so it is exactly chapter 1.2d's Bayesian regression in disguise. At x = ${f2(RG.x)}, beyond the bumps, k(x, x) is only ${f3(k(RG.x, RG.x))}, and the band shrinks to the noise level although there is no data here. Switch to the squared-exponential kernel: its prior variance is ${f2(RG.sf ** 2)} everywhere, so the band reopens.`;
+  else if (RG.kind === 'se' && RG.l < 0.06) s = `Length-scale ${f3(RG.l)} is far shorter than the spacing of the points: the mean dashes through each point and drops back to 0 in between, and the band balloons between points. The model has too little reach to connect the data.`;
+  else if (RG.kind === 'se' && RG.l > 0.6) s = `Length-scale ${f3(RG.l)} is longer than the wave itself: the GP refuses to bend that fast, the mean is nearly a straight line, and most points sit outside the inner band. Shorten the length-scale.`;
+  else if (outside) s = `Beyond the data at x = ${f2(RG.x)}, the mean returns to the prior mean 0 and the band to the prior's &plusmn;2&radic;(&sigma;<sub>f</sub>&sup2; + &sigma;<sub>n</sub>&sup2;). How fast it gets there is set by the length-scale ${f3(RG.l)}. A GP admits ignorance far from data, as the basis-function model could not.`;
+  else s = `Among the data at x = ${f2(RG.x)}: the latent function's uncertainty is ${pct(fshare, 0)} of the predictive variance; the rest is noise &sigma;<sub>n</sub>&sup2; = ${f4(RG.sn ** 2)}. <strong>Click to add points, drag them, or move the probe outside [0, 1].</strong>`;
+  $('#rg-say').innerHTML = s;
+}
+function rgUpd() { RG.z = null; drawRG(); }
+seg1('[data-rk]', 'data-rk', v => { RG.kind = v; $('#rg-l-lab').textContent = v === 'se' ? 'Length-scale ℓ' : 'Bump width (×2)'; $('#rg-f-lab').textContent = v === 'se' ? 'Signal sd σ_f' : 'Weight sd'; rgUpd(); });
+seg1('[data-rv]', 'data-rv', v => { RG.view = v; drawRG(); });
+$$('[data-rd]').forEach(b => b.addEventListener('click', () => { const m = b.getAttribute('data-rd'); RG.P = m === 'sine' ? RG_SINE.map(p => p.slice()) : m === 'gap' ? RG_GAP.map(p => p.slice()) : []; rgUpd(); }));
+$('#rg-l').addEventListener('input', e => { RG.l = lg(+e.target.value); rgUpd(); });
+$('#rg-f').addEventListener('input', e => { RG.sf = +e.target.value; rgUpd(); });
+$('#rg-n').addEventListener('input', e => { RG.sn = lg(+e.target.value); rgUpd(); });
+$('#rg-x').addEventListener('input', e => { RG.x = +e.target.value; drawRG(); });
+draggable($('#rg-cv'), () => rgV, () => RG.P, () => { dragFlag.moved = true; RG.z = null; drawRG(); });
+$('#rg-cv').addEventListener('pointerdown', () => { dragFlag.moved = false; });
+$('#rg-cv').addEventListener('click', e => { if (!rgV || dragFlag.moved) return; const [px, py] = evPos($('#rg-cv'), e), x = rgV.iX(px), y = rgV.iY(py);
+  if (RG.P.some(p => Math.hypot(rgV.X(p[0]) - px, rgV.Y(p[1]) - py) < 12)) return; if (x < -0.4 || x > 1.4 || Math.abs(y) > 2.6 || RG.P.length >= 40) return; RG.P.push([x, y]); rgUpd(); });
+$('#rg-cv').addEventListener('pointermove', e => { if (!rgV || e.pointerType === 'touch' || e.buttons) return; const x = rgV.iX(evPos($('#rg-cv'), e)[0]); if (x < -0.4 || x > 1.4) return; RG.x = Math.round(x * 100) / 100; $('#rg-x').value = RG.x; drawRG(); });
+fig($('#rg-cv'), drawRG);
+
+/* ======================= 5. the mean is a sum of kernel bumps; valid kernels ======================= */
+const BU0 = [[1, 0.5], [2.2, 1.4], [3.1, 1.1], [5, -0.6], [6.2, -1.2], [8.5, 0.4]];
+const BU = { P: BU0.map(p => p.slice()), kind: 'se', l: 1.5, sn: 0.1, view: 'bumps', x: 4 };
+const buK = () => { const l = BU.l; return BU.kind === 'se' ? (x, z) => Math.exp(-0.5 * (x - z) ** 2 / (l * l)) : (x, z) => Math.exp(-(Math.abs((x - z) / l) ** 3)); };
+function gaussSolve(A, n, b) { // Gaussian elimination with partial pivoting (works for indefinite matrices)
+  const M = Array.from({ length: n }, (_, i) => [...Array.from(A.slice(i * n, i * n + n)), b[i]]);
+  for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r; [M[c], M[p]] = [M[p], M[c]]; const d = M[c][c] || 1e-300; for (let r = c + 1; r < n; r++) { const f = M[r][c] / d; if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; } }
+  const x = new Float64Array(n); for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / (M[r][r] || 1e-300); } return x;
+}
+function buFit() {
+  const k = buK(), n = BU.P.length, xs = BU.P.map(p => p[0]), t = BU.P.map(p => p[1]), K = new Float64Array(n * n), Cm = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { K[i * n + j] = k(xs[i], xs[j]); Cm[i * n + j] = K[i * n + j] + (i === j ? BU.sn ** 2 : 0); }
+  const a = gaussSolve(Cm, n, t), ev = eigSym(K, n), evC = ev.map(e => e + BU.sn ** 2);
+  const pred = x => { const kx = xs.map(z => k(z, x)), w = gaussSolve(Cm, n, kx); let m = 0, q = 0; for (let i = 0; i < n; i++) { m += kx[i] * a[i]; q += kx[i] * w[i]; } return { m, v: k(x, x) - q, w, kx }; };
+  return { k, n, xs, t, a, ev, evC, pred };
+}
+let buD = null;
+function drawBU() {
+  const C = C0(), F = buFit(), xs = linspace(0, 10, 201), Pn = panes($('#bu-cv'), 2, 99999, [2.1, 1]);
+  const va = paneView(Pn.base, Pn.rects[0], [0, 10], [-3, 3], { l: 34, t: 24, b: 24 }); buD = va;
+  axes(va, '', 'm(x)', { sx: 1, sy: 1 }); title(va, BU.view === 'bumps' ? 'm(x) = Σ aₙ k(xₙ, x): one bump per data point' : `m(x) at the probe = Σ wₙ(x) tₙ`); clip(va);
+  const pr = xs.map(x => F.pred(x)), neg = [];
+  const lo = pr.map(p => p.m - 2 * Math.sqrt(Math.max(0, p.v))), hi = pr.map(p => p.m + 2 * Math.sqrt(Math.max(0, p.v)));
+  fillBand(va, xs, lo, hi, C.lda, 0.12); pr.forEach((p, i) => { if (p.v < -1e-9) neg.push(xs[i]); });
+  if (BU.view === 'bumps') F.xs.forEach((xn, i) => pline(va, xs, xs.map(x => F.a[i] * F.k(xn, x)), F.a[i] >= 0 ? C.a : C.b, 1.4, [4, 3], 0.95));
+  pline(va, xs, pr.map(p => p.m), C.lda, 2.6);
+  neg.forEach(x => seg(va, x, -3, x, -2.75, C.bad, 3));
+  BU.P.forEach(p => dot(va, p[0], p[1], C.ink, 5));
+  if (BU.view === 'weights') { vline(va, BU.x, C.ink, 1, [3, 3]); dot(va, BU.x, F.pred(BU.x).m, C.lda, 5.5); }
+  va.ctx.restore();
+  const p0 = F.pred(BU.x), stem = BU.view === 'bumps' ? Array.from(F.a) : p0.w, sm = Math.max(0.5, ...stem.map(Math.abs)) * 1.15;
+  const vb = paneView(Pn.base, Pn.rects[1], [0, 10], [-sm, sm], { l: 34, t: 24, b: 26 }); axes(vb, 'x', '', { sx: 1, ny: 2 }); title(vb, BU.view === 'bumps' ? 'aₙ = (C⁻¹t)ₙ, the height of each bump' : `wₙ(x) = (C⁻¹k(x))ₙ, the weight on target tₙ at x = ${f2(BU.x)}`); clip(vb);
+  seg(vb, 0, 0, 10, 0, C.muted, 1); stem.forEach((s, i) => { seg(vb, F.xs[i], 0, F.xs[i], s, s >= 0 ? C.a : C.b, 3); dot(vb, F.xs[i], s, s >= 0 ? C.a : C.b, 4); });
+  if (BU.view === 'weights') vline(vb, BU.x, C.ink, 1, [3, 3]);
+  vb.ctx.restore();
+  const lmin = F.ev[0], amax = Math.max(...Array.from(F.a).map(Math.abs)), sw = sum(Array.from(p0.w));
+  $('#bu-l-o').textContent = f2(BU.l); $('#bu-n-o').textContent = f3(BU.sn); $('#bu-x-o').textContent = f2(BU.x);
+  $('#bu-ev').innerHTML = tip(f3(lmin), `smallest eigenvalue of the ${F.n}×${F.n} matrix K (no noise)\nall eigenvalues: ${F.ev.map(e => f3(e)).join(', ')}`);
+  $('#bu-a').innerHTML = tip(gf(amax), `largest |aₙ|, a = (K + σₙ²I)⁻¹ t\na = (${Array.from(F.a).map(f2).join(', ')})`);
+  $('#bu-v').innerHTML = tip(f4(p0.v), `k(x,x) − kᵀC⁻¹k at x = ${f2(BU.x)}\n= ${f3(F.k(BU.x, BU.x))} − ${f4(F.k(BU.x, BU.x) - p0.v)}`);
+  $('#run-bu').innerHTML = `<b>Running example</b>: a = C<sub>N</sub><sup>&minus;1</sup>t = (${Array.from(F.a).map(f2).join(', ')}). At x = ${f2(BU.x)} the bumps add to ${F.xs.map((xn, i) => `${f2(F.a[i])}&middot;${f3(F.k(xn, BU.x))}`).slice(0, 3).join(' + ')} + &hellip; = ${tip(f3(p0.m), 'Σₙ aₙ k(xₙ, x)')}. The same number as a weighted sum of targets: w(x) = C<sub>N</sub><sup>&minus;1</sup>k = (${Array.from(p0.w).map(v => f2(v)).join(', ')}), whose sum is ${tip(f3(sw), 'Σₙ wₙ(x)')}.`;
+  let s;
+  if (BU.kind === 'cube' && lmin < -1e-6) {
+    const indef = F.evC[0] <= 0;
+    s = `<b>Not a valid kernel.</b> exp(&minus;|r/&ell;|&sup3;) looks like a perfectly good similarity, yet with &ell; = ${f2(BU.l)} the matrix K has a negative eigenvalue, ${f3(lmin)}: there is a combination u with u<sup>&top;</sup>Ku &lt; 0, a &ldquo;negative variance&rdquo;. ${indef ? `The noise ${f3(BU.sn)}&sup2; is too small to cover it, so C is not positive definite: no Gaussian has this covariance, a Cholesky factorisation fails, and the formula's variance comes out negative at ${neg.length ? 'the red ticks' : 'some inputs'}.` : `Here the noise ${f3(BU.sn)}&sup2; = ${f4(BU.sn ** 2)} is just large enough to keep C positive definite, which hides the problem. <strong>Lower the noise</strong> and it surfaces.`}`;
+  } else if (BU.kind === 'cube') s = `With &ell; = ${f2(BU.l)} the points are far apart relative to &ell;, and K happens to be positive definite (smallest eigenvalue ${f3(lmin)}). But exp(&minus;|r|&sup3;) is not positive semidefinite for every set of points: <strong>raise &ell; past 2</strong> and watch.`;
+  else if (BU.view === 'weights') s = `The prediction at x = ${f2(BU.x)} is a weighted sum of the six targets. Points near x get large weights, distant ones almost none, and some weights are negative: the GP's &ldquo;equivalent kernel&rdquo; is not a simple average. The weights depend only on the inputs, never on the targets; drag a point up and down and they stay put.`;
+  else if (BU.sn < 0.03) s = `With almost no noise the GP must pass through every point, so the bump heights grow and alternate in sign (largest |a<sub>n</sub>| = ${gf(amax)}) to cancel each other between close points. That is interpolation, and it is fragile.`;
+  else s = `Each data point contributes one bump of the kernel's shape, scaled by a<sub>n</sub>. The squared-exponential kernel is valid for any points: every eigenvalue of K is positive (smallest ${f3(lmin)}). <strong>Drag a point</strong>, change the noise, or switch to the weights view.`;
+  $('#bu-say').innerHTML = s;
+}
+seg1('[data-bk]', 'data-bk', v => { BU.kind = v; if (v === 'cube' && BU.l < 2) { BU.l = 2.5; $('#bu-l').value = 2.5; } drawBU(); });
+seg1('[data-bv]', 'data-bv', v => { BU.view = v; drawBU(); });
+$('#bu-l').addEventListener('input', e => { BU.l = +e.target.value; drawBU(); });
+$('#bu-n').addEventListener('input', e => { BU.sn = lg(+e.target.value); drawBU(); });
+$('#bu-x').addEventListener('input', e => { BU.x = +e.target.value; drawBU(); });
+$('#bu-reset').addEventListener('click', () => { BU.P = BU0.map(p => p.slice()); drawBU(); });
+draggable($('#bu-cv'), () => buD, () => BU.P, drawBU);
+$('#bu-cv').addEventListener('pointermove', e => { if (!buD || e.pointerType === 'touch' || e.buttons || BU.view !== 'weights') return; const x = buD.iX(evPos($('#bu-cv'), e)[0]); if (x < 0 || x > 10) return; BU.x = Math.round(x * 20) / 20; $('#bu-x').value = BU.x; drawBU(); });
+fig($('#bu-cv'), drawBU);
+
+/* ======================= 6. learning the hyperparameters (PRML 6.4.3) ======================= */
+const ML_SETS = [[12, 46], [15, 50], [12, 3], [12, 65], [15, 40]];
+function mlData(N, seed) { const r = mulberry32(seed), xs = Array.from({ length: N }, () => -5 + 10 * r()); xs.sort((a, b) => a - b);
+  const K = new Float64Array(N * N); for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) K[i * N + j] = Math.exp(-0.5 * (xs[i] - xs[j]) ** 2) + (i === j ? 1e-8 : 0);
+  const L = cholF(K, N), z = Array.from({ length: N }, () => gaussOf(r)), t = xs.map((_, i) => { let s = 0; for (let k = 0; k <= i; k++) s += L[i * N + k] * z[k]; return s + 0.15 * gaussOf(r); }); return { xs, t: Float64Array.from(t) }; }
+const ML = { set: 0, D: null, ll: Math.log(3), ln: Math.log(0.3), map: null, opt: null, path: [], timer: 0 };
+function mlEval(D, ll, ln, grad) { const l = Math.exp(ll), sn = Math.exp(ln), k = (x, z) => Math.exp(-0.5 * (x - z) ** 2 / (l * l)), g = gpFit(D.xs, D.t, k, sn * sn); if (!g) return null;
+  if (grad) { const n = g.n, Ci = invCholF(g.L, n); let g0 = 0, g1 = 0, tr0 = 0, tr1 = 0; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const aa = g.a[i] * g.a[j], ci = Ci[i * n + j], d0 = k(D.xs[i], D.xs[j]) * (D.xs[i] - D.xs[j]) ** 2 / (l * l); g0 += (aa - ci) * d0; tr0 += ci * d0; if (i === j) { g1 += (aa - ci) * 2 * sn * sn; tr1 += ci * 2 * sn * sn; } } g.grad = [0.5 * g0, 0.5 * g1]; g.tr = [tr0, tr1]; }
+  return g; }
+function mlSetup() { const [N, seed] = ML_SETS[ML.set]; ML.D = mlData(N, seed); ML.path = []; clearInterval(ML.timer);
+  const nx = 56, ny = 40, Z = new Float64Array(nx * ny); let zmax = -Infinity, zmin = Infinity;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const ll = Math.LN10 * (-1 + 2.5 * i / (nx - 1)), ln = Math.LN10 * (-2 + 2.2 * j / (ny - 1)), g = mlEval(ML.D, ll, ln); const z = g ? g.lml : -1e9; Z[j * nx + i] = z; zmax = Math.max(zmax, z); zmin = Math.min(zmin, z); }
+  ML.map = { nx, ny, Z, zmax, zmin };
+  const found = []; for (const a of [-2, -1, 0, 1, 2, 3]) for (const b of [-4, -2.5, -1, 0.3]) { const o = lbfgs(th => { const g = mlEval(ML.D, th[0], th[1], true); return g ? [-g.lml, [-g.grad[0], -g.grad[1]]] : [Infinity, [0, 0]]; }, [a, b], { gtol: 1e-6 }); while (!o.step()); if (o.x[0] > Math.LN10 * 1.5 || o.x[0] < -Math.LN10 || o.x[1] < Math.LN10 * -2 || o.x[1] > Math.LN10 * 0.2) continue; if (!found.some(q => Math.hypot(q[0] - o.x[0], q[1] - o.x[1]) < 0.15)) found.push([o.x[0], o.x[1], -o.f]); }
+  ML.opt = found.sort((a, b) => b[2] - a[2]);
+}
+let mlMap = null;
+function drawML() {
+  if (!ML.D) mlSetup();
+  const C = C0(), D = ML.D, g = mlEval(D, ML.ll, ML.ln, true), Pn = panes($('#ml-cv'), 2, 640, [1, 1.25]);
+  const va = paneView(Pn.base, Pn.rects[0], [-1, 1.5], [-2, 0.2], { l: 40, t: 24, b: 30 }); mlMap = va;
+  const M = ML.map, span = Math.min(15, M.zmax - M.zmin);
+  imgMap(va, [-1, 1.5, -2, 0.2], M.nx, M.ny, (i, j) => [0, 0.08 + 0.82 * clamp(1 - (M.zmax - M.Z[j * M.nx + i]) / span, 0, 1)], [C.lda]);
+  axes(va, 'log₁₀ ℓ', 'log₁₀ σₙ', { sx: 0.5, sy: 0.5 }); title(va, 'ln p(t | ℓ, σₙ): darker is higher'); clip(va);
+  ML.opt.forEach((o, i) => star(va, o[0] / Math.LN10, o[1] / Math.LN10, i ? C.b : C.a, 9));
+  if (ML.path.length > 1) { const c = va.ctx; c.save(); c.strokeStyle = C.ink; c.lineWidth = 1.6; c.beginPath(); ML.path.forEach((p, i) => { const X = va.X(p[0] / Math.LN10), Y = va.Y(p[1] / Math.LN10); i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); c.restore(); ML.path.forEach(p => dot(va, p[0] / Math.LN10, p[1] / Math.LN10, C.ink, 2.2)); }
+  ring(va, ML.ll / Math.LN10, ML.ln / Math.LN10, C.ink, 7); dot(va, ML.ll / Math.LN10, ML.ln / Math.LN10, C.c, 4);
+  va.ctx.restore();
+  const vb = paneView(Pn.base, Pn.rects[1], [-5.5, 5.5], [-3, 3], { l: 34, t: 24 }); axes(vb, 'x', 't', { sx: 1, sy: 1 }); title(vb, `The fit at ℓ = ${gf(Math.exp(ML.ll))}, σₙ = ${gf(Math.exp(ML.ln))}`); clip(vb);
+  if (g) { const xs = linspace(-5.5, 5.5, 160), pr = xs.map(x => g.pred(x)), mu = pr.map(p => p.m), st = pr.map(p => Math.sqrt(Math.max(0, p.vt))), sf_ = pr.map(p => Math.sqrt(Math.max(0, p.v)));
+    fillBand(vb, xs, mu.map((m, i) => m - 2 * st[i]), mu.map((m, i) => m + 2 * st[i]), C.lda, 0.1); fillBand(vb, xs, mu.map((m, i) => m - 2 * sf_[i]), mu.map((m, i) => m + 2 * sf_[i]), C.lda, 0.14); pline(vb, xs, mu, C.lda, 2.5); }
+  D.xs.forEach((x, i) => dot(vb, x, D.t[i], C.b, 5)); vb.ctx.restore();
+  const l = Math.exp(ML.ll), sn = Math.exp(ML.ln), N = D.xs.length;
+  $('#ml-l').value = ML.ll / Math.LN10; $('#ml-n').value = ML.ln / Math.LN10; $('#ml-l-o').textContent = gf(l); $('#ml-n-o').textContent = gf(sn);
+  if (!g) { $('#ml-say').textContent = 'The covariance matrix is numerically singular here; pick a larger noise.'; return; }
+  $('#ml-v').innerHTML = tip(f2(g.lml), `data fit + complexity − (N/2) ln 2π\n= ${f2(g.fit)} + ${f2(g.cplx)} − ${f2(0.5 * N * LOG2PI)}`);
+  $('#ml-fit').innerHTML = tip(f2(g.fit), '−½ tᵀ C⁻¹ t: high when the targets are likely under C');
+  $('#ml-cx').innerHTML = tip(f2(g.cplx), '−½ ln|C|: high when C is "small", i.e. the model can make few data sets');
+  $('#run-ml').innerHTML = `<b>Running example</b>: N = ${N}, &ell; = ${gf(l)}, &sigma;<sub>n</sub> = ${gf(sn)}, &sigma;<sub>f</sub> = 1. ln p(t) = ${tip(f2(g.fit), '−½ tᵀC⁻¹t')} ${g.cplx < 0 ? '&minus;' : '+'} ${f2(Math.abs(g.cplx))} &minus; ${f2(0.5 * N * LOG2PI)} = ${f2(g.lml)}. Gradient with respect to ln &ell;: &minus;&frac12;Tr(C<sup>&minus;1</sup>&part;C) + &frac12;a<sup>&top;</sup>&part;C a = ${tip(sg(g.grad[0], 3), `−½ × ${f3(g.tr[0])} + ½ aᵀ(∂C/∂ln ℓ)a\n∂C/∂ln ℓ = K ⊙ (xₙ − xₘ)²/ℓ²`)}; with respect to ln &sigma;<sub>n</sub>: ${tip(sg(g.grad[1], 3), `−½ × ${f3(g.tr[1])} + ½ aᵀ(2σₙ²I)a`)}. ${Math.hypot(g.grad[0], g.grad[1]) < 0.01 ? 'Both are zero: this is a stationary point.' : 'Climbing means stepping along this vector.'}`;
+  const best = ML.opt[0], here = ML.opt.findIndex(o => Math.hypot(o[0] - ML.ll, o[1] - ML.ln) < 0.08);
+  let s;
+  if (here === 0 && ML.opt.length > 1) s = `You are at the <b>global maximum</b>, ln p = ${f2(best[2])}. ${ML.opt.length - 1} other local maximum${ML.opt.length > 2 ? 'a' : ''} (orange star${ML.opt.length > 2 ? 's' : ''}) ${ML.opt.length > 2 ? 'exist' : 'exists'}, at ln p = ${ML.opt.slice(1).map(o => f2(o[2])).join(', ')}: ${Math.exp(ML.opt[1][0]) > l ? 'a smoother curve that blames more of the scatter on noise' : 'a wigglier curve that blames less on noise'}. Two readings of the same data, and gradient ascent finds whichever is uphill from where it starts.`;
+  else if (here > 0) s = `A <b>local maximum</b>: the gradient is zero and every small step goes down, yet the teal star is higher by ${f2(best[2] - ML.opt[here][2])} nats, a likelihood ratio of about ${gf(Math.exp(best[2] - ML.opt[here][2]))} to 1. The log marginal likelihood is not concave in the hyperparameters; that is why libraries restart the optimiser from several points.`;
+  else if (g.cplx < -5 && g.fit > -N / 2 && sn < 0.03) s = `Tiny noise: the curve threads every point, so the data-fit term is good (${f2(g.fit)}), but the complexity term ${f2(g.cplx)} punishes a model flexible enough to fit almost any data. The balance of the two is Occam's razor, built in.`;
+  else if (l > 8) s = `Length-scale ${gf(l)}: the model is nearly a straight line and must call the wiggles noise. Data fit ${f2(g.fit)}, complexity ${f2(g.cplx)}. <strong>Press Climb</strong> to let the gradient choose.`;
+  else s = `ln p(t) = ${f2(g.lml)} here. Click anywhere on the map to set &ell; and &sigma;<sub>n</sub>, then <strong>press Climb</strong>: the path follows the analytic gradient to the nearest maximum.`;
+  $('#ml-say').innerHTML = s;
+}
+function mlClimb() { clearInterval(ML.timer); ML.path = [[ML.ll, ML.ln]];
+  const o = lbfgs(th => { const g = mlEval(ML.D, th[0], th[1], true); return g ? [-g.lml, [-g.grad[0], -g.grad[1]]] : [Infinity, [0, 0]]; }, [ML.ll, ML.ln], { gtol: 1e-6, maxIter: 80 });
+  ML.timer = setInterval(() => { const done = o.step(); ML.ll = o.x[0]; ML.ln = o.x[1]; ML.path.push([ML.ll, ML.ln]); drawML(); if (done) clearInterval(ML.timer); }, reduced ? 0 : 110); }
+$('#ml-cv').addEventListener('click', e => { if (!mlMap) return; const [px, py] = evPos($('#ml-cv'), e), a = mlMap.iX(px), b = mlMap.iY(py); if (a < -1 || a > 1.5 || b < -2 || b > 0.2) return; clearInterval(ML.timer); ML.path = []; ML.ll = a * Math.LN10; ML.ln = b * Math.LN10; drawML(); });
+$('#ml-l').addEventListener('input', e => { clearInterval(ML.timer); ML.path = []; ML.ll = +e.target.value * Math.LN10; drawML(); });
+$('#ml-n').addEventListener('input', e => { clearInterval(ML.timer); ML.path = []; ML.ln = +e.target.value * Math.LN10; drawML(); });
+$('#ml-climb').addEventListener('click', mlClimb);
+$('#ml-new').addEventListener('click', () => { ML.set = (ML.set + 1) % ML_SETS.length; ML.ll = Math.log(3); ML.ln = Math.log(0.3); mlSetup(); drawML(); });
+fig($('#ml-cv'), drawML);
+
+/* ======================= 7. composite kernels ======================= */
+const CP = { on: { trend: true, seas: true, med: true, noise: true }, ld: 30, lp: 1, G: 241, grid: linspace(0, 20, 241), z: null, r: mulberry32(77), cache: {} };
+function cpKernels() { const ld = CP.ld, lp = CP.lp;
+  return { trend: (x, z) => 9 * Math.exp(-0.5 * (x - z) ** 2 / 64), seas: (x, z) => Math.exp(-0.5 * (x - z) ** 2 / (ld * ld) - 2 * Math.sin(Math.PI * (x - z)) ** 2 / (lp * lp)), med: (x, z) => 0.36 * Math.pow(1 + (x - z) ** 2 / 2, -1), noise: (x, z) => (x === z ? 0.04 : 0) }; }
+const CP_NAMES = { trend: 'trend', seas: 'seasons', med: 'medium-term', noise: 'noise' };
+function cpSamples() { const K = cpKernels(), out = {};
+  if (!CP.z) CP.z = { trend: zs(CP.r, CP.G), seas: zs(CP.r, CP.G), med: zs(CP.r, CP.G), noise: zs(CP.r, CP.G) };
+  for (const n of ['trend', 'seas', 'med']) { const key = n + (n === 'seas' ? CP.ld + '|' + CP.lp : ''); if (!CP.cache[key]) CP.cache[key] = gridPost(null, K[n], CP.grid, 1e-9); out[n] = gridSample(CP.cache[key], CP.z[n]); }
+  out.noise = Float64Array.from(CP.z.noise, v => 0.2 * v); return out; }
+function drawCP() {
+  const C = C0(), K = cpKernels(), S = cpSamples(), on = Object.keys(CP.on).filter(n => CP.on[n]), xs = CP.grid, col = { trend: C.lda, seas: C.a, med: C.b, noise: C.muted };
+  const tot = xs.map((_, i) => sum(on.map(n => S[n][i])));
+  const Pn = panes($('#cp-cv'), 2, 99999, [1.25, 1]);
+  let ym = 2; tot.forEach(v => { ym = Math.max(ym, Math.abs(v) * 1.1); });
+  const va = paneView(Pn.base, Pn.rects[0], [0, 20], [-ym, ym], { l: 34, t: 24, b: 22 }); axes(va, '', '', { sx: 2 }); title(va, on.length ? 'One draw from the summed kernel' : 'No component switched on'); clip(va);
+  if (on.length) pline(va, xs, tot, C.ink, 1.8); va.ctx.restore();
+  const vb = paneView(Pn.base, Pn.rects[1], [0, 20], [-0.5, 4.5], { l: 34, t: 24, b: 28 }); axes(vb, 'years', '', { sx: 2, sy: 10, fy: () => '' }); title(vb, 'The same draw, part by part (rescaled)'); clip(vb);
+  ['trend', 'seas', 'med', 'noise'].forEach((n, r) => { const base = 3.6 - r * 1.05, mx = Math.max(1e-9, ...Array.from(S[n]).map(Math.abs)), sc = 0.45 / mx; pline(vb, xs, Array.from(S[n]).map(v => base + v * sc), col[n], CP.on[n] ? 1.6 : 1, CP.on[n] ? null : [3, 3], CP.on[n] ? 1 : 0.35); { const c = vb.ctx, txt = CP_NAMES[n] + (CP.on[n] ? '' : ' (off)'); c.save(); c.font = '11px ' + css('--f-mono'); const w = c.measureText(txt).width; c.fillStyle = C.surf; c.globalAlpha = 0.85; c.fillRect(vb.X(0) + 3, vb.Y(base + 0.5) - 1, w + 8, 15); c.restore(); label(vb, 0, base + 0.5, txt, col[n], 'left', 'top'); c.save(); c.restore(); } });
+  vb.ctx.restore();
+  const taus = linspace(0, 4, 241), kt = t => sum(on.map(n => n === 'noise' ? (t === 0 ? 0.04 : 0) : K[n](0, t))), k0 = kt(0) || 1;
+  const vc = frame($('#cp-k'), [0, 4], [-0.1, 1.05], { l: 40, r: 12, t: 12, b: 26 }); axes(vc, 'lag τ (years)', 'k(τ)/k(0)', { sx: 0.5, sy: 0.5 }); clip(vc);
+  if (on.length) { on.filter(n => n !== 'noise').forEach(n => pline(vc, taus, taus.map(t => K[n](0, t) / K[n](0, 0)), col[n], 1.4, [4, 3])); pline(vc, taus, taus.map(t => kt(t) / k0), C.ink, 2.2); }
+  vc.ctx.restore();
+  const r1 = K.seas(0, 1), rh = K.seas(0, 0.5);
+  $('#cp-d-o').textContent = gf(CP.ld); $('#cp-p-o').textContent = f2(CP.lp);
+  $('#cp-r1').innerHTML = tip(f3(r1), `k_seas(t, t+1) / k_seas(t, t)\n= exp(−1 / (2 × ${gf(CP.ld)}²)) × exp(−2 sin²(π) / θ₅²), and sin π = 0`);
+  $('#cp-rh').innerHTML = tip(f3(rh), `k_seas(t, t+½) / k_seas(t, t)\n= exp(−0.25 / (2 × ${gf(CP.ld)}²)) × exp(−2 sin²(π/2) / ${f2(CP.lp)}²)`);
+  $('#cp-sd').innerHTML = tip(f2(Math.sqrt(on.length ? k0 : 0)), `√k(t, t) = √(${on.map(n => n === 'noise' ? '0.04' : f2(K[n](0, 0))).join(' + ') || '0'})`);
+  $('#run-cp').innerHTML = `<b>Running example</b>: covariance between two dates one year apart, component by component: trend 9e<sup>&minus;1/128</sup> = ${tip(f3(K.trend(0, 1)), '9 exp(−1² / (2 × 8²))')}, seasons ${tip(f3(K.seas(0, 1)), `exp(−1/(2 × ${gf(CP.ld)}²)) × exp(−2 sin²(π)/ℓ_p²); sin π = 0`)}, medium-term ${tip(f3(K.med(0, 1)), '0.36 × (1 + 1/2)⁻¹')}, noise 0. Half a year apart the seasonal term becomes ${tip(f3(K.seas(0, 0.5)), `exp(−0.25/(2 × ${gf(CP.ld)}²) − 2 sin²(π/2)/${f2(CP.lp)}²)`)}: summer and winter are nearly unrelated.`;
+  let s;
+  if (!on.length) s = 'Switch on a component to see what it draws.';
+  else if (on.length === 1) s = `A single ${CP_NAMES[on[0]]} kernel. ${on[0] === 'seas' ? 'A periodic kernel times a slowly decaying squared exponential: a yearly cycle whose shape drifts over the decades.' : on[0] === 'trend' ? 'A squared exponential with an 8-year length-scale: a slow, smooth wander.' : on[0] === 'med' ? 'A rational quadratic: a mix of length-scales, so wiggles of many sizes.' : 'White noise: independent from month to month.'} Switch on more and they add.`;
+  else if (CP.on.seas && CP.lp < 0.5) s = `Periodic smoothness &ell;<sub>p</sub> = ${f2(CP.lp)} is small, so each year's cycle has sharp, intricate detail, like a seasonal pattern with several peaks. Its correlation at exactly one year is still ${f3(K.seas(0, 1))}: the shape repeats.`;
+  else if (CP.on.seas && CP.ld < 2) s = `Decay length ${gf(CP.ld)} years: the seasonal shape is forgotten within a couple of years, so the bumps in k(&tau;) die away quickly. That would suit a cycle that changes from year to year.`;
+  else s = `Sums of kernels are kernels, and a sample from the sum is the sum of independent samples from the parts: the top trace is just the four lower traces added together. The correlation plot below has a bump at every whole year from the seasonal part, sitting on the slow trend's broad hill. This is the kernel the project uses.`;
+  $('#cp-say').innerHTML = s;
+}
+$$('[data-cp]').forEach(b => b.addEventListener('click', () => { const n = b.getAttribute('data-cp'); CP.on[n] = !CP.on[n]; b.setAttribute('aria-pressed', CP.on[n] ? 'true' : 'false'); drawCP(); }));
+$('#cp-d').addEventListener('input', e => { CP.ld = lg(+e.target.value); drawCP(); });
+$('#cp-p').addEventListener('input', e => { CP.lp = +e.target.value; drawCP(); });
+$('#cp-new').addEventListener('click', () => { CP.z = null; drawCP(); });
+fig($('#cp-cv'), drawCP); fig($('#cp-k'), drawCP);
+
+/* ======================= 8. the cost of exactness ======================= */
+const CT = { res: [], busy: false };
+function drawCT() {
+  const C = C0(), v = frame($('#ct-cv'), [Math.log10(100), Math.log10(100000)], [-1, 7], { l: 62, r: 30, t: 12, b: 30 });
+  axes(v, 'N (training points)', 'time', { sx: 1, sy: 1, fx: x => nf(Math.round(Math.pow(10, x))), fy: y => { const ms = Math.pow(10, y), s = ms / 1000; return ms < 1 ? fmt(ms, 1) + ' ms' : s < 1 ? fmt(ms, 0) + ' ms' : s < 60 ? fmt(s, 0) + ' s' : s < 3600 ? fmt(s / 60, 0) + ' min' : fmt(s / 3600, 1) + ' h'; } }); clip(v);
+  const R = CT.res;
+  if (R.length >= 2) { const xs = R.map(r => Math.log10(r[0])), ys = R.map(r => Math.log10(r[1])), n = xs.length, mx = sum(xs) / n, my = sum(ys) / n; let sxy = 0, sxx = 0; xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) ** 2; }); const b = sxy / sxx, a = my - b * mx; CT.fit = { a, b };
+    seg(v, 2, a + 2 * b, 5, a + 5 * b, C.lda, 1.6, [6, 4]); const a3 = ys[n - 1] - 3 * xs[n - 1]; seg(v, 2, a3 + 6, 5, a3 + 15, C.muted, 1.2, [2, 4]); }
+  R.forEach(r => dot(v, Math.log10(r[0]), Math.log10(r[1]), C.b, 5.5));
+  v.ctx.restore();
+  const msS = ms => ms < 1000 ? fmt(ms, ms < 10 ? 1 : 0) + ' ms' : ms < 60000 ? gf(ms / 1000) + ' s' : ms < 3.6e6 ? gf(ms / 60000) + ' min' : ms < 8.64e7 ? gf(ms / 3.6e6) + ' hours' : gf(ms / 8.64e7) + ' days';
+  if (R.length >= 2 && CT.fit) { const { a, b } = CT.fit, last = R[R.length - 1], p1 = last[1] * (1e4 / last[0]) ** 3, p2 = last[1] * (1e5 / last[0]) ** 3;
+    $('#ct-b').innerHTML = tip(f2(b), `slope of log time against log N, least squares over ${R.length} sizes\ntheory: 3 for large N`);
+    $('#ct-t').innerHTML = tip(msS(last[1]), `Cholesky of a ${nf(last[0])} × ${nf(last[0])} matrix in your browser\nabout N³/3 = ${(last[0] ** 3 / 3 / 1e9).toFixed(2)} billion floating-point operations`);
+    $('#ct-p').innerHTML = tip(msS(p2), `${msS(last[1])} × (100,000 / ${nf(last[0])})³\n(the memory, 80 GB for the matrix, would fail first)`);
+    $('#ct-say').innerHTML = `Measured slope ${f2(b)}${b < 2.6 ? ': lower than 3 because at small N fixed overheads dominate; the larger sizes alone follow the cube more closely' : ', close to the theoretical 3'}. Doubling N costs about ${gf(Math.pow(2, b))}&times; the time. At this rate 10,000 points would take about ${msS(p1)} and 100,000 about ${msS(p2)}, for one factorisation; learning hyperparameters repeats it at every step. That is why large-data GPs use approximations.`;
+  } else { $('#ct-b').textContent = '–'; $('#ct-t').textContent = '–'; $('#ct-p').textContent = '–'; $('#ct-say').innerHTML = CT.busy ? 'Timing&hellip;' : '<strong>Press the button</strong> to factorise covariance matrices of growing size in your browser and time each one. The dashed grey line, drawn once there are results, has slope exactly 3.'; }
+}
+$('#ct-go').addEventListener('click', () => { if (CT.busy) return; CT.busy = true; CT.res = []; drawCT(); const sizes = [150, 300, 500, 800, 1200, 1600]; let i = 0;
+  const step = () => { const n = sizes[i], r = mulberry32(n), xs = Array.from({ length: n }, () => 10 * r()), A = new Float64Array(n * n); for (let a = 0; a < n; a++) for (let b = 0; b <= a; b++) { const v = Math.exp(-0.5 * (xs[a] - xs[b]) ** 2) + (a === b ? 0.01 : 0); A[a * n + b] = v; A[b * n + a] = v; }
+    let best = Infinity; for (let rep = 0; rep < (n < 600 ? 3 : 1); rep++) { const t0 = performance.now(); cholF(A, n); best = Math.min(best, performance.now() - t0); }
+    CT.res.push([n, Math.max(best, 0.05)]); $('#ct-prog').textContent = `N = ${nf(n)}: ${fmt(best, 1)} ms`; drawCT(); i++; if (i < sizes.length) setTimeout(step, 30); else { CT.busy = false; $('#ct-prog').textContent = 'Done.'; drawCT(); } };
+  setTimeout(step, 30); });
+fig($('#ct-cv'), drawCT);
+
+/* ======================= project: Mauna Loa CO2 with a composite kernel ======================= */
+const CO = {"y0":1958,"m0":3,"co2":[315.71,317.45,317.51,317.27,315.87,314.93,313.21,312.42,313.33,314.67,315.58,316.49,316.65,317.72,318.29,318.15,316.54,314.8,313.84,313.33,314.81,315.58,316.43,316.98,317.58,319.03,320.03,319.58,318.18,315.9,314.17,313.83,315.0,316.19,316.89,317.7,318.54,319.48,320.58,319.77,318.56,316.79,314.99,315.31,316.1,317.01,317.94,318.55,319.68,320.57,321.02,320.62,319.61,317.4,316.24,315.42,316.69,317.7,318.74,319.07,319.86,321.38,322.24,321.49,319.74,317.77,316.21,315.99,317.07,318.35,319.57,320.04,320.75,321.84,322.25,321.89,320.44,318.69,316.71,316.87,317.68,318.71,319.44,320.44,320.89,322.14,322.17,321.87,321.21,318.87,317.82,317.3,318.87,319.42,320.62,321.6,322.39,323.7,324.08,323.75,322.37,320.36,318.64,318.1,319.78,321.02,322.33,322.5,323.03,324.41,325.0,324.09,322.54,320.92,319.25,319.39,320.73,321.96,322.57,323.15,323.89,325.02,325.57,325.36,324.14,322.11,320.33,320.25,321.32,322.89,324.0,324.41,325.63,326.66,327.38,326.71,325.88,323.66,322.38,321.78,322.85,324.11,325.06,325.99,326.93,328.13,328.08,327.67,326.34,324.68,323.1,323.06,324.01,325.13,326.17,326.69,327.18,327.78,328.93,328.57,327.36,325.43,323.36,323.56,324.8,326.01,326.77,327.63,327.75,329.72,330.07,329.09,328.04,326.32,324.84,325.2,326.5,327.55,328.55,329.57,330.3,331.5,332.48,332.07,330.87,329.31,327.52,327.19,328.17,328.65,329.36,330.71,331.49,332.65,333.19,332.2,331.07,329.15,327.33,327.28,328.31,329.58,330.73,331.46,331.94,333.11,333.95,333.42,331.97,329.95,328.49,328.36,329.38,330.77,331.56,332.74,333.36,334.74,334.72,333.97,333.08,330.68,328.96,328.72,330.16,331.62,332.68,333.17,334.96,336.14,336.93,336.17,334.89,332.56,331.29,331.28,332.46,333.6,334.94,335.26,336.66,337.69,338.02,338.01,336.5,334.42,332.36,332.45,333.76,334.91,336.14,336.69,338.27,338.82,339.24,339.26,337.54,335.72,333.97,334.24,335.32,336.81,337.9,338.34,340.07,340.93,341.45,341.36,339.45,337.67,336.25,336.14,337.3,338.29,339.29,340.55,341.63,342.6,343.04,342.54,340.82,338.48,336.95,337.05,338.58,339.91,340.93,341.76,342.78,343.96,344.77,343.88,342.42,340.24,338.37,338.41,339.44,340.78,341.57,342.78,343.37,345.4,346.14,345.76,344.32,342.51,340.46,340.53,341.79,343.2,344.21,344.92,345.68,347.37,347.77,347.16,345.79,343.74,341.59,341.86,343.31,345.0,345.48,346.41,347.91,348.66,349.28,348.65,346.9,345.26,343.47,343.35,344.73,346.12,346.78,347.48,348.25,349.86,350.52,349.98,348.25,346.17,345.48,344.82,346.22,347.48,348.73,348.92,349.81,351.4,352.15,351.58,350.21,348.2,346.66,346.72,348.08,349.28,350.51,351.7,352.5,353.67,354.35,353.88,352.8,350.49,348.97,349.37,350.42,351.62,353.07,353.43,354.08,355.72,355.95,355.44,354.05,351.84,350.09,350.33,351.55,352.91,353.86,355.1,355.75,356.38,357.38,356.39,354.89,353.06,351.38,351.69,353.14,354.41,354.93,355.82,357.33,358.77,359.23,358.23,356.3,353.97,352.34,352.43,353.89,355.21,356.34,357.21,357.97,359.22,359.71,359.44,357.15,354.99,353.01,353.4,354.42,355.68,357.1,357.42,358.59,359.39,360.3,359.64,357.45,355.76,354.14,354.23,355.53,357.03,358.36,359.04,360.11,361.36,361.78,360.94,359.51,357.59,355.86,356.21,357.65,359.1,360.04,361.0,361.98,363.44,363.83,363.33,361.78,359.33,358.32,358.14,359.61,360.82,362.2,363.36,364.28,364.69,365.25,365.06,363.69,361.55,359.69,359.72,361.04,362.39,363.24,364.21,364.65,366.49,366.77,365.73,364.46,362.4,360.44,360.97,362.65,364.51,365.39,366.1,367.36,368.79,369.56,369.13,367.98,366.1,364.16,364.54,365.67,367.3,368.35,369.28,369.84,371.15,371.12,370.46,369.61,367.06,364.95,365.52,366.88,368.26,369.45,369.71,370.75,371.98,371.75,371.87,370.02,368.27,367.15,367.18,368.53,369.83,370.76,371.69,372.63,373.55,374.03,373.4,371.68,369.78,368.34,368.61,369.94,371.42,372.7,373.37,374.3,375.19,375.93,375.69,374.16,372.03,370.92,370.73,372.43,373.98,375.07,375.82,376.64,377.92,378.78,378.46,376.88,374.57,373.34,373.31,374.84,376.17,377.17,378.05,379.06,380.54,380.8,379.87,377.65,376.17,374.43,374.63,376.33,377.68,378.63,379.91,380.95,382.48,382.64,382.4,380.93,378.93,376.89,377.19,378.54,380.31,381.58,382.4,382.86,384.8,385.22,384.24,382.65,380.6,379.04,379.33,380.35,382.02,383.1,384.12,384.81,386.73,386.78,386.33,384.73,382.24,381.2,381.37,382.7,384.19,385.78,386.06,386.28,387.33,388.78,387.99,386.62,384.32,383.41,383.22,384.41,385.79,387.17,387.7,389.04,389.76,390.36,389.7,388.24,386.29,384.95,384.64,386.23,387.63,388.91,390.41,391.37,392.67,393.21,392.38,390.41,388.54,387.03,387.43,388.87,389.99,391.5,392.05,392.8,393.44,394.41,393.95,392.72,390.33,389.28,389.19,390.48,392.06,393.31,394.04,394.59,396.38,396.93,395.91,394.56,392.59,391.32,391.27,393.2,394.57,395.78,397.03,397.66,398.64,400.02,398.81,397.51,395.39,393.72,393.9,395.36,397.03,398.04,398.27,399.91,401.51,401.96,401.43,399.27,397.18,395.54,396.16,397.4,399.08,400.18,400.55,401.74,403.35,404.15,402.97,401.46,399.11,397.82,398.49,400.27,402.06,402.73,404.25,405.06,407.6,407.9,406.99,404.59,402.45,401.23,401.79,403.72,404.64,406.36,406.66,407.54,409.22,409.89,409.08,407.33,405.32,403.57,403.82,405.31,407.0,408.15,408.52,409.59,410.45,411.44,410.99,408.9,407.16,405.71,406.19,408.21,409.27,411.03,411.96,412.18,413.54,414.86,414.15,411.96,410.17,408.76,408.74,410.47,411.97,413.59,414.32,414.72,416.42,417.28,416.58,414.58,412.75,411.5,411.49,413.1,414.23,415.49,416.72,417.61,419.01,419.09,418.93,416.9,414.42,413.26,413.9,414.97,416.67,418.13,419.24,418.76,420.19,420.97,420.94,418.85,417.15,415.91,415.74,417.47,418.99,419.48,420.31,420.99,423.35,424.0,423.68,421.83,419.68,418.5,418.82,420.46,421.86,422.8,424.55,425.38,426.51,426.9,426.91,425.55,422.99,422.03,422.38,423.85,425.4,426.65,427.09,428.15,429.64,430.51,429.61,427.87,425.48,424.37,424.87,426.46,427.49,428.62,429.35,430.15,431.12,432.34,431.43,429.13,427.55,426.07]}, REF = {"R&W|1990": {"theta": [3040.233958262997, 51.079816152012334, 9.254854026671488, 163.72895206393136, 1.484331226140347, 0.11234392526213177, 5.590833252795729, 0.6942510359068655, 0.03601033808762683, 0.13819434454950666, 0.03908831293897314], "mu0": 331.30924083769634, "lml": -87.41026279617631, "all": [441, 6.4848235392880555, 0.7755102040816326], "10y": [120, 2.5305542661583917, 0.2833333333333333], "check": [[2030.0416666666667, 2040.0416666666667, 1990.5], [414.24436813213555, 418.4353035321681, 356.45625937480816], [13.28090563468492, 19.82143430541648, 0.43086399216108245]]}, "R&W|2000": {"theta": [2213.7956116694877, 52.05215826572111, 9.061852019827134, 149.80230057084484, 1.4868386931139097, 1.0385899923457866, 0.13485362925976957, 1.5589032742062372, 0.03151670586438207, 0.11568513682213394, 0.03711062448120509], "mu0": 338.3072908366534, "lml": -116.63039642355176, "all": [321, 13.770458836291006, 0.20249221183800623], "10y": [120, 2.9732446172977425, 0.5416666666666666], "check": [[2030.0416666666667, 2040.0416666666667, 2000.5], [403.18127089949706, 406.2442211600057, 371.41130357376704], [9.118959976750677, 14.275045658120364, 0.4927045703037774]]}, "R&W|2010": {"theta": [9065.703889912877, 83.48714766622412, 6.291261892924859, 107.13672847067137, 1.462864908148527, 58.502145219233846, 0.0019572378261754984, 12.269356011046426, 0.03229727904095503, 0.11728892565402646, 0.03802657365539684], "mu0": 346.1142765273312, "lml": -141.96007133486972, "all": [201, 5.387542243285924, 0.32338308457711445], "10y": [120, 2.968518970458825, 0.5416666666666666], "check": [[2030.0416666666667, 2040.0416666666667, 2010.5], [426.5501503931493, 443.9922452221615, 390.88395726571537], [4.13557115146928, 7.296052963431614, 0.4834268164402275]]}, "R&W|2020": {"theta": [5267.9576036593735, 40.21579086151923, 8.205581380473422, 164.65354497099582, 1.4452255726384133, 2.3118994546073823, 0.044105747130865874, 2.4135680182429815, 0.034678038187696505, 0.11753280631282031, 0.040113150817022346], "mu0": 354.89535040431264, "lml": -185.60512787300195, "all": [81, 0.5351567211615458, 1.0], "10y": [81, 0.5351567211615458, 1.0], "check": [[2030.0416666666667, 2040.0416666666667, 2020.5], [439.0438798448301, 463.59762497331013, 415.4521056548454], [3.0541254688105983, 8.324329810445109, 0.49777757305078923]]}, "R&W|2100": {"theta": [3864.6347463884545, 37.15626946137815, 5.979192571000995, 124.01147459408911, 1.3353831300098613, 0.4142299443079991, 0.5651776573722457, 1.117293684873622, 0.037640321455933295, 0.11304302893225608, 0.04103097721870546], "mu0": 361.43910085054677, "lml": -217.29906381946125, "check": [[2030.0416666666667, 2040.0416666666667, 2026.5], [438.45864594786553, 460.8695441994337, 430.5066000272477], [1.1479474971999204, 4.279519567335781, 0.23698885454319688]]}, "R&W+quad|1990": {"theta": [0.0007616696448052807, 33.94591378679757, 2.6383078154711903, 82.19502922504421, 9.321449963823474, 165.2125954136574, 1.4859855286351191, 0.11396158638742779, 3.8739955448569376, 0.675313919465107, 0.034965978724410166, 0.13568875340992412, 0.038950587972252516], "mu0": 331.30924083769634, "lml": -87.18434355541063, "all": [441, 10.946776369218902, 0.027210884353741496], "10y": [120, 3.862590211414733, 0.1], "check": [[2030.0416666666667, 2040.0416666666667, 1990.5], [460.3811867368741, 496.8242522321944, 356.6471406546826], [3.212537989715856, 4.469083449449255, 0.4188018637723792]]}, "R&W+quad|2000": {"theta": [0.0004805252152479957, 33.311739788601955, 1.0768928930579265, 8.216121703841239, 9.14579186126632, 152.04741212404835, 1.4883262681549396, 0.5415527998161979, 0.26783412613956337, 1.13194345559279, 0.03115858870953852, 0.11481629642139353, 0.03705714647313163], "mu0": 338.3072908366534, "lml": -116.79242271846351, "all": [321, 1.5968851873864478, 0.9968847352024922], "10y": [120, 0.46755935643271135, 0.9916666666666667], "check": [[2030.0416666666667, 2040.0416666666667, 2000.5], [435.4449977941867, 462.374292140529, 371.61785509892263], [7.135496655804122, 10.250709997307945, 0.4941576864924578]]}, "R&W+quad|2010": {"theta": [0.0008882072671237723, 22.894193233873086, 0.7511394150737246, 6.39772062509183, 6.279994224966737, 108.10993275730166, 1.4614653242787314, 0.2165874458370985, 2.2604008220011194, 0.8439670124615763, 0.035327038978764436, 0.1235518032288343, 0.038350618484484345], "mu0": 346.1142765273312, "lml": -140.27123201243086, "all": [201, 2.216723091499627, 0.9850746268656716], "10y": [120, 1.4189961562925997, 0.975], "check": [[2030.0416666666667, 2040.0416666666667, 2010.5], [435.17652590353487, 461.92487292828355, 391.08413846411963], [3.1464664755203127, 4.615867382258605, 0.4745513709565289]]}, "R&W+quad|2020": {"theta": [0.0017431002972868798, 16.245995599752906, 0.7396438016072135, 6.142881069663627, 8.15277224485793, 165.3877033451005, 1.442974688907371, 0.1784459250547205, 328.0144851006189, 0.8153796807139883, 0.04084742229346302, 0.1296035152267192, 0.04076499335097093], "mu0": 354.89535040431264, "lml": -180.66604123841392, "all": [81, 0.602874817073109, 1.0], "10y": [81, 0.602874817073109, 1.0], "check": [[2030.0416666666667, 2040.0416666666667, 2020.5], [438.5548919313415, 466.7147136550006, 415.401223719197], [1.7032590946525095, 2.645302552148771, 0.47347884408320884]]}, "R&W+quad|2100": {"theta": [0.0007484655846329252, 26.25755072495123, 0.6651101672019847, 6.531263367131428, 5.969003157656522, 124.30524268526173, 1.3348616726887923, 0.201353981065741, 35541.25670939237, 0.8644772687839984, 0.04058174032003962, 0.11957861669195549, 0.04153006315368027], "mu0": 361.43910085054677, "lml": -211.79979683525312, "check": [[2030.0416666666667, 2040.0416666666667, 2026.5], [438.852134071471, 467.03886695295523, 430.50946699259885], [0.8843157484507804, 1.8497578266908905, 0.23778711352555615]]}};
+const PJ = (() => { const y = CO.co2, n = y.length, t = y.map((_, k) => CO.y0 + (CO.m0 - 1 + k + 0.5) / 12); return { y, n, t, kern: 'q', cut: 2010, fits: {}, busy: false }; })();
+const PJ_NAMES = { rw: 'R&W', q: 'R&W+quad' }, PJ_CUTS = [1990, 2000, 2010, 2020, 2100];
+const PJ_INIT = { rw: [2500, 50, 4, 100, 1, 0.25, 1, 1, 0.01, 0.1, 0.01], q: [1e-3, 30, 4, 10, 4, 100, 1, 0.25, 1, 1, 0.01, 0.1, 0.01] };
+/* kernel value and log-gradient for one pair; x, z in years since 1990; th in scikit-learn's order (variances and length-scales) */
+function pjKern(kind) {
+  const off = kind === 'q' ? 2 : 0;
+  const val = (th, x, z, same) => { const r = x - z, r2 = r * r, s = Math.sin(Math.PI * r), [a1, l1, a2, l2, lp, a3, al, l3, a4, l4, w] = th.slice(off);
+    let v = a1 * Math.exp(-0.5 * r2 / (l1 * l1)) + a2 * Math.exp(-0.5 * r2 / (l2 * l2) - 2 * s * s / (lp * lp)) + a3 * Math.pow(1 + r2 / (2 * al * l3 * l3), -al) + a4 * Math.exp(-0.5 * r2 / (l4 * l4)) + (same ? w : 0);
+    if (off) { const q = th[1] * th[1] + x * z; v += th[0] * q * q; } return v; };
+  const parts = (th, x, z) => { const r = x - z, r2 = r * r, s = Math.sin(Math.PI * r), [a1, l1, a2, l2, lp, a3, al, l3] = th.slice(off); let tr = a1 * Math.exp(-0.5 * r2 / (l1 * l1)); if (off) { const q = th[1] * th[1] + x * z; tr += th[0] * q * q; }
+    return [tr, a2 * Math.exp(-0.5 * r2 / (l2 * l2) - 2 * s * s / (lp * lp)), a3 * Math.pow(1 + r2 / (2 * al * l3 * l3), -al)]; };
+  const grad = (th, x, z, same, g) => { const r = x - z, r2 = r * r, s = Math.sin(Math.PI * r), [a1, l1, a2, l2, lp, a3, al, l3, a4, l4, w] = th.slice(off);
+    const k1 = a1 * Math.exp(-0.5 * r2 / (l1 * l1)), k2 = a2 * Math.exp(-0.5 * r2 / (l2 * l2) - 2 * s * s / (lp * lp)), u = 1 + r2 / (2 * al * l3 * l3), k3 = a3 * Math.pow(u, -al), k4 = a4 * Math.exp(-0.5 * r2 / (l4 * l4));
+    if (off) { const q = th[1] * th[1] + x * z; g[0] = th[0] * q * q; g[1] = 4 * th[0] * q * th[1] * th[1]; }
+    g[off] = k1; g[off + 1] = k1 * r2 / (l1 * l1); g[off + 2] = k2; g[off + 3] = k2 * r2 / (l2 * l2); g[off + 4] = k2 * 4 * s * s / (lp * lp);
+    g[off + 5] = k3; g[off + 6] = k3 * (-al * Math.log(u) + r2 / (2 * l3 * l3 * u)); g[off + 7] = k3 * r2 / (l3 * l3 * u); g[off + 8] = k4; g[off + 9] = k4 * r2 / (l4 * l4); g[off + 10] = same ? w : 0; };
+  return { val, parts, grad, P: off + 11 };
+}
+/* fit with fixed hyperparameters: Cholesky of C = K + 1e-10 I (scikit-learn's default jitter), a = C^-1 (y - mean), log marginal likelihood */
+function pjFit(kind, cut, th, wantInv) {
+  const K = pjKern(kind), idx = []; PJ.t.forEach((tt, i) => { if (tt < cut) idx.push(i); });
+  const n = idx.length, xs = idx.map(i => PJ.t[i] - 1990), mu0 = sum(idx.map(i => PJ.y[i])) / n, yc = Float64Array.from(idx, i => PJ.y[i] - mu0), C = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { const v = K.val(th, xs[i], xs[j], i === j) + (i === j ? 1e-10 : 0); C[i * n + j] = v; C[j * n + i] = v; }
+  const L = cholF(C, n); if (!L) return null;
+  const a = cholSolveF(L, n, yc); let fit = 0; for (let i = 0; i < n; i++) fit += yc[i] * a[i];
+  const lml = -0.5 * fit - 0.5 * logdetF(L, n) - 0.5 * n * LOG2PI;
+  const F = { kind, cut, th, K, n, xs, mu0, yc, L, a, lml, fit: -0.5 * fit, cplx: -0.5 * logdetF(L, n), idx };
+  F.mean = tt => { const x = tt - 1990; let m = 0; for (let i = 0; i < n; i++) m += K.val(th, xs[i], x, false) * a[i]; return m + mu0; };
+  F.pred = tt => { const x = tt - 1990, kx = new Float64Array(n); let m = 0; for (let i = 0; i < n; i++) { kx[i] = K.val(th, xs[i], x, false); m += kx[i] * a[i]; } const v = fwdF(L, n, kx); let q = 0; for (let i = 0; i < n; i++) q += v[i] * v[i]; return [m + mu0, Math.sqrt(Math.max(0, K.val(th, x, x, true) - q)), kx]; };
+  F.parts = tt => { const x = tt - 1990, s = [0, 0, 0]; for (let i = 0; i < n; i++) { const p = K.parts(th, xs[i], x); s[0] += p[0] * a[i]; s[1] += p[1] * a[i]; s[2] += p[2] * a[i]; } s[0] += mu0; return s; };
+  if (wantInv) { const Ci = invCholF(L, n), g = new Float64Array(K.P), G = new Float64Array(K.P);
+    for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { K.grad(th, xs[i], xs[j], i === j, g); const wgt = (a[i] * a[j] - Ci[i * n + j]) * (i === j ? 0.5 : 1); for (let p = 0; p < K.P; p++) G[p] += wgt * g[p]; }
+    F.grad = G; }
+  return F;
+}
+function pjScore(F, from, to) { let n = 0, se = 0, inb = 0; PJ.t.forEach((tt, k) => { if (tt < from || tt >= to) return; const [m, s] = F.pred(tt), e = PJ.y[k] - m; n++; se += e * e; if (Math.abs(e) < 1.96 * s) inb++; }); return { n, rmse: n ? Math.sqrt(se / n) : NaN, cov: n ? inb / n : NaN }; }
+function pjGet(kind, cut, src) { const key = kind + '|' + cut + '|' + (src || 'sk'); if (!PJ.fits[key]) { const th = src === 'js' ? PJ.js[kind + '|' + cut] : REF[PJ_NAMES[kind] + '|' + cut].theta; PJ.fits[key] = pjFit(kind, cut, th); } return PJ.fits[key]; }
+PJ.js = {};
+let pjV = null;
+const monthName = tt => { const k = Math.floor((tt - Math.floor(tt)) * 12 + 1e-6); return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][k] + ' ' + Math.floor(tt); };
+function drawPJ() {
+  const C = C0(), src = PJ.js[PJ.kern + '|' + PJ.cut] && PJ.useJs ? 'js' : 'sk', F = pjGet(PJ.kern, PJ.cut, src), cut = PJ.cut, all = cut > 2050;
+  const t0 = PJ.t[0], tEnd = 2040, grid = []; for (let tt = t0; tt <= tEnd + 1e-9; tt += 1 / 12) grid.push(tt);
+  const cache = F.gridCache || (F.gridCache = (() => { const mu = grid.map(tt => F.mean(tt)), bt = [], lo = [], hi = []; grid.forEach(tt => { if (tt >= Math.min(cut, 2026.75) - 1) { const [m, s] = F.pred(tt); bt.push(tt); lo.push(m - 1.96 * s); hi.push(m + 1.96 * s); } }); return { mu, bt, lo, hi }; })());
+  const v = pjV = frame($('#pj-cv'), [1958, 2040], [305, 480], { l: 40, r: 12, t: 12, b: 28 }); axes(v, 'year', 'CO₂ (ppm)', { sx: 10, sy: 25 }); clip(v);
+  { const c = v.ctx; c.save(); c.fillStyle = C.soft; c.globalAlpha = 0.5; const x0 = v.X(Math.min(cut, 2040)); c.fillRect(x0, v.pad.t, v.pad.l + v.pw - x0, v.ph); c.restore(); }
+  fillBand(v, cache.bt, cache.lo, cache.hi, C.lda, 0.22);
+  const tr = [], te = []; PJ.t.forEach((tt, k) => (tt < cut ? tr : te).push([tt, PJ.y[k]]));
+  pline(v, tr.map(p => p[0]), tr.map(p => p[1]), C.muted, 1.1);
+  if (te.length) pline(v, te.map(p => p[0]), te.map(p => p[1]), C.b, 1.3);
+  const sel = grid.map((tt, i) => [tt, cache.mu[i]]).filter(p => p[0] >= cut - 0.5 || p[0] > 2026.7);
+  pline(v, sel.map(p => p[0]), sel.map(p => p[1]), C.lda, 1.8);
+  if (!all) vline(v, cut, C.ink, 1, [4, 3]);
+  v.ctx.restore();
+  /* components */
+  const Pn = panes($('#pj-comp'), 3, 99999), ts = grid.filter((_, i) => i % 2 === 0), pp = F.compCache || (F.compCache = ts.map(tt => F.parts(tt)));
+  const rng = j => { let lo = Infinity, hi = -Infinity; pp.forEach(p => { lo = Math.min(lo, p[j]); hi = Math.max(hi, p[j]); }); const pad = (hi - lo) * 0.08 + 0.05; return [lo - pad, hi + pad]; };
+  [['Long-term trend (with the mean), ppm', C.lda], ['Seasonal component, ppm', C.a], ['Medium-term irregularities, ppm', C.b]].forEach(([ttl, col], j) => {
+    const vv = paneView(Pn.base, Pn.rects[j], [1958, 2040], rng(j), { l: 44, t: 20, b: j === 2 ? 26 : 14 }); axes(vv, j === 2 ? 'year' : '', '', { sx: 10, ny: 3, fx: j === 2 ? undefined : () => '' }); title(vv, ttl); clip(vv);
+    if (!all) { const c = vv.ctx; c.save(); c.fillStyle = C.soft; c.globalAlpha = 0.5; c.fillRect(vv.X(cut), vv.pad.t, vv.pad.l + vv.pw - vv.X(cut), vv.ph); c.restore(); }
+    pline(vv, ts, pp.map(p => p[j]), col, j === 1 ? 0.9 : 1.6); vv.ctx.restore(); });
+  /* stats */
+  const lmlRef = REF[PJ_NAMES[PJ.kern] + '|' + cut].lml, sc = all ? null : (F.score || (F.score = pjScore(F, cut, 9999)));
+  const p30 = F.p30 || (F.p30 = F.pred(2030 + 1 / 24));
+  $('#pj-ml').innerHTML = tip(f2(F.lml), `ln p(y | θ) in your browser: ${f3(F.fit)} (fit) + ${f3(F.cplx)} (complexity) − ${f2(0.5 * F.n * LOG2PI)}\nscikit-learn reports ${f3(lmlRef)}${src === 'js' ? ' at its own θ' : ''}`);
+  $('#pj-rm').innerHTML = all ? tip('&mdash;', 'no held-out months: trained on every month to Sep 2026') : tip(f3(sc.rmse), `√(mean of (actual − forecast)²) over the ${sc.n} months after the cut-off, ppm`);
+  $('#pj-cov').innerHTML = all ? tip('&mdash;', 'no held-out months') : tip(pct(sc.cov, 1), `share of the ${sc.n} held-out months with |actual − mean| < 1.96 σ`);
+  $('#pj-30k').innerHTML = `forecast, Jan 2030 (&plusmn;${f1(1.96 * p30[1])} ppm)`;
+  $('#pj-30').innerHTML = tip(f1(p30[0]), `predictive mean ± 1.96 sd for Jan 2030, ppm\n(includes the noise terms, like scikit-learn's predict with return_std)`);
+  $('#pj-hp').innerHTML = pjTable(F);
+  const q = Math.min(cut, 2026.75) + 5, pq = F.pred(q), kmax = Array.from(pq[2]).reduce((a, b) => Math.max(a, b), 0);
+  $('#run-pj').innerHTML = `<b>Running example</b> (${PJ_NAMES[PJ.kern]}, ${all ? 'all data' : 'trained to Dec ' + (cut - 1)}): N = ${F.n} months, constant mean ${tip(f2(F.mu0), 'average of the training months, ppm')} ppm. For ${monthName(q)}, five years past the ${all ? 'last month' : 'cut-off'}, the vector k has ${F.n} entries, the mean is ${f2(F.mu0)} + k<sup>&top;</sup>a = ${tip(f2(pq[0]), 'μ₀ + Σₙ k(tₙ, t) aₙ')} ppm and &sigma; = &radic;(c &minus; k<sup>&top;</sup>C<sup>&minus;1</sup>k) = ${tip(f3(pq[1]), `c = k(t, t) = ${f2(F.K.val(F.th, q - 1990, q - 1990, true))}`)} ppm, so the 95% band is &plusmn;${f2(1.96 * pq[1])} ppm.`;
+  let s;
+  if (all) s = `Trained on all ${F.n} months, the ${PJ.kern === 'q' ? 'quadratic-trend' : 'classic'} kernel forecasts ${f1(p30[0])} &plusmn; ${f1(1.96 * p30[1])} ppm for January 2030. ${PJ.kern === 'q' ? 'Its band grows slowly, because the trend is a Bayesian quadratic whose coefficients the data pin down well.' : 'Further out its band balloons: the squared-exponential trend can bend anywhere beyond the data, and it slowly reverts towards the training mean.'} Switch kernels to compare.`;
+  else if (PJ.kern === 'rw' && sc.cov < 0.6) s = `The classic kernel, trained to ${cut}, misses badly: RMSE ${f2(sc.rmse)} ppm and only ${pct(sc.cov, 0)} of the held-out months inside the 95% band. Its trend is a squared exponential, which can only continue the recent slope for about a length-scale and then drifts back towards the constant mean, while real CO&#8322; kept accelerating. The marginal likelihood cannot see this: it scores the past, not the extrapolation. <strong>Switch to the quadratic trend.</strong>`;
+  else if (PJ.kern === 'q' && cut === 1990) s = `A failure worth seeing: trained to 1990, the quadratic trend over-forecasts (RMSE ${f2(sc.rmse)} ppm, ${pct(sc.cov, 0)} inside the band). The 1970s and 80s showed strong acceleration, which the quadratic projects forward, and growth then slowed in the early 1990s (partly after the Pinatubo eruption). The band is too narrow because the quadratic's three coefficients are very well determined by 32 years of data; the model has no way to say that the acceleration itself might change.`;
+  else if (sc.cov >= 0.9) s = `Trained to Dec ${cut - 1}, the forecast meets the ${sc.n} held-out months with RMSE ${f2(sc.rmse)} ppm and ${pct(sc.cov, 1)} of them inside the 95% band. ${PJ.kern === 'q' ? 'The quadratic term carries the acceleration forward; the squared-exponential part absorbs decade-scale wobbles, and the seasonal part keeps cycling with its learned shape.' : 'At this short horizon the classic kernel is still fine; its trouble starts beyond a decade.'}`;
+  else s = `Trained to Dec ${cut - 1}: RMSE ${f2(sc.rmse)} ppm, ${pct(sc.cov, 1)} of ${sc.n} held-out months inside the 95% band.`;
+  $('#pj-say').innerHTML = s;
+}
+function pjTable(F) {
+  const th = F.th, o = F.kind === 'q' ? 2 : 0, sq = Math.sqrt, rows = [];
+  if (o) rows.push(['Quadratic trend', `c(&sigma;<sub>0</sub>&sup2; + &tau;&tau;&prime;)&sup2;: prior sd of level, slope, curvature`, `${gf(sq(th[0]) * th[1] * th[1])} ppm, ${gf(sq(2 * th[0]) * th[1])} ppm/yr, ${gf(sq(th[0]))} ppm/yr&sup2;`]);
+  rows.push([o ? 'Smooth deviations' : 'Long-term trend', 'amplitude &theta;<sub>1</sub>, length-scale &theta;<sub>2</sub>', `${gf(sq(th[o]))} ppm, ${gf(th[o + 1])} yr`]);
+  rows.push(['Seasons', 'amplitude &theta;<sub>3</sub>, decay &theta;<sub>4</sub>, smoothness &theta;<sub>5</sub> (period fixed at 1 yr)', `${gf(sq(th[o + 2]))} ppm, ${gf(th[o + 3])} yr, ${gf(th[o + 4])}`]);
+  rows.push(['Medium-term', 'amplitude &theta;<sub>6</sub>, length-scale &theta;<sub>7</sub>, shape &theta;<sub>8</sub>', `${gf(sq(th[o + 5]))} ppm, ${gf(th[o + 7])} yr, ${gf(th[o + 6])}`]);
+  rows.push(['Noise', 'correlated &theta;<sub>9</sub> over &theta;<sub>10</sub>; white &theta;<sub>11</sub>', `${gf(sq(th[o + 8]))} ppm over ${gf(th[o + 9] * 12)} months; ${gf(sq(th[o + 10]))} ppm`]);
+  return '<thead><tr><th>Component</th><th>Hyperparameters</th><th>Learned values</th></tr></thead><tbody>' + rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="num">${r[2]}</td></tr>`).join('') + '</tbody>';
+}
+function drawBT() {
+  const rows = []; ['rw', 'q'].forEach(kd => [1990, 2000, 2010, 2020].forEach(c => { const F = pjGet(kd, c), a = F.score || (F.score = pjScore(F, c, 9999)), b = F.s10 || (F.s10 = pjScore(F, c, c + 10)); rows.push([kd, c, F.lml, a, b]); }));
+  $('#pj-bt').innerHTML = '<thead><tr><th>Kernel</th><th>Cut-off</th><th>ln p(y | &theta;)</th><th>RMSE, all held out</th><th>inside 95%</th><th>RMSE, next 10 yrs</th><th>inside 95%</th></tr></thead><tbody>' + rows.map(r => `<tr${r[0] === PJ.kern && r[1] === PJ.cut ? ' class="sel"' : ''}><td>${PJ_NAMES[r[0]]}</td><td>${r[1]}</td><td class="num">${f2(r[2])}</td><td class="num">${f3(r[3].rmse)}</td><td class="num">${f3(r[3].cov)}</td><td class="num">${f3(r[4].rmse)}</td><td class="num">${f3(r[4].cov)}</td></tr>`).join('') + '</tbody>';
+  const g = (k, c) => rows.find(r => r[0] === k && r[1] === c);
+  const wins = [1990, 2000, 2010, 2020].filter(c => g('q', c)[3].rmse < g('rw', c)[3].rmse).length;
+  $('#pj-btsay').innerHTML = `The quadratic trend has the lower held-out RMSE at ${wins} of 4 cut-offs. Its marginal likelihood is higher at 2010 and 2020, about equal at 1990 and 2000: on the training months the two kernels explain the data almost equally well, yet their forecasts part company within a decade. The marginal likelihood compares fits to the past; only held-out data test the extrapolation. At 1990 both fail, the quadratic worse, a reminder that no kernel knows about volcanoes or economic shocks.`;
+  window.__x028 = Object.assign(window.__x028 || {}, { rows: rows.map(r => [r[0], r[1], r[2], r[3].rmse, r[3].cov, r[4].rmse, r[4].cov]) });
+}
+seg1('[data-pk2]', 'data-pk2', v => { PJ.kern = v; PJ.useJs = false; drawPJ(); drawBT(); });
+seg1('[data-pc]', 'data-pc', v => { PJ.cut = +v; PJ.useJs = false; drawPJ(); drawBT(); });
+$('#pj-opt').addEventListener('click', () => {
+  if (PJ.busy) return; PJ.busy = true; const kind = PJ.kern, cut = PJ.cut, ref = REF[PJ_NAMES[kind] + '|' + cut], lo = Math.log(1e-5), hi = Math.log(1e5), fixedB = x => x.map(v => clamp(v, lo, hi));
+  let nev = 0; const t0 = performance.now();
+  const fg = x => { const xc = fixedB(x), th = xc.map(Math.exp), F = pjFit(kind, cut, th, true); nev++; if (!F) return [Infinity, x.map(() => 0)]; return [-F.lml, Array.from(F.grad, (gv, i) => (x[i] <= lo && gv < 0) || (x[i] >= hi && gv > 0) ? 0 : -gv)]; };
+  const o = lbfgs(fg, PJ_INIT[kind].map(Math.log), { gtol: 1e-3, ftol: 1e-9, maxIter: 300 });
+  $('#pj-prog').textContent = 'Starting from the initial kernel…';
+  const step = () => { const done = o.step(); $('#pj-prog').textContent = `Iteration ${o.it}: ln p = ${f3(-o.f)} (${nev} evaluations, ${fmt((performance.now() - t0) / 1000, 1)} s)`;
+    if (!done && o.it < 300) { setTimeout(step, 0); return; }
+    const th = fixedB(Array.from(o.x)).map(Math.exp); PJ.js[kind + '|' + cut] = th; delete PJ.fits[kind + '|' + cut + '|js']; PJ.useJs = true; PJ.busy = false;
+    const F = pjGet(kind, cut, 'js'), d = F.lml - ref.lml;
+    $('#pj-prog').innerHTML = `Done in ${fmt((performance.now() - t0) / 1000, 1)} s: ${o.it} iterations, ${nev} evaluations (${o.msg}). Your browser reached ln p = ${tip(f3(F.lml), 'log marginal likelihood at the browser’s own θ')}; scikit-learn reached ${f3(ref.lml)}. ${Math.abs(d) < 0.05 ? 'The same peak.' : d > 0 ? `Your browser found a slightly higher point (${sg(d, 3)}).` : `A different, lower peak (${sg(d, 3)}): the surface has several, and small differences in the optimiser's path decide which one is reached.`} The plot now uses your browser's hyperparameters; pick a cut-off or kernel to return to scikit-learn's.`;
+    drawPJ(); window.__x028 = Object.assign(window.__x028 || {}, { opt: { lml: F.lml, ref: ref.lml, it: o.it, nev, th } }); };
+  setTimeout(step, 30);
+});
+fig($('#pj-cv'), drawPJ); fig($('#pj-comp'), drawPJ);
+$('#pj-nm').textContent = nf(PJ.n); $('#pj-last').textContent = monthName(PJ.t[PJ.n - 1]).replace('Sep', 'September');
+{ let started = false; const go = () => { if (started) return; started = true; drawBT(); pjCheck(); };
+  if ('IntersectionObserver' in window) new IntersectionObserver(es => { if (es[0].isIntersecting) setTimeout(go, 50); }).observe($('#pj-bt')); else setTimeout(go, 500); }
+function pjCheck() {
+  let dl = 0, dm = 0, ds = 0, dr = 0, dc = 0;
+  ['rw', 'q'].forEach(kd => PJ_CUTS.forEach(c => { const R = REF[PJ_NAMES[kd] + '|' + c], F = pjGet(kd, c); dl = Math.max(dl, Math.abs(F.lml - R.lml));
+    R.check[0].forEach((tt, i) => { const [m, s] = F.pred(tt); dm = Math.max(dm, Math.abs(m - R.check[1][i])); ds = Math.max(ds, Math.abs(s - R.check[2][i])); });
+    if (c < 2100) { const a = F.score || (F.score = pjScore(F, c, 9999)); dr = Math.max(dr, Math.abs(a.rmse - R.all[1])); dc = Math.max(dc, Math.abs(a.cov - R.all[2])); } }));
+  $('#pj-check').innerHTML = `<b>Checked in your browser</b> with scikit-learn's learned hyperparameters, for both kernels at all five cut-offs: the log marginal likelihoods agree to ${tip(dl.toExponential(1), 'largest |browser − scikit-learn| over the 10 fits')}, the predictive means at the check dates to ${tip(dm.toExponential(1) + ' ppm', 'Jan 2030, Jan 2040 and mid-way through the cut-off year')}, the predictive sds to ${tip(ds.toExponential(1) + ' ppm', 'same dates')}, held-out RMSEs to ${tip(dr.toExponential(1), 'all held-out months')} and coverages ${dc === 0 ? tip('exactly', 'the same months fall inside the 95% band in both') : 'to ' + tip(dc.toExponential(1), 'largest coverage difference')}. The page builds the covariance matrix itself, factorises it with its own Cholesky routine and uses scikit-learn's default jitter of 10<sup>&minus;10</sup> on the diagonal. The &ldquo;Re-learn&rdquo; button runs the page's own L-BFGS from the same starting kernel; it is a different implementation from scikit-learn's L-BFGS-B, so on this many-peaked surface it can stop at a nearby but different peak, and it says so.`;
+  window.__x028 = Object.assign(window.__x028 || {}, { dl, dm, ds, dr, dc });
+}
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+redrawAll();
+})();
+</script>
+
+
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

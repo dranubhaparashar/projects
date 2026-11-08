@@ -1,0 +1,1606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on kernel smoothing and local regression: from k-nearest-neighbour averages to Nadaraya-Watson kernel weights, local linear and local polynomial regression with their equivalent kernels, bias and variance, choosing the width by leave-one-out and generalised cross-validation, radial and structured kernels in many dimensions, varying-coefficient models, local logistic regression and the computational cost of memory-based smoothers, ending with LOESS fits of real EPA ozone readings from San Bernardino against temperature, verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Kernel Smoothing &amp; Local Regression</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+@media (max-width: 480px) { .eq .m { font-size: 0.84rem; } }
+table.race td:first-child { white-space: nowrap; }
+table.race td, table.race th { font-size: 0.88rem; }
+.plot.sq { aspect-ratio: 4 / 3; }
+@media (max-width: 560px) { .plot.sq { aspect-ratio: 1 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Kernel Smoothing <span>&middot; a small model at every point</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Neighbours</a>
+      <a href="#nw">Nadaraya&ndash;Watson</a>
+      <a href="#loclin">Local lines</a>
+      <a href="#poly">Polynomials</a>
+      <a href="#width">Width</a>
+      <a href="#multi">Many inputs</a>
+      <a href="#struct">Structure</a>
+      <a href="#likelihood">Likelihood</a>
+      <a href="#compute">Cost</a>
+      <a href="#project">Ozone project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning &middot; chapter 1.6a &middot; kernel smoothing</div>
+      <h1>Kernel Smoothing &amp; Local Regression</h1>
+      <div class="sub">A small model fitted around every point</div>
+      <p class="lead">k-nearest neighbours predicts by averaging the k closest points, and its curve jumps every time a point enters or leaves the neighbourhood. Kernel smoothing keeps the idea and removes the jumps: every training point votes, with a weight that fades smoothly with distance, and around each query we can fit a small weighted line instead of a flat average. That recipe, LOESS, draws the trend line on countless scatter plots. In the figure is a year of real ozone readings from San Bernardino, California, plotted against the day's top temperature. <strong>Move your pointer or finger across the figure</strong>: the highlighted days are the ones that get a say at that temperature, and the short line is the local fit that sets the curve there.</p>
+      <dl class="facts">
+        <div><dt>The idea</dt><dd>Fit a tiny weighted model around each query point, then keep only its value there</dd></div>
+        <div><dt>The dial</dt><dd>The kernel width &lambda; trades bias against variance; cross-validation sets it</dd></div>
+        <div><dt>In practice</dt><dd>LOESS trend lines, local logistic risk curves and varying-coefficient models</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Daily ozone against daily maximum temperature with a LOESS curve; move the pointer to see the local fit"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>11 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Averaging the neighbours</a></li>
+    <li><a href="#nw"><i>02</i>Nadaraya–Watson weights</a></li>
+    <li><a href="#loclin"><i>03</i>Local lines fix the edges</a></li>
+    <li><a href="#poly"><i>04</i>Local polynomials</a></li>
+    <li><a href="#width"><i>05</i>Choosing the kernel width</a></li>
+    <li><a href="#multi"><i>06</i>Smoothing in many dimensions</a></li>
+    <li><a href="#struct"><i>07</i>Structured kernels &amp; models</a></li>
+    <li><a href="#likelihood"><i>08</i>Local likelihood</a></li>
+    <li><a href="#compute"><i>09</i>The cost of lazy learning</a></li>
+    <li><a href="#project"><i>10</i>Ozone on hot days</a></li>
+    <li><a href="#summary"><i>11</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Averaging the neighbours</h2>
+    <div class="prose">
+      <p>Here are 100 noisy points scattered around a smooth curve (the faint line, which in real life you never see). To predict y at a new x<sub>0</sub>, the simplest honest answer is to look at nearby points. You can <em>connect the dots</em>, which reproduces every wiggle of the noise. You can average the <em class="term">k nearest neighbours</em> (chapter 1.6), which is calmer but jumps whenever a point enters or leaves the group of k. You can fit a straight line to those k points. Or you can give every point a weight that fades smoothly with its distance, so nobody enters or leaves with a bang. <strong>Switch between the four methods and drag across the plot</strong> to move x<sub>0</sub>; watch the largest jump.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \hat f(x_0) = \operatorname{Ave}\big(\,y_i \;\big|\; x_i \in N_k(x_0)\big) \]</div><div class="read"><b>Read it as:</b> N<sub>k</sub>(x<sub>0</sub>) is the set of the k training points whose x is closest to x<sub>0</sub>. Average their y values. Each of the k counts the same, every other point counts nothing, so sliding x<sub>0</sub> past the midpoint between two points swaps one in and one out at once: a jump.</div><div class="eq-say"><b>Say it</b><em>&ldquo;f-hat at x-nought is the average of the y's whose x's are among the k nearest neighbours of x-nought.&rdquo;</em></div><div class="eq-run" id="run-nb"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Method"><button type="button" data-nm="dots">Connect the dots</button><button type="button" data-nm="knn" aria-pressed="true">k-NN average</button><button type="button" data-nm="knnlin">k-NN line</button><button type="button" data-nm="kern">Kernel average</button></div></div>
+        <div class="plot ar-16x10"><canvas id="nb-cv" aria-label="Noisy points with a fitted curve; drag to move the query point"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9644;</span> the estimate &nbsp; <span style="color:var(--muted)">&#9644;</span> the true curve &nbsp; filled dots: the points used at x<sub>0</sub> (the dashed line)</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl" id="nb-k-ctrl"><div class="top"><label for="nb-k">k, the number of neighbours</label><output id="nb-k-o"></output></div><input type="range" id="nb-k" min="1" max="60" step="1" value="15"></div>
+        <div class="stats"><div class="stat"><div class="v" id="nb-f"></div><div class="k">estimate at x&#8320;</div></div><div class="stat"><div class="v" id="nb-t"></div><div class="k">true value at x&#8320;</div></div><div class="stat"><div class="v" id="nb-e"></div><div class="k">error against the truth</div></div><div class="stat"><div class="v" id="nb-j"></div><div class="k">largest jump</div></div></div>
+        <p class="note" id="nb-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- NADARAYA-WATSON -->
+<section class="chap" id="nw">
+  <div class="wrap">
+    <div class="tag">The estimator</div>
+    <h2>Nadaraya&ndash;Watson: weights that fade</h2>
+    <div class="prose"><p>In 1964 &Egrave;lizbar Nadaraya and Geoffrey Watson, independently, proposed the weighted version: centre a bump, the <em class="term">kernel</em>, on the query point, give each training point the bump's height at its x as its weight, and take the weighted average of the y values. The bump's width &lambda; is the one dial that matters. A <em>fixed</em> (metric) width keeps &lambda; the same everywhere; an <em>adaptive</em> width stretches to reach the k-th nearest point, so sparse regions still get enough data. <strong>Try each kernel, shrink &lambda; until the curve breaks, then switch to an adaptive width.</strong></p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \hat f(x_0) &= \frac{\sum_{i=1}^N K_\lambda(x_0, x_i)\, y_i}{\sum_{i=1}^N K_\lambda(x_0, x_i)} \\ K_\lambda(x_0, x) &= D\!\left(\frac{|x - x_0|}{h_\lambda(x_0)}\right) \end{aligned} \]</div><div class="read"><b>Read it as:</b> a weighted average of the y values, the weights being the kernel's heights. Dividing by the total weight makes the weights sum to one. The window half-width h<sub>&lambda;</sub>(x<sub>0</sub>) is either the constant &lambda; or, adaptively, the distance from x<sub>0</sub> to its k-th nearest point.</div><div class="eq-say"><b>Say it</b><em>&ldquo;f-hat at x-nought is the sum of K y over the sum of K, where K is D of the distance over the window width.&rdquo;</em></div><div class="eq-run" id="run-nw"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{Epanechnikov:}\quad D(t) &= \tfrac34\,(1 - t^2) \\ \text{tri-cube:}\quad D(t) &= (1 - |t|^3)^3 \\ \text{(both zero for } |t| &> 1) \\ \text{Gaussian:}\quad D(t) &= \phi(t) \end{aligned} \]</div><div class="read"><b>Read it as:</b> three common bump shapes. The first two have compact support: points beyond &lambda; get exactly zero weight, so with a small fixed &lambda; there may be nobody to average. Tri-cube is flatter on top and meets zero smoothly. The Gaussian (&phi; is the standard normal density) never reaches zero; for it &lambda; is a standard deviation. The shape matters far less than the width.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Epanechnikov is three quarters of one minus t squared; tri-cube is one minus t cubed, cubed; Gaussian is phi of t.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Kernel"><button type="button" data-nk="epan" aria-pressed="true">Epanechnikov</button><button type="button" data-nk="tri">Tri-cube</button><button type="button" data-nk="gauss">Gaussian</button></div><div class="seg" role="group" aria-label="Window width"><button type="button" data-nwm="fixed" aria-pressed="true">Fixed &lambda;</button><button type="button" data-nwm="adapt">Nearest k</button></div></div>
+        <div class="plot ar-16x10"><canvas id="nw-cv" aria-label="Kernel-weighted average with the kernel drawn at the query point"></canvas></div>
+        <figcaption id="nw-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl" id="nw-l-ctrl"><div class="top"><label for="nw-l">&lambda;, the kernel width</label><output id="nw-l-o"></output></div><input type="range" id="nw-l" min="-1.8" max="-0.3" step="0.01" value="-0.82"></div>
+        <div class="ctrl" id="nw-k-ctrl" hidden><div class="top"><label for="nw-k">k, points inside the window</label><output id="nw-k-o"></output></div><input type="range" id="nw-k" min="3" max="80" step="1" value="20"></div>
+        <div class="btns"><button type="button" class="btn" id="nw-dens">Show p(t | x&#8320;)</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="nw-f"></div><div class="k">f&#770;(x&#8320;)</div></div><div class="stat"><div class="v" id="nw-n"></div><div class="k">points with weight</div></div><div class="stat"><div class="v" id="nw-e"></div><div class="k">error against the truth</div></div><div class="stat"><div class="v" id="nw-g"></div><div class="k">gaps (no estimate)</div></div></div>
+        <p class="note" id="nw-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>Bishop reaches the same formula from density estimation. Put a small bump f at every training pair (x<sub>n</sub>, t<sub>n</sub>) to estimate the joint density p(x, t), the Parzen method of chapter 1.6b. Then ask for the conditional mean of t given x. The answer is Nadaraya&ndash;Watson, and the same construction gives the whole conditional distribution, not just its mean. Press <b>Show p(t | x&#8320;)</b> above to see it drawn sideways at the query.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(x, t) &= \frac1N \sum_{n=1}^N f(x - x_n,\ t - t_n) \\ \mathbb E[t \mid x] &= \sum_{n=1}^N k(x, x_n)\, t_n \\ k(x, x_n) &= \frac{g(x - x_n)}{\sum_m g(x - x_m)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> each bump f has mean zero in t, and g(x) = &int; f(x, t) dt is its shape along x. The conditional mean is a weighted sum of the targets with weights k(x, x<sub>n</sub>) that are positive and sum to 1 at every x: the <em class="term">equivalent kernel</em> of this model.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected t given x is the sum over n of k of x and x-n times t-n, with k equal to g of x minus x-n over the sum of all the g's.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(t \mid x) &= \sum_{n=1}^N k(x, x_n)\, \mathcal N\!\big(t \mid t_n, \sigma^2\big) \\ \operatorname{var}[t \mid x] &= \sigma^2 + \sum_n k(x, x_n)\, t_n^2 - \mathbb E[t \mid x]^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> with Gaussian bumps of spread &sigma; in t, the prediction at x is a <em>mixture</em> of Gaussians, one per training point, each weighted by its kernel weight. Its variance is the bump's own &sigma;&sup2; plus the spread of the nearby targets. The lab uses &sigma; = 0.15.</div><div class="eq-say"><b>Say it</b><em>&ldquo;p of t given x is a mixture of normals centred on the t-n, weighted by k of x and x-n.&rdquo;</em></div><div class="eq-run" id="run-pt"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- LOCAL LINEAR -->
+<section class="chap" id="loclin">
+  <div class="wrap">
+    <div class="tag">Bias at the edges</div>
+    <h2>Local linear regression: fixing the edges</h2>
+    <div class="prose"><p>Near the left edge the true curve is climbing steeply, and every neighbour of x<sub>0</sub> = 0 lies to its right, higher up. A weighted average of them must land too high: Nadaraya&ndash;Watson is biased at the boundary, and the bias is as large as the slope. The cure is to fit a weighted <em>line</em> instead of a weighted constant, then read the line at x<sub>0</sub>. A line can extrapolate the trend to the edge. <strong>Drag x&#8320; to the edges and back</strong>, and watch the equivalent-kernel weights below tilt, some of them turning negative.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\min_{\alpha(x_0),\ \beta(x_0)}\ \sum_{i=1}^N K_\lambda(x_0, x_i) \\ &\qquad \times \big[\,y_i - \alpha(x_0) - \beta(x_0)\, x_i\,\big]^2 \\ &\hat f(x_0) = \hat\alpha(x_0) + \hat\beta(x_0)\, x_0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> at every query, solve a small weighted least-squares problem using only the points the kernel lets in. Keep the line's height at x<sub>0</sub> and throw the line away; at the next query, fit a new one. Setting &beta; = 0 gives back Nadaraya&ndash;Watson.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Choose alpha and beta at x-nought to minimise the kernel-weighted squared errors; the estimate is alpha-hat plus beta-hat times x-nought.&rdquo;</em></div></div>
+    <div class="two">
+      <div class="eq"><div class="m">\[ \begin{aligned} \hat f(x_0) &= b(x_0)^{\mathsf T}\big(\mathbf B^{\mathsf T}\mathbf W(x_0)\,\mathbf B\big)^{-1} \\ &\qquad \times \mathbf B^{\mathsf T}\mathbf W(x_0)\,\mathbf y \\ &= \sum_{i=1}^N l_i(x_0)\, y_i \end{aligned} \]</div><div class="read"><b>Read it as:</b> <b>B</b> has rows (1, x<sub>i</sub>), <b>W</b>(x<sub>0</sub>) is diagonal with the kernel weights, and b(x<sub>0</sub>) = (1, x<sub>0</sub>). The answer is still a weighted sum of the y values, with weights l<sub>i</sub>(x<sub>0</sub>) that blend the kernel with the line fit. These are the <em class="term">equivalent kernel</em>. At the edges they reshape themselves, a trick called <em>automatic kernel carpentry</em>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;f-hat is b transpose times B-transpose W B inverse, times B-transpose W y: a weighted sum with weights l-i of x-nought.&rdquo;</em></div></div>
+      <div class="eq"><div class="m">\[ \begin{aligned} &\mathbb E\,\hat f(x_0) - f(x_0) \\ &\quad = \tfrac{f''(x_0)}{2}\sum_{i} (x_i - x_0)^2\, l_i(x_0) + R \\ &\text{because } \textstyle\sum_i l_i(x_0) = 1 \\ &\text{and } \textstyle\sum_i (x_i - x_0)\, l_i(x_0) = 0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> expand f around x<sub>0</sub> in a Taylor series. Local linear weights sum to one and have zero first moment, so the constant and the slope terms cancel exactly and only curvature (f&Prime;) and higher terms R are left. Nadaraya&ndash;Watson's weights also sum to one, but at an edge their first moment is not zero, so it pays an extra f&prime;(x<sub>0</sub>) &times; &sum;(x<sub>i</sub> &minus; x<sub>0</sub>)l<sub>i</sub>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The bias is f-double-prime over two times the second moment of the weights, plus a remainder, because the weights sum to one and their first moment is zero.&rdquo;</em></div><div class="eq-run" id="run-ll"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="ll-cv" aria-label="Nadaraya-Watson and local linear fits with the local line at the query"></canvas></div>
+        <div class="plot ar-3x1" style="margin-top:10px"><canvas id="ll-k" aria-label="Equivalent kernel weights at the query point for both methods"></canvas></div>
+        <figcaption><span style="color:var(--cB)">&#9644;</span> Nadaraya&ndash;Watson &nbsp; <span style="color:var(--lda)">&#9644;</span> local linear, with its line at x&#8320; &nbsp; <span style="color:var(--muted)">&#9644;</span> truth. Below: the weights l<sub>i</sub>(x&#8320;) each method gives each point.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ll-x">The query x&#8320;</label><output id="ll-x-o"></output></div><input type="range" id="ll-x" min="0" max="1" step="0.005" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="ll-l">&lambda;, tri-cube width</label><output id="ll-l-o"></output></div><input type="range" id="ll-l" min="0.08" max="0.5" step="0.01" value="0.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ll-nw"></div><div class="k">bias, Nadaraya&ndash;Watson</div></div><div class="stat"><div class="v" id="ll-ll"></div><div class="k">bias, local linear</div></div><div class="stat"><div class="v" id="ll-m0"></div><div class="k">&sum;(x&#7522; &minus; x&#8320;) l&#7522;, NW</div></div><div class="stat"><div class="v" id="ll-m1"></div><div class="k">&sum;(x&#7522; &minus; x&#8320;) l&#7522;, local linear</div></div></div>
+        <p class="note" id="ll-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- LOCAL POLYNOMIAL -->
+<section class="chap" id="poly">
+  <div class="wrap">
+    <div class="tag">Curvature</div>
+    <h2>Local polynomials: trimming the hills</h2>
+    <div class="prose"><p>Local linear regression removes the slope from the bias but not the curvature. At the top of a hill every neighbour is lower, so the weighted line sags below the peak: it <em>trims the hills and fills the valleys</em>. A local quadratic can bend with the hill, and the bias there almost vanishes. Nothing is free, though. A more flexible local model needs more extreme weights, and extreme weights pass more noise through. <strong>Step the degree from 0 to 3</strong> and compare bias and spread at the peak and at the edge.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\min_{\alpha,\ \beta_1, \ldots, \beta_d}\ \sum_{i=1}^N K_\lambda(x_0, x_i) \\ &\qquad \times \Big[\,y_i - \alpha - \sum_{j=1}^{d} \beta_j\,(x_i - x_0)^j\Big]^2 \\ &\hat f(x_0) = \hat\alpha \end{aligned} \]</div><div class="read"><b>Read it as:</b> a weighted polynomial of degree d around each query. Writing the powers in (x<sub>i</sub> &minus; x<sub>0</sub>) changes nothing in the fit but makes the intercept the estimate itself. The bias now starts at the (d + 1)-th derivative of f.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Fit a degree-d polynomial in x-i minus x-nought by kernel-weighted least squares; f-hat is its intercept.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \operatorname{Var}\hat f(x_0) = \sigma^2\,\lVert l(x_0)\rVert^2 = \sigma^2 \sum_{i=1}^N l_i(x_0)^2 \]</div><div class="read"><b>Read it as:</b> if each y<sub>i</sub> carries independent noise of variance &sigma;&sup2;, the estimate, being &sum;l<sub>i</sub>y<sub>i</sub>, has variance &sigma;&sup2; times the sum of squared weights. Spreading weight evenly keeps &Vert;l&Vert;&sup2; small; the larger positive and negative weights of high degrees make it grow.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The variance of f-hat is sigma squared times the squared length of the weight vector.&rdquo;</em></div><div class="eq-run" id="run-lp"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="lp-cv" aria-label="Local polynomial fits of degrees 0 to 3"></canvas></div>
+        <div class="plot ar-3x1" style="margin-top:10px"><canvas id="lp-v" aria-label="Variance factor of each degree across x"></canvas></div>
+        <figcaption>Top: the fit of the chosen degree (solid) and the expected fit E f&#770;, averaged over all noise draws (dashed). Below: the variance factor &Vert;l(x)&Vert;&sup2; for degrees 0, 1, 2 and 3; the chosen one is bold.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Local degree"><button type="button" data-pd="0">0 (NW)</button><button type="button" data-pd="1" aria-pressed="true">1 (linear)</button><button type="button" data-pd="2">2</button><button type="button" data-pd="3">3</button></div>
+        <div class="ctrl"><div class="top"><label for="lp-l">&lambda;, tri-cube width</label><output id="lp-l-o"></output></div><input type="range" id="lp-l" min="0.1" max="0.6" step="0.01" value="0.3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="lp-b"></div><div class="k">bias at the peak</div></div><div class="stat"><div class="v" id="lp-s"></div><div class="k">noise sd at the peak</div></div><div class="stat"><div class="v" id="lp-be"></div><div class="k">bias at x = 1</div></div><div class="stat"><div class="v" id="lp-se"></div><div class="k">noise sd at x = 1</div></div></div>
+        <p class="note" id="lp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- WIDTH -->
+<section class="chap" id="width">
+  <div class="wrap">
+    <div class="tag">Bias against variance</div>
+    <h2>Choosing the kernel width</h2>
+    <div class="prose"><p>A narrow window averages few points: little bias, lots of variance, a wiggly curve. A wide window averages many: smooth and stable, but it flattens real features. The right &lambda; depends on the data, and we can't compare with the true curve, so we estimate the error by <em class="term">leave-one-out cross-validation</em>: predict each point from all the others. For kernel smoothers with a fixed width this needs only one fit, thanks to a shortcut through the <em class="term">smoother matrix</em>. <strong>Slide &lambda; and find the bottom of the cross-validation curve</strong>, then draw a new sample and see how much the best &lambda; moves.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \hat{\mathbf f} = \mathbf S_\lambda\,\mathbf y, \qquad \mathrm{df}_\lambda = \operatorname{trace}(\mathbf S_\lambda) = \sum_{i=1}^N S_{ii} \]</div><div class="read"><b>Read it as:</b> the fitted values at all N training points are a linear map of the targets. Row i of the N &times; N smoother matrix <b>S</b><sub>&lambda;</sub> is the equivalent kernel l(x<sub>i</sub>). Its trace counts <em class="term">effective degrees of freedom</em>: N when the smoother copies the data, 1 for a flat average, 2 for a global line.</div><div class="eq-say"><b>Say it</b><em>&ldquo;f-hat is S-lambda times y; the degrees of freedom are the trace of S-lambda.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathrm{CV}(\lambda) &= \frac1N\sum_{i=1}^N\big(y_i - \hat f^{(-i)}_\lambda(x_i)\big)^2 \\ &= \frac1N\sum_{i=1}^N\left(\frac{y_i - \hat f_\lambda(x_i)}{1 - S_{ii}}\right)^{\!2} \end{aligned} \]</div><div class="read"><b>Read it as:</b> f&#770;<sup>(&minus;i)</sup> is the fit made without point i. Dropping a point from a weighted least-squares fit has a closed form: its left-out residual is its ordinary residual divided by 1 &minus; S<sub>ii</sub>. A point that pulls the fit towards itself (large S<sub>ii</sub>) is penalised the most.</div><div class="eq-say"><b>Say it</b><em>&ldquo;CV is the mean squared leave-one-out error, which equals the mean of the residual over one minus S-i-i, squared.&rdquo;</em></div><div class="eq-run" id="run-cv"></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \mathrm{GCV}(\lambda) = \frac{\frac1N\sum_{i=1}^N\big(y_i - \hat f_\lambda(x_i)\big)^2}{\big(1 - \mathrm{df}_\lambda/N\big)^2} \]</div><div class="read"><b>Read it as:</b> <em class="term">generalised cross-validation</em> replaces each S<sub>ii</sub> by their average, df<sub>&lambda;</sub>/N. It needs only the trace, and it usually picks nearly the same &lambda;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;GCV is the training error divided by one minus df over N, squared.&rdquo;</em></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="cv-cv" aria-label="The fit at the chosen width"></canvas></div>
+        <div class="plot ar-3x1" style="margin-top:10px"><canvas id="cv-c" aria-label="Error curves against the effective degrees of freedom"></canvas></div>
+        <figcaption>Below, against the effective degrees of freedom (wider windows to the left): <span style="color:var(--lda)">&#9644;</span> LOOCV &nbsp; <span style="color:var(--cC)">&#9644;</span> GCV &nbsp; <span style="color:var(--cA)">&#9644;</span> true error on fresh noise &nbsp; <span style="color:var(--muted)">&#9644;</span> training error. Dots mark each curve's minimum.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Local degree"><button type="button" data-cd="0">Nadaraya&ndash;Watson</button><button type="button" data-cd="1" aria-pressed="true">Local linear</button></div>
+        <div class="ctrl"><div class="top"><label for="cv-l">&lambda;, tri-cube width</label><output id="cv-l-o"></output></div><input type="range" id="cv-l" min="-1.4" max="0" step="0.01" value="-0.4"></div>
+        <div class="btns"><button type="button" class="btn" id="cv-best">Jump to the LOOCV minimum</button><button type="button" class="btn" id="cv-new">Draw a new sample</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cv-df"></div><div class="k">effective df</div></div><div class="stat"><div class="v" id="cv-loo"></div><div class="k">LOOCV error</div></div><div class="stat"><div class="v" id="cv-g"></div><div class="k">GCV error</div></div><div class="stat"><div class="v" id="cv-te"></div><div class="k">true error</div></div></div>
+        <p class="note" id="cv-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MULTI -->
+<section class="chap" id="multi">
+  <div class="wrap">
+    <div class="tag">Higher dimensions</div>
+    <h2>Smoothing in many dimensions</h2>
+    <div class="prose"><p>Nothing in the recipe needs x to be a single number. With p inputs, measure closeness by the Euclidean distance (after standardising every input, or the one with the biggest units decides everything), and fit a local plane instead of a local line. Below, 250 points are scattered over a square and their y values (colour) follow a hill on a slope. <strong>Drag the ring</strong> to move the query and compare a local average with a local plane in the corners. Then turn up the dimension to see why this stops working beyond a handful of inputs.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} K_\lambda(x_0, x) &= D\!\left(\frac{\lVert x - x_0\rVert}{\lambda}\right) \\ b(X) &= (1,\ X_1,\ X_2,\ \ldots,\ X_p) \end{aligned} \]</div><div class="read"><b>Read it as:</b> a <em>radial</em> kernel: the weight depends only on the distance to x<sub>0</sub>, so the window is a ball. A local linear fit now has p + 1 parameters at every query: a height and a slope along each input.</div><div class="eq-say"><b>Say it</b><em>&ldquo;K is D of the length of x minus x-nought over lambda; the local basis is one and the p inputs.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \Pr\big(\text{within } \lambda \text{ of an edge}\big) = 1 - (1 - 2\lambda)^p \]</div><div class="read"><b>Read it as:</b> for points spread uniformly in the unit cube [0, 1]<sup>p</sup>, the fraction lying within &lambda; of some face. It grows fast with p, and near a face every window is lopsided, which is exactly where local averages are biased. Local linear fits help, but in high dimensions almost every point is a boundary point and the windows are nearly empty.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The chance of being within lambda of the boundary is one minus one-minus-two-lambda to the power p.&rdquo;</em></div><div class="eq-run" id="run-md"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Local model"><button type="button" data-mdeg="0">Local average</button><button type="button" data-mdeg="1" aria-pressed="true">Local plane</button></div></div>
+        <div class="plot sq"><canvas id="md-cv" aria-label="Two-dimensional local regression surface with draggable query ring"></canvas></div>
+        <figcaption>Colour: the fitted surface (dark = high). Dots: the 250 training points, filled when inside the window. Ring: the window around the query; drag it.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="md-l">&lambda;, the window radius</label><output id="md-l-o"></output></div><input type="range" id="md-l" min="0.08" max="0.5" step="0.01" value="0.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="md-n"></div><div class="k">points in the window</div></div><div class="stat"><div class="v" id="md-f"></div><div class="k">fit &minus; truth at the query</div></div><div class="stat"><div class="v" id="md-e"></div><div class="k">error over the square</div></div><div class="stat"><div class="v" id="md-ec"></div><div class="k">error in the corners</div></div></div>
+        <p class="note" id="md-say"></p>
+      </div>
+      <div class="grp">
+        <h4>The curse of dimensionality</h4>
+        <div class="ctrl"><div class="top"><label for="md-p">Number of inputs p</label><output id="md-p-o"></output></div><input type="range" id="md-p" min="1" max="20" step="1" value="2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="md-bf"></div><div class="k">points near an edge</div></div><div class="stat"><div class="v" id="md-ed"></div><div class="k">cube side holding 10%</div></div></div>
+        <p class="note" id="md-psay"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- STRUCT -->
+<section class="chap" id="struct">
+  <div class="wrap">
+    <div class="tag">Taming dimensions</div>
+    <h2>Structured kernels and structured models</h2>
+    <div class="prose"><p>When the data are too thin for a free-form surface, add structure. One way is to shape the kernel. A matrix A turns the round window into an ellipse, and a small weight on an input says &ldquo;closeness along this one matters less&rdquo;. Below, y depends strongly on x&#8321; and only gently on x&#8322;. <strong>Turn the weight on x&#8322; down from 1 towards 0</strong> and watch the cross-validation error: a little attention to x&#8322; beats both full attention and none.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} K_{\lambda, A}(x_0, x) &= D\!\left(\frac{\sqrt{(x - x_0)^{\mathsf T} A\,(x - x_0)}}{\lambda}\right) \\ A &= \begin{pmatrix} 1 & 0 \\ 0 & a \end{pmatrix} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the distance is measured through A. With a diagonal A, a<sub>jj</sub> weighs coordinate j; a = 1 is the round window, and a = 0 ignores x&#8322; completely, so the window becomes a vertical slab. Even then the local <em>plane</em> still has a slope along x&#8322;, so the model becomes &ldquo;a line in x&#8322; whose height and slope vary with x&#8321;&rdquo;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;K is D of the square root of x minus x-nought, transposed, times A, times x minus x-nought, over lambda.&rdquo;</em></div><div class="eq-run" id="run-st"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot sq"><canvas id="st-cv" aria-label="Local plane fit with an elliptical window; drag the ring"></canvas></div>
+        <div class="plot ar-3x1" style="margin-top:10px"><canvas id="st-c" aria-label="Leave-one-out error against the weight on x2"></canvas></div>
+        <figcaption>Top: the fitted surface with the shaped window (drag it). Below: leave-one-out RMSE against the weight a on x&#8322;, at the current &lambda;.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="st-a">a, the weight on x&#8322;</label><output id="st-a-o"></output></div><input type="range" id="st-a" min="0" max="1" step="0.01" value="1"></div>
+        <div class="ctrl"><div class="top"><label for="st-l">&lambda;, the window size</label><output id="st-l-o"></output></div><input type="range" id="st-l" min="0.12" max="0.4" step="0.01" value="0.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="st-cvv"></div><div class="k">LOOCV RMSE at this a</div></div><div class="stat"><div class="v" id="st-best"></div><div class="k">best a</div></div><div class="stat"><div class="v" id="st-r"></div><div class="k">LOOCV, round (a = 1)</div></div><div class="stat"><div class="v" id="st-z"></div><div class="k">LOOCV, slab (a = 0)</div></div></div>
+        <p class="note" id="st-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>The other way is to restrict the <em>function</em>. An <em class="term">ANOVA decomposition</em> writes f as a constant, plus one-input terms, plus two-input interactions, and so on; dropping the higher terms leaves models that low-dimensional smoothers can fit. Keeping only the one-input terms gives an <em class="term">additive model</em>, fitted by smoothing each input in turn (backfitting, in the chapter on generalised additive models). A <em class="term">varying-coefficient model</em> keeps a linear model in some inputs but lets its coefficients drift smoothly with another input Z, such as time or season. It is fitted by local regression in Z alone, and the project below uses one to ask how much an extra degree of heat raises ozone in January compared with July.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} f(X) = \alpha &+ \sum_{j} g_j(X_j) \\ &+ \sum_{k < l} g_{kl}(X_k, X_l) + \cdots \end{aligned} \]</div><div class="read"><b>Read it as:</b> main effects, then pairwise interactions, then higher ones. Each g<sub>j</sub> is a curve in one input and each g<sub>kl</sub> a surface in two, so each can be smoothed with plenty of data even when p is large.</div><div class="eq-say"><b>Say it</b><em>&ldquo;f is alpha plus a sum of one-input functions plus a sum of two-input functions, and so on.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &f(X) = \alpha(Z) + \beta_1(Z)\,X_1 + \cdots + \beta_q(Z)\,X_q \\ &\min_{\alpha(z_0),\ \beta(z_0)}\ \sum_{i} K_\lambda(z_0, z_i) \\ &\qquad \times \big[y_i - \alpha(z_0) - x_i^{\mathsf T}\beta(z_0)\big]^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> for any fixed Z the model is an ordinary linear regression in X. The kernel works on Z only: at each z<sub>0</sub>, a weighted least-squares fit using the cases whose Z is close to z<sub>0</sub>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;f is alpha of Z plus beta-one of Z times X-one, and so on; fit alpha and beta at z-nought by kernel-weighted least squares in Z.&rdquo;</em></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- LIKELIHOOD -->
+<section class="chap" id="likelihood">
+  <div class="wrap">
+    <div class="tag">Beyond least squares</div>
+    <h2>Local likelihood: local logistic regression</h2>
+    <div class="prose"><p>Least squares is not special. Any model fitted by maximum likelihood can be made local: weight every point's log-likelihood by the kernel, maximise, and keep the fitted value at x<sub>0</sub>. For yes/no outcomes this gives <em class="term">local logistic regression</em>. Below, the chance of a &ldquo;yes&rdquo; rises and then falls again with x. One global logistic curve can only rise or fall, so it fails; a local average of the 0s and 1s works but is biased at the edges; local logistic bends where the data bend. <strong>Compare the three methods and drag the query</strong> to see the small logistic curve fitted there.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \ell\big(\beta(x_0)\big) = \sum_{i=1}^N K_\lambda(x_0, x_i)\;\ell\big(y_i,\ x_i^{\mathsf T}\beta(x_0)\big) \]</div><div class="read"><b>Read it as:</b> &ell;(y, &eta;) is one point's log-likelihood under a model with linear predictor &eta;. The kernel decides how much each point's evidence counts at x<sub>0</sub>. With a Gaussian log-likelihood this is local least squares again; with a Bernoulli one it is local logistic regression; with x<sub>i</sub> replaced by lagged values of a time series it gives an autoregression whose coefficients drift over time.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The local log-likelihood is the kernel-weighted sum of each point's log-likelihood at the local parameters beta of x-nought.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \eta_i &= \alpha(x_0) + \beta(x_0)\,(x_i - x_0) \\ \max_{\alpha,\ \beta}\ &\sum_{i} K_\lambda(x_0, x_i)\big[\,y_i\,\eta_i - \log\!\big(1 + e^{\eta_i}\big)\big] \\ \hat p(x_0) &= \frac{1}{1 + e^{-\hat\alpha(x_0)}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> a logistic regression weighted by the kernel, with x centred at x<sub>0</sub> so the intercept &alpha; is the log-odds at x<sub>0</sub> itself. There is no closed form, so each query runs a few steps of Newton's method. With K classes the same idea gives local multinomial logistic regression.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Maximise the kernel-weighted logistic log-likelihood; p-hat at x-nought is the sigmoid of alpha-hat.&rdquo;</em></div><div class="eq-run" id="run-lk"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Method"><button type="button" data-lm="global">Global logistic</button><button type="button" data-lm="nw">Local average</button><button type="button" data-lm="local" aria-pressed="true">Local logistic</button></div></div>
+        <div class="plot ar-16x10"><canvas id="lk-cv" aria-label="Binary outcomes with estimated probability curves; drag to move the query"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9644;</span> estimated probability &nbsp; <span style="color:var(--muted)">&#9644;</span> true probability &nbsp; <span style="color:var(--cB)">&#9644;</span> the logistic curve fitted at x&#8320; (local logistic only). Dots at 1 are &ldquo;yes&rdquo;, at 0 &ldquo;no&rdquo;.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="lk-l">&lambda;, Gaussian kernel sd</label><output id="lk-l-o"></output></div><input type="range" id="lk-l" min="0.02" max="0.3" step="0.005" value="0.07"></div>
+        <div class="stats"><div class="stat"><div class="v" id="lk-p"></div><div class="k">p&#770;(x&#8320;)</div></div><div class="stat"><div class="v" id="lk-t"></div><div class="k">true p(x&#8320;)</div></div><div class="stat"><div class="v" id="lk-ll"></div><div class="k">expected log-loss on new data</div></div><div class="stat"><div class="v" id="lk-it"></div><div class="k">Newton steps at x&#8320;</div></div></div>
+        <p class="note" id="lk-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPUTE -->
+<section class="chap" id="compute">
+  <div class="wrap">
+    <div class="tag">Computation</div>
+    <h2>The cost of lazy learning</h2>
+    <div class="prose"><p>Kernel smoothers are <em class="term">memory-based</em>: there is no training step, the whole dataset is the model, and all the work happens when you ask a question. Evaluating at M points costs N kernel weights each, and leave-one-out cross-validation over N points costs about N&sup2;. Two tricks make it fast. With a compact kernel and sorted x, a binary search finds the few points inside each window. And <em>binning</em> rounds the data onto a grid of G cells first, so every query sums over G cells instead of N points, at a small cost in accuracy. Statistical software also fits at a few well-chosen vertices and interpolates between them. <strong>Set N and press Run</strong>: these are real timings in your browser.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{direct:}\quad & O(N M) \\ \text{sorted windows:}\quad & O\big((N + M)\log N + M k\big) \\ \text{binned, } G \text{ cells:}\quad & O(N + G M) \end{aligned} \]</div><div class="read"><b>Read it as:</b> N training points, M query points, k the typical number of points inside one window. The first line touches every pair. The second sorts once, then visits only each window's k points. The third spends one pass putting the data into G cells (each point split between its two nearest cell centres) and then treats every cell as a single weighted point.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Direct costs N times M; with sorting, N log N plus M times k; with binning, N plus G times M.&rdquo;</em></div><div class="eq-run" id="run-cp"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="tbl-wrap"><table class="hand race" id="cp-tbl"></table></div>
+        <div class="plot ar-3x1" style="margin-top:12px"><canvas id="cp-cv" aria-label="Exact and binned estimates on a sample of the data"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9644;</span> exact Nadaraya&ndash;Watson (Epanechnikov, &lambda; = 0.05) &nbsp; <span style="color:var(--cB)">&#9644;</span> the binned approximation, with the gap between them magnified 100&times; underneath. Dots: a sample of 400 of the N points.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cp-n">N, training points</label><output id="cp-n-o"></output></div><input type="range" id="cp-n" min="3" max="5.7" step="0.1" value="4.5"></div>
+        <div class="ctrl"><div class="top"><label for="cp-g">G, cells for binning</label><output id="cp-g-o"></output></div><input type="range" id="cp-g" min="20" max="2000" step="10" value="400"></div>
+        <div class="btns"><button type="button" class="btn primary" id="cp-run">Run the race</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cp-sp"></div><div class="k">speed-up, sorted</div></div><div class="stat"><div class="v" id="cp-sb"></div><div class="k">speed-up, binned</div></div><div class="stat"><div class="v" id="cp-er"></div><div class="k">largest binning error</div></div><div class="stat"><div class="v" id="cp-mem"></div><div class="k">the model's size</div></div></div>
+        <p class="note" id="cp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: ozone on hot days</h2>
+    <div class="prose">
+      <p>Ground-level ozone is not emitted by anything. It is cooked in sunlight from car and industrial exhaust, so it piles up on hot, bright, still days, and it harms lungs. The US Environmental Protection Agency publishes every monitor's readings in its Air Quality System. We take the station in <strong>San Bernardino, California</strong> (site 06-071-9004), east of Los Angeles and one of the most ozone-burdened places in the country. For each day of <strong>2023</strong> we have the <b>MDA8</b>, the highest 8-hour average ozone of the day in parts per billion (the number the US standard of 70 ppb is set on), and the day's <b>maximum temperature</b> from the same station. Days with less than 75% of hours recorded are dropped, leaving <b>358</b>. Every model learns from 2023; <b>2022</b> (354 days) is kept back as a test of next year's data. <strong>Pick a degree and slide the span</strong>.</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Local degree"><button type="button" data-pjd="0">Degree 0</button><button type="button" data-pjd="1" aria-pressed="true">Degree 1 (LOESS)</button><button type="button" data-pjd="2">Degree 2</button></div><div class="seg" role="group" aria-label="Overlay"><button type="button" data-pjo="one" aria-pressed="true">One span</button><button type="button" data-pjo="three">Spans 0.1, 0.3, 1</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pj-cv" aria-label="Ozone against temperature with LOESS curves"></canvas></div>
+        <figcaption id="pj-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-s">Span: fraction of days in each window</label><output id="pj-s-o"></output></div><input type="range" id="pj-s" min="0.1" max="1" step="0.05" value="0.3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-df"></div><div class="k">effective df</div></div><div class="stat"><div class="v" id="pj-loo"></div><div class="k">LOOCV RMSE (ppb)</div></div><div class="stat"><div class="v" id="pj-gcv"></div><div class="k">GCV RMSE (ppb)</div></div><div class="stat"><div class="v" id="pj-te"></div><div class="k">2022 test RMSE (ppb)</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Comparing every span</h3>
+    <div class="prose"><p>Each point on these curves is a full leave-one-out run: 358 fits, each made without the day being predicted (with a nearest-neighbour span, dropping a day changes the window, so the S<sub>ii</sub> shortcut is only approximate here and the page does it the honest way). Solid lines are LOOCV on 2023; dashed lines are the error on 2022.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-3x1" style="aspect-ratio:2.4/1"><canvas id="pj-cc" aria-label="LOOCV and 2022 test RMSE against the span for three degrees"></canvas></div>
+        <figcaption><span style="color:var(--cB)">&#9644;</span> degree 0 &nbsp; <span style="color:var(--lda)">&#9644;</span> degree 1 &nbsp; <span style="color:var(--cC)">&#9644;</span> degree 2 &nbsp; solid: LOOCV on 2023, dashed: test on 2022. <span id="pj-cc-cap"></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="stats"><div class="stat"><div class="v" id="pj-bs"></div><div class="k">best span by LOOCV</div></div><div class="stat"><div class="v" id="pj-line"></div><div class="k">straight line, 2022 RMSE</div></div></div>
+        <p class="note" id="pj-csay"></p>
+      </div></div>
+    </div>
+
+    <h3>How likely is an unhealthy day?</h3>
+    <div class="prose"><p>Regulators care less about the average than about <em>exceedances</em>: days above 70 ppb. In 2023 there were 83 of them. Local logistic regression turns the 0/1 record of exceedance days into a smooth risk curve against temperature; a single global logistic curve is the rival. <strong>Slide &lambda;</strong>.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="pj-lg" aria-label="Probability of an exceedance day against temperature"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9644;</span> local logistic &nbsp; <span style="color:var(--cB)">&#9644;</span> global logistic &nbsp; squares: the share of exceedance days in each 2 &deg;C band of 2023 (size = number of days). Ticks at top and bottom: the days themselves.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-ll">&lambda;, Gaussian kernel sd (&deg;C)</label><output id="pj-ll-o"></output></div><input type="range" id="pj-ll" min="0.8" max="8" step="0.1" value="2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-p30"></div><div class="k">P(exceedance | 30 &deg;C)</div></div><div class="stat"><div class="v" id="pj-p35"></div><div class="k">P(exceedance | 35 &deg;C)</div></div><div class="stat"><div class="v" id="pj-l22"></div><div class="k">2022 log-loss, local</div></div><div class="stat"><div class="v" id="pj-g22"></div><div class="k">2022 log-loss, global</div></div></div>
+        <p class="note" id="pj-lsay"></p>
+      </div></div>
+    </div>
+
+    <h3>Does heat matter more in summer?</h3>
+    <div class="prose"><p>Ozone needs sunlight as well as heat, and a 25 &deg;C day in January has far less sun than one in July. A varying-coefficient model, ozone = &alpha;(day) + &beta;(day) &times; temperature, lets the slope change with the day of the year (a circle: 31 December is next to 1 January). <strong>Move through the year and change the kernel width in days</strong>.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-3x1" style="aspect-ratio:2.4/1"><canvas id="pj-vc" aria-label="The temperature slope beta through the year"></canvas></div>
+        <div class="plot ar-16x10" style="margin-top:10px"><canvas id="pj-vs" aria-label="Ozone against temperature with the local line for the chosen day"></canvas></div>
+        <figcaption>Top: &beta;(day), the extra ozone per extra &deg;C, through 2023. Below: every day of 2023, shaded by its kernel weight for the chosen day, with that day's line &alpha; + &beta; &times; temperature.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-vz">Day of the year</label><output id="pj-vz-o"></output></div><input type="range" id="pj-vz" min="1" max="365" step="1" value="196"></div>
+        <div class="ctrl"><div class="top"><label for="pj-vl">&lambda;, kernel sd (days)</label><output id="pj-vl-o"></output></div><input type="range" id="pj-vl" min="5" max="150" step="1" value="30"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-vb"></div><div class="k">&beta;: ppb per &deg;C</div></div><div class="stat"><div class="v" id="pj-va"></div><div class="k">predicted at 35 &deg;C</div></div><div class="stat"><div class="v" id="pj-vloo"></div><div class="k">LOOCV RMSE (ppb)</div></div><div class="stat"><div class="v" id="pj-vte"></div><div class="k">2022 test RMSE (ppb)</div></div></div>
+        <p class="note" id="pj-vsay"></p>
+      </div></div>
+    </div>
+
+    <h3>The same project in Python</h3>
+<pre class="code"><code>import numpy as np, pandas as pd
+from sklearn.linear_model import LogisticRegression
+
+tr = pd.read_csv("sb2023.csv"); te = pd.read_csv("sb2022.csv")    # EPA AQS site 06-071-9004
+x, y, xt, yt = tr.tc.values, tr.o3.values, te.tc.values, te.o3.values # daily max temp (C), MDA8 ozone (ppb)
+
+def loess(x, y, x0, frac, deg=1):
+    """Local polynomial fit at x0: tricube weights over the nearest frac*n points."""
+    d = np.abs(x - x0); q = max(2, int(frac * len(x) + 1e-10))
+    h = np.sort(d)[q - 1]
+    w = np.where(d &lt; h, (1 - (d / h) ** 3) ** 3, 0.0)
+    B = np.vander(x - x0, deg + 1, increasing=True)              # columns 1, (x-x0), (x-x0)^2
+    l = w * (B @ np.linalg.solve(B.T @ (w[:, None] * B), np.eye(deg + 1)[0]))
+    return l @ y, l                                              # fit and equivalent kernel
+
+rmse = lambda e: np.sqrt(np.mean(np.square(e)))
+n = len(x); b = np.polyfit(x, y, 1)
+line_loo = [y[i] - np.polyval(np.polyfit(np.delete(x, i), np.delete(y, i), 1), x[i]) for i in range(n)]
+print(f"{n} days in 2023, {len(xt)} in 2022; straight line: LOOCV {rmse(line_loo):.3f}, 2022 test {rmse(yt - np.polyval(b, xt)):.3f} ppb")
+print(" span  deg     df   LOOCV   GCV    2022 test")
+for deg in [0, 1, 2]:
+    for frac in [0.1, 0.2, 0.3, 0.5, 0.75, 1.0]:
+        fit = np.array([loess(x, y, xi, frac, deg)[0] for xi in x])
+        df = sum(loess(x, y, xi, frac, deg)[1][i] for i, xi in enumerate(x))        # trace of S
+        keep = lambda i: np.arange(n) != i
+        loo = [y[i] - loess(x[keep(i)], y[keep(i)], x[i], frac, deg)[0] for i in range(n)]
+        gcv = np.mean((y - fit) ** 2) / (1 - df / n) ** 2
+        test = [loess(x, y, xi, frac, deg)[0] for xi in xt]
+        print(f" {frac:4.2f}   {deg}   {df:5.2f}  {rmse(loo):6.3f}  {np.sqrt(gcv):6.3f}  {rmse(yt - test):6.3f}")
+
+# local likelihood: P(MDA8 > 70 ppb | temperature), Gaussian kernel of sd 2 C, against one global logistic curve
+z, zt = (y > 70).astype(int), (yt > 70).astype(int)
+def local_logit(x0, lam=2.0):
+    m = LogisticRegression(C=1e12, tol=1e-12, max_iter=10000)
+    m.fit((x - x0)[:, None], z, sample_weight=np.exp(-0.5 * ((x - x0) / lam) ** 2))
+    return 1 / (1 + np.exp(-m.intercept_[0]))
+g = LogisticRegression(C=1e12, tol=1e-12, max_iter=10000).fit(x[:, None], z)
+print("  temp  local  global")
+for x0 in [20, 25, 30, 35, 40]:
+    print(f"  {x0:2d} C  {local_logit(x0):.4f}  {g.predict_proba([[x0]])[0, 1]:.4f}")
+logloss = lambda p: -np.mean(zt * np.log(p) + (1 - zt) * np.log(1 - p))
+pl, pg = np.array([local_logit(t) for t in xt]), g.predict_proba(xt[:, None])[:, 1]
+print(f"2022 log-loss: local {logloss(pl):.4f}, global {logloss(pg):.4f}")
+
+# varying coefficient: ozone = alpha(day) + beta(day) * temperature, Gaussian kernel over the day of the year
+d, dt = tr.doy.values, te.doy.values
+def vc(z0, x, y, d, lam):
+    r = np.abs(d - z0); w = np.exp(-0.5 * (np.minimum(r, 365 - r) / lam) ** 2)
+    B = np.c_[np.ones_like(x), x]
+    return np.linalg.solve(B.T @ (w[:, None] * B), B.T @ (w * y))      # alpha, beta
+print("  days  LOOCV   2022 test  slope in Jan / Apr / Jul / Oct (ppb per C)")
+for lam in [7, 15, 30, 60, 120]:
+    keep = lambda i: np.arange(n) != i
+    loo = [y[i] - [1, x[i]] @ vc(d[i], x[keep(i)], y[keep(i)], d[keep(i)], lam) for i in range(n)]
+    test = [yt[i] - [1, xt[i]] @ vc(dt[i], x, y, d, lam) for i in range(len(xt))]
+    sl = "  ".join(f"{vc(z0, x, y, d, lam)[1]:5.2f}" for z0 in [15, 105, 196, 288])
+    print(f"  {lam:4d}  {rmse(loo):6.3f}  {rmse(test):6.3f}     {sl}")</code></pre>
+<pre class="code out"><code id="pj-out">358 days in 2023, 354 in 2022; straight line: LOOCV 12.474, 2022 test 11.845 ppb
+ span  deg     df   LOOCV   GCV    2022 test
+ 0.10   0   17.42  11.463  11.470  12.100
+ 0.20   0    8.65  11.384  11.386  11.736
+ 0.30   0    5.76  11.516  11.511  11.545
+ 0.50   0    3.40  12.121  12.122  11.520
+ 0.75   0    2.20  13.045  13.041  12.199
+ 1.00   0    1.35  17.147  17.145  16.027
+ 0.10   1   19.43  11.450  11.490  12.404
+ 0.20   1   10.13  11.299  11.327  12.135
+ 0.30   1    7.07  11.274  11.290  12.020
+ 0.50   1    4.58  11.348  11.363  11.878
+ 0.75   1    3.30  11.410  11.416  11.922
+ 1.00   1    2.39  11.802  11.802  11.852
+ 0.10   2   38.05  11.859  11.883  14.144
+ 0.20   2   17.41  11.457  11.484  12.407
+ 0.30   2   11.99  11.330  11.358  12.304
+ 0.50   2    7.58  11.284  11.313  12.073
+ 0.75   2    5.14  11.373  11.385  11.886
+ 1.00   2    3.52  11.368  11.379  11.939
+  temp  local  global
+  20 C  0.0000  0.0060
+  25 C  0.0065  0.0468
+  30 C  0.3774  0.2860
+  35 C  0.7194  0.7656
+  40 C  0.9676  0.9638
+2022 log-loss: local 0.3038, global 0.2990
+  days  LOOCV   2022 test  slope in Jan / Apr / Jul / Oct (ppb per C)
+     7   7.686  10.607     -0.58   1.99   3.25   1.85
+    15   8.040   9.747     -0.36   2.08   3.18   1.78
+    30   8.801   9.498     -0.01   2.11   2.94   2.32
+    60  10.154  10.221      1.32   2.23   2.53   2.49
+   120  11.593  11.231      2.00   2.23   2.32   2.30</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest">The page runs the same algorithms in JavaScript, and every number it shows for this project matches the Python output above to the last printed digit: all 18 rows of the span table (df, LOOCV, GCV, 2022 test), the five exceedance probabilities and both 2022 log-losses, and the varying-coefficient table. The degree-1 fits also agree with statsmodels' <code>lowess</code> (no robustness iterations) to within 3&times;10<sup>&minus;14</sup> ppb. One small difference in method: scikit-learn solves the local logistic fits with L-BFGS, the page with Newton's method; at the four printed decimals they agree. Two caveats belong to the data, not the code: the station reports whole &deg;F, so many days share a temperature, and consecutive days are not independent, which makes every leave-one-out number here somewhat optimistic.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>A kernel smoother predicts at x<sub>0</sub> with a weighted average of the training targets, the weights fading smoothly with distance, so the curve has none of k-NN's jumps. That is Nadaraya&ndash;Watson, and Bishop derives it as the conditional mean of a Parzen density.</li>
+      <li>Fitting a weighted line, not a constant, at each query removes the slope from the bias, which cures the boundary bias; local quadratics also trim less off peaks but pay with variance &sigma;&sup2;&Vert;l(x<sub>0</sub>)&Vert;&sup2;.</li>
+      <li>The width &lambda; matters far more than the kernel's shape. Every such smoother is linear, f&#770; = <b>S</b><sub>&lambda;</sub>y, so df = trace <b>S</b><sub>&lambda;</sub>, and LOOCV or GCV picks &lambda; from one fit.</li>
+      <li>In many dimensions windows empty and most points sit near an edge. Structure rescues you: shaped kernels that down-weight inputs, additive models, and varying-coefficient models smoothed in one variable.</li>
+      <li>Any likelihood can be localised: local logistic regression gives a risk curve. On San Bernardino ozone the LOESS curve with span 0.3 is flat below about 20 &deg;C and climbs steeply after, and letting the slope vary with the season cuts next year's error from 11.8 to 9.5 ppb.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why does the k-NN average jump, while a kernel average with the same k does not?</summary><p>In the k-NN average every neighbour has weight 1/k and every other point weight 0, so when x<sub>0</sub> passes the midpoint between the k-th and the (k+1)-th neighbour, one whole 1/k share swaps from one y to another. A kernel like Epanechnikov gives the point at the window's edge weight zero, and weights change continuously as x<sub>0</sub> moves, so the estimate does too.</p></details>
+      <details class="q"><summary>Nadaraya&ndash;Watson at x<sub>0</sub> = 0 on a rising curve comes out too high. Why does a local line fix it?</summary><p>All of x<sub>0</sub>'s neighbours lie to its right, where the curve is higher, so any positive-weighted average of them overshoots by roughly f&prime;(x<sub>0</sub>) times the weights' mean distance. A local line estimates that slope and extrapolates back to x<sub>0</sub>; its weights have first moment exactly zero, so the slope term cancels.</p></details>
+      <details class="q"><summary>A smoother has df<sub>&lambda;</sub> = 2 on 100 points. What does it look like, and what if df<sub>&lambda;</sub> = 100?</summary><p>df = 2 is about as rigid as a straight line (local linear with a huge window becomes the least-squares line). df = 100 means trace <b>S</b> = N: each fitted value is essentially its own y, so the curve interpolates the data and LOOCV will expose it.</p></details>
+      <details class="q"><summary>Why is the shortcut CV = mean((y<sub>i</sub> &minus; f&#770;(x<sub>i</sub>)) / (1 &minus; S<sub>ii</sub>))&sup2; exact for a fixed &lambda; but not for a LOESS span?</summary><p>With a fixed &lambda; the kernel weights at x<sub>i</sub> do not depend on which points are present, and deleting one case from a weighted least-squares fit has that closed form. A span picks the q nearest points, so removing x<sub>i</sub> pulls a new neighbour into the window and changes the weights themselves.</p></details>
+      <details class="q"><summary>In the varying-coefficient model, LOOCV prefers a 7-day window but 2022 prefers about 30 days. Which should you trust?</summary><p>The 2022 test. Neighbouring days share weather systems, so their errors are correlated; leaving out one day still leaves its almost-identical neighbours in the fit, and LOOCV rewards windows that copy them. When errors are correlated, leave out whole blocks (weeks or months) or test on a separate period.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../density-estimation/">Next chapter: Density Estimation: Histograms, Kernels &amp; RBF Networks &rarr;</a>
+      <a class="btn" href="../k-nearest-neighbours/">&larr; Previous: k-Nearest Neighbours</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Nadaraya, E. A. (1964). On estimating regression. <em>Theory of Probability and Its Applications</em> 9(1), 141&ndash;142; Watson, G. S. (1964). Smooth regression analysis. <em>Sankhy&#257; A</em> 26(4), 359&ndash;372.</li>
+      <li>Cleveland, W. S. (1979). Robust locally weighted regression and smoothing scatterplots. <em>JASA</em> 74, 829&ndash;836; Cleveland, W. S. &amp; Devlin, S. J. (1988). Locally weighted regression: an approach to regression analysis by local fitting. <em>JASA</em> 83, 596&ndash;610.</li>
+      <li>Fan, J. &amp; Gijbels, I. (1996). <em>Local Polynomial Modelling and Its Applications</em>. Chapman &amp; Hall.</li>
+      <li>Craven, P. &amp; Wahba, G. (1979). Smoothing noisy data with spline functions. <em>Numerische Mathematik</em> 31, 377&ndash;403 (generalised cross-validation).</li>
+      <li>Tibshirani, R. &amp; Hastie, T. (1987). Local likelihood estimation. <em>JASA</em> 82, 559&ndash;567; Hastie, T. &amp; Tibshirani, R. (1993). Varying-coefficient models. <em>JRSS B</em> 55, 757&ndash;796.</li>
+      <li>Loader, C. (1999). <em>Local Regression and Likelihood</em>. Springer.</li>
+      <li>Hastie, Tibshirani &amp; Friedman (2009). <em>The Elements of Statistical Learning</em>, 2nd ed., &sect;2.8.2 and chapter 6; Bishop (2006). <em>Pattern Recognition and Machine Learning</em>, &sect;6.3.1; Russell &amp; Norvig (2021). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed., &sect;19.7.4.</li>
+      <li>Data: US Environmental Protection Agency, Air Quality System, pre-generated daily summary files for ozone (44201) and temperature, 2022 and 2023, aqs.epa.gov/aqsweb/airdata (US government work, public domain).</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- kernel smoothing core: kernels, local polynomials, LOESS, local logistic, varying coefficients ---------- */
+const KER = {
+  epan: { name: 'Epanechnikov', D: t => { t = Math.abs(t); return t < 1 ? 0.75 * (1 - t * t) : 0; }, form: '¾(1 − t²)' },
+  tri: { name: 'tri-cube', D: t => { t = Math.abs(t); return t < 1 ? Math.pow(1 - t * t * t, 3) : 0; }, form: '(1 − |t|³)³' },
+  gauss: { name: 'Gaussian', D: t => Math.exp(-0.5 * t * t) / Math.sqrt(2 * Math.PI), form: 'e^(−t²/2) / √(2π)' },
+};
+const tricube = KER.tri.D;
+// solve a small dense system; returns null when (nearly) singular
+function gsolve(A, b) {
+  const n = b.length, M = A.map((r, i) => [...r, b[i]]); let big = 0;
+  for (let i = 0; i < n; i++) big = Math.max(big, Math.abs(A[i][i]));
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    if (!(Math.abs(M[c][c]) > 1e-11 * (big || 1))) return null;
+    for (let r = c + 1; r < n; r++) { const f = M[r][c] / M[c][c]; if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  const x = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / M[r][r]; }
+  return x.every(isFinite) ? x : null;
+}
+// local polynomial of degree deg at x0 with weights w (only indices lo..hi are visited).
+// Returns { f, beta, l } where l is the equivalent kernel: f = sum_i l_i y_i.
+function localPoly(xs, ys, x0, w, deg, lo, hi, wantL) {
+  lo = lo || 0; hi = hi == null ? xs.length - 1 : hi;
+  const p = deg + 1, mom = new Array(2 * p - 1).fill(0), r = new Array(p).fill(0);
+  let nz = 0;
+  for (let i = lo; i <= hi; i++) { const wi = w[i]; if (!(wi > 0)) continue; nz++; const u = xs[i] - x0; let pw = wi;
+    for (let k = 0; k < 2 * p - 1; k++) { if (k < p) r[k] += pw * ys[i]; mom[k] += pw; pw *= u; } }
+  if (nz === 0) return null;
+  const M = []; for (let j = 0; j < p; j++) { M.push([]); for (let k = 0; k < p; k++) M[j].push(mom[j + k]); }
+  const beta = gsolve(M, r); if (!beta) return null;
+  const out = { f: beta[0], beta, sw: mom[0] };
+  if (wantL) {
+    const e1 = new Array(p).fill(0); e1[0] = 1; const c = gsolve(M, e1), l = new Float64Array(xs.length);
+    for (let i = lo; i <= hi; i++) { const wi = w[i]; if (!(wi > 0)) continue; const u = xs[i] - x0; let s = 0, pw = 1; for (let j = 0; j < p; j++) { s += c[j] * pw; pw *= u; } l[i] = wi * s; }
+    out.l = l;
+  }
+  return out;
+}
+// kernel weights with a fixed (metric) width lam, or an adaptive width = distance to the k-th nearest point
+function kthDist(xs, x0, k) { const d = Array.from(xs, x => Math.abs(x - x0)).sort((a, b) => a - b); return d[Math.min(k, d.length) - 1]; }
+function kWeights(xs, x0, D, h) { const w = new Float64Array(xs.length); if (!(h > 0)) return w; for (let i = 0; i < xs.length; i++) w[i] = D((xs[i] - x0) / h); return w; }
+function kernelFit(xs, ys, x0, kern, h, deg, wantL) { const w = kWeights(xs, x0, KER[kern].D, h); const r = localPoly(xs, ys, x0, w, deg, 0, xs.length - 1, wantL); if (r) r.w = w; return r; }
+
+/* LOESS on x-sorted data: tri-cube weights over the q = floor(frac*n) nearest points (q-th distance gets weight 0).
+   skip: index left out (for leave-one-out). */
+function lowerBound(xs, v) { let a = 0, b = xs.length; while (a < b) { const m = (a + b) >> 1; if (xs[m] < v) a = m + 1; else b = m; } return a; }
+function nnWindow(xs, x0, q, skip) {
+  const n = xs.length; let r = lowerBound(xs, x0), l = r - 1, cnt = 0, h = 0;
+  while (cnt < q) {
+    if (l === skip) { l--; continue; } if (r === skip) { r++; continue; }
+    const dl = l >= 0 ? x0 - xs[l] : Infinity, dr = r < n ? xs[r] - x0 : Infinity;
+    if (dl === Infinity && dr === Infinity) break;
+    if (dl <= dr) { h = dl; l--; } else { h = dr; r++; } cnt++;
+  }
+  return { lo: l + 1, hi: r - 1, h };
+}
+function loessAt(xs, ys, x0, frac, deg, skip, wantL) {
+  const n = xs.length - (skip == null || skip < 0 ? 0 : 1), q = Math.max(2, Math.floor(frac * n + 1e-10));
+  const { lo, hi, h } = nnWindow(xs, x0, q, skip == null ? -1 : skip), w = new Float64Array(xs.length);
+  for (let i = lo; i <= hi; i++) { if (i === skip) continue; const d = Math.abs(xs[i] - x0); w[i] = d < h ? tricube(d / h) : 0; }
+  const r = localPoly(xs, ys, x0, w, deg, lo, hi, wantL); if (r) { r.w = w; r.h = h; r.lo = lo; r.hi = hi; r.q = q; }
+  return r;
+}
+
+/* local logistic regression at x0: Gaussian kernel of sd lam, eta = a + b (x - x0), Newton's method */
+function localLogit(xs, zs, x0, lam, skip) {
+  const n = xs.length, w = new Float64Array(n); let sw = 0, sz = 0;
+  for (let i = 0; i < n; i++) { if (i === skip) continue; const t = (xs[i] - x0) / lam; w[i] = Math.exp(-0.5 * t * t); sw += w[i]; sz += w[i] * zs[i]; }
+  const m = clamp(sz / sw, 1e-4, 1 - 1e-4); let a = Math.log(m / (1 - m)), b = 0, it = 0, ll = 0;
+  for (it = 1; it <= 100; it++) {
+    let g0 = 0, g1 = 0, h00 = 0, h01 = 0, h11 = 0;
+    for (let i = 0; i < n; i++) { const wi = w[i]; if (!(wi > 0)) continue; const u = xs[i] - x0, p = 1 / (1 + Math.exp(-(a + b * u))), e = zs[i] - p, v = p * (1 - p);
+      g0 += wi * e; g1 += wi * e * u; h00 += wi * v; h01 += wi * v * u; h11 += wi * v * u * u; }
+    const det = h00 * h11 - h01 * h01; if (!(det > 0)) break;
+    const da = (h11 * g0 - h01 * g1) / det, db = (h00 * g1 - h01 * g0) / det; a += da; b += db;
+    if (Math.abs(da) + Math.abs(db) < 1e-11) break;
+  }
+  for (let i = 0; i < n; i++) { if (!(w[i] > 0)) continue; const eta = a + b * (xs[i] - x0); ll += w[i] * (zs[i] * eta - (eta > 0 ? eta + Math.log1p(Math.exp(-eta)) : Math.log1p(Math.exp(eta)))); }
+  return { p: 1 / (1 + Math.exp(-a)), a, b, it: Math.min(it, 100), ll, w, sw };
+}
+// ordinary (global) logistic regression on one feature, by Newton
+function logit1(xs, zs) {
+  let a = 0, b = 0; const n = xs.length, mx = xs.reduce((s, v) => s + v, 0) / n;
+  for (let it = 0; it < 100; it++) {
+    let g0 = 0, g1 = 0, h00 = 0, h01 = 0, h11 = 0;
+    for (let i = 0; i < n; i++) { const u = xs[i] - mx, p = 1 / (1 + Math.exp(-(a + b * u))), e = zs[i] - p, v = p * (1 - p); g0 += e; g1 += e * u; h00 += v; h01 += v * u; h11 += v * u * u; }
+    const det = h00 * h11 - h01 * h01, da = (h11 * g0 - h01 * g1) / det, db = (h00 * g1 - h01 * g0) / det; a += da; b += db; if (Math.abs(da) + Math.abs(db) < 1e-12) break;
+  }
+  return { a: a - b * mx, b, p: x => 1 / (1 + Math.exp(-(a + b * (x - mx)))) };
+}
+
+/* varying-coefficient model y = alpha(z) + beta(z) x, Gaussian kernel in z of sd lam; z is circular with period per */
+function vcAt(zs, xs, ys, z0, lam, per, skip) {
+  let s0 = 0, s1 = 0, s2 = 0, t0 = 0, t1 = 0;
+  for (let i = 0; i < zs.length; i++) { if (i === skip) continue; let d = Math.abs(zs[i] - z0); if (per) d = Math.min(d, per - d); const t = d / lam, w = Math.exp(-0.5 * t * t);
+    s0 += w; s1 += w * xs[i]; s2 += w * xs[i] * xs[i]; t0 += w * ys[i]; t1 += w * xs[i] * ys[i]; }
+  const det = s0 * s2 - s1 * s1, beta = (s0 * t1 - s1 * t0) / det, alpha = (t0 - beta * s1) / s0;
+  return { alpha, beta, sw: s0 };
+}
+
+/* 2-D local polynomial (degree 0 or 1) with a structured kernel D( sqrt(d1^2 + a d2^2) / lam ) */
+function local2(P, x1, x2, lam, a, deg, D, skip) {
+  let S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], r = [0, 0, 0], nz = 0;
+  for (let i = 0; i < P.length; i++) { if (i === skip) continue; const d1 = P[i][0] - x1, d2 = P[i][1] - x2, w = D(Math.sqrt(d1 * d1 + a * d2 * d2) / lam); if (!(w > 0)) continue; nz++;
+    const b = [1, d1, d2]; for (let j = 0; j < 3; j++) { r[j] += w * b[j] * P[i][2]; for (let k = 0; k < 3; k++) S[j][k] += w * b[j] * b[k]; } }
+  if (!nz || (deg === 1 && nz < 5)) return null; // a local plane needs a few points, not three
+  if (deg === 0) return { f: r[0] / S[0][0], n: nz };
+  const be = gsolve(S, r); return be ? { f: be[0], g: [be[1], be[2]], n: nz } : null;
+}
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const sum = a => { let s = 0; for (const v of a) s += v; return s; };
+const sq = v => v * v;
+const pct = (p, d) => fmt(p * 100, d == null ? 0 : d) + '%';
+const num = (v, d) => Number(v).toLocaleString('en-GB', { maximumFractionDigits: d || 0, minimumFractionDigits: d || 0 });
+const linspace = (a, b, n) => Array.from({ length: n }, (_, i) => a + (b - a) * i / (n - 1));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dayName = d => { const t = new Date(Date.UTC(2023, 0, d)); return t.getUTCDate() + ' ' + MONTHS[t.getUTCMonth()]; };
+
+/* ---------- drawing bits ---------- */
+function path(v, X, Y, col, lw, dash, alpha) {
+  const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.4; c.lineJoin = 'round'; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha;
+  c.beginPath(); let pen = false;
+  for (let i = 0; i < X.length; i++) { const y = Y[i]; if (y == null || !isFinite(y)) { pen = false; continue; } const px = v.X(X[i]), py = clamp(v.Y(y), -2000, 4000); if (pen) c.lineTo(px, py); else { c.moveTo(px, py); pen = true; } }
+  c.stroke(); c.restore();
+}
+function vline(v, x, col, dash, lw) { seg(v, x, v.yl[0], x, v.yl[1], col, lw || 1.2, dash || [4, 4]); }
+function hline(v, y, col, dash, lw) { seg(v, v.xl[0], y, v.xl[1], y, col, lw || 1.2, dash || [4, 4]); }
+function hexRGB(h) { h = h.trim(); if (h[0] === '#') { if (h.length === 4) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3]; return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); } const m = h.match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : [128, 128, 128]; }
+function mixRGB(a, b, t) { return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`; }
+function ptDot(v, x, y, col, r, alpha) { const c = v.ctx; c.save(); c.globalAlpha = alpha == null ? 1 : alpha; c.beginPath(); c.arc(v.X(x), v.Y(y), r, 0, 7); c.fillStyle = col; c.fill(); c.restore(); }
+function hollow(v, x, y, col, r, alpha) { const c = v.ctx; c.save(); c.globalAlpha = alpha == null ? 1 : alpha; c.beginPath(); c.arc(v.X(x), v.Y(y), r, 0, 7); c.strokeStyle = col; c.lineWidth = 1.2; c.stroke(); c.restore(); }
+function label(v, text, x, y, col, align, base, font) { const c = v.ctx; c.save(); c.font = font || ('11px ' + css('--f-mono')); c.fillStyle = col; c.textAlign = align || 'left'; c.textBaseline = base || 'bottom'; c.fillText(text, v.X(x), v.Y(y)); c.restore(); }
+// a kernel bump drawn along the bottom of a plot, height frac of the plot
+function bump(v, x0, h, D, col, frac) {
+  const c = v.ctx, base = v.yl[0], top = (v.yl[1] - v.yl[0]) * (frac || 0.22), D0 = D(0); c.save(); c.fillStyle = col; c.globalAlpha = 0.14; c.beginPath(); c.moveTo(v.X(v.xl[0]), v.Y(base));
+  for (let i = 0; i <= 200; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / 200; c.lineTo(v.X(x), v.Y(base + top * D((x - x0) / h) / D0)); }
+  c.lineTo(v.X(v.xl[1]), v.Y(base)); c.closePath(); c.fill(); c.globalAlpha = 0.7; c.strokeStyle = col; c.lineWidth = 1.2; c.stroke(); c.restore();
+}
+// press-and-drag (and, for a mouse, hover) to move a query
+function scrub(cv, getV, set, hover) {
+  let on = false; const go = e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); set(clamp(v.iX(px), v.xl[0], v.xl[1]), clamp(v.iY(py), v.yl[0], v.yl[1])); };
+  cv.addEventListener('pointerdown', e => { on = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} go(e); e.preventDefault(); });
+  cv.addEventListener('pointermove', e => { if (on || (hover && e.pointerType === 'mouse')) go(e); });
+  const up = () => { on = false; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.style.cursor = 'crosshair';
+}
+function paintField(v, f, step, lo, hi, cLo, cHi) {
+  const c = v.ctx, A = hexRGB(cLo), B = hexRGB(cHi), nx = Math.ceil(v.pw / step), ny = Math.ceil(v.ph / step); c.save();
+  for (let j = 0; j < ny; j++) { const y = v.iY(v.pad.t + (j + 0.5) * step); for (let i = 0; i < nx; i++) { const x = v.iX(v.pad.l + (i + 0.5) * step), val = f(x, y);
+    if (val == null || !isFinite(val)) continue; c.fillStyle = mixRGB(A, B, clamp((val - lo) / (hi - lo), 0, 1)); c.fillRect(v.pad.l + i * step, v.pad.t + j * step, step + 0.6, step + 0.6); } }
+  c.restore();
+}
+
+/* ---------- the shared teaching data: 100 noisy points around sin(4x) ---------- */
+const SIG = 1 / 3, fTrue = x => Math.sin(4 * x), dTrue = x => 4 * Math.cos(4 * x), PEAK = Math.PI / 8;
+function makeSyn(seed, n) { const r = mulberry32(seed), x = []; for (let i = 0; i < n; i++) x.push(r()); x.sort((a, b) => a - b); return { x, y: x.map(t => fTrue(t) + SIG * gaussOf(r)) }; }
+const SYN = makeSyn(17, 100);
+const GX = linspace(0, 1, 401);
+const synAxes = (v, opt) => axes(v, 'x', 'y', Object.assign({ sx: 0.2, sy: 1 }, opt || {}));
+const SYX = [-0.02, 1.02], SYY = [-2, 2.1];
+
+/* ---------- ozone data ---------- */
+const DATA = {"site":"San Bernardino (AQS 06-071-9004)","tr":[[12.22,33,1],[12.78,28,2],[13.33,30,3],[16.67,26,4],[13.89,34,5],[18.33,34,6],[21.11,32,7],[19.44,33,8],[16.11,29,9],[15.0,35,10],[15.0,29,11],[18.89,23,12],[19.44,20,13],[12.22,33,14],[12.22,35,15],[13.33,37,16],[13.33,34,17],[14.44,26,18],[13.89,34,19],[15.56,37,20],[18.33,36,21],[17.22,40,22],[15.0,39,23],[20.0,41,25],[17.22,40,26],[20.56,32,27],[17.22,41,28],[12.78,38,29],[13.89,36,30],[14.44,42,31],[19.44,41,32],[21.11,36,33],[21.67,31,34],[22.22,40,35],[16.67,39,36],[17.78,40,37],[20.56,39,38],[23.33,35,39],[25.0,42,40],[22.78,42,41],[17.22,44,42],[14.44,40,43],[15.56,41,44],[12.22,39,45],[14.44,38,46],[16.11,40,47],[18.33,39,48],[20.0,45,49],[21.67,50,50],[23.33,42,51],[19.44,43,52],[11.67,39,53],[6.67,35,54],[12.22,38,55],[12.22,39,56],[9.44,43,57],[10.0,30,58],[12.22,39,59],[9.44,43,60],[17.22,40,61],[17.22,44,62],[14.44,45,63],[12.22,46,64],[14.44,47,65],[16.11,43,66],[15.56,45,67],[12.78,29,69],[18.33,20,70],[20.0,37,71],[19.44,31,72],[15.0,25,73],[17.22,22,74],[16.11,30,75],[22.22,45,76],[23.33,53,77],[18.33,45,78],[16.67,37,79],[13.89,46,80],[12.78,44,81],[12.78,39,82],[17.22,46,83],[17.78,51,84],[17.22,54,85],[20.0,49,86],[21.11,58,87],[13.89,44,88],[12.78,44,89],[18.33,47,90],[22.22,57,91],[21.11,56,92],[15.56,47,93],[16.11,45,94],[20.56,53,95],[23.33,52,96],[22.78,61,97],[22.78,54,98],[29.44,72,99],[31.67,68,100],[27.78,66,101],[21.11,42,102],[12.78,31,103],[17.78,45,104],[26.11,64,105],[23.33,69,106],[19.44,51,107],[18.33,55,108],[22.22,57,109],[28.89,62,110],[32.22,72,111],[31.67,76,112],[27.78,73,113],[23.89,53,114],[23.89,58,115],[30.0,66,116],[31.11,80,117],[33.33,93,119],[27.22,75,120],[18.33,39,121],[18.33,43,122],[17.78,46,123],[15.56,37,124],[17.22,39,125],[20.0,49,126],[22.22,50,127],[23.33,51,128],[21.11,45,129],[18.33,42,130],[22.78,54,131],[27.22,67,132],[34.44,84,133],[31.67,77,134],[29.44,63,135],[30.56,82,136],[30.56,77,137],[27.22,70,138],[25.0,59,139],[30.56,73,140],[30.56,70,141],[28.89,66,142],[23.89,51,144],[22.22,53,145],[23.89,64,147],[22.22,49,148],[22.22,51,149],[20.56,47,150],[17.78,32,151],[19.44,32,152],[25.56,59,153],[27.78,77,154],[28.33,77,155],[21.11,52,156],[21.67,56,157],[22.22,52,158],[25.0,58,159],[23.89,50,160],[22.22,52,161],[18.89,37,162],[19.44,34,163],[23.89,48,164],[22.78,48,165],[23.89,49,166],[27.78,57,167],[31.67,83,168],[28.33,60,169],[24.44,52,170],[27.78,71,171],[28.33,69,172],[25.56,56,173],[26.67,57,174],[28.89,70,175],[28.33,65,176],[28.89,72,177],[29.44,73,178],[28.33,66,179],[30.56,82,180],[35.56,106,181],[36.67,111,182],[37.22,105,183],[35.0,103,184],[33.89,69,185],[33.33,78,186],[31.11,74,187],[30.56,74,188],[31.11,78,189],[31.11,78,190],[36.67,94,191],[37.22,95,192],[35.56,78,193],[36.11,92,194],[37.78,105,195],[38.89,118,196],[38.33,101,197],[37.78,93,198],[37.22,90,199],[37.78,76,200],[38.89,91,201],[36.67,92,202],[38.33,107,203],[35.0,76,204],[40.0,99,205],[40.56,101,206],[38.89,87,207],[39.44,99,208],[38.33,95,209],[38.33,103,210],[36.67,97,211],[35.56,66,212],[35.0,72,213],[35.56,76,214],[33.89,81,215],[34.44,94,216],[37.78,103,217],[39.44,83,218],[36.67,72,219],[33.33,52,220],[31.67,44,221],[28.33,46,222],[30.0,57,223],[32.22,66,224],[34.44,81,225],[36.67,85,226],[38.89,90,227],[40.0,90,228],[39.44,76,229],[37.22,74,230],[32.78,58,231],[25.56,25,232],[28.89,44,233],[32.78,66,234],[35.56,83,235],[32.78,81,236],[35.56,81,237],[37.22,84,238],[39.44,86,239],[40.56,94,240],[41.11,110,241],[39.44,90,242],[36.67,90,243],[31.67,41,244],[26.67,22,245],[26.67,39,246],[27.22,51,247],[27.22,53,248],[31.11,71,249],[34.44,84,250],[36.67,74,251],[37.22,91,252],[35.56,70,253],[34.44,53,254],[32.22,66,255],[29.44,65,256],[28.89,66,257],[27.78,59,258],[24.44,59,259],[25.0,58,260],[26.67,64,261],[28.33,66,262],[25.0,53,263],[23.89,54,264],[26.67,54,265],[30.0,74,266],[31.67,71,267],[30.56,64,268],[32.22,79,269],[33.89,86,270],[29.44,83,271],[25.0,60,272],[20.56,38,273],[20.56,42,274],[23.89,42,275],[29.44,53,276],[33.89,44,277],[35.56,43,278],[37.22,49,279],[37.78,69,280],[36.11,84,281],[32.78,63,282],[26.11,53,283],[23.89,49,284],[28.33,42,285],[28.89,46,286],[31.11,63,287],[36.11,64,288],[34.44,73,289],[33.33,84,290],[38.33,66,291],[37.78,70,292],[36.11,70,293],[31.67,68,294],[24.44,48,295],[21.67,32,296],[25.56,39,297],[22.78,40,299],[23.33,50,300],[22.78,55,301],[21.67,46,302],[25.56,46,303],[28.33,46,304],[28.89,48,305],[30.56,50,306],[31.11,50,307],[30.0,67,308],[30.56,67,309],[27.78,57,310],[20.56,38,311],[22.22,41,312],[23.89,42,313],[25.0,40,314],[27.78,51,315],[28.33,49,316],[26.11,41,317],[27.22,42,318],[20.56,19,319],[21.11,28,320],[24.44,37,321],[20.56,34,322],[21.67,41,323],[20.56,42,324],[25.0,34,325],[26.67,35,326],[23.33,44,327],[18.89,38,328],[19.44,33,329],[18.33,31,330],[20.56,33,331],[22.78,35,332],[16.67,31,333],[15.56,30,334],[18.33,32,335],[20.56,35,336],[21.11,40,337],[26.67,32,338],[27.22,33,339],[25.56,34,340],[18.33,29,341],[21.67,36,342],[20.0,37,343],[23.89,39,344],[24.44,18,345],[21.67,32,346],[20.0,38,347],[23.33,34,348],[24.44,34,349],[25.56,33,350],[26.67,33,351],[22.78,20,352],[18.33,13,353],[20.0,25,354],[20.56,25,355],[18.33,28,356],[16.67,29,357],[18.89,34,358],[20.0,36,359],[20.56,17,360],[21.11,19,361],[21.11,15,362],[22.22,20,363],[15.0,37,364]],"te":[[16.11,42,1],[17.22,39,2],[18.33,29,3],[18.33,30,4],[24.44,29,5],[25.56,32,6],[20.56,29,7],[17.22,39,8],[22.78,40,9],[19.44,33,10],[23.89,34,11],[19.44,25,15],[23.33,39,16],[17.22,16,17],[17.22,27,18],[23.89,37,20],[21.11,40,21],[18.33,40,22],[22.78,40,23],[22.22,31,24],[22.78,44,25],[20.56,41,26],[22.22,39,27],[18.89,40,28],[17.78,32,29],[22.78,39,30],[18.89,26,31],[16.11,39,32],[14.44,45,33],[19.44,42,34],[19.44,39,35],[22.22,44,36],[25.56,46,37],[25.56,43,38],[26.67,45,39],[27.78,47,40],[27.78,43,41],[30.0,44,42],[30.0,46,43],[30.0,48,44],[27.22,54,45],[14.44,39,46],[17.22,37,47],[20.0,44,48],[23.89,43,49],[21.67,52,51],[15.0,43,52],[13.33,40,53],[10.56,35,54],[15.0,40,55],[18.33,42,56],[20.56,45,57],[23.33,46,58],[26.67,48,59],[31.67,48,60],[30.0,52,61],[23.89,55,62],[15.0,36,63],[12.22,43,64],[16.11,44,65],[18.33,45,66],[21.11,47,67],[20.56,50,68],[22.78,49,70],[25.0,53,71],[22.22,60,72],[28.33,55,73],[27.22,60,74],[25.0,49,75],[27.22,54,76],[27.22,55,77],[22.78,50,78],[21.11,47,79],[27.22,47,80],[30.0,45,81],[31.11,53,82],[31.67,64,83],[32.78,62,84],[30.0,58,85],[25.56,57,86],[15.56,40,87],[17.22,43,88],[22.22,46,89],[17.22,36,90],[23.33,55,91],[20.56,58,92],[17.78,50,93],[25.56,49,94],[28.89,75,95],[34.44,49,96],[35.0,54,97],[36.11,57,98],[31.67,72,99],[22.78,59,100],[17.78,46,101],[20.0,51,102],[22.22,55,103],[22.78,60,104],[23.33,63,105],[20.56,45,106],[27.22,63,107],[28.33,74,108],[24.44,51,109],[21.67,51,110],[21.67,51,111],[17.22,51,112],[26.11,54,113],[28.89,52,114],[31.11,69,115],[28.89,76,116],[25.0,68,117],[20.0,58,118],[26.67,69,119],[29.44,86,120],[25.56,73,121],[25.56,59,122],[24.44,67,123],[31.67,67,124],[30.56,74,125],[30.0,76,126],[26.67,66,127],[21.11,48,128],[20.56,58,129],[21.11,53,130],[20.56,51,131],[28.89,62,132],[34.44,69,133],[36.11,90,134],[31.67,82,135],[28.89,73,136],[25.56,63,137],[29.44,74,138],[27.22,70,139],[18.33,42,140],[23.33,55,141],[26.67,71,142],[26.67,67,143],[32.78,89,144],[32.22,91,145],[31.67,75,146],[27.22,61,147],[18.89,43,148],[23.33,55,149],[26.11,61,150],[28.33,68,151],[34.44,77,152],[33.33,80,153],[28.89,74,154],[26.67,66,155],[28.33,65,156],[31.11,77,157],[32.78,88,158],[34.44,97,159],[37.22,102,160],[37.22,105,161],[35.56,105,162],[33.89,71,163],[27.78,54,164],[31.67,73,165],[36.11,94,166],[34.44,94,167],[28.89,70,168],[26.67,62,169],[29.44,70,170],[37.22,82,171],[36.67,75,172],[35.0,52,173],[36.11,65,174],[36.67,76,175],[37.78,84,176],[39.44,98,177],[40.0,92,178],[37.78,88,179],[36.67,82,180],[35.0,79,181],[33.89,76,182],[32.78,62,183],[30.0,58,184],[30.0,61,185],[30.56,67,186],[31.11,53,187],[35.0,62,188],[34.44,66,189],[35.56,78,190],[36.67,87,191],[35.56,81,192],[32.78,71,193],[35.0,91,194],[33.33,79,195],[37.22,99,196],[38.33,104,197],[38.33,81,198],[36.67,69,199],[37.22,72,200],[35.56,78,201],[36.67,88,202],[35.56,101,203],[36.11,86,204],[34.44,87,205],[35.0,87,206],[35.0,87,207],[35.56,80,208],[34.44,72,209],[36.67,78,210],[36.11,83,211],[35.0,78,212],[36.11,75,213],[34.44,72,214],[35.56,79,215],[33.89,64,216],[35.56,69,217],[36.67,81,218],[39.44,75,219],[37.22,82,220],[37.22,65,221],[37.22,60,222],[38.33,70,223],[38.89,84,224],[39.44,77,225],[38.33,71,226],[38.33,85,227],[38.89,98,228],[37.22,87,229],[35.56,79,230],[37.22,88,231],[33.89,85,232],[32.22,72,233],[35.56,59,237],[36.11,76,238],[33.33,64,239],[32.22,56,240],[34.44,76,241],[38.89,84,242],[42.22,95,243],[42.22,103,244],[39.44,89,245],[41.67,86,246],[42.22,66,247],[43.89,79,248],[42.22,82,249],[41.67,92,250],[38.33,73,251],[33.33,24,252],[30.0,33,253],[32.78,48,254],[30.56,48,255],[28.33,36,256],[29.44,48,257],[28.33,57,258],[29.44,59,259],[27.22,59,260],[27.78,53,261],[29.44,50,262],[30.0,49,263],[28.89,51,264],[35.56,55,266],[36.11,68,267],[36.11,64,268],[37.22,70,269],[39.44,74,270],[38.33,82,271],[35.0,75,272],[31.67,60,273],[28.89,54,274],[30.0,68,275],[31.11,67,276],[33.33,70,277],[33.33,74,278],[31.11,70,279],[32.78,73,280],[32.78,82,281],[31.11,77,282],[30.0,64,283],[25.56,45,284],[28.89,53,285],[27.78,55,286],[24.44,46,287],[20.56,36,288],[20.0,28,289],[28.89,46,290],[32.78,44,291],[33.33,47,292],[32.78,55,293],[28.89,56,294],[22.22,43,295],[21.67,42,296],[24.44,41,297],[26.11,47,298],[23.33,46,299],[26.11,43,300],[27.22,43,301],[27.78,44,302],[30.0,45,303],[29.44,41,304],[23.89,48,305],[18.33,36,306],[16.11,33,307],[20.0,31,308],[22.78,39,309],[22.22,47,310],[18.33,21,311],[17.78,32,312],[15.56,34,313],[19.44,35,314],[20.56,35,315],[20.0,39,316],[17.78,38,317],[21.11,33,318],[20.56,39,319],[20.56,42,320],[23.89,37,321],[23.33,35,322],[20.0,42,323],[22.78,39,324],[22.78,37,325],[24.44,35,326],[25.0,31,327],[23.89,42,328],[23.89,40,329],[22.78,38,330],[23.89,40,331],[15.56,42,332],[18.33,40,333],[17.22,29,334],[13.89,35,335],[15.0,26,336],[22.78,32,337],[18.33,27,338],[16.11,34,339],[15.0,28,340],[15.56,34,341],[16.67,29,342],[16.67,26,343],[16.67,32,344],[12.22,34,345],[10.0,31,346],[15.0,26,347],[16.11,25,348],[17.22,23,349],[16.67,26,350],[16.67,28,351],[17.78,35,352],[19.44,32,353],[20.0,25,354],[23.33,32,355],[22.22,21,356],[22.22,21,357],[26.67,35,358],[28.33,37,359],[27.22,24,360],[18.89,20,361],[17.22,31,362],[14.44,24,363],[14.44,19,364]]};
+const OZ = (() => {
+  const prep = rows => { const R = rows.map(r => ({ t: r[0], o: r[1], d: r[2] })).sort((a, b) => a.t - b.t || a.d - b.d); return { t: R.map(r => r.t), o: R.map(r => r.o), d: R.map(r => r.d), n: R.length }; };
+  return { tr: prep(DATA.tr), te: prep(DATA.te) };
+})();
+const OZX = [5, 45], OZY = [0, 125], OZG = linspace(6.5, 42, 143);
+
+/* ---------- hero ---------- */
+const HERO = { x0: 30, auto: !reduced, t0: performance.now(), v: null, curve: null, vis: true };
+function drawHero() {
+  const C = C0(), T = OZ.tr, v = HERO.v = frame($('#hero-cv'), OZX, OZY, { l: 40, b: 30 });
+  axes(v, 'daily max temperature (°C)', 'ozone, MDA8 (ppb)', { sx: 5, sy: 20 }); clip(v);
+  if (!HERO.curve) HERO.curve = OZG.map(g => { const r = loessAt(T.t, T.o, g, 0.3, 1); return r ? r.f : NaN; });
+  hline(v, 70, C.bad, [6, 4], 1.2);
+  const r = loessAt(T.t, T.o, HERO.x0, 0.3, 1), D = tricube;
+  bump(v, HERO.x0, r.h, D, C.lda, 0.2);
+  for (let i = 0; i < T.n; i++) { const w = r.w[i]; if (w > 0) ptDot(v, T.t[i], T.o[i], C.lda, 2.4 + 2.8 * w, 0.25 + 0.75 * w); else ptDot(v, T.t[i], T.o[i], C.muted, 2.2, 0.35); }
+  path(v, OZG, HERO.curve, C.q, 2.6);
+  const b1 = r.beta[1]; seg(v, HERO.x0 - r.h, r.f - b1 * r.h, HERO.x0 + r.h, r.f + b1 * r.h, C.b, 3);
+  vline(v, HERO.x0, C.muted, [3, 4]); star(v, HERO.x0, r.f, C.b, 9);
+  label(v, 'US standard, 70 ppb', OZX[0] + 0.8, 71.5, C.bad);
+  v.ctx.restore();
+  const cnt = r.hi - r.lo + 1;
+  $('#hero-cap').innerHTML = `At ${tip('<b>' + fmt(HERO.x0, 1) + ' °C</b>', 'the query temperature x₀')}, the ${tip(cnt, `span 0.3 × 358 days → q = ${r.q} nearest days\n(their temperatures within ${fmt(r.h, 2)} °C)`)} nearest days get a say. Their weighted line puts ozone at ${tip('<b>' + fmt(r.f, 1) + ' ppb</b>', `local linear fit, tri-cube weights\nf̂ = α̂ = ${fmt(r.f, 3)}`)}, rising ${tip(fmt(b1, 2), `the local slope β̂ = ${fmt(b1, 3)} ppb per °C`)} ppb per °C. ${HERO.auto ? 'Move over the plot to take control.' : ''}`;
+}
+function heroTick() {
+  if (HERO.auto && HERO.vis) { const s = (performance.now() - HERO.t0) / 1000; HERO.x0 = 24 + 15 * Math.sin(s * 0.45); drawHero(); }
+  if (HERO.auto) requestAnimationFrame(heroTick);
+}
+scrub($('#hero-cv'), () => HERO.v, x => { HERO.auto = false; HERO.x0 = clamp(x, 7, 41.5); drawHero(); }, true);
+fig($('#hero-cv'), drawHero);
+if ('IntersectionObserver' in window) new IntersectionObserver(es => { HERO.vis = es[0].isIntersecting; }).observe($('#hero-cv'));
+
+/* ---------- 1. neighbours ---------- */
+const NB = { m: 'knn', k: 15, x0: 0.42, v: null };
+function nbNearest(x0, k) { const X = SYN.x; return X.map((x, i) => [Math.abs(x - x0), i]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).slice(0, k).map(p => p[1]); }
+function nbEst(x0, m, k) {
+  const X = SYN.x, Y = SYN.y;
+  if (m === 'dots') { if (x0 <= X[0]) return { f: Y[0], used: [0] }; if (x0 >= X[X.length - 1]) return { f: Y[X.length - 1], used: [X.length - 1] }; const j = lowerBound(X, x0), i = j - 1, t = (x0 - X[i]) / (X[j] - X[i]); return { f: Y[i] + t * (Y[j] - Y[i]), used: [i, j], t }; }
+  if (m === 'knn') { const u = nbNearest(x0, k); return { f: sum(u.map(i => Y[i])) / k, used: u }; }
+  if (m === 'knnlin') { const kk = Math.max(2, k), u = nbNearest(x0, kk), P = u.map(i => [X[i], Y[i]]), n = P.length, mx = sum(P.map(p => p[0])) / n, my = sum(P.map(p => p[1])) / n;
+    let sxy = 0, sxx = 0; P.forEach(p => { sxy += (p[0] - mx) * (p[1] - my); sxx += sq(p[0] - mx); }); const b = sxx > 0 ? sxy / sxx : 0; return { f: my + b * (x0 - mx), used: u, b, a: my - b * mx }; }
+  const h = kthDist(X, x0, k + 1), w = kWeights(X, x0, KER.epan.D, h), sw = sum(w); return { f: sw > 0 ? sum(Y.map((y, i) => w[i] * y)) / sw : NaN, used: X.map((_, i) => i).filter(i => w[i] > 0), w, h, sw };
+}
+function drawNB() {
+  const C = C0(), k = NB.k, m = NB.m, v = NB.v = frame($('#nb-cv'), SYX, SYY); synAxes(v); clip(v);
+  const F = GX.map(x => nbEst(x, m, k).f);
+  curve(v, fTrue, C.muted, 1.6, [5, 4]);
+  const e = nbEst(NB.x0, m, k), used = new Set(e.used);
+  SYN.x.forEach((x, i) => used.has(i) ? ptDot(v, x, SYN.y[i], C.lda, 4, e.w ? 0.35 + 0.65 * e.w[i] / KER.epan.D(0) : 1) : hollow(v, x, SYN.y[i], C.muted, 3.2, 0.8));
+  path(v, GX, F, C.lda, 2.4);
+  if (m === 'knnlin') seg(v, Math.min(...e.used.map(i => SYN.x[i])), e.a + e.b * Math.min(...e.used.map(i => SYN.x[i])), Math.max(...e.used.map(i => SYN.x[i])), e.a + e.b * Math.max(...e.used.map(i => SYN.x[i])), C.b, 2.2);
+  vline(v, NB.x0, C.q, [4, 4]); star(v, NB.x0, e.f, C.b, 8);
+  v.ctx.restore();
+  let jump = 0, ji = 0; for (let i = 1; i < F.length; i++) { const d = Math.abs(F[i] - F[i - 1]); if (d > jump) { jump = d; ji = i; } }
+  const err = Math.sqrt(sum(F.map((f, i) => sq(f - fTrue(GX[i])))) / F.length);
+  $('#nb-k-o').textContent = k; $('#nb-k-ctrl').style.opacity = m === 'dots' ? 0.4 : 1; $('#nb-k').disabled = m === 'dots';
+  $('#nb-f').innerHTML = tip(fmt(e.f, 3), 'the blue curve at the dashed line');
+  $('#nb-t').innerHTML = tip(fmt(fTrue(NB.x0), 3), `sin(4 × ${fmt(NB.x0, 3)})`);
+  $('#nb-e').innerHTML = tip(fmt(err, 3), 'root-mean-square gap between the estimate\nand the true curve, over 401 points in [0, 1]');
+  $('#nb-j').innerHTML = tip(fmt(jump, 3), `largest change between neighbouring grid points\n(step 0.0025), near x = ${fmt(GX[ji], 3)}`);
+  const X = SYN.x, Y = SYN.y;
+  let run = '';
+  if (m === 'dots') { const [i, j] = e.used; run = e.used.length < 2 ? `x&#8320; = ${fmt(NB.x0, 3)} is beyond the last point, so the estimate is that point's y = ${fmt(e.f, 3)}.` : `x&#8320; = ${fmt(NB.x0, 3)} lies between (${fmt(X[i], 3)}, ${fmt(Y[i], 2)}) and (${fmt(X[j], 3)}, ${fmt(Y[j], 2)}); reading along that segment gives ${fmt(Y[i], 2)} + ${fmt(e.t, 3)} &times; (${fmt(Y[j], 2)} &minus; ${fmt(Y[i], 2)}) = ${tip(fmt(e.f, 3), 'connect-the-dots: no averaging at all')}. Not an average: one formula only for the next three methods.`; }
+  else if (m === 'knn') { const xs = e.used.map(i => X[i]), ys = e.used.map(i => Y[i]); run = `the ${k} nearest points to x&#8320; = ${fmt(NB.x0, 3)} have x from ${fmt(Math.min(...xs), 3)} to ${fmt(Math.max(...xs), 3)}; their y values add up to ${tip(fmt(sum(ys), 3), ys.slice(0, 8).map(y => fmt(y, 2)).join(' + ') + (k > 8 ? ' + …' : ''))}, so the average is ${fmt(sum(ys), 3)} / ${k} = ${tip(fmt(e.f, 3), 'each neighbour weighs exactly 1/k')}.`; }
+  else if (m === 'knnlin') run = `a least-squares line through the ${Math.max(2, k)} nearest points: y = ${fmt(e.a, 3)} + ${fmt(e.b, 3)} x, read at x&#8320; = ${fmt(NB.x0, 3)}: ${tip(fmt(e.f, 3), `${fmt(e.a, 3)} + ${fmt(e.b, 3)} × ${fmt(NB.x0, 3)}`)}. Same neighbours as the average, but a line instead of a flat value.`;
+  else run = `the window reaches the ${k + 1}-th nearest point, h = ${fmt(e.h, 3)}, so exactly ${e.used.length} points get an Epanechnikov weight &frac34;(1 &minus; (d/h)&sup2;); the weights total ${fmt(e.sw, 3)} and the weighted average is ${tip(fmt(e.f, 3), 'Σ wᵢ yᵢ / Σ wᵢ\nthe next section is all about this formula')}. Points at the window's edge weigh almost nothing, so they slip in and out without a jump.`;
+  $('#run-nb').innerHTML = `<b>Running example</b>: ${run}`;
+  $('#nb-say').innerHTML = m === 'dots' ? `Connecting the dots goes through every point, so it reproduces all of the noise: error ${fmt(err, 2)} against the true curve, against a noise level of ${fmt(SIG, 2)}. It never jumps, but it is far too wiggly.`
+    : m === 'knn' ? (k === 1 ? 'k = 1 copies the nearest point: a staircase of the raw noise.' : `The average of ${k} neighbours is a staircase: it jumps by up to ${fmt(jump, 2)} each time one neighbour is swapped for another. ${k >= 35 ? 'With this many neighbours it also flattens the curve near the edges and the peak.' : 'More neighbours make the steps smaller but flatten the curve.'}`)
+    : m === 'knnlin' ? `A local line follows the slope better than the flat average, ${k <= 4 ? 'but with so few points the lines swing wildly' : 'especially near the edges'}, yet it still jumps by up to ${fmt(jump, 2)} when the neighbour set changes.`
+    : `Weights that fade to zero at the window's edge remove the jumps: the largest step between grid points is now ${fmt(jump, 3)}${k < 3 ? ' (with fewer than three points the window can still leave a single point in charge)' : ''}. This is a kernel smoother.`;
+}
+seg1('[data-nm]', 'data-nm', m => { NB.m = m; drawNB(); });
+$('#nb-k').addEventListener('input', e => { NB.k = +e.target.value; drawNB(); });
+scrub($('#nb-cv'), () => NB.v, x => { NB.x0 = clamp(x, 0, 1); drawNB(); });
+fig($('#nb-cv'), drawNB);
+
+/* ---------- 2. Nadaraya-Watson ---------- */
+const NW = { kern: 'epan', mode: 'fixed', ll: -0.82, k: 20, x0: 0.3, dens: false, v: null };
+const NWSIG = 0.15;
+const nwH = x0 => NW.mode === 'fixed' ? Math.pow(10, NW.ll) : kthDist(SYN.x, x0, NW.k + 1);
+function nwAt(x0) { const h = nwH(x0), w = kWeights(SYN.x, x0, KER[NW.kern].D, h), sw = sum(w); return { h, w, sw, f: sw > 0 ? sum(SYN.y.map((y, i) => w[i] * y)) / sw : NaN }; }
+function drawNW() {
+  const C = C0(), v = NW.v = frame($('#nw-cv'), SYX, SYY); synAxes(v); clip(v);
+  const D = KER[NW.kern].D, F = GX.map(x => nwAt(x).f), r = nwAt(NW.x0);
+  const lam = Math.pow(10, NW.ll);
+  curve(v, fTrue, C.muted, 1.6, [5, 4]);
+  bump(v, NW.x0, r.h, D, C.lda, 0.2);
+  const wmax = Math.max(...r.w, 1e-12);
+  SYN.x.forEach((x, i) => r.w[i] > wmax * 1e-3 ? ptDot(v, x, SYN.y[i], C.lda, 2.5 + 3 * r.w[i] / wmax, 0.3 + 0.7 * r.w[i] / wmax) : hollow(v, x, SYN.y[i], C.muted, 3, 0.7));
+  path(v, GX, F, C.lda, 2.4);
+  // gaps
+  const c = v.ctx; c.save(); c.fillStyle = C.bad; c.globalAlpha = 0.1; for (let i = 0; i < GX.length; i++) if (!isFinite(F[i])) c.fillRect(v.X(GX[i]) - 1.5, v.pad.t, 3, v.ph); c.restore();
+  vline(v, NW.x0, C.q, [4, 4]);
+  let Et = NaN, sd = NaN;
+  if (r.sw > 0) {
+    const k = r.w.map(w => w / r.sw); Et = sum(k.map((kk, i) => kk * SYN.y[i])); sd = Math.sqrt(NWSIG * NWSIG + sum(k.map((kk, i) => kk * sq(SYN.y[i]))) - Et * Et);
+    if (NW.dens) {
+      const T = linspace(SYY[0], SYY[1], 260), P = T.map(t => sum(k.map((kk, i) => kk > 1e-6 ? kk * Math.exp(-0.5 * sq((t - SYN.y[i]) / NWSIG)) / (NWSIG * Math.sqrt(2 * Math.PI)) : 0)));
+      const pm = Math.max(...P), dir = NW.x0 > 0.7 ? -1 : 1, W = 0.26;
+      c.save(); c.fillStyle = C.c; c.globalAlpha = 0.22; c.beginPath(); c.moveTo(v.X(NW.x0), v.Y(T[0])); T.forEach((t, i) => c.lineTo(v.X(NW.x0 + dir * W * P[i] / pm), v.Y(t))); c.lineTo(v.X(NW.x0), v.Y(T[T.length - 1])); c.closePath(); c.fill();
+      c.globalAlpha = 0.9; c.strokeStyle = C.c; c.lineWidth = 1.6; c.beginPath(); T.forEach((t, i) => i ? c.lineTo(v.X(NW.x0 + dir * W * P[i] / pm), v.Y(t)) : c.moveTo(v.X(NW.x0 + dir * W * P[i] / pm), v.Y(t))); c.stroke(); c.restore();
+      seg(v, NW.x0 + dir * 0.02, Et - 2 * sd, NW.x0 + dir * 0.02, Et + 2 * sd, C.c, 3);
+    }
+    star(v, NW.x0, r.f, C.b, 8);
+  }
+  v.ctx.restore();
+  const defined = F.filter(isFinite).length, gapFrac = 1 - defined / F.length;
+  const err = defined ? Math.sqrt(sum(F.map((f, i) => isFinite(f) ? sq(f - fTrue(GX[i])) : 0)) / defined) : NaN;
+  const npos = r.w.filter(w => w > 0).length;
+  $('#nw-l-o').textContent = fmt(lam, 3); $('#nw-k-o').textContent = NW.k;
+  $('#nw-l-ctrl').hidden = NW.mode !== 'fixed'; $('#nw-k-ctrl').hidden = NW.mode === 'fixed';
+  $('#nw-dens').textContent = NW.dens ? 'Hide p(t | x₀)' : 'Show p(t | x₀)';
+  $('#nw-f').innerHTML = r.sw > 0 ? tip(fmt(r.f, 3), `Σ K yᵢ / Σ K = ${fmt(sum(SYN.y.map((y, i) => r.w[i] * y)), 3)} / ${fmt(r.sw, 3)}`) : tip('none', 'no point lies inside the window:\n0 / 0 is undefined');
+  $('#nw-n').innerHTML = tip(NW.kern === 'gauss' ? `all ${npos}` : String(npos), NW.kern === 'gauss' ? 'a Gaussian kernel is never exactly zero' : `points with |xᵢ − x₀| < h = ${fmt(r.h, 3)}`);
+  $('#nw-e').innerHTML = tip(fmt(err, 3), 'RMS gap to the true curve where an estimate exists');
+  $('#nw-g').innerHTML = tip(pct(gapFrac, 1), `${F.length - defined} of ${F.length} grid points have no point inside their window`);
+  $('#nw-cap').innerHTML = `Shaded bump: the ${KER[NW.kern].name} kernel at x&#8320;, width h = ${fmt(r.h, 3)}${NW.mode === 'adapt' ? ' (reaching the ' + (NW.k + 1) + '-th nearest point)' : ''}. Bigger, darker dots get more weight. ${gapFrac > 0 ? 'Red stripes: no estimate.' : ''}${NW.dens ? ' Purple: p(t | x&#8320;), with a bar of &plusmn;2 sd.' : ''}`;
+  const top = Array.from(r.w, (w, i) => [w, i]).filter(p => p[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, 3);
+  $('#run-nw').innerHTML = r.sw > 0 ? `<b>Running example</b>: at x&#8320; = ${fmt(NW.x0, 3)} with h = ${fmt(r.h, 3)}, ${npos} points get weight. The heaviest: ${top.map(p => `K = ${fmt(p[0], 3)} on y = ${fmt(SYN.y[p[1]], 2)}`).join(', ')}. &sum;K y = ${tip(fmt(sum(SYN.y.map((y, i) => r.w[i] * y)), 3), 'sum over all weighted points')}, &sum;K = ${tip(fmt(r.sw, 3), 'the total weight')}, so f&#770;(x&#8320;) = ${tip(fmt(r.f, 3), 'their ratio')}.`
+    : `<b>Running example</b>: at x&#8320; = ${fmt(NW.x0, 3)} no training point lies within h = ${fmt(r.h, 3)}, so both sums are 0 and the estimate is 0/0: undefined.`;
+  $('#run-pt').innerHTML = r.sw > 0 ? `<b>Running example</b>: using the lab's kernel as g, the weights k(x&#8320;, x<sub>n</sub>) = K / &sum;K add up to ${tip('1.000', 'by construction')}; E[t | x&#8320;] = ${tip(fmt(Et, 3), 'the same number as f̂(x₀)')}; var = ${fmt(NWSIG, 2)}&sup2; + &sum;k t&sup2; &minus; E&sup2; = ${tip(fmt(sd * sd, 4), `${fmt(NWSIG * NWSIG, 4)} + ${fmt(sd * sd + Et * Et - NWSIG * NWSIG, 4)} − ${fmt(Et * Et, 4)}`)}, an sd of ${fmt(sd, 3)}.` : '';
+  const D0 = NW.kern === 'gauss';
+  $('#nw-say').innerHTML = NW.mode === 'fixed' && gapFrac > 0 ? `&lambda; = ${fmt(lam, 3)} is so narrow that ${pct(gapFrac, 0)} of the range has no point within reach: the estimate breaks. ${D0 ? '' : 'A Gaussian kernel or a nearest-k width would never leave a gap.'}`
+    : NW.mode === 'adapt' ? `An adaptive width widens in sparse stretches and narrows in dense ones: here h = ${fmt(r.h, 3)}. Every estimate uses ${NW.k} points, so the variance is about the same everywhere; the bias is not, since a wide window in a sparse stretch blurs more.`
+    : lam > 0.3 ? `A wide window (&lambda; = ${fmt(lam, 2)}) averages across the peak and the slopes: the curve is smooth but sags below the peak and lifts at the right edge. Error ${fmt(err, 3)}.`
+    : lam < 0.05 ? `A narrow window averages only a few points, so the curve follows the noise. Error ${fmt(err, 3)}.`
+    : `A fixed width gives every estimate the same reach; where points are dense it averages more of them, so the variance changes along x. Error ${fmt(err, 3)} against the truth. Now look at the left edge: the curve sits above the truth.`;
+}
+seg1('[data-nk]', 'data-nk', k => { NW.kern = k; drawNW(); });
+seg1('[data-nwm]', 'data-nwm', m => { NW.mode = m; drawNW(); });
+$('#nw-l').addEventListener('input', e => { NW.ll = +e.target.value; drawNW(); });
+$('#nw-k').addEventListener('input', e => { NW.k = +e.target.value; drawNW(); });
+$('#nw-dens').addEventListener('click', () => { NW.dens = !NW.dens; drawNW(); });
+scrub($('#nw-cv'), () => NW.v, x => { NW.x0 = clamp(x, 0, 1); drawNW(); });
+fig($('#nw-cv'), drawNW);
+
+/* ---------- 3. local linear ---------- */
+const LL = { x0: 0, lam: 0.2, v: null };
+const fitT = (x0, deg, lam, L) => kernelFit(SYN.x, SYN.y, x0, 'tri', lam, deg, L);
+const expFit = r => sum(SYN.x.map((x, i) => r.l[i] * fTrue(x)));
+function drawLL() {
+  const C = C0(), lam = LL.lam, v = LL.v = frame($('#ll-cv'), SYX, SYY); synAxes(v); clip(v);
+  const N0 = GX.map(x => { const r = fitT(x, 0, lam); return r ? r.f : NaN; }), N1 = GX.map(x => { const r = fitT(x, 1, lam); return r ? r.f : NaN; });
+  const r0 = fitT(LL.x0, 0, lam, true), r1 = fitT(LL.x0, 1, lam, true);
+  curve(v, fTrue, C.muted, 1.6, [5, 4]);
+  bump(v, LL.x0, lam, tricube, C.lda, 0.18);
+  SYN.x.forEach((x, i) => r1 && r1.w[i] > 0 ? ptDot(v, x, SYN.y[i], C.lda, 2.5 + 2.5 * r1.w[i], 0.3 + 0.7 * r1.w[i]) : hollow(v, x, SYN.y[i], C.muted, 3, 0.7));
+  path(v, GX, N0, C.b, 2.2); path(v, GX, N1, C.lda, 2.6);
+  if (r1) seg(v, Math.max(-0.02, LL.x0 - lam), r1.f - r1.beta[1] * Math.min(lam, LL.x0 + 0.02), Math.min(1.02, LL.x0 + lam), r1.f + r1.beta[1] * Math.min(lam, 1.02 - LL.x0), C.q, 2, [6, 3]);
+  vline(v, LL.x0, C.q, [3, 4]);
+  if (r0) ptDot(v, LL.x0, r0.f, C.b, 5.5); if (r1) ptDot(v, LL.x0, r1.f, C.lda, 5.5);
+  v.ctx.restore();
+  // equivalent kernel stems
+  const lv = r0 && r1 ? Math.max(...r0.l, ...r1.l) : 1, ln = r1 ? Math.min(0, ...r1.l) : 0;
+  const k = frame($('#ll-k'), SYX, [Math.min(-0.02, ln * 1.15), lv * 1.15], { l: 46, b: 22, t: 10 }); axes(k, '', 'lᵢ(x₀)', { sx: 0.2, ny: 3 });
+  hline(k, 0, C.muted, null, 1);
+  if (r0 && r1) SYN.x.forEach((x, i) => { if (r0.l[i] !== 0) seg(k, x - 0.003, 0, x - 0.003, r0.l[i], C.b, 2.2); if (r1.l[i] !== 0) seg(k, x + 0.003, 0, x + 0.003, r1.l[i], C.lda, 2.2); });
+  vline(k, LL.x0, C.q, [3, 4]);
+  $('#ll-x-o').textContent = fmt(LL.x0, 3); $('#ll-l-o').textContent = fmt(lam, 2);
+  if (!r0 || !r1) { ['#ll-nw', '#ll-ll', '#ll-m0', '#ll-m1'].forEach(s => $(s).textContent = '—'); $('#ll-say').textContent = 'Too few points inside the window for a line: widen λ.'; $('#run-ll').innerHTML = ''; return; }
+  const f0 = fTrue(LL.x0), e0 = expFit(r0), e1 = expFit(r1), m0 = sum(SYN.x.map((x, i) => (x - LL.x0) * r0.l[i])), m1 = sum(SYN.x.map((x, i) => (x - LL.x0) * r1.l[i]));
+  const s0 = sum(r0.l), s1 = sum(r1.l), neg = Array.from(r1.l).filter(l => l < -1e-12).length;
+  $('#ll-nw').innerHTML = tip(fmt(e0 - f0, 3), `E f̂(x₀) − f(x₀) = Σ lᵢ f(xᵢ) − f(x₀)\n= ${fmt(e0, 3)} − ${fmt(f0, 3)}\n(exact: averaged over all noise draws)`);
+  $('#ll-ll').innerHTML = tip(fmt(e1 - f0, 3), `Σ lᵢ f(xᵢ) − f(x₀) = ${fmt(e1, 3)} − ${fmt(f0, 3)}`);
+  $('#ll-m0').innerHTML = tip(fmt(m0, 3), 'the weights\' first moment: how far, on average,\nthe weighted neighbours sit from x₀');
+  $('#ll-m1').innerHTML = tip(fmt(Math.abs(m1) < 5e-13 ? 0 : m1, 3), `exactly 0 by construction (here ${m1.toExponential(1)})`);
+  $('#run-ll').innerHTML = `<b>Running example</b>: at x&#8320; = ${fmt(LL.x0, 3)}, both weight vectors sum to ${tip(fmt(s0, 3), 'Nadaraya–Watson: Σ lᵢ')} and ${tip(fmt(s1, 3), 'local linear: Σ lᵢ')}. Their first moments are ${fmt(m0, 3)} and ${fmt(Math.abs(m1) < 5e-13 ? 0 : m1, 3)}. With slope f&prime;(x&#8320;) = 4cos(4x&#8320;) = ${fmt(dTrue(LL.x0), 2)}, Nadaraya&ndash;Watson's slope bias is about ${fmt(dTrue(LL.x0), 2)} &times; ${fmt(m0, 3)} = ${tip(fmt(dTrue(LL.x0) * m0, 3), 'first-order term of the Taylor expansion')}; its exact bias is ${fmt(e0 - f0, 3)}.`;
+  const edge = LL.x0 < lam || LL.x0 > 1 - lam;
+  $('#ll-say').innerHTML = edge ? `x&#8320; is within &lambda; of an edge, so all the neighbours sit on one side (first moment ${fmt(m0, 3)}). Nadaraya&ndash;Watson is off by ${fmt(e0 - f0, 2)}; the local line extrapolates the trend and is off by only ${fmt(e1 - f0, 2)}. ${neg ? `Look at the weights: ${neg} of them are negative, the line's way of tilting the average.` : ''}`
+    : `In the interior the neighbours surround x&#8320; and both first moments are small, so the two fits nearly agree (biases ${fmt(e0 - f0, 3)} and ${fmt(e1 - f0, 3)}). What bias is left comes from curvature: ${Math.abs(LL.x0 - PEAK) < 0.12 ? 'at the peak both sag below it, which is the next section' : 'drag to the peak or to an edge'}.`;
+}
+$('#ll-x').addEventListener('input', e => { LL.x0 = +e.target.value; drawLL(); });
+$('#ll-l').addEventListener('input', e => { LL.lam = +e.target.value; drawLL(); });
+scrub($('#ll-cv'), () => LL.v, x => { LL.x0 = clamp(x, 0, 1); $('#ll-x').value = LL.x0; drawLL(); });
+fig($('#ll-cv'), drawLL); fig($('#ll-k'), drawLL);
+
+/* ---------- 4. local polynomials ---------- */
+const LP = { deg: 1, lam: 0.3 };
+const GX2 = linspace(0, 1, 201);
+function drawLP() {
+  const C = C0(), lam = LP.lam, d = LP.deg, v = frame($('#lp-cv'), SYX, SYY); synAxes(v); clip(v);
+  const R = GX2.map(x => fitT(x, d, lam, true)), F = R.map(r => r ? r.f : NaN), E = R.map(r => r ? expFit(r) : NaN);
+  curve(v, fTrue, C.muted, 1.6, [5, 4]);
+  SYN.x.forEach((x, i) => ptDot(v, x, SYN.y[i], C.muted, 2.6, 0.55));
+  path(v, GX2, E, C.lda, 1.8, [7, 4]); path(v, GX2, F, C.lda, 2.6);
+  vline(v, PEAK, C.line, [2, 4]); label(v, 'peak', PEAK + 0.01, SYY[1] - 0.25, C.muted);
+  v.ctx.restore();
+  // variance factors
+  const VF = [0, 1, 2, 3].map(dd => GX2.map(x => { const r = fitT(x, dd, lam, true); return r ? sum(Array.from(r.l, l => l * l)) : NaN; }));
+  const inner = VF.flatMap(V => V.filter((_, i) => GX2[i] > 0.15 && GX2[i] < 0.85)).filter(isFinite), vmax = Math.min(1.2, Math.max(...inner) * 3.5);
+  const w = frame($('#lp-v'), SYX, [0, vmax], { l: 46, b: 22, t: 10 }); axes(w, 'x', '‖l(x)‖²', { sx: 0.2, ny: 3 }); clip(w);
+  const cols = [C.b, C.lda, C.c, C.a]; VF.forEach((V, dd) => path(w, GX2, V, cols[dd], dd === d ? 2.8 : 1.3, null, dd === d ? 1 : 0.6));
+  VF.forEach((V, dd) => { const y = V[V.length - 1]; if (isFinite(y) && y < vmax) label(w, 'd=' + dd, 0.985, y, cols[dd], 'right', 'bottom'); });
+  w.ctx.restore();
+  const rp = fitT(PEAK, d, lam, true), re = fitT(1, d, lam, true);
+  const stat = r => r ? { b: expFit(r) - fTrue(r === rp ? PEAK : 1), v: sum(Array.from(r.l, l => l * l)) } : null, sp = stat(rp), se = stat(re);
+  $('#lp-l-o').textContent = fmt(lam, 2);
+  $('#lp-b').innerHTML = sp ? tip(fmt(sp.b, 3), `Σ lᵢ f(xᵢ) − f(π/8) = ${fmt(expFit(rp), 3)} − 1`) : '—';
+  $('#lp-s').innerHTML = sp ? tip(fmt(SIG * Math.sqrt(sp.v), 3), `σ ‖l‖ = ${fmt(SIG, 3)} × √${fmt(sp.v, 4)}`) : '—';
+  $('#lp-be').innerHTML = se ? tip(fmt(se.b, 3), `Σ lᵢ f(xᵢ) − f(1) = ${fmt(expFit(re), 3)} − ${fmt(fTrue(1), 3)}`) : '—';
+  $('#lp-se').innerHTML = se ? tip(fmt(SIG * Math.sqrt(se.v), 3), `σ ‖l‖ = ${fmt(SIG, 3)} × √${fmt(se.v, 4)}`) : '—';
+  $('#run-lp').innerHTML = sp ? `<b>Running example</b>: at the peak x&#8320; = &pi;/8 = ${fmt(PEAK, 3)}, degree ${d}, &lambda; = ${fmt(lam, 2)}: &sum; l<sub>i</sub>&sup2; = ${tip(fmt(sp.v, 4), 'sum of the squared equivalent-kernel weights')}, so with &sigma; = 1/3 the noise sd is ${fmt(SIG, 3)} &times; &radic;${fmt(sp.v, 4)} = ${fmt(SIG * Math.sqrt(sp.v), 3)}, about ${tip(fmt(1 / sp.v, 0), '1 / ‖l‖²: the number of equally weighted points\nthat would give the same variance')} points' worth of averaging.` : '';
+  const say = { 0: `Degree 0 is Nadaraya&ndash;Watson: the smallest variance, but biased by the slope at the edges (${fmt(se ? se.b : NaN, 2)} at x = 1) and by curvature at the peak (${fmt(sp ? sp.b : NaN, 2)}).`,
+    1: `A local line fixes the edges (bias ${fmt(se ? se.b : NaN, 2)} at x = 1) but trims the peak by ${fmt(sp ? -sp.b : NaN, 2)}: the dashed expected fit sags below the hill. Try degree 2.`,
+    2: `A local quadratic bends with the hill: the bias at the peak is down to ${fmt(sp ? sp.b : NaN, 3)}. The price is variance: the noise sd at the edge is now ${fmt(se ? SIG * Math.sqrt(se.v) : NaN, 2)}, see the purple curve below.`,
+    3: `Degree 3 has bias about as small as degree 2, and its variance is the largest: at x = 1 the noise sd reaches ${fmt(se ? SIG * Math.sqrt(se.v) : NaN, 2)}. Beyond quadratic there is rarely a gain; a common choice is local linear, or local quadratic where curvature matters.` };
+  $('#lp-say').innerHTML = say[d] + (lam < 0.15 ? ' With a window this narrow, every degree is noisy.' : '');
+}
+seg1('[data-pd]', 'data-pd', d => { LP.deg = +d; drawLP(); });
+$('#lp-l').addEventListener('input', e => { LP.lam = +e.target.value; drawLP(); });
+fig($('#lp-cv'), drawLP); fig($('#lp-v'), drawLP);
+
+/* ---------- 5. choosing the width ---------- */
+const CV = { deg: 1, ll: -0.4, seed: 17, D: SYN, curves: null };
+const CVL = linspace(-1.4, 0, 57);
+function cvStats(D, lam, deg) {
+  const n = D.x.length; let df = 0, loo = 0, tr = 0, te = 0; const S = [], F = [];
+  for (let i = 0; i < n; i++) { const r = kernelFit(D.x, D.y, D.x[i], 'tri', lam, deg, true); if (!r || !(r.l[i] < 1 - 1e-9) || !isFinite(r.f)) return null; const s = r.l[i]; S.push(s); F.push(r.f); df += s; const e = D.y[i] - r.f; tr += e * e; loo += sq(e / (1 - s)); te += sq(r.f - fTrue(D.x[i])); }
+  return { df, loo: loo / n, gcv: tr / n / sq(1 - df / n), tr: tr / n, te: SIG * SIG + te / n, S, F };
+}
+function cvCurves() { CV.curves = CVL.map(ll => ({ ll, s: cvStats(CV.D, Math.pow(10, ll), CV.deg) })).filter(o => o.s); }
+function drawCV() {
+  if (!CV.curves) cvCurves();
+  const C = C0(), lam = Math.pow(10, CV.ll), st = cvStats(CV.D, lam, CV.deg), v = frame($('#cv-cv'), SYX, SYY); synAxes(v); clip(v);
+  curve(v, fTrue, C.muted, 1.6, [5, 4]);
+  CV.D.x.forEach((x, i) => ptDot(v, x, CV.D.y[i], C.muted, 2.8, 0.6));
+  path(v, GX2, GX2.map(x => { const r = kernelFit(CV.D.x, CV.D.y, x, 'tri', lam, CV.deg); return r ? r.f : NaN; }), C.lda, 2.6);
+  v.ctx.restore();
+  const K = CV.curves, dfs = K.map(o => o.s.df), keys = ['loo', 'gcv', 'te', 'tr'], cols = [C.lda, C.c, C.a, C.muted];
+  const ymax = Math.min(0.5, Math.max(...K.map(o => Math.max(o.s.loo, o.s.te))) * 1.05);
+  const w = frame($('#cv-c'), [0, Math.max(...dfs) * 1.03], [0.05, ymax], { l: 46, b: 24, t: 10 }); axes(w, 'effective df', 'MSE', { ny: 3 }); clip(w);
+  hline(w, SIG * SIG, C.line, [2, 3]);
+  keys.forEach((k, j) => path(w, dfs, K.map(o => o.s[k]), cols[j], k === 'tr' ? 1.4 : 2.2));
+  const mins = {}; keys.slice(0, 3).forEach((k, j) => { let b = 0; K.forEach((o, i) => { if (o.s[k] < K[b].s[k]) b = i; }); mins[k] = K[b]; ptDot(w, K[b].s.df, K[b].s[k], cols[j], 4.5); });
+  if (st) vline(w, st.df, C.q, [3, 3]);
+  w.ctx.restore();
+  $('#cv-l-o').textContent = fmt(lam, 3);
+  if (!st) { ['#cv-df', '#cv-loo', '#cv-g', '#cv-te'].forEach(s => $(s).textContent = '—'); $('#cv-say').textContent = 'Some window holds too few points for this local model: widen λ.'; $('#run-cv').innerHTML = ''; return; }
+  $('#cv-df').innerHTML = tip(fmt(st.df, 2), `trace(S) = Σ Sᵢᵢ over ${CV.D.x.length} points\nlargest Sᵢᵢ = ${fmt(Math.max(...st.S), 3)}`);
+  $('#cv-loo').innerHTML = tip(fmt(st.loo, 4), 'mean of ((yᵢ − f̂(xᵢ)) / (1 − Sᵢᵢ))²');
+  $('#cv-g').innerHTML = tip(fmt(st.gcv, 4), `training MSE ${fmt(st.tr, 4)} / (1 − ${fmt(st.df, 2)}/${CV.D.x.length})²`);
+  $('#cv-te').innerHTML = tip(fmt(st.te, 4), `σ² + mean (f̂(xᵢ) − f(xᵢ))²\n= ${fmt(SIG * SIG, 4)} + ${fmt(st.te - SIG * SIG, 4)}\nthe error on fresh noise at the same x's`);
+  // shortcut vs brute force for the point with the largest leverage
+  let i = 0; st.S.forEach((s, j) => { if (s > st.S[i]) i = j; });
+  const keep = CV.D.x.map((_, j) => j).filter(j => j !== i), rb = kernelFit(keep.map(j => CV.D.x[j]), keep.map(j => CV.D.y[j]), CV.D.x[i], 'tri', lam, CV.deg);
+  const res = CV.D.y[i] - st.F[i], short = res / (1 - st.S[i]);
+  $('#run-cv').innerHTML = `<b>Running example</b>: the point with the most pull, x = ${fmt(CV.D.x[i], 3)}, has residual ${fmt(res, 3)} and S<sub>ii</sub> = ${fmt(st.S[i], 3)}. Its left-out residual is ${fmt(res, 3)} / (1 &minus; ${fmt(st.S[i], 3)}) = ${tip(fmt(short, 4), rb ? `refitting without the point gives\n${fmt(CV.D.y[i], 4)} − ${fmt(rb.f, 4)} = ${fmt(CV.D.y[i] - rb.f, 4)}: the same` : 'the refit without it is undefined')}. Averaging all ${CV.D.x.length} squared left-out residuals gives CV = ${fmt(st.loo, 4)}.`;
+  const bl = mins.loo, bt = mins.te, lb = Math.pow(10, bl.ll);
+  $('#cv-say').innerHTML = `LOOCV is lowest at &lambda; = ${tip(fmt(lb, 3), `${fmt(bl.s.df, 1)} effective df, CV = ${fmt(bl.s.loo, 4)}`)} and the true error at &lambda; = ${fmt(Math.pow(10, bt.ll), 3)}: ${Math.abs(bl.ll - bt.ll) < 0.13 ? 'close agreement' : 'not identical, as one sample of 100 points allows'}. ${lam < lb / 1.5 ? 'Your window is narrower: the training error is low but the fit chases noise.' : lam > lb * 1.5 ? 'Your window is wider: smooth, but it flattens the peak and the edges.' : 'You are near the bottom of the curve.'} The flat dotted line is the noise floor &sigma;&sup2; = ${fmt(SIG * SIG, 3)}, which no smoother can beat.`;
+}
+seg1('[data-cd]', 'data-cd', d => { CV.deg = +d; CV.curves = null; drawCV(); });
+$('#cv-l').addEventListener('input', e => { CV.ll = +e.target.value; drawCV(); });
+$('#cv-best').addEventListener('click', () => { if (!CV.curves) cvCurves(); let b = CV.curves[0]; CV.curves.forEach(o => { if (o.s.loo < b.s.loo) b = o; }); CV.ll = b.ll; $('#cv-l').value = b.ll; drawCV(); });
+$('#cv-new').addEventListener('click', () => { CV.seed++; CV.D = makeSyn(CV.seed * 7919 + 1, 100); CV.curves = null; drawCV(); });
+fig($('#cv-cv'), drawCV); fig($('#cv-c'), drawCV);
+
+/* ---------- 6. many inputs ---------- */
+const fM = (a, b) => 1.3 * Math.exp(-(sq(a - 0.55) + sq(b - 0.5)) / 0.03) + 1.6 * a + 1.0 * b;
+const MP = (() => { const r = mulberry32(21), P = []; for (let i = 0; i < 250; i++) { const a = r(), b = r(); P.push([a, b, fM(a, b) + 0.25 * gaussOf(r)]); } return P; })();
+const MD = { deg: 1, lam: 0.2, q: [0.1, 0.88], p: 2, v: null };
+const GRID2 = (() => { const g = []; for (let j = 0; j < 30; j++) for (let i = 0; i < 30; i++) g.push([(i + 0.5) / 30, (j + 0.5) / 30]); return g; })();
+function drawMD() {
+  const C = C0(), lam = MD.lam, v = MD.v = frame($('#md-cv'), [0, 1], [0, 1], { l: 34, b: 28 }, true); axes(v, 'x₁', 'x₂', { sx: 0.2, sy: 0.2 }); clip(v);
+  const fit = (a, b) => { const r = local2(MP, a, b, lam, 1, MD.deg, tricube); return r ? r.f : NaN; };
+  paintField(v, (a, b) => a < 0 || a > 1 || b < 0 || b > 1 ? NaN : fit(a, b), 9, -0.1, 3.6, css('--surface'), css('--lda'));
+  const [qa, qb] = MD.q, c = v.ctx;
+  MP.forEach(p => { const d = Math.hypot(p[0] - qa, p[1] - qb); if (d < lam) ptDot(v, p[0], p[1], C.b, 3.4, 1); else ptDot(v, p[0], p[1], C.q, 1.8, 0.45); });
+  c.save(); c.strokeStyle = C.b; c.lineWidth = 2.2; c.beginPath(); c.arc(v.X(qa), v.Y(qb), v.X(qa + lam) - v.X(qa), 0, 7); c.stroke(); c.restore();
+  star(v, qa, qb, C.b, 8);
+  v.ctx.restore();
+  const r = local2(MP, qa, qb, lam, 1, MD.deg, tricube), err = [], cor = [];
+  GRID2.forEach(([a, b]) => { const f = fit(a, b); if (!isFinite(f)) return; const e = sq(f - fM(a, b)); err.push(e); if ((a < 0.2 || a > 0.8) && (b < 0.2 || b > 0.8)) cor.push(e); });
+  const rm = a => a.length ? Math.sqrt(sum(a) / a.length) : NaN;
+  $('#md-l-o').textContent = fmt(lam, 2);
+  $('#md-n').innerHTML = r ? tip(r.n, `points closer than λ = ${fmt(lam, 2)} to (${fmt(qa, 2)}, ${fmt(qb, 2)})`) : '0';
+  $('#md-f').innerHTML = r ? tip(fmt(r.f - fM(qa, qb), 3), `fit ${fmt(r.f, 3)} − truth ${fmt(fM(qa, qb), 3)}`) : '—';
+  $('#md-e').innerHTML = tip(fmt(rm(err), 3), `RMS gap to the true surface over ${err.length} grid cells\n(noise sd is 0.25)`);
+  $('#md-ec').innerHTML = tip(fmt(rm(cor), 3), `the same, over the ${cor.length} cells in the four 0.2 × 0.2 corners`);
+  $('#md-say').innerHTML = !r ? 'No point inside the window here: widen λ.' : MD.deg === 0 ? `A local average in 2-D is pulled towards the middle in every corner: the surface rises towards the top right, and a corner's neighbours all lie inward. Corner error ${fmt(rm(cor), 2)} against ${fmt(rm(err), 2)} overall. Switch to the local plane.`
+    : `The local plane follows the slope into the corners (corner error ${fmt(rm(cor), 2)}, overall ${fmt(rm(err), 2)}). ${lam < 0.12 ? 'With so small a window only a few points steer each plane, and it gets noisy.' : lam > 0.35 ? 'A window this wide flattens the hill.' : 'Shrink the window and the hill sharpens, but noise creeps in.'}`;
+  drawCurse();
+}
+function drawCurse() {
+  const p = MD.p, lam = MD.lam, bf = 1 - Math.pow(Math.max(0, 1 - 2 * lam), p), ed = Math.pow(0.1, 1 / p);
+  $('#md-p-o').textContent = p;
+  $('#md-bf').innerHTML = tip(pct(bf, 1), `1 − (1 − 2 × ${fmt(lam, 2)})^${p}`);
+  $('#md-ed').innerHTML = tip(fmt(ed, 2), `0.1^(1/${p}): a sub-cube holding 10% of uniform data`);
+  $('#run-md').innerHTML = `<b>Running example</b>: &lambda; = ${fmt(lam, 2)}, p = ${p}: 1 &minus; (1 &minus; ${fmt(2 * lam, 2)})<sup>${p}</sup> = ${tip(fmt(bf, 3), `${fmt(Math.max(0, 1 - 2 * lam), 2)}^${p} = ${fmt(Math.pow(Math.max(0, 1 - 2 * lam), p), 4)} of the cube is safely inside`)}${p === 2 ? ' of the points in the square above are near an edge' : ' of the points would be near an edge'}.`;
+  $('#md-psay').innerHTML = p <= 2 ? `In ${p === 1 ? 'one dimension' : 'the square'}, ${pct(bf, 0)} of points are within &lambda; of an edge. Slide p up.`
+    : `With ${p} inputs, ${pct(bf, 1)} of the points are within ${fmt(lam, 2)} of an edge, and a cube that holds just 10% of the data needs sides ${fmt(ed, 2)} long${ed > 0.6 ? ', most of the range of every input: such a window is not local any more' : ''}.`;
+}
+$('#md-l').addEventListener('input', e => { MD.lam = +e.target.value; drawMD(); });
+$('#md-p').addEventListener('input', e => { MD.p = +e.target.value; drawCurse(); });
+seg1('[data-mdeg]', 'data-mdeg', d => { MD.deg = +d; drawMD(); });
+scrub($('#md-cv'), () => MD.v, (a, b) => { MD.q = [clamp(a, 0, 1), clamp(b, 0, 1)]; drawMD(); });
+fig($('#md-cv'), drawMD);
+
+/* ---------- 7. structured kernels ---------- */
+const fS = (a, b) => Math.sin(2 * Math.PI * a) + 1.5 * sq(b - 0.5);
+const SP = (() => { const r = mulberry32(33), P = []; for (let i = 0; i < 200; i++) { const a = r(), b = r(); P.push([a, b, fS(a, b) + 0.3 * gaussOf(r)]); } return P; })();
+const ST = { a: 1, lam: 0.2, q: [0.3, 0.5], v: null, curve: null, clam: null };
+const SA = linspace(0, 1, 21);
+function stLoo(a, lam) { let s = 0, n = 0; for (let i = 0; i < SP.length; i++) { const r = local2(SP, SP[i][0], SP[i][1], lam, a, 1, tricube, i); if (!r) continue; s += sq(SP[i][2] - r.f); n++; } return { rmse: Math.sqrt(s / n), n }; }
+function drawST() {
+  const C = C0(), a = ST.a, lam = ST.lam, v = ST.v = frame($('#st-cv'), [0, 1], [0, 1], { l: 34, b: 28 }, true); axes(v, 'x₁', 'x₂', { sx: 0.2, sy: 0.2 }); clip(v);
+  paintField(v, (x, y) => { if (x < 0 || x > 1 || y < 0 || y > 1) return NaN; const r = local2(SP, x, y, lam, a, 1, tricube); return r ? r.f : NaN; }, 10, -1.2, 1.5, css('--surface'), css('--lda'));
+  const [qa, qb] = ST.q, c = v.ctx;
+  SP.forEach(p => { const d = Math.sqrt(sq(p[0] - qa) + a * sq(p[1] - qb)); if (d < lam) ptDot(v, p[0], p[1], C.b, 3.2, 1); else ptDot(v, p[0], p[1], C.q, 1.8, 0.45); });
+  c.save(); c.strokeStyle = C.b; c.lineWidth = 2.2; c.beginPath();
+  const rx = v.X(qa + lam) - v.X(qa); if (a > 1e-3) { const ry = rx / Math.sqrt(a); c.ellipse(v.X(qa), v.Y(qb), rx, ry, 0, 0, 7); } else { c.rect(v.X(qa - lam), v.pad.t - 2, 2 * rx, v.ph + 4); } c.stroke(); c.restore();
+  star(v, qa, qb, C.b, 8); v.ctx.restore();
+  if (ST.clam !== lam) { ST.curve = SA.map(aa => stLoo(aa, lam).rmse); ST.clam = lam; }
+  const cur = stLoo(a, lam), K = ST.curve; let bi = 0; K.forEach((r, i) => { if (r < K[bi]) bi = i; });
+  const ymin = Math.min(...K, cur.rmse), ymax = Math.max(...K, cur.rmse), pad = (ymax - ymin) * 0.15 + 0.002;
+  const w = frame($('#st-c'), [0, 1], [ymin - pad, ymax + pad], { l: 50, b: 24, t: 10 }); axes(w, 'weight a on x₂', 'LOOCV RMSE', { sx: 0.2, ny: 3 }); clip(w);
+  path(w, SA, K, C.lda, 2.4); ptDot(w, SA[bi], K[bi], C.a, 5); ptDot(w, a, cur.rmse, C.b, 5.5); hline(w, 0.3, C.line, [2, 3]);
+  w.ctx.restore();
+  $('#st-a-o').textContent = fmt(a, 2); $('#st-l-o').textContent = fmt(lam, 2);
+  $('#st-cvv').innerHTML = tip(fmt(cur.rmse, 4), `leave-one-out over ${cur.n} points\n(noise sd is 0.3)`);
+  $('#st-best').innerHTML = tip(fmt(SA[bi], 2), `LOOCV ${fmt(K[bi], 4)}, searched a = 0, 0.05, …, 1`);
+  $('#st-r').innerHTML = tip(fmt(K[K.length - 1], 4), 'the ordinary round window');
+  $('#st-z').innerHTML = tip(fmt(K[0], 4), 'x₂ ignored by the kernel: a slab');
+  const dd = 0.3;
+  $('#run-st').innerHTML = `<b>Running example</b>: with a = ${fmt(a, 2)}, a neighbour ${dd} away along x&#8322; counts as &radic;(${fmt(a, 2)}) &times; ${dd} = ${tip(fmt(Math.sqrt(a) * dd, 3), 'its distance through A')} away; with &lambda; = ${fmt(lam, 2)} it gets tri-cube weight ${tip(fmt(tricube(Math.sqrt(a) * dd / lam), 3), `(1 − (${fmt(Math.sqrt(a) * dd, 3)}/${fmt(lam, 2)})³)³, or 0 beyond λ`)}. The window at the ring holds ${SP.filter(p => Math.sqrt(sq(p[0] - qa) + a * sq(p[1] - qb)) < lam).length} points.`;
+  $('#st-say').innerHTML = a > 0.6 ? `A round window treats both inputs alike, so it holds few points and each local plane is noisy (LOOCV ${fmt(cur.rmse, 3)}). Turn a down.`
+    : a < 0.02 ? `a = 0: the window is a slab that ignores x&#8322;, so each fit is a line in x&#8322; whose height and slope change with x&#8321;: a varying-coefficient model. It can't bend with the gentle curve in x&#8322;, and LOOCV rises to ${fmt(cur.rmse, 3)}.`
+    : `A stretched window: many more points per fit, and x&#8322; still matters a little. LOOCV ${fmt(cur.rmse, 3)}, against ${fmt(K[K.length - 1], 3)} for the round window; the best a on this grid is ${fmt(SA[bi], 2)}.`;
+}
+$('#st-a').addEventListener('input', e => { ST.a = +e.target.value; drawST(); });
+$('#st-l').addEventListener('input', e => { ST.lam = +e.target.value; drawST(); });
+scrub($('#st-cv'), () => ST.v, (a, b) => { ST.q = [clamp(a, 0, 1), clamp(b, 0, 1)]; drawST(); });
+fig($('#st-cv'), drawST); fig($('#st-c'), drawST);
+
+/* ---------- 8. local likelihood ---------- */
+const pT = x => 0.08 + 0.8 * Math.exp(-sq((x - 0.55) / 0.17));
+const LKD = (() => { const r = mulberry32(51), x = [], z = [], j = []; for (let i = 0; i < 200; i++) x.push(r()); x.sort((a, b) => a - b); x.forEach(t => { z.push(r() < pT(t) ? 1 : 0); j.push((r() - 0.5) * 0.06); }); return { x, z, j }; })();
+const LKG = logit1(LKD.x, LKD.z);
+const LK = { m: 'local', lam: 0.07, x0: 0.3, v: null };
+const GX3 = linspace(0, 1, 151);
+function lkEst(x, m, lam) { if (m === 'global') return LKG.p(x); if (m === 'nw') { let s = 0, t = 0; LKD.x.forEach((xi, i) => { const w = Math.exp(-0.5 * sq((xi - x) / lam)); s += w; t += w * LKD.z[i]; }); return t / s; } return localLogit(LKD.x, LKD.z, x, lam).p; }
+function drawLK() {
+  const C = C0(), lam = LK.lam, m = LK.m, v = LK.v = frame($('#lk-cv'), SYX, [-0.08, 1.08], { l: 40 }); axes(v, 'x', 'P(yes)', { sx: 0.2, sy: 0.25 }); clip(v);
+  const P = GX3.map(x => lkEst(x, m, lam)), r = localLogit(LKD.x, LKD.z, LK.x0, lam);
+  curve(v, pT, C.muted, 1.8, [5, 4]);
+  LKD.x.forEach((x, i) => { const w = m === 'global' ? 0.6 : 0.15 + 0.85 * r.w[i]; ptDot(v, x, LKD.z[i] ? 1.02 + LKD.j[i] * 0.6 : -0.02 + LKD.j[i] * 0.6, LKD.z[i] ? C.lda : C.muted, 2.8, w); });
+  if (m !== 'global') bump(v, LK.x0, lam, KER.gauss.D, C.lda, 0.16);
+  if (m === 'local') curve(v, x => 1 / (1 + Math.exp(-(r.a + r.b * (x - LK.x0)))), C.b, 1.6, [6, 3]);
+  path(v, GX3, P, C.lda, 2.6);
+  vline(v, LK.x0, C.q, [3, 4]); star(v, LK.x0, lkEst(LK.x0, m, lam), C.b, 8);
+  v.ctx.restore();
+  const ll = sum(GX3.map((x, i) => { const p = pT(x), q = clamp(P[i], 1e-6, 1 - 1e-6); return -(p * Math.log(q) + (1 - p) * Math.log(1 - q)); })) / GX3.length;
+  const best = sum(GX3.map(x => { const p = pT(x); return -(p * Math.log(p) + (1 - p) * Math.log(1 - p)); })) / GX3.length;
+  const pe = lkEst(LK.x0, m, lam);
+  $('#lk-l-o').textContent = fmt(lam, 3);
+  $('#lk-p').innerHTML = tip(fmt(pe, 3), m === 'global' ? `1 / (1 + e^−(${fmt(LKG.a, 2)} + ${fmt(LKG.b, 2)} x₀))` : m === 'nw' ? 'kernel-weighted share of yeses' : `1 / (1 + e^−α̂), α̂ = ${fmt(r.a, 3)}`);
+  $('#lk-t').innerHTML = tip(fmt(pT(LK.x0), 3), '0.08 + 0.8 exp(−((x − 0.55)/0.17)²)');
+  $('#lk-ll').innerHTML = tip(fmt(ll, 4), `− E[p log p̂ + (1 − p) log(1 − p̂)] over uniform x\nthe true p itself would score ${fmt(best, 4)}`);
+  $('#lk-it').innerHTML = m === 'local' ? tip(r.it, 'Newton steps until the update is below 1e-11') : '—';
+  $('#run-lk').innerHTML = `<b>Running example</b>: at x&#8320; = ${fmt(LK.x0, 3)}, &lambda; = ${fmt(lam, 3)}, Newton's method converges in ${r.it} steps to &alpha;&#770; = ${tip(fmt(r.a, 3), 'the local log-odds at x₀')} and &beta;&#770; = ${tip(fmt(r.b, 2), 'the local slope of the log-odds, per unit x')}; the weighted log-likelihood is ${fmt(r.ll, 2)}. So p&#770;(x&#8320;) = 1 / (1 + e<sup>${r.a > 0 ? '&minus;' : ''}${fmt(Math.abs(r.a), 3)}</sup>) = ${tip(fmt(r.p, 3), 'the sigmoid of the intercept')}.`;
+  $('#lk-say').innerHTML = m === 'global' ? `One logistic curve can only rise or fall, never both, so it misses the hump completely: expected log-loss ${fmt(ll, 3)} against ${fmt(best, 3)} for the true curve.`
+    : m === 'nw' ? `The kernel-weighted share of yeses follows the hump (log-loss ${fmt(ll, 3)}), but it is a local constant, so near the edges it is pulled towards the inside, like Nadaraya&ndash;Watson.`
+    : `Local logistic bends with the data: log-loss ${fmt(ll, 3)}, against ${fmt(best, 3)} for the truth. ${lam < 0.04 ? 'This narrow kernel lets a few points swing each fit.' : lam > 0.18 ? 'This wide kernel smooths the hump away.' : 'The orange curve is the whole logistic model fitted at x₀; only its value at x₀ is kept.'}`;
+}
+seg1('[data-lm]', 'data-lm', m => { LK.m = m; drawLK(); });
+$('#lk-l').addEventListener('input', e => { LK.lam = +e.target.value; drawLK(); });
+scrub($('#lk-cv'), () => LK.v, x => { LK.x0 = clamp(x, 0, 1); drawLK(); });
+fig($('#lk-cv'), drawLK);
+
+/* ---------- 9. computation race ---------- */
+const CP = { ln: 4.5, G: 400, res: null };
+const CPLAM = 0.05, CPM = 400;
+function cpRace() {
+  const N = Math.round(Math.pow(10, CP.ln)), G = CP.G, r = mulberry32(99), x = new Float64Array(N), y = new Float64Array(N);
+  for (let i = 0; i < N; i++) { x[i] = r(); y[i] = fTrue(x[i]) + SIG * gaussOf(r); }
+  const Q = linspace(0, 1, CPM), D = KER.epan.D, lam = CPLAM;
+  const time = fn => { let reps = 0, out; const t0 = performance.now(); let t1; do { out = fn(); reps++; t1 = performance.now(); } while (t1 - t0 < 25 && reps < 50); return { out, ms: (t1 - t0) / reps }; };
+  const direct = time(() => Q.map(q => { let s = 0, t = 0; for (let i = 0; i < N; i++) { const w = D((x[i] - q) / lam); if (w > 0) { s += w; t += w * y[i]; } } return t / s; }));
+  const ts = performance.now(), o = new Uint32Array(N); for (let i = 0; i < N; i++) o[i] = i; o.sort((a, b) => x[a] - x[b]); const xs = new Float64Array(N), ys = new Float64Array(N); for (let i = 0; i < N; i++) { xs[i] = x[o[i]]; ys[i] = y[o[i]]; }
+  const sortMs = performance.now() - ts;
+  const sorted = time(() => { let k = 0; const out = Q.map(q => { const lo = lowerBound(xs, q - lam), hi = lowerBound(xs, q + lam); k += hi - lo; let s = 0, t = 0; for (let i = lo; i < hi; i++) { const w = D((xs[i] - q) / lam); s += w; t += w * ys[i]; } return t / s; }); out.k = k / CPM; return out; });
+  const binned = time(() => { const W = new Float64Array(G), S = new Float64Array(G);
+    for (let i = 0; i < N; i++) { const p = x[i] * G - 0.5; let j = Math.floor(p); const f = p - j; if (j < 0) { W[0] += 1; S[0] += y[i]; continue; } if (j >= G - 1) { W[G - 1] += 1; S[G - 1] += y[i]; continue; } W[j] += 1 - f; S[j] += (1 - f) * y[i]; W[j + 1] += f; S[j + 1] += f * y[i]; }
+    return Q.map(q => { const lo = Math.max(0, Math.floor((q - lam) * G - 0.5)), hi = Math.min(G - 1, Math.ceil((q + lam) * G - 0.5)); let s = 0, t = 0; for (let j = lo; j <= hi; j++) { const w = D(((j + 0.5) / G - q) / lam); s += w * W[j]; t += w * S[j]; } return t / s; }); });
+  const errS = Math.max(...Q.map((_, i) => Math.abs(sorted.out[i] - direct.out[i]))), errB = Math.max(...Q.map((_, i) => Math.abs(binned.out[i] - direct.out[i])));
+  const samp = []; for (let i = 0; i < Math.min(400, N); i++) samp.push([x[i], y[i]]);
+  CP.res = { N, G, Q, direct, sorted, binned, errS, errB, samp, k: sorted.out.k, sortMs };
+}
+function drawCP() {
+  const C = C0(), R = CP.res;
+  $('#cp-n-o').textContent = num(Math.round(Math.pow(10, CP.ln))); $('#cp-g-o').textContent = CP.G;
+  const N = Math.round(Math.pow(10, CP.ln)), k = 2 * CPLAM * N;
+  $('#run-cp').innerHTML = `<b>Running example</b>: N = ${num(N)}, M = ${CPM}, &lambda; = ${CPLAM}. Direct: N &times; M = ${tip(num(N * CPM), 'kernel weights computed')}. Sorted: each window of width 2&lambda; holds about k = 2&lambda;N = ${num(k)} points, so M &times; k = ${tip(num(CPM * k), 'plus one sort of N numbers')}. Binned: N + M &times; 2&lambda;G = ${num(N)} + ${CPM} &times; ${num(2 * CPLAM * CP.G)} = ${tip(num(N + CPM * 2 * CPLAM * CP.G), 'one binning pass, then cells instead of points')}.`;
+  $('#cp-mem').innerHTML = tip(N * 16 >= 1e6 ? fmt(N * 16 / 1e6, 1) + ' MB' : fmt(N * 16 / 1e3, 0) + ' kB', `N pairs (x, y) of 8-byte numbers: ${num(N)} × 16 bytes\nthe data is the model`);
+  if (!R) { $('#cp-tbl').innerHTML = '<tbody><tr><td>Press <b>Run the race</b>.</td></tr></tbody>'; ['#cp-sp', '#cp-sb', '#cp-er'].forEach(s => $(s).textContent = '—'); $('#cp-say').textContent = ''; return; }
+  const row = (name, work, o, err) => `<tr><td><b>${name}</b></td><td class="num">${work}</td><td class="num">${tip(fmt(o.ms, o.ms < 1 ? 3 : 1), 'milliseconds per full run of 400 queries,\naveraged over repeated runs')}</td><td class="num">${err}</td></tr>`;
+  $('#cp-tbl').innerHTML = `<thead><tr><th>method</th><th>weights</th><th>ms</th><th>gap</th></tr></thead><tbody>` +
+    row('direct', num(R.N * CPM), R.direct, '0') + row('sorted', num(Math.round(R.k * CPM)), R.sorted, R.errS < 1e-12 ? tip('&lt; 10<sup>&minus;12</sup>', `${R.errS.toExponential(1)}: the same sums, in another order`) : R.errS.toExponential(1)) +
+    `<tr><td>(one-off sort)</td><td class="num">N log N</td><td class="num">${tip(fmt(R.sortMs, 1), 'sorting N indices by x, done once and reused\nfor every query and every λ')}</td><td></td></tr>` + row(`binned`, num(Math.round(CPM * 2 * CPLAM * R.G)), R.binned, tip(fmt(R.errB, 4), 'largest |binned − direct| over the 400 queries')) + '</tbody>';
+  $('#cp-sp').innerHTML = tip(fmt(R.direct.ms / R.sorted.ms, 1) + '×', `${fmt(R.direct.ms, 2)} ms / ${fmt(R.sorted.ms, 2)} ms for the queries
+plus a one-off sort of ${fmt(R.sortMs, 1)} ms`);
+  $('#cp-sb').innerHTML = tip(fmt(R.direct.ms / R.binned.ms, 1) + '×', `${fmt(R.direct.ms, 2)} ms / ${fmt(R.binned.ms, 3)} ms, including binning`);
+  $('#cp-er').innerHTML = tip(fmt(R.errB, 4), `against a noise sd of ${fmt(SIG, 2)}: ${R.errB < 0.01 ? 'invisible' : 'small but visible'}`);
+  const v = frame($('#cp-cv'), SYX, [-2.6, 2.1], { l: 40, b: 22, t: 10 }); axes(v, 'x', 'y', { sx: 0.2, sy: 1 }); clip(v);
+  R.samp.forEach(p => ptDot(v, p[0], p[1], C.muted, 1.8, 0.45));
+  path(v, R.Q, R.direct.out, C.lda, 2.6); path(v, R.Q, R.binned.out, C.b, 1.6, [5, 3]);
+  hline(v, -2.1, C.line, null, 1); path(v, R.Q, R.Q.map((_, i) => -2.1 + 100 * (R.binned.out[i] - R.direct.out[i])), C.b, 1.4); label(v, 'gap × 100', 0.01, -2.2, C.muted, 'left', 'top');
+  v.ctx.restore();
+  $('#cp-say').innerHTML = `Once the data are sorted (a one-off ${fmt(R.sortMs, 0)} ms), visiting only each window's points answers the 400 queries ${fmt(R.direct.ms / R.sorted.ms, 0)} times faster, with exactly the same answer. Binning onto ${R.G} cells is ${fmt(R.direct.ms / R.binned.ms, 0)} times faster and off by at most ${fmt(R.errB, 4)}${R.G < 100 ? '; with this few cells (wider than a tenth of the window) the error grows, so raise G' : ''}. Timings vary with your device and browser.`;
+}
+$('#cp-n').addEventListener('input', e => { CP.ln = +e.target.value; drawCP(); });
+$('#cp-g').addEventListener('input', e => { CP.G = +e.target.value; drawCP(); });
+$('#cp-run').addEventListener('click', () => { $('#cp-run').textContent = 'Running…'; setTimeout(() => { cpRace(); $('#cp-run').textContent = 'Run the race again'; drawCP(); }, 30); });
+fig($('#cp-cv'), drawCP);
+
+/* ---------- project: ozone ---------- */
+const PJ = { deg: 1, span: 0.3, over: 'one', cache: new Map(), cc: null, ccRunning: false, line: null };
+const T = OZ.tr, TE = OZ.te;
+const spanKey = (deg, s) => deg + ':' + s.toFixed(2);
+function pjStats(deg, span) {
+  const key = spanKey(deg, span); if (PJ.cache.has(key)) return PJ.cache.get(key);
+  const n = T.n; let df = 0, rss = 0, loo = 0, te = 0, bad = 0;
+  for (let i = 0; i < n; i++) { const r = loessAt(T.t, T.o, T.t[i], span, deg, -1, true), rl = loessAt(T.t, T.o, T.t[i], span, deg, i); if (!r || !rl) { bad++; continue; } df += r.l[i]; rss += sq(T.o[i] - r.f); loo += sq(T.o[i] - rl.f); }
+  for (let i = 0; i < TE.n; i++) { const r = loessAt(T.t, T.o, TE.t[i], span, deg); te += sq(TE.o[i] - (r ? r.f : NaN)); }
+  const s = { df, loo: Math.sqrt(loo / n), gcv: Math.sqrt(rss / n / sq(1 - df / n)), te: Math.sqrt(te / TE.n), bad };
+  PJ.cache.set(key, s); return s;
+}
+const ols = (() => { const n = T.n, mx = sum(T.t) / n, my = sum(T.o) / n; let sxy = 0, sxx = 0; for (let i = 0; i < n; i++) { sxy += (T.t[i] - mx) * (T.o[i] - my); sxx += sq(T.t[i] - mx); } const b = sxy / sxx; return { a: my - b * mx, b }; })();
+PJ.lineLoo = (() => { const n = T.n, mx = sum(T.t) / n, sxx = sum(T.t.map(t => sq(t - mx))); return Math.sqrt(sum(T.t.map((t, i) => sq((T.o[i] - ols.a - ols.b * t) / (1 - 1 / n - sq(t - mx) / sxx)))) / n); })();
+PJ.line = Math.sqrt(sum(TE.t.map((t, i) => sq(TE.o[i] - ols.a - ols.b * t))) / TE.n);
+const pjCurve = (deg, span) => OZG.map(g => { const r = loessAt(T.t, T.o, g, span, deg); return r ? r.f : NaN; });
+function drawPJ() {
+  const C = C0(), v = frame($('#pj-cv'), OZX, OZY, { l: 40, b: 30 }); axes(v, 'daily max temperature (°C)', 'ozone, MDA8 (ppb)', { sx: 5, sy: 20 }); clip(v);
+  hline(v, 70, C.bad, [6, 4], 1.2);
+  TE.t.forEach((t, i) => hollow(v, t, TE.o[i], C.muted, 2.2, 0.35));
+  T.t.forEach((t, i) => ptDot(v, t, T.o[i], C.a, 2.4, 0.55));
+  seg(v, OZX[0], ols.a + ols.b * OZX[0], OZX[1], ols.a + ols.b * OZX[1], C.muted, 1.4, [6, 4]);
+  if (PJ.over === 'three') { [[0.1, C.b], [0.3, C.lda], [1, C.c]].forEach(([s, col]) => path(v, OZG, pjCurve(PJ.deg, s), col, 2.4)); }
+  else path(v, OZG, pjCurve(PJ.deg, PJ.span), C.lda, 2.8);
+  v.ctx.restore();
+  const s = pjStats(PJ.deg, PJ.span);
+  $('#pj-s-o').textContent = fmt(PJ.span, 2);
+  $('#pj-df').innerHTML = tip(fmt(s.df, 2), `trace of the 358 × 358 smoother matrix`);
+  $('#pj-loo').innerHTML = tip(fmt(s.loo, 3), '358 fits, each without the day it predicts');
+  $('#pj-gcv').innerHTML = tip(fmt(s.gcv, 3), `√( training MSE / (1 − ${fmt(s.df, 2)}/358)² )`);
+  $('#pj-te').innerHTML = tip(fmt(s.te, 3), `fitted on 2023, scored on ${TE.n} days of 2022\nstraight line: ${fmt(PJ.line, 3)}`);
+  $('#pj-cap').innerHTML = PJ.over === 'three' ? `Degree ${PJ.deg} with spans <span style="color:var(--cB)">0.1</span>, <span style="color:var(--lda)">0.3</span> and <span style="color:var(--cC)">1</span>. Teal: 2023 days; grey rings: 2022 days; dashed: the least-squares line; red: the 70 ppb standard.`
+    : `Teal: the 358 days of 2023 that every fit learns from; grey rings: 2022 days, kept for testing; dashed grey: one straight line; red: the 70 ppb standard.`;
+  const r15 = loessAt(T.t, T.o, 15, PJ.span, Math.max(1, PJ.deg)), r35 = loessAt(T.t, T.o, 35, PJ.span, Math.max(1, PJ.deg));
+  $('#pj-say').innerHTML = PJ.over === 'three' ? `Span 0.1 uses 35 days per window and wobbles; span 1 uses them all and is almost a single gentle curve; 0.3 sits between. All three agree that the rise steepens with heat.`
+    : `${PJ.span <= 0.15 ? 'A small span follows small clusters of days, and the curve wobbles. ' : PJ.span >= 0.8 ? 'A span this large is close to one global curve, and the hockey-stick shape softens. ' : ''}The local slope is ${tip(fmt(r15.beta[1], 2), 'local linear slope at 15 °C, ppb per °C')} ppb per &deg;C at 15 &deg;C and ${tip(fmt(r35.beta[1], 2), 'local linear slope at 35 °C')} at 35 &deg;C: cool days barely change ozone, hot days add a lot. LOOCV says ${fmt(s.loo, 2)} ppb${s.loo < 11.32 ? ', among the best on offer' : ''}.`;
+}
+function drawCC() {
+  const C = C0(), cols = [C.b, C.lda, C.c], spans = PJ.spans, v = frame($('#pj-cc'), [0.08, 1.02], [11, 13.2], { l: 44, b: 26, t: 10 }); axes(v, 'span', 'RMSE (ppb)', { sx: 0.1, sy: 0.5 }); clip(v);
+  hline(v, PJ.line, C.muted, [2, 3]); label(v, 'straight line, 2022', 0.1, PJ.line + 0.04, C.muted);
+  let done = 0, best = null;
+  [0, 1, 2].forEach(d => { const L = spans.map(s => PJ.cache.get(spanKey(d, s))); if (L.some(x => !x)) return; done++;
+    path(v, spans, L.map(x => x.loo), cols[d], 2.4); path(v, spans, L.map(x => x.te), cols[d], 1.6, [6, 4]);
+    L.forEach((x, i) => { if (!best || x.loo < best.loo) best = { loo: x.loo, te: x.te, d, s: spans[i] }; }); });
+  if (done === 3) vline(v, PJ.span, C.q, [3, 3]);
+  if (best) ptDot(v, best.s, best.loo, cols[best.d], 5.5);
+  v.ctx.restore();
+  $('#pj-cc-cap').textContent = done < 3 ? `Computing… ${done} of 3 degrees.` : 'The vertical line is the span chosen above.';
+  $('#pj-line').innerHTML = tip(fmt(PJ.line, 3), `ozone = ${fmt(ols.a, 2)} + ${fmt(ols.b, 3)} × temperature, fitted on 2023`);
+  if (best && done === 3) {
+    const bt = [0, 1, 2].flatMap(d => spans.map(s => ({ d, s, te: PJ.cache.get(spanKey(d, s)).te }))).reduce((a, b) => b.te < a.te ? b : a);
+    $('#pj-bs').innerHTML = tip(`${fmt(best.s, 2)}, degree ${best.d}`, `LOOCV RMSE ${fmt(best.loo, 3)} ppb\nits 2022 RMSE: ${fmt(best.te, 3)}`);
+    $('#pj-csay').innerHTML = `On 2023 the best LOESS beats one straight line by more than a ppb (LOOCV ${fmt(best.loo, 2)} against ${tip(fmt(PJ.lineLoo, 2), 'leave-one-out RMSE of the least-squares line,\nby the hat-matrix shortcut, which is exact for it')}). On 2022 everything sits close together: the best is ${fmt(bt.te, 2)} ppb (degree ${bt.d}, span ${fmt(bt.s, 2)}) and the plain line scores ${fmt(PJ.line, 2)}. The year changed more than the curve: 2022 was about 5 ppb cleaner on hot days than 2023. Very small spans, and degree 2 with small spans, do clearly worse on both years.`;
+  } else { $('#pj-bs').textContent = '…'; $('#pj-csay').textContent = 'Running 57 leave-one-out experiments in the background…'; }
+}
+PJ.spans = Array.from({ length: 19 }, (_, i) => Math.round((0.1 + 0.05 * i) * 100) / 100);
+function ccRun() {
+  if (PJ.ccRunning) return; PJ.ccRunning = true; const jobs = [];
+  [1, 0, 2].forEach(d => PJ.spans.forEach(s => jobs.push([d, s])));
+  const step = () => { const t0 = performance.now(); while (jobs.length && performance.now() - t0 < 30) { const [d, s] = jobs.shift(); pjStats(d, s); } drawCC(); if (jobs.length) setTimeout(step, 0); };
+  step();
+}
+seg1('[data-pjd]', 'data-pjd', d => { PJ.deg = +d; drawPJ(); drawCC(); });
+seg1('[data-pjo]', 'data-pjo', o => { PJ.over = o; drawPJ(); });
+$('#pj-s').addEventListener('input', e => { PJ.span = Math.round(+e.target.value * 100) / 100; drawPJ(); drawCC(); });
+fig($('#pj-cv'), drawPJ); fig($('#pj-cc'), drawCC);
+
+/* exceedance probability */
+const PL = { lam: 2 };
+const ZT = T.o.map(o => o > 70 ? 1 : 0), ZTE = TE.o.map(o => o > 70 ? 1 : 0), PLG = logit1(T.t, ZT);
+const logloss = (p, z) => -sum(z.map((zz, i) => { const q = clamp(p[i], 1e-15, 1 - 1e-15); return zz ? Math.log(q) : Math.log(1 - q); })) / z.length;
+function drawPL() {
+  const C = C0(), lam = PL.lam, v = frame($('#pj-lg'), OZX, [-0.06, 1.06], { l: 40, b: 30 }); axes(v, 'daily max temperature (°C)', 'P(MDA8 > 70 ppb)', { sx: 5, sy: 0.25 }); clip(v);
+  T.t.forEach((t, i) => seg(v, t, ZT[i] ? 1.06 : -0.06, t, ZT[i] ? 1.0 : 0.0, ZT[i] ? C.bad : C.muted, 1.2, null, 0.5));
+  const bands = new Map(); T.t.forEach((t, i) => { const b = Math.floor(t / 2) * 2; const o = bands.get(b) || [0, 0]; o[0]++; o[1] += ZT[i]; bands.set(b, o); });
+  bands.forEach(([n, k], b) => { const c = v.ctx, s = 3 + Math.sqrt(n) * 1.2; c.save(); c.globalAlpha = 0.5; c.fillStyle = C.muted; c.fillRect(v.X(b + 1) - s / 2, v.Y(k / n) - s / 2, s, s); c.restore(); });
+  const L = OZG.map(g => localLogit(T.t, ZT, g, lam).p);
+  path(v, OZG, OZG.map(g => PLG.p(g)), C.b, 2, [6, 3]); path(v, OZG, L, C.lda, 2.8);
+  v.ctx.restore();
+  const r30 = localLogit(T.t, ZT, 30, lam), r35 = localLogit(T.t, ZT, 35, lam);
+  const pl = TE.t.map(t => localLogit(T.t, ZT, t, lam).p), pg = TE.t.map(t => PLG.p(t)), l22 = logloss(pl, ZTE), g22 = logloss(pg, ZTE);
+  $('#pj-ll-o').textContent = fmt(lam, 1);
+  $('#pj-p30').innerHTML = tip(fmt(r30.p, 3), `α̂ = ${fmt(r30.a, 3)}, β̂ = ${fmt(r30.b, 3)} per °C\n${r30.it} Newton steps; global logistic: ${fmt(PLG.p(30), 3)}`);
+  $('#pj-p35').innerHTML = tip(fmt(r35.p, 3), `α̂ = ${fmt(r35.a, 3)}, β̂ = ${fmt(r35.b, 3)} per °C\n${r35.it} Newton steps; global logistic: ${fmt(PLG.p(35), 3)}`);
+  $('#pj-l22').innerHTML = tip(fmt(l22, 4), `mean −log p̂ of what happened, over ${TE.n} days of 2022\n(${sum(ZTE)} exceedances)`);
+  $('#pj-g22').innerHTML = tip(fmt(g22, 4), `one logistic curve: log-odds = ${fmt(PLG.a, 2)} + ${fmt(PLG.b, 3)} × temperature`);
+  $('#pj-lsay').innerHTML = `Below about 25 &deg;C an exceedance almost never happens; the risk climbs through the 30s to ${fmt(localLogit(T.t, ZT, 40, lam).p, 2)} at 40 &deg;C. ${l22 < g22 ? `On 2022 the local curve scores better than the global one (${fmt(l22, 3)} against ${fmt(g22, 3)}).` : `On 2022 the single global curve is ${l22 - g22 < 0.01 ? 'a touch ' : ''}better (${fmt(g22, 3)} against ${fmt(l22, 3)}). Two 2022 exceedances came on days of only 25.6 and 26.7 &deg;C, cooler than any in 2023 (the coolest was 27.2 &deg;C), so the local curve's confident near-zero risks there are punished.`} ${lam < 1.3 ? 'This narrow kernel makes the curve lumpy.' : lam > 5 ? 'This wide kernel is close to the global curve.' : ''}`;
+}
+$('#pj-ll').addEventListener('input', e => { PL.lam = +e.target.value; drawPL(); });
+fig($('#pj-lg'), drawPL);
+
+/* varying coefficient through the year */
+const PV = { z: 196, lam: 30, key: null, beta: null, loo: 0, te: 0 };
+const DAYS = linspace(1, 365, 365);
+function pvCompute() {
+  const lam = PV.lam; if (PV.key === lam) return; PV.key = lam;
+  PV.beta = DAYS.map(z => vcAt(T.d, T.t, T.o, z, lam, 365));
+  let s = 0; for (let i = 0; i < T.n; i++) { const r = vcAt(T.d, T.t, T.o, T.d[i], lam, 365, i); s += sq(T.o[i] - r.alpha - r.beta * T.t[i]); } PV.loo = Math.sqrt(s / T.n);
+  s = 0; for (let i = 0; i < TE.n; i++) { const r = vcAt(T.d, T.t, T.o, TE.d[i], lam, 365); s += sq(TE.o[i] - r.alpha - r.beta * TE.t[i]); } PV.te = Math.sqrt(s / TE.n);
+}
+function drawPV() {
+  pvCompute();
+  const C = C0(), B = PV.beta.map(r => r.beta), bmin = Math.min(-1, ...B), bmax = Math.max(4, ...B);
+  const v = frame($('#pj-vc'), [1, 365], [Math.floor(bmin), Math.ceil(bmax)], { l: 40, b: 26, t: 10 });
+  axes(v, '', 'β: ppb per °C', { sx: 30.42, sy: 1, fx: x => MONTHS[Math.round(x / 30.42) % 12] }); clip(v);
+  hline(v, 0, C.muted, null, 1); hline(v, ols.b, C.muted, [5, 4], 1.2);
+  path(v, DAYS, B, C.lda, 2.6); vline(v, PV.z, C.q, [3, 3]); ptDot(v, PV.z, PV.beta[PV.z - 1].beta, C.b, 5.5);
+  label(v, 'one line for the whole year', 6, ols.b + 0.12, C.muted);
+  v.ctx.restore();
+  const r = PV.beta[PV.z - 1], lam = PV.lam;
+  const w = frame($('#pj-vs'), OZX, OZY, { l: 40, b: 30 }); axes(w, 'daily max temperature (°C)', 'ozone, MDA8 (ppb)', { sx: 5, sy: 20 }); clip(w);
+  T.t.forEach((t, i) => { let d = Math.abs(T.d[i] - PV.z); d = Math.min(d, 365 - d); const k = Math.exp(-0.5 * sq(d / lam)); ptDot(w, t, T.o[i], k > 0.05 ? C.lda : C.muted, 2 + 2.5 * k, 0.12 + 0.88 * k); });
+  seg(w, OZX[0], ols.a + ols.b * OZX[0], OZX[1], ols.a + ols.b * OZX[1], C.muted, 1.4, [6, 4]);
+  seg(w, 8, r.alpha + r.beta * 8, 42, r.alpha + r.beta * 42, C.b, 2.8);
+  w.ctx.restore();
+  $('#pj-vz-o').textContent = dayName(PV.z); $('#pj-vl-o').textContent = lam;
+  $('#pj-vb').innerHTML = tip(fmt(r.beta, 2), `weighted least squares at day ${PV.z}\nα = ${fmt(r.alpha, 2)}, β = ${fmt(r.beta, 3)}\ntotal weight ${fmt(r.sw, 1)} days' worth`);
+  $('#pj-va').innerHTML = tip(fmt(r.alpha + 35 * r.beta, 1), `α + 35 β = ${fmt(r.alpha, 2)} + 35 × ${fmt(r.beta, 3)}\n(an extrapolation in months that never reach 35 °C)`);
+  $('#pj-vloo').innerHTML = tip(fmt(PV.loo, 3), 'each day predicted from the other 357');
+  $('#pj-vte').innerHTML = tip(fmt(PV.te, 3), `fitted on 2023, scored on 2022\none straight line: ${fmt(PJ.line, 3)}`);
+  const summer = PV.z > 140 && PV.z < 260, winter = PV.z < 60 || PV.z > 330;
+  $('#pj-vsay').innerHTML = `${winter ? `Around ${dayName(PV.z)} heat hardly matters: ${fmt(r.beta, 2)} ppb per &deg;C, because there is too little sunlight to cook much ozone.` : summer ? `Around ${dayName(PV.z)} every extra degree adds ${fmt(r.beta, 2)} ppb: long, bright days turn heat into ozone.` : `Around ${dayName(PV.z)} the slope is ${fmt(r.beta, 2)} ppb per &deg;C, between the winter and summer values.`} Letting the slope follow the season gives a 2022 error of ${fmt(PV.te, 2)} ppb, against ${fmt(PJ.line, 2)} for one line. ${lam < 12 ? `LOOCV loves this narrow window (${fmt(PV.loo, 2)}), but 2022 does not: neighbouring days share weather, so leaving out one day still leaves its near-twins in the fit. Trust the separate year.` : lam > 90 ? 'With a window this wide the slope barely changes through the year, and the model drifts back towards one line.' : `LOOCV (${fmt(PV.loo, 2)}) is a little optimistic here too, for the same reason: neighbouring days share weather.`}`;
+}
+$('#pj-vz').addEventListener('input', e => { PV.z = +e.target.value; drawPV(); });
+$('#pj-vl').addEventListener('input', e => { PV.lam = +e.target.value; drawPV(); });
+fig($('#pj-vc'), drawPV); fig($('#pj-vs'), drawPV);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+drawHero(); drawNB(); drawNW(); drawLL(); drawLP(); drawCV(); drawMD(); drawST(); drawLK(); drawCP(); drawPJ(); drawCC(); drawPL(); drawPV();
+if (HERO.auto) requestAnimationFrame(heroTick);
+{ const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { ccRun(); io.disconnect(); } }, { rootMargin: '600px' }) : null; if (io) io.observe($('#project')); else ccRun(); }
+{ const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { if (!CP.res) { cpRace(); $('#cp-run').textContent = 'Run the race again'; drawCP(); } io.disconnect(); } }, { rootMargin: '200px' }) : null; if (io) io.observe($('#compute')); }
+window.__ksDebug = { SYN, OZ, T, TE, loessAt, localLogit, vcAt, pjStats, PJ, PV, PL, CV, cvStats, ST, stLoo, MP, SP, LKD, local2, kernelFit, logit1, PLG, ols, cpRace, CP };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

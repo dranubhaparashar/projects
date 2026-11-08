@@ -1,0 +1,1377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on choosing inputs for linear regression: the bias-variance cost of every extra input, best-subset selection and why it explodes, forward and backward stepwise, forward stagewise, principal components regression, partial least squares, the coefficient paths of selection and shrinkage side by side, and reduced-rank regression and curds and whey for many outcomes, all on the Stamey prostate cancer data with cross-validated results verified against scikit-learn.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Choosing Inputs: Subset Selection, PCR &amp; PLS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.chips button[disabled] { opacity: 1; }
+.stat.wide { grid-column: 1 / -1; }
+@media (max-width: 560px) { .plot.ar-16x10 { aspect-ratio: 1.15 / 1; } }
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Choosing inputs <span>&middot; fewer, better directions</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Why fewer?</a>
+      <a href="#best">Best subset</a>
+      <a href="#stepwise">Stepwise</a>
+      <a href="#stagewise">Stagewise</a>
+      <a href="#pcr">PCR</a>
+      <a href="#pls">PLS</a>
+      <a href="#compare">Side by side</a>
+      <a href="#multi">Many outcomes</a>
+      <a href="#project">Prostate project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.2a · choosing inputs</div>
+      <h1>Choosing Inputs</h1>
+      <div class="sub">Subset selection, principal components and partial least squares</div>
+      <p class="lead">Least squares uses every input you hand it, and every input brings its own noisy coefficient. With eight measurements on 67 men, that is eight guesses, some of them poor. This chapter is about using <strong>fewer, better inputs</strong>: keep only a subset of them, or squeeze all of them into a few derived directions. On the right, each dot is one of the <b>256</b> models you can build from the eight prostate measurements. <strong>Toggle the inputs or click any dot</strong> to see how well that model fits and how well it predicts men it has never seen.</p>
+      <dl class="facts">
+        <div><dt>The trade</dt><dd>Each extra input lowers bias and raises variance</dd></div>
+        <div><dt>Two families</dt><dd>Select a subset of inputs, or derive a few new directions from all of them</dd></div>
+        <div><dt>The data</dt><dd>Stamey&rsquo;s 97 prostate cancer patients, the classic running example</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="fig-head"><div class="chips" id="hero-chips" role="group" aria-label="Inputs in the model"></div></div>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Training error of all 256 subset models against their size; click a dot to choose a model"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Why use fewer inputs?</h2>
+    <div class="prose">
+      <p>Chapter 1.2 fitted a straight-line model by least squares. If the model is right, least squares is unbiased: on average its coefficients hit the truth. But &ldquo;on average&rdquo; hides a cost. Each coefficient is estimated from noisy data, and every extra input adds its own wobble to every prediction. There are two reasons to use fewer inputs. The first is <em class="term">prediction accuracy</em>: dropping a weak input adds a little bias but can remove a lot of variance. The second is <em class="term">interpretation</em>: a handful of strong effects is easier to understand and to trust than a long list of small ones.</p>
+      <p>Below is a made-up study where we know the truth. Ten candidate inputs are ordered from the strongest effect to the weakest; the last two have no effect at all. The model uses the first <i>k</i> of them. <strong>Slide k and the noise level</strong>, and watch the test error fall, bottom out and climb again.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathrm{Err}(k) &= \underbrace{\sigma^2}_{\text{noise}} + \underbrace{\tfrac{1}{N}\big\lVert(\mathbf{I}-\mathbf{H}_k)\,\mathbf{f}\big\rVert^2}_{\text{bias}^2} \\ &\quad + \underbrace{\sigma^2\,\tfrac{k+1}{N}}_{\text{variance}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the average squared error when the same N people are measured again with fresh noise. <b>f</b> holds their true mean responses and <b>H</b><sub>k</sub> is the least-squares &ldquo;hat&rdquo; matrix for an intercept plus the first k inputs. The bias term is the part of the truth that k inputs cannot reach; it shrinks as k grows. The variance term grows by &sigma;&sup2;/N for every coefficient you estimate. The training error hides that cost: on average it is &sigma;&sup2;(1 &minus; (k+1)/N) + bias&sup2;, and it only ever falls.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Error of k equals sigma squared, plus one over N times the squared length of I minus H-k times f, plus sigma squared times k plus one over N.&rdquo;</em></div><div class="eq-run" id="run-why"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="why-cv" aria-label="Expected training and test error against the number of inputs used"></canvas></div><figcaption><span style="color:var(--cB)">&#9644;</span> expected test error &nbsp; <span style="color:var(--cA)">&#9644;</span> expected training error &nbsp; <span style="color:var(--lda)">- -</span> bias&sup2; &nbsp; <span style="color:var(--qda)">- -</span> variance &nbsp; dots: one actual draw of the noise</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Number of people"><button type="button" data-wn="20">N = 20</button><button type="button" data-wn="40" aria-pressed="true">N = 40</button><button type="button" data-wn="100">N = 100</button></div>
+        <div class="ctrl"><div class="top"><label for="why-k">Inputs used, k</label><output id="why-k-o"></output></div><input type="range" id="why-k" min="0" max="10" step="1" value="10"></div>
+        <div class="ctrl"><div class="top"><label for="why-s">Noise level &sigma;</label><output id="why-s-o"></output></div><input type="range" id="why-s" min="0.3" max="2.5" step="0.05" value="1.2"></div>
+        <div class="btns"><button type="button" class="btn" id="why-draw">Draw new noise</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="why-b"></div><div class="k">bias&sup2;</div></div><div class="stat"><div class="v" id="why-v"></div><div class="k">variance</div></div><div class="stat"><div class="v" id="why-e"></div><div class="k">expected test error</div></div><div class="stat"><div class="v" id="why-best"></div><div class="k">best k</div></div></div>
+        <p class="note" id="why-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BEST SUBSET -->
+<section class="chap" id="best">
+  <div class="wrap">
+    <div class="tag">Subset selection</div>
+    <h2>Best subset: try every combination</h2>
+    <div class="prose"><p>In real data we don&rsquo;t know which inputs matter or in what order. The most direct answer is brute force: for every size k, fit <em>every</em> subset of k inputs and keep the one with the smallest residual sum of squares. Those winners are the lower edge of the cloud in the hero. On the prostate data the winners happen to be nested (each adds one input to the last), but nothing forces that. <strong>Slide k</strong> to see the winner of each size and how it does on the 30 test men.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathrm{RSS}(S) &= \min_{\beta}\ \sum_{i=1}^{N}\big(y_i - \hat y_i\big)^2 \\ \hat y_i &= \beta_0 + \sum_{j\in S}\beta_j x_{ij} \\ \hat S_k &= \operatorname*{arg\,min}_{|S| = k}\ \mathrm{RSS}(S) \end{aligned} \]</div><div class="read"><b>Read it as:</b> for a set S of inputs, RSS(S) is the error of the least-squares fit that uses only those inputs. The best subset of size k is the set with the smallest RSS among all sets of exactly k inputs. RSS can only fall as k grows, so it cannot tell you which k to use. That needs an estimate of <i>test</i> error, such as cross-validation (the project) or a penalty like AIC or BIC.</div><div class="eq-say"><b>Say it</b><em>&ldquo;RSS of S is the smallest sum of squared residuals using only the inputs in S; S-hat-k is the set of size k with the smallest RSS.&rdquo;</em></div><div class="eq-run" id="run-best"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="best-cv" aria-label="Training and test error of the best subset of each size"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> training error RSS/67 of the best subset of each size &nbsp; <span style="color:var(--cB)">&#9644;</span> its error on the 30 test men &nbsp; grey: every other subset&rsquo;s test error</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="best-k">Subset size k</label><output id="best-k-o"></output></div><input type="range" id="best-k" min="0" max="8" step="1" value="2"></div>
+        <div class="chips" id="best-chips" aria-label="Inputs in the best subset of this size"></div>
+        <div class="stats"><div class="stat"><div class="v" id="best-tr"></div><div class="k">training error</div></div><div class="stat"><div class="v" id="best-te"></div><div class="k">test error</div></div></div>
+        <p class="note" id="best-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Why it explodes</h3>
+    <div class="prose"><p>Every input is either in or out, so p inputs give 2<sup>p</sup> models. Your browser just fitted all 256 prostate models; the stopwatch below says how long that took. Doubling for every extra input soon outruns any computer. The <em class="term">leaps and bounds</em> algorithm (Furnival &amp; Wilson, 1974) skips whole branches that cannot win, which stretches exhaustive search to about 30 or 40 inputs, and modern mixed-integer solvers push further on favourable problems. <strong>Slide p</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \#\text{models} = \sum_{k=0}^{p}\binom{p}{k} = 2^{p} \]</div><div class="read"><b>Read it as:</b> there are &ldquo;p choose k&rdquo; subsets of size k, and adding them up over every size gives two to the power p: one in-or-out choice per input.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The number of models is the sum over k of p choose k, which is two to the p.&rdquo;</em></div><div class="eq-run" id="run-boom"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="boom-cv" aria-label="Time to fit every subset against the number of inputs, on a log scale"></canvas></div><figcaption>Time to fit all 2<sup>p</sup> subsets at your browser&rsquo;s measured speed (log scale). <span style="color:var(--cA)">&#9644;</span> exhaustive search &nbsp; <span style="color:var(--lda)">&#9644;</span> forward stepwise, p(p+1)/2 + 1 fits</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="boom-p">Number of inputs p</label><output id="boom-p-o"></output></div><input type="range" id="boom-p" min="1" max="80" step="1" value="8"></div>
+        <div class="stats"><div class="stat"><div class="v" id="boom-n"></div><div class="k">models to fit</div></div><div class="stat"><div class="v" id="boom-t"></div><div class="k">time, every subset</div></div></div>
+        <div class="btns"><button type="button" class="btn" id="boom-re">Time it again</button></div>
+        <p class="note" id="boom-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- STEPWISE -->
+<section class="chap" id="stepwise">
+  <div class="wrap">
+    <div class="tag">Greedy search</div>
+    <h2>Forward and backward stepwise</h2>
+    <div class="prose">
+      <p><em class="term">Forward stepwise</em> selection starts with the intercept alone and, at each step, adds the one input that lowers RSS the most. It fits only p(p+1)/2 + 1 models instead of 2<sup>p</sup>, and clever updating of the fit makes each step cheap. It works even when there are more inputs than people. Because it searches a narrow path, it has lower variance than best subset but may miss the best combination. <em class="term">Backward stepwise</em> starts with every input and repeatedly drops the weakest one, the input with the smallest |z|-score. It needs more people than inputs. Hybrids consider both an add and a drop at every step.</p>
+      <p>On the prostate data all three searches agree at every size, so there is a second dataset: four inputs where x<sub>1</sub> and x<sub>2</sub> are almost copies of each other and the response is their <em>difference</em>. <strong>Step forward and backward on the trap</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ F = \frac{\mathrm{RSS}_0 - \mathrm{RSS}_1}{\mathrm{RSS}_1/(N-k_1-1)} \]</div><div class="read"><b>Read it as:</b> how much one extra input lowers RSS (model 0 has k<sub>1</sub> &minus; 1 inputs, model 1 has k<sub>1</sub>), measured against the noise level that model 1 leaves. Forward stepwise adds the input with the largest F; with one input added, the largest F and the largest drop in RSS are the same choice.</div><div class="eq-say"><b>Say it</b><em>&ldquo;F is RSS-nought minus RSS-one, over RSS-one divided by N minus k-one minus one.&rdquo;</em></div><div class="eq-run" id="run-f"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ z_j = \frac{\hat\beta_j}{\hat\sigma\sqrt{v_j}}, \qquad \hat\sigma^2 = \frac{\mathrm{RSS}}{N-k-1} \]</div><div class="read"><b>Read it as:</b> a coefficient divided by its standard error, where v<sub>j</sub> is the j-th diagonal entry of the inverse of the (centred) inputs&rsquo; Gram matrix. Backward stepwise drops the input with the smallest |z|. Dropping it raises RSS by exactly z<sub>j</sub>&sup2;&sigma;&#770;&sup2;, so it is also the cheapest input to lose.</div><div class="eq-say"><b>Say it</b><em>&ldquo;z-j is beta-hat-j over sigma-hat times the root of v-j.&rdquo;</em></div><div class="eq-run" id="run-z"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Dataset"><button type="button" data-sd="trap" aria-pressed="true">The trap (4 inputs)</button><button type="button" data-sd="pros">Prostate (8 inputs)</button></div></div>
+        <div class="plot ar-16x10"><canvas id="sw-cv" aria-label="Training RSS against size for best subset, forward and backward stepwise"></canvas></div>
+        <figcaption><span style="color:var(--ink)">&#9644;</span> best subset &nbsp; <span style="color:var(--cA)">&#9644;</span> forward path &nbsp; <span style="color:var(--cB)">&#9644;</span> backward path &nbsp; ringed: where you are</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Direction"><button type="button" data-sw="f" aria-pressed="true">Forward</button><button type="button" data-sw="b">Backward</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="sw-step">Take a step</button><button type="button" class="btn" id="sw-reset">Start again</button></div>
+        <div class="tbl-wrap"><table class="hand" id="sw-tbl"></table></div>
+        <p class="note" id="sw-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- STAGEWISE -->
+<section class="chap" id="stagewise">
+  <div class="wrap">
+    <div class="tag">Slower still</div>
+    <h2>Forward stagewise: one nudge at a time</h2>
+    <div class="prose"><p>Forward stepwise refits every coefficient each time an input joins. <em class="term">Forward stagewise</em> regression is more timid. It starts with the intercept at the mean of y and every other coefficient at zero. At each step it finds the input most correlated with the current residual, regresses the residual on that input alone, adds the result to that one coefficient, and leaves all the others untouched. It can revisit the same input many times and needs far more than p steps to reach least squares. That slowness looked wasteful for decades; in very high dimensions it turns out to be a virtue, as chapter 1.2b shows. <strong>Step it, then run it</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} j &= \operatorname*{arg\,max}_{k}\ \big|\mathrm{Corr}(\mathbf{x}_k, \mathbf{r})\big| \\ \delta &= \frac{\langle \mathbf{x}_j, \mathbf{r}\rangle}{\langle \mathbf{x}_j, \mathbf{x}_j\rangle} \\ \beta_j &\leftarrow \beta_j + \delta \\ \mathbf{r} &\leftarrow \mathbf{r} - \delta\,\mathbf{x}_j \end{aligned} \]</div><div class="read"><b>Read it as:</b> pick the input most correlated with the current residual r (with standardised inputs this is the largest |&lang;x<sub>k</sub>, r&rang;|). &delta; is the slope of a one-input regression of r on that input. Add &delta; to its coefficient, subtract its contribution from the residual, and repeat. After the step, x<sub>j</sub> is uncorrelated with the new residual.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Pick the j whose input is most correlated with r; delta is x-j dot r over x-j dot x-j; add delta to beta-j and take delta x-j off the residual.&rdquo;</em></div><div class="eq-run" id="run-sg"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="sg-cv" aria-label="Forward stagewise coefficient paths against the number of steps"></canvas></div><figcaption>Coefficient paths, one colour per input. Ticks on the right: the least-squares coefficients the paths are heading for. Step axis on a square-root scale.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="sg-1">1 step</button><button type="button" class="btn" id="sg-10">10 steps</button><button type="button" class="btn" id="sg-run">Run to the end</button><button type="button" class="btn" id="sg-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="sg-n"></div><div class="k">steps taken</div></div><div class="stat"><div class="v" id="sg-rss"></div><div class="k">training RSS</div></div><div class="stat"><div class="v" id="sg-in"></div><div class="k">inputs used</div></div><div class="stat"><div class="v" id="sg-te"></div><div class="k">test error</div></div></div>
+        <p class="note" id="sg-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PCR -->
+<section class="chap" id="pcr">
+  <div class="wrap">
+    <div class="tag">Derived inputs</div>
+    <h2>Principal components regression</h2>
+    <div class="prose">
+      <p>Selection keeps some inputs whole and throws the rest away. The other family keeps a little of every input. When inputs are correlated, as cancer volume and capsular penetration are here, or the two Gleason measures, least squares struggles to separate their effects and the coefficients swing wildly. <em class="term">Principal components regression</em> (PCR) first rotates the standardised inputs into <em>uncorrelated</em> directions, the principal components, ordered by how much the inputs vary along them. Then it regresses y on the first M components only. Because the components are uncorrelated, that regression is just M separate one-input regressions added together.</p>
+      <p>PCR is a cousin of ridge regression from chapter 1.2. Both work in the same rotated coordinates. Ridge shrinks every direction a little, low-variance ones the most; PCR keeps the first M directions untouched and deletes the rest. <strong>Slide M</strong> and compare their shrinkage factors.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{z}_m &= \mathbf{X}\mathbf{v}_m \\ \hat\theta_m &= \frac{\langle \mathbf{z}_m, \mathbf{y}\rangle}{\langle \mathbf{z}_m, \mathbf{z}_m\rangle} \\ \hat{\mathbf{y}}^{\text{pcr}}_{(M)} &= \bar y\,\mathbf{1} + \sum_{m=1}^{M}\hat\theta_m \mathbf{z}_m \end{aligned} \]</div><div class="read"><b>Read it as:</b> v<sub>m</sub> is the m-th principal direction of the centred, standardised inputs (an eigenvector of X<sup>T</sup>X), and z<sub>m</sub> is every person&rsquo;s score along it. Each &theta;&#770;<sub>m</sub> is a one-input regression slope; there is no need to fit them jointly because the z&rsquo;s are uncorrelated.</div><div class="eq-say"><b>Say it</b><em>&ldquo;z-m is X times v-m; theta-hat-m is z-m dot y over z-m dot z-m; the fit is y-bar plus the sum of theta-m z-m for the first M components.&rdquo;</em></div><div class="eq-run" id="run-pcr"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \hat{\boldsymbol\beta}^{\text{pcr}}(M) &= \sum_{m=1}^{M}\hat\theta_m \mathbf{v}_m \\ \text{ridge keeps } &\tfrac{d_m^2}{d_m^2+\lambda} \\ \text{PCR keeps } &1 \text{ or } 0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> turn the M slopes back into one coefficient per original input. d<sub>m</sub>&sup2; is the variance along direction m (times N). In the same coordinates, ridge multiplies the least-squares fit along each direction by d<sub>m</sub>&sup2;/(d<sub>m</sub>&sup2; + &lambda;): smooth shrinkage. PCR multiplies by 1 for the first M directions and 0 for the rest: a hard cut. With M = p, PCR is plain least squares.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Beta-hat PCR of M is the sum of theta-hat-m v-m. Ridge keeps d-m squared over d-m squared plus lambda of each direction; PCR keeps all or nothing.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pcr-cv" aria-label="Variance of each principal component with PCR and ridge shrinkage factors"></canvas></div><figcaption>Bars: share of the inputs&rsquo; variance along principal directions 1 to 8. <span style="color:var(--lda)">&#9632;</span> PCR&rsquo;s factor (kept = 1, dropped = 0) &nbsp; <span style="color:var(--cB)">&#9679;</span> ridge&rsquo;s factor at the same degrees of freedom</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pcr-m">Components kept, M</label><output id="pcr-m-o"></output></div><input type="range" id="pcr-m" min="0" max="8" step="1" value="3"></div>
+        <div class="coefs" id="pcr-bars"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pcr-tr"></div><div class="k">training error</div></div><div class="stat"><div class="v" id="pcr-te"></div><div class="k">test error</div></div></div>
+        <p class="note" id="pcr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PLS -->
+<section class="chap" id="pls">
+  <div class="wrap">
+    <div class="tag">Derived inputs</div>
+    <h2>Partial least squares: directions that look at y</h2>
+    <div class="prose"><p>PCR picks its directions without ever looking at the response. If y happens to depend on a direction where the inputs barely vary, PCR throws that direction away first. <em class="term">Partial least squares</em> (PLS), from Herman Wold&rsquo;s work in econometrics and chemometrics, builds each direction from the inputs&rsquo; covariance with y. Below are two correlated inputs; colour shows the response. <strong>Turn the signal&rsquo;s direction</strong> until it lies across the cloud&rsquo;s short axis, and watch PCR&rsquo;s first direction miss it while PLS&rsquo;s does not.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{PCR: } &\max_{\alpha}\ \mathrm{Var}(\mathbf{X}\alpha) \\ \text{PLS: } &\max_{\alpha}\ \mathrm{Corr}^2(\mathbf{y}, \mathbf{X}\alpha) \\ &\qquad\times \mathrm{Var}(\mathbf{X}\alpha) \\ \text{s.t. } &\lVert\alpha\rVert = 1, \\ &\alpha^{\mathsf T}\mathbf{S}\,\hat\varphi_\ell = 0 \ \ (\ell < m) \end{aligned} \]</div><div class="read"><b>Read it as:</b> each method chooses a unit-length combination &alpha; of the inputs, uncorrelated with the earlier ones (S is the inputs&rsquo; covariance matrix and &phi;&#770;<sub>&ell;</sub> the earlier directions). PCR asks only for spread. PLS asks for spread <i>and</i> correlation with y, and in practice the spread term tends to dominate, so PLS behaves much like ridge and PCR. The first PLS direction is simply proportional to X<sup>T</sup>y.</div><div class="eq-say"><b>Say it</b><em>&ldquo;PCR maximises the variance of X alpha. PLS maximises the squared correlation of y with X alpha, times the variance of X alpha. Both with alpha of length one, uncorrelated with the earlier directions.&rdquo;</em></div><div class="eq-run" id="run-pd"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pd-cv" aria-label="Two correlated inputs coloured by the response, with the PCR, PLS and least-squares directions"></canvas></div><figcaption>Points: 120 people, coloured from low y (<span style="color:var(--cA)">&#9679;</span>) to high y (<span style="color:var(--cB)">&#9679;</span>). Arrows: <span style="color:var(--muted)">&#9644;</span> PCR&rsquo;s first direction &nbsp; <span style="color:var(--lda)">&#9644;</span> PLS&rsquo;s first direction &nbsp; <span style="color:var(--qda)">- -</span> least squares</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pd-r">Correlation of x&#8321; and x&#8322;</label><output id="pd-r-o"></output></div><input type="range" id="pd-r" min="0" max="0.95" step="0.01" value="0.8"></div>
+        <div class="ctrl"><div class="top"><label for="pd-a">Direction of the signal</label><output id="pd-a-o"></output></div><input type="range" id="pd-a" min="0" max="180" step="1" value="135"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pd-pc"></div><div class="k">R&sup2;, PCR direction 1</div></div><div class="stat"><div class="v" id="pd-pl"></div><div class="k">R&sup2;, PLS direction 1</div></div><div class="stat"><div class="v" id="pd-ls"></div><div class="k">R&sup2;, both inputs</div></div></div>
+        <p class="note" id="pd-say"></p>
+      </div></div>
+    </div>
+
+    <h3>The PLS algorithm, step by step</h3>
+    <div class="prose"><p>Each PLS step weights every input by its inner product with y, adds them up into one new direction z<sub>m</sub>, regresses y on it, and then removes z<sub>m</sub> from every input so that the next direction is uncorrelated with it. After p steps PLS reaches least squares; with uncorrelated inputs it gets there in a single step. <strong>Slide M on the prostate data</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \hat\varphi_{mj} &= \langle \mathbf{x}^{(m-1)}_j, \mathbf{y}\rangle \\ \mathbf{z}_m &= \sum_{j}\hat\varphi_{mj}\,\mathbf{x}^{(m-1)}_j \\ \hat\theta_m &= \frac{\langle \mathbf{z}_m,\mathbf{y}\rangle}{\langle \mathbf{z}_m,\mathbf{z}_m\rangle} \\ \hat{\mathbf{y}}^{(m)} &= \hat{\mathbf{y}}^{(m-1)} + \hat\theta_m \mathbf{z}_m \\ \mathbf{x}^{(m)}_j &= \mathbf{x}^{(m-1)}_j - \tfrac{\langle \mathbf{z}_m, \mathbf{x}^{(m-1)}_j\rangle}{\langle \mathbf{z}_m,\mathbf{z}_m\rangle}\,\mathbf{z}_m \end{aligned} \]</div><div class="read"><b>Read it as:</b> start from the standardised inputs and &ycirc;<sup>(0)</sup> = y&#772;. The weight &phi;&#770;<sub>mj</sub> is how strongly input j (what is left of it) moves with y. z<sub>m</sub> is the weighted sum; &theta;&#770;<sub>m</sub> its one-input regression slope. The last line strips z<sub>m</sub> out of every input before the next round.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Phi-m-j is x-j dot y; z-m is the phi-weighted sum of the inputs; add theta-m z-m to the fit; then take z-m out of every input.&rdquo;</em></div><div class="eq-run" id="run-pls"></div></div>
+    <div class="lab">
+      <div>
+        <span class="mini-h" id="pls-wh"></span>
+        <div class="coefs" id="pls-w"></div>
+        <span class="mini-h" style="margin-top:16px">Coefficients after M steps (faint: least squares)</span>
+        <div class="coefs" id="pls-b"></div>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pls-m">PLS directions, M</label><output id="pls-m-o"></output></div><input type="range" id="pls-m" min="0" max="8" step="1" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pls-tr"></div><div class="k">training error</div></div><div class="stat"><div class="v" id="pls-te"></div><div class="k">test error</div></div></div>
+        <p class="note" id="pls-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARE -->
+<section class="chap" id="compare">
+  <div class="wrap">
+    <div class="tag">Comparison</div>
+    <h2>Selection and shrinkage, side by side</h2>
+    <div class="prose"><p>Every method in this chapter, and ridge and the lasso from chapter 1.2, draws a path from &ldquo;no inputs&rdquo; (all coefficients zero) to the least-squares answer as its dial turns. With two inputs we can draw all the paths on one map. Each is drawn for a very large sample, so the least-squares end point is the true &beta;. <strong>Drag the true coefficients and change the correlation</strong>.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \hat{\mathbf{y}} &= \sum_{j=1}^{p} \mathbf{u}_j\, f_j\, \mathbf{u}_j^{\mathsf T}\mathbf{y} \\ f_j^{\text{LS}} &= 1 \\ f_j^{\text{ridge}} &= \frac{d_j^2}{d_j^2+\lambda} \\ f_j^{\text{PCR}} &= \begin{cases} 1 & j \le M \\ 0 & j > M \end{cases} \end{aligned} \]</div><div class="read"><b>Read it as:</b> write the centred inputs as X = UDV<sup>T</sup> (the singular value decomposition). Least squares projects y onto each direction u<sub>j</sub> and keeps all of it; the other methods keep a fraction f<sub>j</sub>. Ridge shrinks smoothly, PCR cuts hard. PLS and the lasso have no fixed factors (PLS&rsquo;s depend on y, and the lasso works coordinate by coordinate), and best subset jumps between models.</div><div class="eq-say"><b>Say it</b><em>&ldquo;y-hat is the sum over directions of u-j times f-j times u-j-transpose y, where f-j is one, d-j squared over d-j squared plus lambda, or one-then-zero.&rdquo;</em></div><div class="eq-run" id="run-cmp"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="cmp-cv" aria-label="Coefficient paths of five methods in the plane of two coefficients; drag the true coefficients"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> ridge &nbsp; <span style="color:var(--cB)">&#9644;</span> lasso &nbsp; <span style="color:var(--ink)">&#9679;</span> best subset &nbsp; <span style="color:var(--lda)">&#9644;</span> PCR &nbsp; <span style="color:var(--cC)">&#9644;</span> PLS &nbsp; &#9733; least squares = true &beta; (drag it)</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cmp-r">Correlation &rho; of the two inputs</label><output id="cmp-r-o"></output></div><input type="range" id="cmp-r" min="-0.9" max="0.9" step="0.05" value="0.5"></div>
+        <div class="btns"><button type="button" class="btn" id="cmp-reset">The book&rsquo;s example: &beta; = (4, 2), &rho; = 0.5</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cmp-b"></div><div class="k">true &beta;</div></div><div class="stat"><div class="v" id="cmp-1"></div><div class="k">best single input</div></div></div>
+        <p class="note" id="cmp-say"></p>
+      </div></div>
+    </div>
+    <div class="tbl-wrap block"><table class="zoo">
+      <thead><tr><th>Method</th><th>What the dial does</th><th>Path</th><th>Uses y to choose?</th><th>Cost</th></tr></thead>
+      <tbody>
+        <tr><td><b>Best subset</b></td><td>k inputs kept whole</td><td>jumps between models</td><td>yes</td><td>2<sup>p</sup> fits; about 40 inputs at most</td></tr>
+        <tr><td><b>Forward / backward stepwise</b></td><td>k inputs, chosen greedily</td><td>jumps, nested</td><td>yes</td><td>about p&sup2;/2 fits</td></tr>
+        <tr><td><b>Forward stagewise</b></td><td>number of small steps</td><td>smooth-ish, slow</td><td>yes</td><td>many cheap steps</td></tr>
+        <tr><td><b>Ridge</b></td><td>&lambda;: shrink every direction smoothly</td><td>smooth</td><td>no (only &lambda; does)</td><td>one solve per &lambda;</td></tr>
+        <tr><td><b>Lasso</b></td><td>&lambda;: shrink and set some to exactly 0</td><td>piecewise linear</td><td>yes</td><td>a whole path for the price of one fit (chapter 1.2b)</td></tr>
+        <tr><td><b>PCR</b></td><td>M high-variance directions kept</td><td>jumps</td><td>no</td><td>one eigen-decomposition</td></tr>
+        <tr><td><b>PLS</b></td><td>M directions built with y</td><td>jumps</td><td>yes</td><td>M cheap steps</td></tr>
+      </tbody></table></div>
+    <div class="prose" style="margin-top:18px"><p>Which should you use? In a large simulation study, Frank and Friedman (1993) found that for minimising prediction error, ridge regression is generally preferable to subset selection, PCR and PLS, although its edge over PCR and PLS was small. The lasso sits between ridge and best subset: it shrinks like ridge and selects like best subset. Discrete methods (subset, PCR, PLS) can only stop at a few points along their paths, which makes them noisier to tune.</p></div>
+  </div>
+</section>
+
+<!-- MULTI -->
+<section class="chap" id="multi">
+  <div class="wrap">
+    <div class="tag">More than one response</div>
+    <h2>Many outcomes at once</h2>
+    <div class="prose">
+      <p>Suppose each person has K responses instead of one: say, several blood markers measured together. Least squares with K responses is just K separate regressions; the outcomes never share information. You can shrink or select each one separately, or with a single dial for all of them. But when the outcomes are correlated, there is a better idea: look for the few combinations of inputs that predict the outcomes well <em>together</em>, and pool them.</p>
+      <p><em class="term">Canonical correlation analysis</em> (CCA, Hotelling 1936) finds pairs of directions, one among the inputs and one among the outcomes, whose scores are as correlated as possible. <em class="term">Reduced-rank regression</em> (Izenman, 1975) keeps only the first m of those pairs. <em class="term">Curds and whey</em> (Breiman &amp; Friedman, 1997) keeps all of them but shrinks each by an amount set by its canonical correlation. Below, 5 outcomes depend on 6 inputs through only 1 or 2 hidden combinations. <strong>Change the true rank and the noise, and slide the rank m</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathrm{RSS}(\mathbf{B}) &= \operatorname{tr}\big[\mathbf{R}^{\mathsf T}\mathbf{R}\big] \\ \mathbf{R} &= \mathbf{Y}-\mathbf{X}\mathbf{B} \\ \hat{\mathbf{B}} &= (\mathbf{X}^{\mathsf T}\mathbf{X})^{-1}\mathbf{X}^{\mathsf T}\mathbf{Y} \end{aligned} \]</div><div class="read"><b>Read it as:</b> Y is N &times; K, one column per outcome, and B is p &times; K, one column of coefficients per outcome. The trace adds up the K separate residual sums of squares, so the minimiser is K separate least-squares fits side by side.</div><div class="eq-say"><b>Say it</b><em>&ldquo;RSS of B is the trace of Y minus XB, transposed, times Y minus XB. B-hat is X-transpose-X inverse, X-transpose Y.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \max_{\mathbf{u}_m,\,\mathbf{v}_m}\ \mathrm{Corr}^2(\mathbf{Y}\mathbf{u}_m,\ \mathbf{X}\mathbf{v}_m) \]</div><div class="read"><b>Read it as:</b> find a combination of outcomes Yu<sub>m</sub> and a combination of inputs Xv<sub>m</sub> that are as correlated as possible, each pair uncorrelated with the earlier pairs. The m-th largest correlation is the canonical correlation c<sub>m</sub>. Pairs with c<sub>m</sub> near 0 are noise; pairs near 1 are real shared structure.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Maximise the squared correlation between Y u-m and X v-m.&rdquo;</em></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \hat{\mathbf{B}}^{\text{rr}}(m) &= \hat{\mathbf{B}}\,\mathbf{U}_m\mathbf{U}_m^{-} \\ \hat{\mathbf{B}}^{\text{c+w}} &= \hat{\mathbf{B}}\,\mathbf{U}\boldsymbol\Lambda\mathbf{U}^{-1} \\ \lambda_m &= \frac{c_m^2}{c_m^2 + \frac{p}{N}\,(1-c_m^2)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> U holds the outcome-side canonical vectors u<sub>m</sub> as columns, U<sub>m</sub> the first m of them, and U<sub>m</sub><sup>&minus;</sup> a generalised inverse. Reduced rank: take the separate fits, express them in canonical coordinates, keep the first m, and map back. Curds and whey: keep every coordinate but multiply the m-th by &lambda;<sub>m</sub>, close to 1 when c<sub>m</sub> is strong and close to 0 when it is weak compared with p/N.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Reduced-rank B is B-hat, U-m, U-m inverse. Curds and whey is B-hat, U, Lambda, U inverse, with lambda-m equal to c-m squared over c-m squared plus p over N times one minus c-m squared.&rdquo;</em></div><div class="eq-run" id="run-mo"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="mo-cv" aria-label="Test error of reduced-rank regression against the rank, with separate least squares and curds and whey"></canvas></div><figcaption>Average test error over 30 simulated studies (N = 40, p = 6 inputs, K = 5 outcomes). <span style="color:var(--lda)">&#9644;</span> reduced rank, rank m &nbsp; <span style="color:var(--muted)">- -</span> separate least squares &nbsp; <span style="color:var(--cB)">- -</span> curds and whey &nbsp; dotted: the noise floor</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="True rank"><button type="button" data-mr="1">True rank 1</button><button type="button" data-mr="2" aria-pressed="true">True rank 2</button><button type="button" data-mr="5">Full rank</button></div>
+        <div class="ctrl"><div class="top"><label for="mo-m">Rank kept, m</label><output id="mo-m-o"></output></div><input type="range" id="mo-m" min="1" max="5" step="1" value="2"></div>
+        <div class="ctrl"><div class="top"><label for="mo-s">Noise level &sigma;</label><output id="mo-s-o"></output></div><input type="range" id="mo-s" min="0.3" max="3" step="0.05" value="1.5"></div>
+        <div class="stats"><div class="stat"><div class="v" id="mo-ls"></div><div class="k">separate LS</div></div><div class="stat"><div class="v" id="mo-rr"></div><div class="k">reduced rank</div></div><div class="stat"><div class="v" id="mo-cw"></div><div class="k">curds and whey</div></div><div class="stat wide"><div class="v" id="mo-c"></div><div class="k">canonical correlations</div></div></div>
+        <p class="note" id="mo-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: predicting PSA, six ways</h2>
+    <div class="prose">
+      <p>Stamey and colleagues (1989) studied <strong>97 men</strong> about to have their prostate removed. The response is the log of <b>prostate-specific antigen</b> (lpsa), a blood marker. The eight inputs are log cancer volume (<b>lcavol</b>), log prostate weight (<b>lweight</b>), <b>age</b>, log benign prostatic hyperplasia (<b>lbph</b>), seminal vesicle invasion (<b>svi</b>, 0 or 1), log capsular penetration (<b>lcp</b>), <b>Gleason</b> score and the percentage of Gleason scores 4 or 5 (<b>pgg45</b>). The data comes from the website of <em>The Elements of Statistical Learning</em>, with its split of 67 training men and 30 test men. Like the book, we standardise each input using all 97 men (no PSA values are used; standardising with the 67 training men alone changes the test errors below by at most 0.02).</p>
+      <p>Each method&rsquo;s dial is set by <b>10-fold cross-validation, repeated over 10 shuffles</b> of the training men, with the <em class="term">one-standard-error rule</em>: take the simplest model whose CV error is within one standard error of the lowest. The test men are touched only once, at the end. Everything below is computed by your browser. <strong>Pick a method</strong> to see its CV curve.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathrm{CV}(c) &= \frac{1}{100}\sum_{r=1}^{10}\sum_{f=1}^{10} \mathrm{MSE}_{r,f}(c) \\ \hat c &= \text{the simplest } c \text{ with} \\ & \mathrm{CV}(c) \le \mathrm{CV}(c^{*}) + \mathrm{SE}(c^{*}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> for a complexity c (a subset size, degrees of freedom, a lasso shrinkage s or a number of directions M), MSE<sub>r,f</sub> is the error on fold f of shuffle r of a model fitted to the other nine folds. c* has the lowest CV error and SE(c*) is the standard error of a single 10-fold estimate there. The rule trades a hair of estimated error for a simpler, steadier model.</div><div class="eq-say"><b>Say it</b><em>&ldquo;CV of c is the average fold error over ten shuffles of ten folds; pick the simplest c whose CV is within one standard error of the best.&rdquo;</em></div><div class="eq-run" id="run-cv"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Method" id="pj-meth"><button type="button" data-pm="Subset" aria-pressed="true">Best subset</button><button type="button" data-pm="Ridge">Ridge</button><button type="button" data-pm="Lasso">Lasso</button><button type="button" data-pm="PCR">PCR</button><button type="button" data-pm="PLS">PLS</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pj-cv" aria-label="Cross-validation error with standard-error bars against complexity"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9679;</span> CV error &plusmn; 1 SE &nbsp; <span style="color:var(--muted)">- -</span> lowest CV + 1 SE &nbsp; <span style="color:var(--cB)">&#9644;</span> test error (shown for teaching; never used to choose) &nbsp; &#9733; the one-SE pick</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-sh">Shuffles averaged</label><output id="pj-sh-o"></output></div><input type="range" id="pj-sh" min="0" max="10" step="1" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-pick"></div><div class="k">one-SE pick</div></div><div class="stat"><div class="v" id="pj-te"></div><div class="k">its test error</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+    <h3>The final table</h3>
+    <div class="prose"><p>Each method refitted on all 67 training men at its picked setting. Dots are coefficients set to exactly zero. The last two rows are the error on the 30 test men and its standard error.</p></div>
+    <div class="btns block"><span class="note" id="pj-prog"></span></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-tbl"></table></div>
+    <p class="note block" style="max-width:72ch" id="pj-tsay"></p>
+
+    <h3>The same project in scikit-learn</h3>
+<pre class="code"><code>import itertools, numpy as np
+from scipy.optimize import brentq
+from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.decomposition import PCA
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.pipeline import make_pipeline
+
+D = np.genfromtxt("prostate.data", skip_header=1, usecols=range(1, 10))      # ESL website
+tr = np.genfromtxt("prostate.data", skip_header=1, usecols=10, dtype=str) == "T"
+X, y = D[:, :8], D[:, 8]                                                     # y = log PSA
+names = "lcavol lweight age lbph svi lcp gleason pgg45".split()
+X = (X - X.mean(0)) / X.std(0, ddof=1)                                       # standardise, as the book does
+Xtr, ytr, Xte, yte = X[tr], y[tr], X[~tr], y[~tr]
+folds = [np.random.RandomState(r).permutation(len(ytr)) % 10 for r in range(10)]   # 10 shuffles of 10 folds
+
+class Mean:                                       # the "no inputs" model
+    def fit(self, X, y): self.m = y.mean(); return self
+    def predict(self, X): return np.full(len(X), self.m)
+
+class Subset:                                     # best subset of size k, by training RSS
+    def __init__(self, k): self.k = k
+    def fit(self, X, y):
+        rss = lambda S: ((y - LinearRegression().fit(X[:, S], y).predict(X[:, S])) ** 2).sum()
+        self.S = list(min(itertools.combinations(range(8), self.k), key=rss))
+        self.m = LinearRegression().fit(X[:, self.S], y); return self
+    def predict(self, X): return self.m.predict(X[:, self.S])
+
+d = np.linalg.svd(Xtr - Xtr.mean(0), compute_uv=False)
+lam_for_df = lambda df: brentq(lambda l: (d**2 / (d**2 + l)).sum() - df, 1e-9, 1e9, xtol=1e-12)
+a_max = np.abs((Xtr - Xtr.mean(0)).T @ (ytr - ytr.mean())).max() / len(ytr)
+lassos = [Lasso(alpha=a, tol=1e-12, max_iter=10**6) for a in a_max * np.logspace(0, -3, 31)[1:]]
+L1 = np.abs(LinearRegression().fit(Xtr, ytr).coef_).sum()          # lasso complexity: s = |b|_1 / |b_LS|_1
+grids = {   # each grid runs from the simplest model (the mean) to the most complex
+    "Subset": ([Mean() if k == 0 else Subset(k) for k in range(9)], [f"k={k}" for k in range(9)]),
+    "Ridge":  ([Mean()] + [Ridge(alpha=lam_for_df(df)) for df in np.arange(0.5, 7.6, 0.5)] + [LinearRegression()],
+               [f"df={df:g}" for df in np.arange(0, 8.1, 0.5)]),
+    "Lasso":  ([Mean()] + lassos, ["s=0"] + [f"s={np.abs(m.fit(Xtr, ytr).coef_).sum() / L1:.2f}" for m in lassos]),
+    "PCR":    ([Mean()] + [make_pipeline(PCA(M), LinearRegression()) for M in range(1, 9)], [f"M={M}" for M in range(9)]),
+    "PLS":    ([Mean()] + [PLSRegression(M, scale=False) for M in range(1, 9)], [f"M={M}" for M in range(9)])}
+
+def mse(m, Xa, ya, Xb, yb): return np.mean((yb - m.fit(Xa, ya).predict(Xb).ravel()) ** 2)
+def coefs(m):                                     # every model here is linear: read b0 and b off its predictions
+    b0 = m.predict(np.zeros((1, 8))).ravel()[0]
+    return [b0, *(m.predict(np.eye(8)).ravel() - b0)]
+
+table = {}
+for name, (ms, labels) in [("LS", ([LinearRegression()], ["all 8"]))] + list(grids.items()):
+    cv = np.array([[mse(m, Xtr[F != f], ytr[F != f], Xtr[F == f], ytr[F == f]) for F in folds for f in range(10)] for m in ms])
+    mean, se = cv.mean(1), cv.std(1, ddof=1) / np.sqrt(10)          # se of one 10-fold estimate
+    pick = next(i for i in range(len(ms)) if mean[i] <= mean.min() + se[mean.argmin()])   # one-standard-error rule
+    e = (yte - ms[pick].fit(Xtr, ytr).predict(Xte).ravel()) ** 2
+    table[name] = coefs(ms[pick]) + [e.mean(), e.std(ddof=1) / np.sqrt(len(e))]
+    print(f"{name:6s} picks {labels[pick]:8s} CV error {mean[pick]:.3f}   (lowest CV {mean.min():.3f} at {labels[mean.argmin()]})")
+print("\n" + " " * 11 + "".join(f"{c:>8s}" for c in table))
+for i, r in enumerate(["intercept"] + names + ["test error", "std error"]):
+    print(f"{r:11s}" + "".join("       ." if abs(c[i]) &lt; 5e-4 and i &lt; 9 else f"{c[i]:8.3f}" for c in table.values()))</code></pre>
+<pre class="code out"><code id="pj-out">LS     picks all 8    CV error 0.601   (lowest CV 0.601 at all 8)
+Subset picks k=2      CV error 0.642   (lowest CV 0.583 at k=7)
+Ridge  picks df=3.5   CV error 0.677   (lowest CV 0.586 at df=7)
+Lasso  picks s=0.36   CV error 0.694   (lowest CV 0.592 at s=0.86)
+PCR    picks M=3      CV error 0.682   (lowest CV 0.601 at M=8)
+PLS    picks M=1      CV error 0.708   (lowest CV 0.600 at M=6)
+
+                 LS  Subset   Ridge   Lasso     PCR     PLS
+intercept     2.465   2.477   2.459   2.469   2.455   2.447
+lcavol        0.680   0.740   0.305   0.533   0.287   0.280
+lweight       0.263   0.316   0.199   0.174   0.339   0.196
+age          -0.141       .  -0.004       .   0.056   0.083
+lbph          0.210       .   0.123       .   0.102   0.096
+svi           0.305       .   0.182   0.073   0.261   0.205
+lcp          -0.288       .   0.065       .   0.219   0.178
+gleason      -0.021       .   0.051       .  -0.016   0.122
+pgg45         0.267       .   0.107       .   0.062   0.169
+test error    0.521   0.492   0.520   0.492   0.496   0.533
+std error     0.179   0.143   0.183   0.170   0.133   0.156</code></pre>
+    <p class="note" id="pj-agree" style="max-width:72ch"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Every input you add lowers bias and adds about &sigma;&sup2;/N of variance; training error always falls, so it can never choose how many inputs to keep.</li>
+      <li>Best subset tries all 2<sup>p</sup> models, which is exact but explodes past about 40 inputs. Forward and backward stepwise are greedy shortcuts; forward stagewise moves one coefficient a little at a time.</li>
+      <li>PCR regresses on the first M principal components: a hard 1-or-0 version of ridge&rsquo;s smooth shrinkage, blind to y. PLS builds its directions from the inputs&rsquo; covariance with y.</li>
+      <li>On two inputs, each method draws a different path from zero to least squares. Smooth shrinkage (ridge, then lasso) usually predicts best; discrete methods are noisier to tune.</li>
+      <li>With several correlated outcomes, pool them: reduced-rank regression keeps the strongest canonical directions and curds and whey shrinks each by its canonical correlation.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why can&rsquo;t you pick the subset size k by its training RSS?</summary><p>Adding an input can never raise the least-squares RSS, because the bigger model could always set the new coefficient to zero. So RSS always picks the largest model. You need an estimate of test error: a held-out set, cross-validation, or a penalty such as AIC or BIC.</p></details>
+      <details class="q"><summary>Forward stepwise and best subset agree at every size on the prostate data. Name a situation where they disagree.</summary><p>When two inputs are useless alone but strong together, like x<sub>1</sub> and x<sub>2</sub> in the trap, where y depends on their difference. Forward stepwise first grabs the input that looks best on its own and is then stuck with it; best subset can pick the pair directly.</p></details>
+      <details class="q"><summary>You run PCR with M = p. What do you get?</summary><p>Ordinary least squares. The p components span the same space as the p inputs, so nothing is thrown away. The same holds for PLS after p steps.</p></details>
+      <details class="q"><summary>Why does PCR need standardised inputs, while best subset does not?</summary><p>Principal components chase variance, so an input measured in large units would dominate the first component just because of its units. Best subset uses whole inputs with unpenalised least squares, which is unchanged by rescaling any input.</p></details>
+      <details class="q"><summary>In curds and whey, what happens to a canonical direction with c<sub>m</sub> = 0.1 when p/N = 0.15?</summary><p>&lambda; = 0.01 / (0.01 + 0.15 &times; 0.99) &asymp; 0.063, so its contribution is shrunk to about 6%: a weak correlation, small compared with p/N, is treated as mostly noise.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../lasso-paths/">Next chapter: Sparse Models: Lasso Paths, LARS &amp; the Group Lasso &rarr;</a>
+      <a class="btn" href="../linear-regression/">&larr; Previous: Linear Regression</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Hastie, T., Tibshirani, R. &amp; Friedman, J. (2009). <em>The Elements of Statistical Learning</em>, 2nd ed. Springer. Chapter 3, sections 3.3 and 3.5&ndash;3.7; the prostate data is on the book&rsquo;s website.</li>
+      <li>Stamey, T. A. et al. (1989). Prostate specific antigen in the diagnosis and treatment of adenocarcinoma of the prostate. II. Radical prostatectomy treated patients. <em>Journal of Urology</em> 141(5): 1076&ndash;1083.</li>
+      <li>Furnival, G. M. &amp; Wilson, R. W. (1974). Regressions by leaps and bounds. <em>Technometrics</em> 16(4): 499&ndash;511.</li>
+      <li>Bertsimas, D., King, A. &amp; Mazumder, R. (2016). Best subset selection via a modern optimization lens. <em>Annals of Statistics</em> 44(2): 813&ndash;852.</li>
+      <li>Wold, S., Ruhe, A., Wold, H. &amp; Dunn, W. J. (1984). The collinearity problem in linear regression. The partial least squares (PLS) approach to generalized inverses. <em>SIAM Journal on Scientific and Statistical Computing</em> 5(3): 735&ndash;743.</li>
+      <li>Frank, I. E. &amp; Friedman, J. H. (1993). A statistical view of some chemometrics regression tools. <em>Technometrics</em> 35(2): 109&ndash;135.</li>
+      <li>Hotelling, H. (1936). Relations between two sets of variates. <em>Biometrika</em> 28(3/4): 321&ndash;377.</li>
+      <li>Izenman, A. J. (1975). Reduced-rank regression for the multivariate linear model. <em>Journal of Multivariate Analysis</em> 5(2): 248&ndash;264.</li>
+      <li>Breiman, L. &amp; Friedman, J. H. (1997). Predicting multivariate responses in multiple linear regression. <em>Journal of the Royal Statistical Society B</em> 59(1): 3&ndash;54.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- x011 core: small dense linear algebra and every method in the chapter ---------- */
+/* All fits return { b0, b } so that a prediction is b0 + x·b on the (standardised) inputs. */
+const LA = (function () {
+  const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+  const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+  function colMeans(X) { const p = X[0].length, m = new Array(p).fill(0); X.forEach(r => { for (let j = 0; j < p; j++) m[j] += r[j]; }); return m.map(v => v / X.length); }
+  // centred Gram matrix G = Xcᵀ Xc, c = Xcᵀ yc, yy = ycᵀ yc, plus the means
+  function moments(X, y) {
+    const n = X.length, p = X[0].length, mx = colMeans(X), my = mean(y);
+    const G = Array.from({ length: p }, () => new Array(p).fill(0)), c = new Array(p).fill(0); let yy = 0;
+    for (let i = 0; i < n; i++) { const r = X[i], yc = y[i] - my; yy += yc * yc;
+      for (let j = 0; j < p; j++) { const a = r[j] - mx[j]; c[j] += a * yc; for (let k = j; k < p; k++) G[j][k] += a * (r[k] - mx[k]); } }
+    for (let j = 0; j < p; j++) for (let k = 0; k < j; k++) G[j][k] = G[k][j];
+    return { n, p, mx, my, G, c, yy };
+  }
+  // solve A x = b by Gaussian elimination with partial pivoting
+  function solve(A, b) {
+    const n = b.length, M = A.map((r, i) => [...r, b[i]]);
+    for (let c = 0; c < n; c++) {
+      let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+      [M[c], M[p]] = [M[p], M[c]]; const d = M[c][c] || 1e-300;
+      for (let r = c + 1; r < n; r++) { const f = M[r][c] / d; if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+    }
+    const x = new Array(n).fill(0);
+    for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / (M[r][r] || 1e-300); }
+    return x;
+  }
+  function inv(A) { const n = A.length; const cols = []; for (let j = 0; j < n; j++) { const e = new Array(n).fill(0); e[j] = 1; cols.push(solve(A, e)); } return A.map((_, i) => cols.map(c => c[i])); }
+  // symmetric eigen-decomposition by cyclic Jacobi; returns values (descending) and vectors as columns V[i][k]
+  function eig(A0) {
+    const n = A0.length, A = A0.map(r => r.slice()), V = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => +(i === j)));
+    for (let sweep = 0; sweep < 100; sweep++) {
+      let off = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += A[i][j] * A[i][j];
+      if (off < 1e-30) break;
+      for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+        if (Math.abs(A[p][q]) < 1e-300) continue;
+        const th = (A[q][q] - A[p][p]) / (2 * A[p][q]), t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), c = 1 / Math.sqrt(t * t + 1), s = t * c;
+        for (let k = 0; k < n; k++) { const a = A[k][p], b = A[k][q]; A[k][p] = c * a - s * b; A[k][q] = s * a + c * b; }
+        for (let k = 0; k < n; k++) { const a = A[p][k], b = A[q][k]; A[p][k] = c * a - s * b; A[q][k] = s * a + c * b; }
+        for (let k = 0; k < n; k++) { const a = V[k][p], b = V[k][q]; V[k][p] = c * a - s * b; V[k][q] = s * a + c * b; }
+      }
+    }
+    const idx = [...Array(n).keys()].sort((a, b) => A[b][b] - A[a][a]);
+    return { vals: idx.map(i => A[i][i]), vecs: V.map(r => idx.map(i => r[i])) };
+  }
+  const sub = (G, S) => S.map(i => S.map(j => G[i][j]));
+  const full = (S, bs, p) => { const b = new Array(p).fill(0); S.forEach((j, k) => { b[j] = bs[k]; }); return b; };
+  const wrap = (mo, b) => ({ b0: mo.my - dot(mo.mx, b), b });
+  // least squares on a subset S of the inputs (S = all for plain LS); also returns RSS and the inverse for z-scores
+  function ols(mo, S) {
+    if (!S.length) return Object.assign(wrap(mo, new Array(mo.p).fill(0)), { rss: mo.yy, S });
+    const bs = solve(sub(mo.G, S), S.map(j => mo.c[j])), rss = mo.yy - dot(bs, S.map(j => mo.c[j]));
+    return Object.assign(wrap(mo, full(S, bs, mo.p)), { rss: Math.max(0, rss), S, bs });
+  }
+  // every subset: RSS by mask, and the best mask of each size
+  function allSubsets(mo) {
+    const p = mo.p, N = 1 << p, rss = new Float64Array(N), best = new Array(p + 1).fill(-1);
+    for (let m = 0; m < N; m++) { const S = []; for (let j = 0; j < p; j++) if (m >> j & 1) S.push(j); rss[m] = ols(mo, S).rss; const k = S.length; if (best[k] < 0 || rss[m] < rss[best[k]]) best[k] = m; }
+    return { rss, best };
+  }
+  const maskToS = (m, p) => { const S = []; for (let j = 0; j < p; j++) if (m >> j & 1) S.push(j); return S; };
+  const pop = m => { let k = 0; while (m) { k += m & 1; m >>= 1; } return k; };
+  function ridge(mo, lam) { const A = mo.G.map((r, i) => r.map((v, j) => v + (i === j ? lam : 0))); return wrap(mo, solve(A, mo.c)); }
+  // λ so that df(λ) = Σ d²/(d²+λ) equals df (bisection in log λ)
+  function lamForDf(d2, df) { let lo = Math.log(1e-9), hi = Math.log(1e9); const f = l => d2.reduce((s, d) => s + d / (d + Math.exp(l)), 0) - df; for (let i = 0; i < 200; i++) { const m = (lo + hi) / 2; if (f(m) > 0) lo = m; else hi = m; } return Math.exp((lo + hi) / 2); }
+  // lasso, scikit-learn's scaling: (1/2n)‖y − Xb‖² + α‖b‖₁, by cyclic coordinate descent (warm start allowed)
+  function lasso(mo, alpha, b) {
+    const p = mo.p, n = mo.n, G = mo.G, c = mo.c; b = b ? b.slice() : new Array(p).fill(0);
+    for (let it = 0; it < 100000; it++) { let dm = 0;
+      for (let j = 0; j < p; j++) { let r = c[j]; for (let k = 0; k < p; k++) if (k !== j) r -= G[j][k] * b[k];
+        const nb = Math.sign(r) * Math.max(0, Math.abs(r) - n * alpha) / G[j][j]; dm = Math.max(dm, Math.abs(nb - b[j])); b[j] = nb; }
+      if (dm < 1e-14) break; }
+    return wrap(mo, b);
+  }
+  // principal components regression with the first M components of the centred inputs
+  function pcr(mo, M, E) { E = E || eig(mo.G); const b = new Array(mo.p).fill(0), th = [], path = [wrap(mo, b.slice())];
+    for (let m = 0; m < M; m++) { const v = E.vecs.map(r => r[m]), t = dot(v, mo.c) / E.vals[m]; th.push(t); for (let j = 0; j < mo.p; j++) b[j] += t * v[j]; path.push(wrap(mo, b.slice())); }
+    return Object.assign(wrap(mo, b), { th, E, path }); }
+  // partial least squares (the book's Algorithm 3.3), tracked as coefficients on the original inputs.
+  // Works on moments only: x_j^(m) = X C[:,j], so ⟨x_j^(m), y⟩ = (Cᵀc)_j and ⟨z, z⟩ = aᵀGa.
+  function pls(mo, M) {
+    const p = mo.p, G = mo.G, C = Array.from({ length: p }, (_, i) => Array.from({ length: p }, (_, j) => +(i === j)));
+    const b = new Array(p).fill(0), steps = [], path = [wrap(mo, b.slice())];
+    for (let m = 0; m < M; m++) {
+      const phi = []; for (let j = 0; j < p; j++) { let s = 0; for (let i = 0; i < p; i++) s += C[i][j] * mo.c[i]; phi.push(s); }
+      const a = new Array(p).fill(0); for (let i = 0; i < p; i++) for (let j = 0; j < p; j++) a[i] += C[i][j] * phi[j];
+      const Ga = G.map(r => dot(r, a)), zz = dot(a, Ga); if (zz < 1e-20) break;
+      const th = dot(a, mo.c) / zz; for (let i = 0; i < p; i++) b[i] += th * a[i];
+      for (let j = 0; j < p; j++) { let zx = 0; for (let i = 0; i < p; i++) zx += Ga[i] * C[i][j]; const f = zx / zz; for (let i = 0; i < p; i++) C[i][j] -= f * a[i]; }
+      steps.push({ phi, a, th, zz }); path.push(wrap(mo, b.slice()));
+    }
+    return Object.assign(wrap(mo, b), { steps, path });
+  }
+  // small matrix helpers (arrays of rows)
+  const T = A => A[0].map((_, j) => A.map(r => r[j]));
+  const mm = (A, B) => A.map(r => B[0].map((_, j) => { let s = 0; for (let k = 0; k < r.length; k++) s += r[k] * B[k][j]; return s; }));
+  function symFn(A, fn) { const E = eig(A), n = A.length; return Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => { let s = 0; for (let k = 0; k < n; k++) s += E.vecs[i][k] * fn(E.vals[k]) * E.vecs[j][k]; return s; })); }
+  const predict = (f, x) => f.b0 + dot(f.b, x);
+  const mse = (f, X, y) => { let s = 0; X.forEach((x, i) => { const r = y[i] - predict(f, x); s += r * r; }); return s / X.length; };
+  const sqErr = (f, X, y) => X.map((x, i) => (y[i] - predict(f, x)) ** 2);
+  return { T, mm, symFn, dot, mean, colMeans, moments, solve, inv, eig, ols, allSubsets, maskToS, pop, ridge, lamForDf, lasso, pcr, pls, predict, mse, sqErr };
+})();
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line') });
+const sum = a => a.reduce((s, v) => s + v, 0);
+const sub = n => String(n).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch] || ch).join('');
+const sup = n => String(n).split('').map(ch => ch === '-' ? '⁻' : '⁰¹²³⁴⁵⁶⁷⁸⁹'[+ch] || ch).join('');
+const sgn = v => v < 0 ? '&minus;' + fmt(-v, 3) : fmt(v, 3);
+const range = n => [...Array(n).keys()];
+function ring(v, x, y, col, r, lw) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 8, 0, 7); c.strokeStyle = col; c.lineWidth = lw || 1.8; c.stroke(); }
+function poly(v, pts, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(v.X(p[0]), v.Y(p[1])) : c.moveTo(v.X(p[0]), v.Y(p[1]))); c.stroke(); c.restore(); }
+function hexRgb(h) { h = (h || '').trim(); if (h[0] === '#') { if (h.length === 4) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3]; return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); } const m = h.match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : [128, 128, 128]; }
+const mix = (c1, c2, t) => { const a = hexRgb(c1), b = hexRgb(c2); return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`; };
+function arrow(v, x0, y0, x1, y1, col, lw, dash) {
+  const c = v.ctx, X0 = v.X(x0), Y0 = v.Y(y0), X1 = v.X(x1), Y1 = v.Y(y1), an = Math.atan2(Y1 - Y0, X1 - X0); c.save(); c.strokeStyle = col; c.fillStyle = col; c.lineWidth = lw || 2.2; if (dash) c.setLineDash(dash);
+  c.beginPath(); c.moveTo(X0, Y0); c.lineTo(X1, Y1); c.stroke(); c.setLineDash([]); c.beginPath(); c.moveTo(X1, Y1); c.lineTo(X1 - 10 * Math.cos(an - .38), Y1 - 10 * Math.sin(an - .38)); c.lineTo(X1 - 10 * Math.cos(an + .38), Y1 - 10 * Math.sin(an + .38)); c.closePath(); c.fill(); c.restore();
+}
+function label(v, x, y, text, col, align, base) { const c = v.ctx; c.save(); c.font = '11.5px ' + css('--f-mono'); c.fillStyle = col; c.textAlign = align || 'left'; c.textBaseline = base || 'middle'; c.fillText(text, x, y); c.restore(); }
+// coefficient bars: rows { name, v, g (ghost), how, col }
+function cfRows(rows, mx) {
+  const bar = (v, extra) => { const w = Math.min(50, Math.abs(v) / mx * 50); return `<i style="left:${v < 0 ? 50 - w : 50}%;width:${w}%;${extra}"></i>`; };
+  return rows.map(r => `<div class="cf${Math.abs(r.v) < 5e-7 ? ' zero' : ''}"><span>${r.name}</span><span class="cf-track">${r.g == null ? '' : bar(r.g, 'background:var(--muted);opacity:.3')}${bar(r.v, 'background:' + (r.col || 'var(--lda)'))}</span><span class="num">${r.how ? tip(fmt(r.v, 3), r.how) : fmt(r.v, 3)}</span></div>`).join('');
+}
+const binom = (n, k) => { let r = 1; for (let i = 1; i <= k; i++) r = r * (n - k + i) / i; return Math.round(r); };
+
+/* ---------- the prostate data, standardised with all 97 men as in the book ---------- */
+const PD = {"names":["lcavol","lweight","age","lbph","svi","lcp","gleason","pgg45"],"X":[[-0.579818495,2.769459,50.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[-0.994252273,3.319626,58.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[-0.510825624,2.691243,74.0,-1.38629436,0.0,-1.38629436,7.0,20.0],[-1.203972804,3.282789,58.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[0.751416089,3.432373,62.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[-1.049822124,3.228826,50.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[0.737164066,3.473518,64.0,0.61518564,0.0,-1.38629436,6.0,0.0],[0.693147181,3.539509,58.0,1.53686722,0.0,-1.38629436,6.0,0.0],[-0.776528789,3.539509,47.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[0.223143551,3.244544,63.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[0.254642218,3.604138,65.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[-1.347073648,3.598681,63.0,1.2669476,0.0,-1.38629436,6.0,0.0],[1.613429934,3.022861,63.0,-1.38629436,0.0,-0.597837,7.0,30.0],[1.477048724,2.998229,67.0,-1.38629436,0.0,-1.38629436,7.0,5.0],[1.205970807,3.442019,57.0,-1.38629436,0.0,-0.43078292,7.0,5.0],[1.541159072,3.061052,66.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[-0.415515444,3.516013,70.0,1.24415459,0.0,-0.597837,7.0,30.0],[2.288486169,3.649359,66.0,-1.38629436,0.0,0.37156356,6.0,0.0],[-0.562118918,3.267666,41.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[0.182321557,3.825375,70.0,1.65822808,0.0,-1.38629436,6.0,0.0],[1.147402453,3.419365,59.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[2.059238834,3.501043,60.0,1.47476301,0.0,1.34807315,7.0,20.0],[-0.544727175,3.37588,59.0,-0.7985077,0.0,-1.38629436,6.0,0.0],[1.781709133,3.451574,63.0,0.43825493,0.0,1.178655,7.0,60.0],[0.385262401,3.6674,69.0,1.59938758,0.0,-1.38629436,6.0,0.0],[1.446918983,3.124565,68.0,0.30010459,0.0,-1.38629436,6.0,0.0],[0.512823626,3.719651,65.0,-1.38629436,0.0,-0.7985077,7.0,70.0],[-0.400477567,3.865979,67.0,1.81645208,0.0,-1.38629436,7.0,20.0],[1.040276712,3.128951,67.0,0.22314355,0.0,0.04879016,7.0,80.0],[2.409644165,3.37588,65.0,-1.38629436,0.0,1.61938824,6.0,0.0],[0.285178942,4.090169,65.0,1.96290773,0.0,-0.7985077,6.0,0.0],[0.182321557,3.804438,65.0,1.70474809,0.0,-1.38629436,6.0,0.0],[1.2753628,3.037354,71.0,1.2669476,0.0,-1.38629436,6.0,0.0],[0.009950331,3.267666,54.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[-0.010050336,3.216874,63.0,-1.38629436,0.0,-0.7985077,6.0,0.0],[1.30833282,4.11985,64.0,2.17133681,0.0,-1.38629436,7.0,5.0],[1.423108334,3.657131,73.0,-0.5798185,0.0,1.65822808,8.0,15.0],[0.457424847,2.374906,64.0,-1.38629436,0.0,-1.38629436,7.0,15.0],[2.660958594,4.085136,68.0,1.37371558,1.0,1.83258146,7.0,35.0],[0.797507196,3.013081,56.0,0.93609336,0.0,-0.16251893,7.0,5.0],[0.620576488,3.141995,60.0,-1.38629436,0.0,-1.38629436,9.0,80.0],[1.442201993,3.68261,68.0,-1.38629436,0.0,-1.38629436,7.0,10.0],[0.58221562,3.865979,62.0,1.71379793,0.0,-0.43078292,6.0,0.0],[1.771556762,3.896909,61.0,-1.38629436,0.0,0.81093022,7.0,6.0],[1.486139696,3.409496,66.0,1.74919985,0.0,-0.43078292,7.0,20.0],[1.663926098,3.392829,61.0,0.61518564,0.0,-1.38629436,7.0,15.0],[2.727852828,3.995445,79.0,1.87946505,1.0,2.65675691,9.0,100.0],[1.16315081,4.035125,68.0,1.71379793,0.0,-0.43078292,7.0,40.0],[1.745715531,3.498022,43.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[1.220829921,3.568123,70.0,1.37371558,0.0,-0.7985077,6.0,0.0],[1.091923301,3.993603,68.0,-1.38629436,0.0,-1.38629436,7.0,50.0],[1.660131027,4.234831,64.0,2.07317193,0.0,-1.38629436,6.0,0.0],[0.512823626,3.633631,64.0,1.4929041,0.0,0.04879016,7.0,70.0],[2.12704052,4.121473,68.0,1.76644166,0.0,1.44691898,7.0,40.0],[3.153590358,3.516013,59.0,-1.38629436,0.0,-1.38629436,7.0,5.0],[1.266947603,4.280132,66.0,2.12226154,0.0,-1.38629436,7.0,15.0],[0.97455964,2.865054,47.0,-1.38629436,0.0,0.50077529,7.0,4.0],[0.463734016,3.764682,49.0,1.42310833,0.0,-1.38629436,6.0,0.0],[0.542324291,4.178226,70.0,0.43825493,0.0,-1.38629436,7.0,20.0],[1.061256502,3.851211,61.0,1.29472717,0.0,-1.38629436,7.0,40.0],[0.457424847,4.524502,73.0,2.32630162,0.0,-1.38629436,6.0,0.0],[1.997417706,3.719651,63.0,1.61938824,1.0,1.9095425,7.0,40.0],[2.77570885,3.524889,72.0,-1.38629436,0.0,1.55814462,9.0,95.0],[2.034705648,3.917011,66.0,2.00821403,1.0,2.1102132,7.0,60.0],[2.073171929,3.623007,64.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[1.458615023,3.836221,61.0,1.32175584,0.0,-0.43078292,7.0,20.0],[2.02287119,3.878466,68.0,1.78339122,0.0,1.32175584,7.0,70.0],[2.198335072,4.050915,72.0,2.30757263,0.0,-0.43078292,7.0,10.0],[-0.446287103,4.408547,69.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[1.193922468,4.780383,72.0,2.32630162,0.0,-0.7985077,7.0,5.0],[1.864080131,3.593194,60.0,-1.38629436,1.0,1.32175584,7.0,60.0],[1.160020917,3.341093,77.0,1.74919985,0.0,-1.38629436,7.0,25.0],[1.214912744,3.825375,69.0,-1.38629436,1.0,0.22314355,7.0,20.0],[1.838961071,3.236716,60.0,0.43825493,1.0,1.178655,9.0,90.0],[2.999226163,3.849083,69.0,-1.38629436,1.0,1.9095425,7.0,20.0],[3.141130476,3.263849,68.0,-0.05129329,1.0,2.42036813,7.0,50.0],[2.010894999,4.433789,72.0,2.12226154,0.0,0.50077529,7.0,60.0],[2.537657215,4.354784,78.0,2.32630162,0.0,-1.38629436,7.0,10.0],[2.648300197,3.582129,69.0,-1.38629436,1.0,2.58399755,7.0,70.0],[2.779440197,3.823192,63.0,-1.38629436,0.0,0.37156356,7.0,50.0],[1.467874348,3.070376,66.0,0.55961579,0.0,0.22314355,7.0,40.0],[2.513656063,3.473518,57.0,0.43825493,0.0,2.32727771,7.0,60.0],[2.613006652,3.888754,77.0,-0.52763274,1.0,0.55961579,7.0,30.0],[2.677590994,3.838376,65.0,1.11514159,0.0,1.74919985,9.0,70.0],[1.562346305,3.709907,60.0,1.69561561,0.0,0.81093022,7.0,30.0],[3.302849259,3.51898,64.0,-1.38629436,1.0,2.32727771,7.0,60.0],[2.024193067,3.731699,58.0,1.63899671,0.0,-1.38629436,6.0,0.0],[1.731655545,3.369018,62.0,-1.38629436,1.0,0.30010459,7.0,30.0],[2.807593831,4.718052,65.0,-1.38629436,1.0,2.46385324,7.0,60.0],[1.562346305,3.69511,76.0,0.93609336,1.0,0.81093022,7.0,75.0],[3.246490992,4.101817,68.0,-1.38629436,0.0,-1.38629436,6.0,0.0],[2.532902848,3.677566,61.0,1.34807315,1.0,-1.38629436,7.0,15.0],[2.830267834,3.876396,68.0,-1.38629436,1.0,1.32175584,7.0,60.0],[3.821003607,3.896909,44.0,-1.38629436,1.0,2.1690537,7.0,40.0],[2.907447359,3.396185,52.0,-1.38629436,1.0,2.46385324,7.0,10.0],[2.882563575,3.77391,68.0,1.55814462,1.0,1.55814462,7.0,80.0],[3.471966453,3.974998,68.0,0.43825493,1.0,2.90416508,7.0,20.0]],"y":[-0.4307829,-0.1625189,-0.1625189,-0.1625189,0.3715636,0.7654678,0.7654678,0.8544153,1.047319,1.047319,1.2669476,1.2669476,1.2669476,1.3480731,1.3987169,1.446919,1.4701758,1.4929041,1.5581446,1.5993876,1.6389967,1.6582281,1.6956156,1.7137979,1.7316555,1.7664417,1.8000583,1.8164521,1.8484548,1.8946169,1.9242487,2.008214,2.008214,2.0215476,2.0476928,2.0856721,2.1575593,2.1916535,2.2137539,2.2772673,2.2975726,2.3075726,2.3272777,2.3749058,2.5217206,2.5533438,2.5687881,2.5687881,2.5915164,2.5915164,2.6567569,2.677591,2.6844403,2.6912431,2.7047113,2.7180005,2.7880929,2.7942279,2.8063861,2.8124102,2.8419982,2.8535925,2.8535925,2.8820035,2.8820035,2.8875901,2.9204698,2.9626924,2.9626924,2.9729753,3.0130809,3.0373539,3.0563569,3.0750055,3.2752562,3.3375474,3.3928291,3.4355988,3.4578927,3.5130369,3.5160131,3.5307626,3.5652984,3.5709402,3.5876769,3.6309855,3.6800909,3.7123518,3.9843437,3.993603,4.029806,4.1295508,4.3851468,4.6844434,5.1431245,5.477509,5.5829322],"train":[1,1,1,1,1,1,0,1,0,0,1,1,1,1,0,1,1,1,1,1,1,0,1,1,0,0,1,0,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,1,1,0,0,0,1,1,0,0,0,1,0,1,1,1,1,0,1,0,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,0,1,0],"folds":[[7,6,5,3,1,8,2,2,6,6,0,3,1,5,4,3,7,2,1,1,0,2,5,9,4,7,4,8,0,9,8,6,5,8,0,5,5,6,0,2,8,3,5,7,7,1,4,0,8,1,2,2,4,6,3,6,0,1,9,9,9,3,9,3,4,7,4],[2,7,3,1,6,5,2,3,9,1,9,0,7,7,8,3,6,8,4,4,3,4,9,0,1,9,6,4,8,7,5,0,8,2,6,4,3,2,2,0,1,3,4,4,9,8,2,3,1,8,6,0,0,5,6,5,7,5,1,6,0,5,5,1,9,2,7],[7,5,0,5,2,3,0,0,4,1,4,5,1,4,9,0,9,7,3,1,8,8,9,7,5,6,2,2,4,0,6,2,8,9,2,6,5,4,5,3,3,6,8,3,2,4,8,3,9,7,0,6,6,7,1,1,1,9,4,7,6,1,8,3,2,5,0],[3,1,7,6,5,4,5,4,8,5,1,2,2,0,8,3,0,4,0,8,9,5,2,8,3,6,7,4,5,1,3,6,5,7,7,6,9,3,5,0,1,2,2,2,6,7,6,4,9,9,4,0,2,8,1,9,1,7,3,0,9,1,0,8,6,3,4],[4,4,6,7,4,7,7,4,5,0,5,2,9,0,3,7,6,1,4,6,2,4,1,7,6,7,1,5,9,5,9,8,8,8,3,3,2,2,1,1,5,2,3,2,9,6,1,0,3,2,8,4,0,6,3,0,5,9,8,9,0,8,3,0,1,5,6],[4,4,8,4,0,5,5,7,3,2,4,5,3,0,5,3,3,7,0,6,9,7,1,7,2,6,9,1,6,3,2,1,0,4,8,0,5,4,1,2,6,9,8,2,0,9,1,1,3,4,6,8,2,3,9,5,2,7,5,0,8,7,9,6,8,6,1],[7,1,6,3,1,8,0,3,0,4,0,7,9,2,6,4,3,9,3,9,6,6,8,2,3,4,8,0,2,5,8,8,1,9,5,5,6,9,4,7,5,2,4,5,9,5,1,1,7,0,2,2,8,0,4,6,4,3,7,6,7,3,1,1,5,2,0],[7,2,5,2,6,8,4,1,7,3,7,1,5,5,9,0,6,1,1,2,3,5,0,2,9,2,2,0,0,1,6,3,3,3,9,1,0,0,9,4,6,4,5,9,6,1,0,4,7,8,4,8,3,8,6,2,6,5,8,4,4,7,8,9,3,5,7],[6,3,3,0,4,1,7,2,9,5,4,6,2,0,1,6,9,0,5,3,6,9,6,3,0,7,5,5,1,4,0,1,2,6,8,2,7,2,7,2,6,1,2,7,4,3,8,8,4,8,4,9,5,9,3,4,7,0,1,9,0,1,5,8,3,8,5],[8,6,7,6,0,1,2,1,3,9,4,2,6,5,7,5,5,8,8,7,0,0,3,1,4,8,3,1,5,6,4,7,4,5,3,6,9,9,7,1,5,2,3,8,2,2,0,0,4,6,0,8,9,3,7,3,5,9,0,9,2,4,1,1,2,6,4]]};
+const NM = PD.names, P = 8;
+const MU = LA.colMeans(PD.X), SDV = MU.map((m, j) => Math.sqrt(PD.X.reduce((s, r) => s + (r[j] - m) ** 2, 0) / (PD.X.length - 1)));
+const ZX = PD.X.map(r => r.map((v, j) => (v - MU[j]) / SDV[j]));
+const XTR = ZX.filter((_, i) => PD.train[i]), YTR = PD.y.filter((_, i) => PD.train[i]), XTE = ZX.filter((_, i) => !PD.train[i]), YTE = PD.y.filter((_, i) => !PD.train[i]);
+const NTR = XTR.length, NTE = XTE.length, ALL = range(P);
+const MO = LA.moments(XTR, YTR), AS = LA.allSubsets(MO);
+const FITM = [], TEST = new Float64Array(1 << P);
+for (let m = 0; m < 1 << P; m++) { const f = LA.ols(MO, LA.maskToS(m, P)); FITM.push(f); TEST[m] = LA.mse(f, XTE, YTE); }
+const LSF = FITM[255];
+const maskOf = S => S.reduce((m, j) => m | 1 << j, 0);
+const setName = (m, names) => { const S = LA.maskToS(m, names.length); return S.length ? S.map(j => names[j]).join(', ') : 'no inputs (just the mean)'; };
+const testErr = f => LA.mse(f, XTE, YTE);
+
+/* ---------- hero: all 256 subsets ---------- */
+const HERO = { mask: 3 }; let heroV = null;
+const JIT = new Float64Array(256);
+{ const r = mulberry32(11); for (let m = 0; m < 256; m++) JIT[m] = AS.best[LA.pop(m)] === m ? 0 : (r() - 0.5) * 0.5; }
+function drawHero() {
+  const C = C0(), v = heroV = frame($('#hero-cv'), [-0.6, 8.6], [0, 102], { l: 40, b: 32 }); axes(v, 'subset size k', 'training RSS', { sx: 1, sy: 20 }); clip(v);
+  const c = v.ctx; c.save(); c.globalAlpha = 0.5; for (let m = 0; m < 256; m++) if (m !== HERO.mask) dot(v, LA.pop(m) + JIT[m], AS.rss[m], C.muted, 3.3); c.restore();
+  poly(v, AS.best.map((m, k) => [k, AS.rss[m]]), C.lda, 2.2); AS.best.forEach((m, k) => dot(v, k, AS.rss[m], C.lda, 4));
+  const k = LA.pop(HERO.mask); dot(v, k + JIT[HERO.mask], AS.rss[HERO.mask], C.b, 6.5); ring(v, k + JIT[HERO.mask], AS.rss[HERO.mask], C.q, 10, 2);
+  v.ctx.restore();
+  $$('#hero-chips button').forEach(b => b.setAttribute('aria-pressed', HERO.mask >> +b.dataset.j & 1 ? 'true' : 'false'));
+  const ms = range(256).filter(m => LA.pop(m) === k).sort((a, b) => AS.rss[a] - AS.rss[b]), rank = ms.indexOf(HERO.mask) + 1, f = FITM[HERO.mask];
+  $('#hero-cap').innerHTML = `<b>${setName(HERO.mask, NM)}</b>: training RSS ${tip(fmt(AS.rss[HERO.mask], 1), `Σ (yᵢ − ŷᵢ)² over the 67 training men\nleast squares on ${k} input${k === 1 ? '' : 's'} + intercept`)}, test error ${tip(fmt(TEST[HERO.mask], 3), `mean of (y − ŷ)² over the 30 test men\nleast squares: 0.521, mean only: ${fmt(TEST[0], 3)}`)}. ${k === 0 || k === 8 ? `The only model of size ${k}.` : rank === 1 ? `The best of all ${binom(8, k)} subsets of size ${k} (on the lower edge).` : `Number ${rank} of ${binom(8, k)} subsets of size ${k}; the best is ${setName(AS.best[k], NM)}.`}`;
+  void f;
+}
+$('#hero-chips').innerHTML = NM.map((n, j) => `<button type="button" data-j="${j}" aria-pressed="false">${n}</button>`).join('');
+$$('#hero-chips button').forEach(b => b.addEventListener('click', () => { HERO.mask ^= 1 << +b.dataset.j; drawHero(); }));
+$('#hero-cv').addEventListener('pointerdown', e => { const v = heroV; if (!v) return; const [px, py] = evPos($('#hero-cv'), e); let best = -1, bd = 14 * 14;
+  for (let m = 0; m < 256; m++) { const dx = v.X(LA.pop(m) + JIT[m]) - px, dy = v.Y(AS.rss[m]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = m; } } if (best >= 0) { HERO.mask = best; drawHero(); } });
+fig($('#hero-cv'), drawHero);
+
+/* ---------- why fewer inputs: exact bias and variance on a made-up study ---------- */
+const WB = [1.5, 1.0, 0.7, 0.5, 0.35, 0.25, 0.15, 0.08, 0, 0];
+const WX = (() => { const r = mulberry32(2024); return range(100).map(() => WB.map(() => gaussOf(r))); })();
+const WHY = { N: 40, k: 10, s: 1.2, seed: 5 };
+let WE = null; const whyNoise = () => { const r = mulberry32(WHY.seed); WE = [range(100).map(() => gaussOf(r)), range(100).map(() => gaussOf(r))]; }; whyNoise();
+function whyCalc() {
+  const N = WHY.N, X = WX.slice(0, N), f = X.map(r => LA.dot(r, WB)), mo = LA.moments(X, f), s2 = WHY.s ** 2;
+  const y = f.map((v, i) => v + WHY.s * WE[0][i]), y2 = f.map((v, i) => v + WHY.s * WE[1][i]), my = LA.moments(X, y);
+  return range(11).map(k => { const S = range(k), b2 = LA.ols(mo, S).rss / N, va = s2 * (k + 1) / N, fit = LA.ols(my, S);
+    return { k, b2, va, err: s2 + b2 + va, tr: s2 * (1 - (k + 1) / N) + b2, dTr: fit.rss / N, dTe: LA.mse(fit, X, y2) }; });
+}
+function drawWhy() {
+  const C = C0(), R = whyCalc(), s2 = WHY.s ** 2, top = Math.max(...R.map(r => Math.max(r.err, r.dTe))) * 1.08;
+  const v = frame($('#why-cv'), [-0.3, 10.3], [0, top], { l: 44 }); axes(v, 'inputs used k', 'error', { sx: 1 }); clip(v);
+  seg(v, -1, s2, 11, s2, C.muted, 1, [2, 4]); label(v, v.X(-0.1), v.Y(s2) + 10, 'noise σ²', C.muted, 'left');
+  poly(v, R.map(r => [r.k, r.b2]), C.lda, 1.6, [6, 4]); poly(v, R.map(r => [r.k, r.va]), C.bad, 1.6, [6, 4]);
+  poly(v, R.map(r => [r.k, r.tr]), C.a, 2.4); poly(v, R.map(r => [r.k, r.err]), C.b, 2.6);
+  R.forEach(r => { dot(v, r.k, r.dTr, C.a, 3.2, true); dot(v, r.k, r.dTe, C.b, 3.2, true); });
+  const cur = R[WHY.k]; seg(v, WHY.k, 0, WHY.k, top, C.q, 1, [3, 4], 0.6); dot(v, WHY.k, cur.err, C.b, 6); dot(v, WHY.k, cur.tr, C.a, 6);
+  v.ctx.restore();
+  const best = R.reduce((a, r) => r.err < a.err ? r : a, R[0]);
+  $('#why-k-o').textContent = WHY.k; $('#why-s-o').textContent = fmt(WHY.s, 2);
+  $('#why-b').innerHTML = tip(fmt(cur.b2, 3), `‖(I − H_k) f‖² / N\nthe part of the true means that ${WHY.k} input${WHY.k === 1 ? '' : 's'} + intercept cannot fit`);
+  $('#why-v').innerHTML = tip(fmt(cur.va, 3), `σ² (k + 1) / N = ${fmt(s2, 3)} × ${WHY.k + 1} / ${WHY.N}`);
+  $('#why-e').innerHTML = tip(fmt(cur.err, 3), `σ² + bias² + variance\n= ${fmt(s2, 3)} + ${fmt(cur.b2, 3)} + ${fmt(cur.va, 3)}`);
+  $('#why-best').innerHTML = tip(String(best.k), `k with the lowest expected test error (${fmt(best.err, 3)})`);
+  $('#run-why').innerHTML = `<b>Running example</b>: N = ${WHY.N}, &sigma; = ${fmt(WHY.s, 2)}, k = ${WHY.k}. Err = ${tip(fmt(s2, 3), 'σ²')} + ${tip(fmt(cur.b2, 3), 'bias²: residual sum of squares of f on the first k inputs, divided by N')} + ${tip(fmt(cur.va, 3), `σ² × (${WHY.k} + 1) / ${WHY.N}`)} = <b>${fmt(cur.err, 3)}</b>. Expected training error: ${fmt(s2, 3)} &times; (1 &minus; ${WHY.k + 1}/${WHY.N}) + ${fmt(cur.b2, 3)} = ${tip(fmt(cur.tr, 3), 'training error is optimistic by 2σ²(k+1)/N = ' + fmt(2 * cur.va, 3))}. This draw of the noise: training ${fmt(cur.dTr, 3)}, test ${fmt(cur.dTe, 3)}.`;
+  const nxt = WHY.k < 10 ? R[WHY.k + 1] : null;
+  $('#why-say').innerHTML = WHY.k < best.k ? `Too few inputs. Adding input ${WHY.k + 1} would cut bias&sup2; by ${fmt(cur.b2 - nxt.b2, 3)} and cost only &sigma;&sup2;/N = ${fmt(s2 / WHY.N, 3)} of variance. Keep adding until those two balance, at k = ${best.k}.`
+    : WHY.k === best.k ? `The sweet spot for this noise level and sample size. ${WHY.k < 10 ? `The next input would remove only ${fmt(cur.b2 - nxt.b2, 3)} of bias&sup2; but add ${fmt(s2 / WHY.N, 3)} of variance.` : 'With this little noise every input earns its place.'} Try more noise or fewer people: the sweet spot moves left.`
+    : `Too many inputs. The last ${WHY.k - best.k} cost more variance than the bias they remove, so the test error is ${fmt(cur.err - best.err, 3)} above its best. Meanwhile the training error keeps falling: the gap between the two curves is 2&sigma;&sup2;(k+1)/N = ${fmt(2 * cur.va, 3)}.${WHY.k >= 9 ? ' Inputs 9 and 10 have no effect at all, yet the training error still drops when they join.' : ''}`;
+}
+$('#why-k').addEventListener('input', e => { WHY.k = +e.target.value; drawWhy(); });
+$('#why-s').addEventListener('input', e => { WHY.s = +e.target.value; drawWhy(); });
+seg1('[data-wn]', 'data-wn', n => { WHY.N = +n; drawWhy(); });
+$('#why-draw').addEventListener('click', () => { WHY.seed++; whyNoise(); drawWhy(); });
+fig($('#why-cv'), drawWhy);
+
+/* ---------- best subset of each size ---------- */
+const BEST = { k: 2 };
+const bestTestK = range(9).reduce((a, k) => TEST[AS.best[k]] < TEST[AS.best[a]] ? k : a, 0);
+function drawBest() {
+  const C = C0(), k = BEST.k, m = AS.best[k], top = Math.max(...TEST, AS.rss[0] / NTR) * 1.05;
+  const v = frame($('#best-cv'), [-0.5, 8.5], [0.3, top], { l: 44 }); axes(v, 'subset size k', 'mean squared error', { sx: 1 }); clip(v);
+  const c = v.ctx; c.save(); c.globalAlpha = 0.35; for (let q = 0; q < 256; q++) if (AS.best[LA.pop(q)] !== q) dot(v, LA.pop(q) + JIT[q], TEST[q], C.muted, 2.8); c.restore();
+  poly(v, AS.best.map((q, j) => [j, AS.rss[q] / NTR]), C.a, 2.4); poly(v, AS.best.map((q, j) => [j, TEST[q]]), C.b, 2.4);
+  AS.best.forEach((q, j) => { dot(v, j, AS.rss[q] / NTR, C.a, 3.6); dot(v, j, TEST[q], C.b, 3.6); });
+  ring(v, k, AS.rss[m] / NTR, C.q, 8); ring(v, k, TEST[m], C.q, 8);
+  v.ctx.restore();
+  $('#best-k-o').textContent = k;
+  $('#best-chips').innerHTML = NM.map((n, j) => `<button type="button" disabled aria-pressed="${m >> j & 1 ? 'true' : 'false'}" style="cursor:default">${n}</button>`).join('');
+  $('#best-tr').innerHTML = tip(fmt(AS.rss[m] / NTR, 3), `RSS / 67 = ${fmt(AS.rss[m], 2)} / 67`);
+  $('#best-te').innerHTML = tip(fmt(TEST[m], 3), 'mean squared error on the 30 test men');
+  const ms = range(256).filter(q => LA.pop(q) === k).sort((a, b) => AS.rss[a] - AS.rss[b]);
+  $('#run-best').innerHTML = k === 0 || k === 8 ? `<b>Running example</b>: with k = ${k} there is only ${tip('one', `8 choose ${k} = 1`)} subset: ${k ? 'all eight inputs, least squares' : 'the intercept alone'}, with RSS = ${fmt(AS.rss[m], 2)}.`
+    : `<b>Running example</b>: k = ${k} means comparing ${tip(String(ms.length), `8 choose ${k} = ${ms.length}`)} subsets. The winner, {${setName(m, NM)}}, has RSS = ${tip(fmt(AS.rss[m], 2), 'least-squares fit on these inputs, 67 training men')}; the runner-up, {${setName(ms[1], NM)}}, has ${fmt(AS.rss[ms[1]], 2)}.`;
+  $('#best-say').innerHTML = `Training error falls at every size, from ${fmt(AS.rss[0] / NTR, 3)} (the mean) to ${fmt(AS.rss[255] / NTR, 3)} (all eight). ${k === bestTestK ? `<b>k = ${k}</b> happens to have the lowest test error of the winners.` : `Among the winners, the test error is lowest at k = ${bestTestK} (${fmt(TEST[AS.best[bestTestK]], 3)}).`} But we may not use the test men to choose k: that would make their error an optimistic score. The project chooses k by cross-validation instead.`;
+}
+$('#best-k').addEventListener('input', e => { BEST.k = +e.target.value; drawBest(); });
+fig($('#best-cv'), drawBest);
+
+/* ---------- why it explodes ---------- */
+const BOOM = { p: 8, tau: null, reps: 0 };
+function timeIt() { const t0 = performance.now(); let reps = 0; do { LA.allSubsets(MO); reps++; } while (performance.now() - t0 < 80); BOOM.ms = performance.now() - t0; BOOM.reps = reps; BOOM.tau = BOOM.ms / 1000 / (reps * 256); }
+const YEAR = 3.156e7, UNI = 13.8e9 * YEAR;
+function dur(s) {
+  if (s < 1e-3) return fmt(s * 1e6, s < 1e-5 ? 1 : 0) + ' µs'; if (s < 1) return fmt(s * 1e3, s < 1e-2 ? 1 : 0) + ' ms'; if (s < 120) return fmt(s, 1) + ' s';
+  if (s < 7200) return fmt(s / 60, 0) + ' min'; if (s < 2 * 86400) return fmt(s / 3600, 1) + ' hours'; if (s < YEAR) return fmt(s / 86400, 0) + ' days';
+  const y = s / YEAR; return y < 1e4 ? fmt(y, y < 10 ? 1 : 0) + ' years' : sci(y) + ' years';
+}
+function sci(x) { const e = Math.floor(Math.log10(x)), m = x / 10 ** e; return fmt(m, 1) + ' × 10' + sup(e); }
+const count = p => p <= 40 ? Math.pow(2, p).toLocaleString('en-GB') : sci(Math.pow(2, p));
+function drawBoom() {
+  if (!BOOM.tau) timeIt();
+  const C = C0(), p = BOOM.p, tau = BOOM.tau, lt = Math.log10(tau);
+  const v = frame($('#boom-cv'), [1, 80], [-8, 26], { l: 44, r: 14 }); axes(v, 'inputs p', 'log₁₀ seconds', { sx: 10, sy: 5 }); clip(v);
+  [[0, '1 second'], [Math.log10(3600), '1 hour'], [Math.log10(YEAR), '1 year'], [Math.log10(UNI), 'age of the universe']].forEach(([y, t]) => { seg(v, 1, y, 80, y, C.muted, 1, [3, 4]); label(v, v.X(79), v.Y(y) - 8, t, C.muted, 'right'); });
+  curve(v, x => x * Math.LOG10E * Math.log(2) + lt, C.a, 2.6); curve(v, x => Math.log10(x * (x + 1) / 2 + 1) + lt, C.lda, 2.2);
+  const te = Math.pow(2, p) * tau; dot(v, p, Math.log10(te), C.a, 6); dot(v, p, Math.log10((p * (p + 1) / 2 + 1) * tau), C.lda, 5);
+  v.ctx.restore();
+  const pU = Math.ceil(Math.log2(UNI / tau)), pY = Math.ceil(Math.log2(YEAR / tau));
+  $('#boom-p-o').textContent = p;
+  $('#boom-n').innerHTML = tip(count(p), `2^${p}${p <= 40 ? '' : ' (rounded)'}`);
+  $('#boom-t').innerHTML = tip(dur(te), `2^${p} × ${fmt(tau * 1e6, 2)} µs per fit\n(measured: ${BOOM.reps} × 256 prostate fits in ${fmt(BOOM.ms, 0)} ms)`);
+  $('#run-boom').innerHTML = `<b>Running example</b>: p = ${p}: &Sigma;<sub>k</sub> C(${p}, k) = 2<sup>${p}</sup> = ${tip(count(p), 'one in-or-out choice per input')} models. At the ${tip(fmt(tau * 1e6, 2) + ' µs', `your browser: ${BOOM.reps} × 256 fits in ${fmt(BOOM.ms, 0)} ms`)} per fit your browser just managed, that is ${dur(te)}; forward stepwise needs ${p * (p + 1) / 2 + 1} fits, ${dur((p * (p + 1) / 2 + 1) * tau)}.`;
+  $('#boom-say').innerHTML = `${p <= 20 ? 'Exhaustive search is still easy here.' : te < 3600 ? 'Getting slow, but still within reach.' : te < YEAR ? 'Possible, if you are patient.' : te < UNI ? 'Longer than you will live.' : 'Longer than the universe has existed.'} At this speed, every subset of ${pY} inputs would take a year, and ${pU} would outlast the universe. Bigger models also cost more per fit, so the real numbers are worse. Forward stepwise stays under ${dur((80 * 81 / 2 + 1) * tau)} even at p = 80.`;
+}
+$('#boom-p').addEventListener('input', e => { BOOM.p = +e.target.value; drawBoom(); });
+$('#boom-re').addEventListener('click', () => { timeIt(); drawBoom(); });
+fig($('#boom-cv'), drawBoom);
+
+/* ---------- forward and backward stepwise ---------- */
+const TRAPD = (() => {
+  const r = mulberry32(31), N = 60, A = [], B = [], Cn = [], E = [], W = [];
+  for (let i = 0; i < N; i++) { A.push(gaussOf(r)); B.push(gaussOf(r)); Cn.push(gaussOf(r)); E.push(gaussOf(r)); W.push(gaussOf(r)); }
+  const x1 = A, x2 = A.map((a, i) => 0.95 * a + Math.sqrt(1 - 0.95 * 0.95) * B[i]), d = x1.map((v, i) => v - x2[i]), md = LA.mean(d), sd = Math.sqrt(d.reduce((s, v) => s + (v - md) ** 2, 0) / (N - 1)), dn = d.map(v => (v - md) / sd);
+  const x3 = dn.map((v, i) => 0.75 * v + 0.66 * Cn[i]), y = dn.map((v, i) => v + 0.25 * E[i]);
+  return { X: range(N).map(i => [x1[i], x2[i], x3[i], W[i]]), y };
+})();
+function swData(name) {
+  const mo = name === 'pros' ? MO : LA.moments(TRAPD.X, TRAPD.y), p = mo.p, as = name === 'pros' ? AS : LA.allSubsets(mo), names = name === 'pros' ? NM : ['x₁', 'x₂', 'x₃', 'x₄'];
+  const fw = [[]]; let S = []; while (S.length < p) { S = [...S, fwdNext(mo, S).j]; fw.push(S); }
+  const bw = [range(p)]; S = range(p); while (S.length) { const z = zScores(mo, S), w = z.reduce((a, o) => Math.abs(o.z) < Math.abs(a.z) ? o : a, z[0]); S = S.filter(j => j !== w.j); bw.push(S); }
+  return { mo, p, as, names, fw, bw };
+}
+function fwdNext(mo, S) { let best = null; for (let j = 0; j < mo.p; j++) if (!S.includes(j)) { const f = LA.ols(mo, [...S, j]); if (!best || f.rss < best.rss) best = { j, rss: f.rss }; } return best; }
+function zScores(mo, S) { const f = LA.ols(mo, S), k = S.length, s2 = f.rss / (mo.n - k - 1), Gi = LA.inv(S.map(i => S.map(j => mo.G[i][j]))); return S.map((j, t) => ({ j, b: f.bs[t], v: Gi[t][t], s2, z: f.bs[t] / Math.sqrt(s2 * Gi[t][t]) })); }
+const SWD = { trap: swData('trap'), pros: swData('pros') };
+const SW = { ds: 'trap', dir: 'f', S: [] };
+function drawSW() {
+  const C = C0(), D = SWD[SW.ds], mo = D.mo, p = D.p, S = SW.S, k = S.length, rssS = LA.ols(mo, S).rss, top = mo.yy * 1.06;
+  const v = frame($('#sw-cv'), [-0.3, p + 0.3], [0, top], { l: 44 }); axes(v, 'inputs k', 'training RSS', { sx: 1 }); clip(v);
+  poly(v, D.as.best.map((m, j) => [j, D.as.rss[m]]), C.q, 2.2, null, 0.7);
+  poly(v, D.fw.map(T => [T.length, LA.ols(mo, T).rss]), C.a, 2.2, [7, 4]); poly(v, D.bw.map(T => [T.length, LA.ols(mo, T).rss]), C.b, 2.2, [2, 4]);
+  D.as.best.forEach((m, j) => dot(v, j, D.as.rss[m], C.q, 3.4));
+  ring(v, k, rssS, SW.dir === 'f' ? C.a : C.b, 9, 2.4);
+  v.ctx.restore();
+  const nm = j => D.names[j], tbl = $('#sw-tbl');
+  if (SW.dir === 'f') {
+    if (k === p) tbl.innerHTML = `<tr><td>All ${p} inputs are in: this is least squares. Press <b>Start again</b>.</td></tr>`;
+    else { const rows = range(p).filter(j => !S.includes(j)).map(j => { const r1 = LA.ols(mo, [...S, j]).rss; return { j, r1, F: (rssS - r1) / (r1 / (mo.n - (k + 1) - 1)) }; }).sort((a, b) => a.r1 - b.r1);
+      tbl.innerHTML = `<thead><tr><th>Add</th><th>RSS after</th><th>F</th></tr></thead><tbody>` + rows.map((r, i) => `<tr${i ? '' : ' style="font-weight:600"'}><td>${nm(r.j)}${i ? '' : ' &larr; next'}</td><td>${tip(fmt(r.r1, 2), `RSS with {${[...S, r.j].map(nm).join(', ')}}`)}</td><td>${tip(fmt(r.F, 1), `(${fmt(rssS, 2)} − ${fmt(r.r1, 2)}) / (${fmt(r.r1, 2)} / (${mo.n} − ${k + 1} − 1))`)}</td></tr>`).join('') + '</tbody>'; }
+  } else {
+    if (!k) tbl.innerHTML = `<tr><td>Only the intercept is left. Press <b>Start again</b>.</td></tr>`;
+    else { const z = zScores(mo, S).sort((a, b) => Math.abs(a.z) - Math.abs(b.z));
+      tbl.innerHTML = `<thead><tr><th>Drop</th><th>&beta;&#770;</th><th>z</th></tr></thead><tbody>` + z.map((o, i) => `<tr${i ? '' : ' style="font-weight:600"'}><td>${nm(o.j)}${i ? '' : ' &larr; next'}</td><td>${sgn(o.b)}</td><td>${tip(fmt(o.z, 2), `β̂ / (σ̂ √v) = ${fmt(o.b, 4)} / √(${fmt(o.s2, 4)} × ${fmt(o.v, 5)})`)}</td></tr>`).join('') + '</tbody>'; }
+  }
+  // running examples
+  if (k < p) { const n = fwdNext(mo, S), F = (rssS - n.rss) / (n.rss / (mo.n - (k + 1) - 1));
+    $('#run-f').innerHTML = `<b>Running example</b>: from {${S.map(nm).join(', ') || 'intercept only'}}, adding ${nm(n.j)} gives F = (${fmt(rssS, 2)} &minus; ${fmt(n.rss, 2)}) / (${fmt(n.rss, 2)} / (${mo.n} &minus; ${k + 1} &minus; 1)) = ${tip(fmt(F, 1), 'the largest F among the inputs not yet in')}.`; }
+  else $('#run-f').innerHTML = `<b>Running example</b>: every input is in, so there is nothing left to add.`;
+  if (k) { const z = zScores(mo, S), w = z.reduce((a, o) => Math.abs(o.z) < Math.abs(a.z) ? o : a, z[0]);
+    $('#run-z').innerHTML = `<b>Running example</b>: in {${S.map(nm).join(', ')}}, the weakest input is ${nm(w.j)}: z = ${fmt(w.b, 4)} / &radic;(${fmt(w.s2, 4)} &times; ${fmt(w.v, 5)}) = ${tip(fmt(w.z, 2), 'the smallest |z| in the current model')}. Dropping it raises RSS by z&sup2;&sigma;&#770;&sup2; = ${tip(fmt(w.z * w.z * w.s2, 3), `${fmt(w.z, 3)}² × ${fmt(w.s2, 4)}`)}.`; }
+  else $('#run-z').innerHTML = `<b>Running example</b>: no inputs are in the model, so there are no z-scores yet.`;
+  const bm = D.as.best[k], my = maskOf(S), same = bm === my;
+  $('#sw-say').innerHTML = (k === 0 && SW.dir === 'f') ? `Forward stepwise starts from the intercept alone. The table ranks every input by how far it would cut RSS.${SW.ds === 'trap' ? ' On its own, x&#8323; looks best.' : ''}`
+    : (k === p && SW.dir === 'b') ? `Backward stepwise starts from every input and will drop the one with the smallest |z| first.`
+    : same ? `With ${k} input${k === 1 ? '' : 's'}, {${S.map(nm).join(', ') || 'none'}} is also the best subset of this size (RSS ${fmt(rssS, 2)}).${SW.ds === 'pros' ? ' On the prostate data all three searches agree at every size.' : SW.dir === 'b' && k === 2 ? ' Backward found the pair that forward missed: starting big, it saw x&#8321; and x&#8322; working together.' : ''}`
+    : `Greedy search went astray: {${S.map(nm).join(', ')}} has RSS ${fmt(rssS, 2)}, but the best subset of size ${k} is {${setName(bm, D.names)}} with RSS ${fmt(D.as.rss[bm], 2)}. ${SW.dir === 'f' ? 'Forward picked x&#8323; first and can never take it back. x&#8321; and x&#8322; are almost useless alone, because y depends on their difference.' : 'Backward removed one of the twins, and alone neither twin is worth much; best subset would switch to x&#8323;.'}`;
+  $('#sw-step').disabled = SW.dir === 'f' ? k === p : k === 0;
+}
+function swReset() { SW.S = SW.dir === 'f' ? [] : range(SWD[SW.ds].p); drawSW(); }
+$('#sw-step').addEventListener('click', () => { const D = SWD[SW.ds]; if (SW.dir === 'f') { if (SW.S.length < D.p) SW.S = [...SW.S, fwdNext(D.mo, SW.S).j]; } else if (SW.S.length) { const z = zScores(D.mo, SW.S), w = z.reduce((a, o) => Math.abs(o.z) < Math.abs(a.z) ? o : a, z[0]); SW.S = SW.S.filter(j => j !== w.j); } drawSW(); });
+$('#sw-reset').addEventListener('click', swReset);
+seg1('[data-sd]', 'data-sd', d => { SW.ds = d; swReset(); });
+seg1('[data-sw]', 'data-sw', d => { SW.dir = d; swReset(); });
+fig($('#sw-cv'), drawSW);
+
+/* ---------- forward stagewise ---------- */
+const PAL = C => [[C.a], [C.b], [C.c], [C.lda], [C.bad], [C.q], [C.a, [6, 4]], [C.b, [6, 4]]];
+const SG = { b: new Array(P).fill(0), n: 0, hist: [new Array(P).fill(0)], last: null, done: false, raf: 0 };
+const sgRss = b => MO.yy - 2 * LA.dot(b, MO.c) + LA.dot(b, MO.G.map(r => LA.dot(r, b)));
+function sgStep() {
+  const rss = sgRss(SG.b), g = MO.c.map((c, j) => c - LA.dot(MO.G[j], SG.b)); let j = 0, bc = -1;
+  g.forEach((v, k) => { const cr = Math.abs(v) / Math.sqrt(MO.G[k][k] * rss); if (cr > bc) { bc = cr; j = k; } });
+  if (bc < 1e-4) { SG.done = true; return false; }
+  const d = g[j] / MO.G[j][j]; SG.last = { j, g: g[j], gg: MO.G[j][j], d, old: SG.b[j], corr: g[j] / Math.sqrt(MO.G[j][j] * rss) };
+  SG.b[j] += d; SG.n++; SG.hist.push(SG.b.slice()); return true;
+}
+function drawSG() {
+  const C = C0(), pal = PAL(C), nMax = Math.max(16, SG.n), xr = Math.sqrt(nMax);
+  const v = frame($('#sg-cv'), [0, xr * 1.02], [-0.4, 0.9], { l: 44, r: 70 }); axes(v, 'steps', 'coefficient', { sx: xr > 8 ? 2 : 1, sy: 0.2, fx: x => fmt(x * x, 0) }); clip(v);
+  seg(v, 0, 0, xr * 2, 0, C.muted, 1);
+  for (let j = 0; j < P; j++) poly(v, SG.hist.map((b, t) => [Math.sqrt(t), b[j]]), pal[j][0], 2, pal[j][1]);
+  v.ctx.restore();
+  // least-squares ticks and labels on the right
+  const c = v.ctx, xe = v.w - v.pad.r; let ys = LSF.b.map((b, j) => ({ j, y: v.Y(b) })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ys.length; i++) if (ys[i].y - ys[i - 1].y < 13) ys[i].y = ys[i - 1].y + 13;
+  c.save(); LSF.b.forEach((b, j) => { c.strokeStyle = pal[j][0]; c.lineWidth = 2; c.beginPath(); c.moveTo(xe + 2, v.Y(b)); c.lineTo(xe + 9, v.Y(b)); c.stroke(); }); c.restore();
+  ys.forEach(o => label(v, xe + 12, o.y, NM[o.j], pal[o.j][0]));
+  const rss = sgRss(SG.b), f = { b0: MO.my - LA.dot(MO.mx, SG.b), b: SG.b }, used = SG.b.filter(x => x !== 0).length;
+  $('#sg-n').textContent = SG.n;
+  $('#sg-rss').innerHTML = tip(fmt(rss, 2), `least squares reaches ${fmt(LSF.rss, 2)}`);
+  $('#sg-in').textContent = used + ' of 8';
+  $('#sg-te').innerHTML = tip(fmt(testErr(f), 3), 'mean squared error on the 30 test men\n(least squares: ' + fmt(TEST[255], 3) + ')');
+  const L = SG.last;
+  $('#run-sg').innerHTML = !L ? `<b>Running example</b>: at the start r = y &minus; y&#772; and every &beta;<sub>j</sub> = 0. The residual is most correlated with lcavol, so the first step will regress r on lcavol alone.`
+    : `<b>Running example</b>: step ${SG.n} picked ${NM[L.j]} (correlation with the residual ${tip(fmt(L.corr, 3), '⟨x, r⟩ / (‖x‖ ‖r‖), centred')}). &delta; = &lang;x, r&rang; / &lang;x, x&rang; = ${fmt(L.g, 3)} / ${fmt(L.gg, 3)} = ${tip(fmt(L.d, 4), 'slope of r on this one input')}, so &beta;<sub>${NM[L.j]}</sub>: ${fmt(L.old, 4)} &rarr; ${fmt(L.old + L.d, 4)}.`;
+  $('#sg-say').innerHTML = SG.n === 0 ? 'Every coefficient starts at zero. Press <b>1 step</b> a few times and watch one coefficient move at a time.'
+    : SG.done ? `Converged after <b>${SG.n} steps</b> for just 8 inputs: no input is correlated with the residual any more (all |corr| &lt; 0.0001), and the coefficients match least squares (RSS ${fmt(rss, 3)} vs ${fmt(LSF.rss, 3)}). Stagewise keeps coming back to the same inputs because correlated inputs keep undoing a little of each other&rsquo;s work.`
+    : SG.n < 8 ? `After ${SG.n} step${SG.n > 1 ? 's' : ''}, ${used} input${used > 1 ? 's are' : ' is'} in. Unlike forward stepwise, the earlier coefficients did not change when a new input joined.`
+    : `After ${SG.n} steps the RSS is ${fmt(rss - LSF.rss, 3)} above least squares. Several inputs have been visited more than once.`;
+}
+function sgRun(n) { cancelAnimationFrame(SG.raf); for (let i = 0; i < n; i++) if (!sgStep()) break; drawSG(); }
+$('#sg-1').addEventListener('click', () => sgRun(1));
+$('#sg-10').addEventListener('click', () => sgRun(10));
+$('#sg-run').addEventListener('click', () => { cancelAnimationFrame(SG.raf); const go = () => { let ok = true; for (let i = 0; i < 2 && ok; i++) ok = sgStep(); drawSG(); if (ok && SG.n < 20000) SG.raf = requestAnimationFrame(go); }; go(); });
+$('#sg-reset').addEventListener('click', () => { cancelAnimationFrame(SG.raf); Object.assign(SG, { b: new Array(P).fill(0), n: 0, hist: [new Array(P).fill(0)], last: null, done: false }); drawSG(); });
+fig($('#sg-cv'), drawSG);
+
+/* ---------- principal components regression ---------- */
+const EIG = LA.eig(MO.G), D2 = EIG.vals, D2S = sum(D2);
+const PCR = { M: 3 };
+function ridgeFactors(df) { if (df <= 0) return D2.map(() => 0); if (df >= P) return D2.map(() => 1); const l = LA.lamForDf(D2, df); return D2.map(d => d / (d + l)); }
+const pcrTest = range(9).map(M => testErr(LA.pcr(MO, M, EIG)));
+function drawPCR() {
+  const C = C0(), M = PCR.M, f = LA.pcr(MO, M, EIG), rf = ridgeFactors(M);
+  const v = frame($('#pcr-cv'), [0.4, 8.6], [0, 1.22], { l: 44 }); axes(v, '', 'share / factor', { sx: 1, sy: 0.2 }); clip(v);
+  const c = v.ctx; c.save();
+  D2.forEach((d, m) => { c.fillStyle = C.muted; c.globalAlpha = 0.28; const x0 = v.X(m + 1 - 0.32), x1 = v.X(m + 1 + 0.32); c.fillRect(x0, v.Y(d / D2S), x1 - x0, v.Y(0) - v.Y(d / D2S)); });
+  c.restore();
+  poly(v, rf.map((r, m) => [m + 1, r]), C.b, 1.6, [4, 4]); rf.forEach((r, m) => dot(v, m + 1, r, C.b, 4.5));
+  D2.forEach((_, m) => { const y = m < M ? 1 : 0, X = v.X(m + 1), Y = v.Y(y); c.save(); c.fillStyle = C.lda; c.fillRect(X - 6, Y - 6, 12, 12); c.restore(); });
+  D2.forEach((d, m) => label(v, v.X(m + 1), v.Y(d / D2S) - 9, fmt(100 * d / D2S, 0) + '%', C.muted, 'center'));
+  v.ctx.restore();
+  $('#pcr-m-o').textContent = M;
+  const mx = Math.max(...LSF.b.map(Math.abs), ...f.b.map(Math.abs)) * 1.05;
+  $('#pcr-bars').innerHTML = '<span class="mini-h">Coefficients (faint: least squares)</span>' + cfRows(NM.map((n, j) => ({ name: n, v: f.b[j], g: LSF.b[j], how: M ? `Σₘ θ̂ₘ vₘ,${n} over the first ${M} direction${M > 1 ? 's' : ''}\nleast squares: ${fmt(LSF.b[j], 3)}` : 'no components: every coefficient is 0' })), mx);
+  $('#pcr-tr').innerHTML = tip(fmt(LA.mse(f, XTR, YTR), 3), 'RSS / 67 on the training men');
+  $('#pcr-te').innerHTML = tip(fmt(pcrTest[M], 3), 'mean squared error on the 30 test men');
+  const v1 = EIG.vecs.map(r => r[0]), top = range(P).sort((a, b) => Math.abs(v1[b]) - Math.abs(v1[a])).slice(0, 3), t1 = LA.dot(v1, MO.c) / D2[0];
+  $('#run-pcr').innerHTML = `<b>Running example</b>: direction 1 carries ${tip(fmt(100 * D2[0] / D2S, 1) + '%', `d₁² / Σ d² = ${fmt(D2[0], 2)} / ${fmt(D2S, 2)}`)} of the inputs&rsquo; variance; its biggest weights are ${top.map(j => `${NM[j]} ${sgn(v1[j])}`).join(', ')}. &theta;&#770;<sub>1</sub> = &lang;z<sub>1</sub>, y&rang; / &lang;z<sub>1</sub>, z<sub>1</sub>&rang; = ${fmt(LA.dot(v1, MO.c), 3)} / ${fmt(D2[0], 3)} = ${tip(fmt(t1, 4), 'a one-input regression slope on the scores z₁')}.${M ? ` With M = ${M}, the fit uses &theta;&#770; = (${f.th.map(t => fmt(t, 3)).join(', ')}).` : ''}`;
+  const bm = pcrTest.indexOf(Math.min(...pcrTest));
+  $('#pcr-say').innerHTML = M === 0 ? 'No components: the model predicts the mean for everyone.'
+    : M === P ? `All eight directions: exactly least squares (test error ${fmt(pcrTest[P], 3)}). Ridge with df = 8 is least squares too.`
+    : `PCR keeps directions 1&ndash;${M} whole and drops ${M === P - 1 ? 'direction 8' : `directions ${M + 1}&ndash;8`}, which hold ${fmt(100 * sum(D2.slice(M)) / D2S, 0)}% of the inputs&rsquo; variance. Ridge with the same ${M} degrees of freedom keeps a little of every direction instead. On the test men PCR does best at M = ${bm} (${fmt(pcrTest[bm], 3)}), but remember that the test set may not be used to choose M.`;
+}
+$('#pcr-m').addEventListener('input', e => { PCR.M = +e.target.value; drawPCR(); });
+fig($('#pcr-cv'), drawPCR);
+
+/* ---------- PLS versus PCR in two dimensions ---------- */
+const PDD = (() => { const r = mulberry32(77); return range(120).map(() => [gaussOf(r), gaussOf(r), gaussOf(r)]); })();
+const PDS = { r: 0.8, a: 135 };
+function pdCalc() {
+  const A = Math.sqrt((1 + PDS.r) / 2), B = Math.sqrt((1 - PDS.r) / 2), th = PDS.a * Math.PI / 180, be = [1.5 * Math.cos(th), 1.5 * Math.sin(th)];
+  const X = PDD.map(([u, w]) => [A * u + B * w, A * u - B * w]), y = X.map((x, i) => LA.dot(x, be) + 0.6 * PDD[i][2]), mo = LA.moments(X, y);
+  const E = LA.eig(mo.G); let pc = [E.vecs[0][0], E.vecs[1][0]]; if (LA.dot(pc, mo.c) < 0) pc = pc.map(v => -v);
+  const nc = Math.hypot(...mo.c), pl = mo.c.map(v => v / nc), ls = LA.ols(mo, [0, 1]);
+  const dir = al => { const Ga = mo.G.map(r => LA.dot(r, al)), vv = LA.dot(al, Ga), cc = LA.dot(al, mo.c); return { varr: vv / mo.n, corr2: cc * cc / (vv * mo.yy), r2: cc * cc / (vv * mo.yy) }; };
+  return { X, y, mo, pc, pl, ls, be, P1: dir(pc), P2: dir(pl), r2ls: 1 - ls.rss / mo.yy };
+}
+function drawPD() {
+  const C = C0(), R = pdCalc(), lo = Math.min(...R.y), hi = Math.max(...R.y);
+  const v = frame($('#pd-cv'), [-3.3, 3.3], [-3.3, 3.3], { l: 36, b: 30 }, true); axes(v, 'x₁', 'x₂', { sx: 1, sy: 1 }); clip(v);
+  R.X.forEach((x, i) => dot(v, x[0], x[1], mix(C.a, C.b, (R.y[i] - lo) / (hi - lo)), 4.2));
+  const L = 2.9, bl = Math.hypot(...R.ls.b), lsd = R.ls.b.map(b => b / bl);
+  seg(v, -L * R.pc[0], -L * R.pc[1], 0, 0, C.muted, 2.4, null, 0.5); arrow(v, 0, 0, L * R.pc[0], L * R.pc[1], C.muted, 2.6);
+  seg(v, -L * R.pl[0], -L * R.pl[1], 0, 0, C.lda, 2.4, null, 0.5); arrow(v, 0, 0, L * R.pl[0], L * R.pl[1], C.lda, 2.6);
+  arrow(v, 0, 0, 2.4 * lsd[0], 2.4 * lsd[1], C.bad, 2, [6, 4]);
+  v.ctx.restore();
+  label(v, v.X(L * R.pc[0]) + 6, v.Y(L * R.pc[1]) - 8, 'PCR', C.muted); label(v, v.X(L * R.pl[0]) + 6, v.Y(L * R.pl[1]) + 10, 'PLS', C.lda);
+  $('#pd-r-o').textContent = fmt(PDS.r, 2); $('#pd-a-o').textContent = PDS.a + '°';
+  $('#pd-pc').innerHTML = tip(fmt(R.P1.r2, 3), 'R² of y on the scores along PCR’s first direction');
+  $('#pd-pl').innerHTML = tip(fmt(R.P2.r2, 3), 'R² of y on the scores along PLS’s first direction (∝ Xᵀy)');
+  $('#pd-ls').innerHTML = tip(fmt(R.r2ls, 3), 'least squares on both inputs (= two directions of either method)');
+  $('#run-pd').innerHTML = `<b>Running example</b>: PCR&rsquo;s direction has Var(X&alpha;) = ${tip(fmt(R.P1.varr, 3), 'the largest possible spread')} and Corr&sup2;(y, X&alpha;) = ${fmt(R.P1.corr2, 3)}, product ${tip(fmt(R.P1.varr * R.P1.corr2, 3), `${fmt(R.P1.varr, 3)} × ${fmt(R.P1.corr2, 3)}`)}. PLS&rsquo;s direction has Var = ${fmt(R.P2.varr, 3)} and Corr&sup2; = ${fmt(R.P2.corr2, 3)}, product ${tip(fmt(R.P2.varr * R.P2.corr2, 3), `${fmt(R.P2.varr, 3)} × ${fmt(R.P2.corr2, 3)}: the largest possible product`)}.`;
+  const off = Math.abs(((PDS.a - 45) % 180 + 180) % 180), ang = Math.min(off, 180 - off);
+  $('#pd-say').innerHTML = PDS.r < 0.1 ? 'With almost no correlation the cloud is round: no direction has much more spread than another, so PCR&rsquo;s first direction is close to arbitrary. PLS still points at the signal.'
+    : ang < 20 ? `The signal runs along the cloud&rsquo;s long axis, the direction PCR picks anyway, so both methods do well with one direction (R&sup2; ${fmt(R.P1.r2, 2)} and ${fmt(R.P2.r2, 2)}).`
+    : ang > 70 ? `The signal runs across the cloud&rsquo;s short axis. PCR&rsquo;s first direction ignores it (R&sup2; ${fmt(R.P1.r2, 2)}): PCR would have to keep both directions to see it. PLS tilts towards it (R&sup2; ${fmt(R.P2.r2, 2)}), although the spread term still pulls it towards the long axis.`
+    : `The signal is ${fmt(ang, 0)}&deg; off the long axis. PCR&rsquo;s first direction reaches R&sup2; ${fmt(R.P1.r2, 2)}, PLS&rsquo;s ${fmt(R.P2.r2, 2)}; least squares on both inputs gets ${fmt(R.r2ls, 2)}.`;
+}
+$('#pd-r').addEventListener('input', e => { PDS.r = +e.target.value; drawPD(); });
+$('#pd-a').addEventListener('input', e => { PDS.a = +e.target.value; drawPD(); });
+fig($('#pd-cv'), drawPD);
+
+/* ---------- PLS on the prostate data ---------- */
+const PLSS = { M: 1 }, PLSF = LA.pls(MO, P), plsTest = PLSF.path.map(testErr);
+function drawPLS() {
+  const M = PLSS.M, f = PLSF.path[M], st = M ? PLSF.steps[M - 1] : null;
+  $('#pls-m-o').textContent = M;
+  $('#pls-wh').innerHTML = M ? `Weights &phi;&#770; of step ${M}: &lang;x<sub>j</sub><sup>(${M - 1})</sup>, y&rang;` : 'No PLS steps yet';
+  if (st) { const mw = Math.max(...st.phi.map(Math.abs)) * 1.05; $('#pls-w').innerHTML = cfRows(NM.map((n, j) => ({ name: n, v: st.phi[j], col: 'var(--cC)', how: M === 1 ? `⟨x_${n}, y⟩ over the 67 training men (centred)` : `inner product of what is left of ${n}, after removing z₁…z${sub(M - 1)}, with y` })), mw); }
+  else $('#pls-w').innerHTML = '<p class="note">With M = 0 the model predicts the mean for everyone.</p>';
+  const mx = Math.max(...LSF.b.map(Math.abs), ...f.b.map(Math.abs)) * 1.05;
+  $('#pls-b').innerHTML = cfRows(NM.map((n, j) => ({ name: n, v: f.b[j], g: LSF.b[j], how: `after ${M} PLS step${M === 1 ? '' : 's'}\nleast squares: ${fmt(LSF.b[j], 3)}` })), mx);
+  $('#pls-tr').innerHTML = tip(fmt(LA.mse(f, XTR, YTR), 3), 'RSS / 67 on the training men');
+  $('#pls-te').innerHTML = tip(fmt(plsTest[M], 3), 'mean squared error on the 30 test men');
+  const s1 = PLSF.steps[0];
+  $('#run-pls').innerHTML = `<b>Running example</b>: step 1 weights each input by &lang;x<sub>j</sub>, y&rang;: lcavol gets ${tip(fmt(s1.phi[0], 2), '⟨x_lcavol, y⟩, centred, 67 men')}, lweight ${fmt(s1.phi[1], 2)}, age ${fmt(s1.phi[2], 2)}. Then &theta;&#770;<sub>1</sub> = &lang;z<sub>1</sub>, y&rang; / &lang;z<sub>1</sub>, z<sub>1</sub>&rang; = ${tip(fmt(s1.th, 5), `${fmt(LA.dot(s1.a, MO.c), 2)} / ${fmt(s1.zz, 1)}`)}.${st && M > 1 ? ` At step ${M}: &theta;&#770;<sub>${M}</sub> = ${fmt(st.th, 5)}.` : ''}`;
+  const bm = plsTest.indexOf(Math.min(...plsTest));
+  $('#pls-say').innerHTML = M === 0 ? 'Slide M to 1: a single PLS direction already uses every input.'
+    : M === 1 ? `One direction, and every input already has a coefficient: each is proportional to its own &lang;x<sub>j</sub>, y&rang;, because z<sub>1</sub> = X&phi;&#770;<sub>1</sub>. Compare with PCR, whose first direction ignores y. Test error ${fmt(plsTest[1], 3)}.`
+    : M === P ? `After ${P} steps PLS has reached least squares exactly (test error ${fmt(plsTest[P], 3)}).`
+    : `After ${M} steps the coefficients are ${fmt(100 * Math.hypot(...f.b.map((b, j) => b - LSF.b[j])) / Math.hypot(...LSF.b), 0)}% of least squares&rsquo; length away from it. PLS gets close to least squares in fewer steps than PCR, because it chooses directions that matter for y. Lowest test error: M = ${bm} (${fmt(plsTest[bm], 3)}).`;
+}
+$('#pls-m').addEventListener('input', e => { PLSS.M = +e.target.value; drawPLS(); });
+
+/* ---------- comparing paths with two correlated inputs ---------- */
+const CMP = { b: [4, 2], r: 0.5 }; let cmpV = null;
+function cmpPaths() {
+  const r = CMP.r, Sg = [[1, r], [r, 1]], c = [Sg[0][0] * CMP.b[0] + Sg[0][1] * CMP.b[1], Sg[1][0] * CMP.b[0] + Sg[1][1] * CMP.b[1]];
+  const ridge = [[0, 0]]; for (let i = 0; i <= 160; i++) { const l = Math.pow(10, 3 - 7 * i / 160); ridge.push(LA.solve([[1 + l, r], [r, 1 + l]], c)); } ridge.push(CMP.b.slice());
+  const lasso = [], tm = Math.max(...c.map(Math.abs)); let b = [0, 0];
+  for (let i = 0; i <= 200; i++) { const t = tm * (1 - i / 200); for (let it = 0; it < 2000; it++) { const o = b.slice(); for (let j = 0; j < 2; j++) { const z = c[j] - Sg[j][1 - j] * b[1 - j]; b[j] = Math.sign(z) * Math.max(0, Math.abs(z) - t); } if (Math.abs(o[0] - b[0]) + Math.abs(o[1] - b[1]) < 1e-12) break; } lasso.push(b.slice()); }
+  const j1 = Math.abs(c[0]) >= Math.abs(c[1]) ? 0 : 1, single = [0, 0]; single[j1] = c[j1];
+  const E = LA.eig(Sg), v1 = [E.vecs[0][0], E.vecs[1][0]], t1 = LA.dot(v1, c) / E.vals[0], pcr1 = v1.map(x => x * t1);
+  const Gc = [LA.dot(Sg[0], c), LA.dot(Sg[1], c)], th = LA.dot(c, c) / LA.dot(c, Gc), pls1 = c.map(x => x * th);
+  const lasFirst = lasso.find(p => Math.abs(p[0]) > 1e-9 && Math.abs(p[1]) > 1e-9);
+  return { c, ridge, lasso, single, j1, pcr1, pls1, E, lasFirst };
+}
+function drawCMP() {
+  const C = C0(), R = cmpPaths();
+  const v = cmpV = frame($('#cmp-cv'), [-1.2, 6.2], [-1.6, 4.6], { l: 36, b: 30 }, true); axes(v, 'β₁', 'β₂', { sx: 1, sy: 1 }); clip(v);
+  seg(v, -10, 0, 10, 0, C.muted, 1.2); seg(v, 0, -10, 0, 10, C.muted, 1.2);
+  poly(v, R.ridge, C.a, 2.6); poly(v, R.lasso, C.b, 2.6);
+  poly(v, [[0, 0], R.pcr1, CMP.b], C.lda, 2.2, [7, 4]); poly(v, [[0, 0], R.pls1, CMP.b], C.c, 2.2, [3, 4]);
+  dot(v, R.pcr1[0], R.pcr1[1], C.lda, 5); dot(v, R.pls1[0], R.pls1[1], C.c, 5);
+  [[0, 0], R.single].forEach(p => dot(v, p[0], p[1], C.q, 5.5));
+  star(v, CMP.b[0], CMP.b[1], C.q, 10);
+  v.ctx.restore();
+  $('#cmp-r-o').textContent = fmt(CMP.r, 2);
+  const nm = j => 'β' + sub(j + 1);
+  $('#cmp-b').innerHTML = tip(`(${fmt(CMP.b[0], 1)}, ${fmt(CMP.b[1], 1)})`, 'least squares with a huge sample lands here');
+  $('#cmp-1').innerHTML = tip(`${nm(R.j1)} = ${fmt(R.c[R.j1], 2)}`, `alone, input ${R.j1 + 1} gets slope (Σβ)${sub(R.j1 + 1)} = β${sub(R.j1 + 1)} + ρβ${sub(2 - R.j1)}\nthe largest of |(Σβ)₁|, |(Σβ)₂|`);
+  const d1 = 1 + Math.abs(CMP.r), d2 = 1 - Math.abs(CMP.r), lam = 0.5;
+  $('#run-cmp').innerHTML = `<b>Running example</b>: with &rho; = ${fmt(CMP.r, 2)} the two directions have d&sup2; &prop; 1 + |&rho;| = ${fmt(d1, 2)} and 1 &minus; |&rho;| = ${fmt(d2, 2)} (per person). Ridge with &lambda; = 0.5 keeps ${tip(fmt(100 * d1 / (d1 + lam), 0) + '%', `${fmt(d1, 2)} / (${fmt(d1, 2)} + 0.5)`)} of the first and ${tip(fmt(100 * d2 / (d2 + lam), 0) + '%', `${fmt(d2, 2)} / (${fmt(d2, 2)} + 0.5)`)} of the second; PCR with M = 1 keeps 100% and 0%.`;
+  const oth = 1 - R.j1, pcrDir = Math.abs(CMP.r) < 1e-9 ? 'one of the axes (with &rho; = 0 the two components tie)' : CMP.r > 0 ? 'the diagonal (1, 1)' : 'the diagonal (1, &minus;1)';
+  $('#cmp-say').innerHTML = `Out of zero, the lasso moves along the ${nm(R.j1)} axis alone, the same input best subset takes first, and ${nm(oth)} joins ${R.lasFirst ? `only once ${nm(R.j1)} reaches ${fmt(R.lasFirst[R.j1], 2)}` : 'at the very end'}. Ridge moves both coefficients at once and never sets either to zero. PCR stops first on ${pcrDir}, the high-variance direction, whatever &beta; is; PLS stops first along &Sigma;&beta; = (${fmt(R.c[0], 2)}, ${fmt(R.c[1], 2)}), which leans towards the signal. <b>Drag the star</b> to (2, 4): PCR still stops on the same diagonal, while PLS swings round to follow the signal.`;
+}
+draggable($('#cmp-cv'), () => cmpV, () => [CMP.b], drawCMP);
+$('#cmp-r').addEventListener('input', e => { CMP.r = +e.target.value; drawCMP(); });
+$('#cmp-reset').addEventListener('click', () => { CMP.b = [4, 2]; CMP.r = 0.5; $('#cmp-r').value = 0.5; drawCMP(); });
+fig($('#cmp-cv'), drawCMP);
+
+/* ---------- many outcomes: reduced rank and curds and whey ---------- */
+const MP = 6, MK = 5, MN = 40, MT = 30;
+const MOS = { r: 2, m: 2, s: 1.5 };
+const MSIM = (() => { const r = mulberry32(99), g = () => gaussOf(r); return range(MT).map(() => ({ X: range(MN).map(() => range(MP).map(g)), E: range(MN).map(() => range(MK).map(g)) })); })();
+const MB = (() => { const out = {}; [1, 2, 5].forEach(rk => { const r = mulberry32(500 + rk), A = range(MP).map(() => range(rk).map(() => gaussOf(r))), Cm = range(MK).map(() => range(rk).map(() => gaussOf(r)));
+  let B = LA.mm(A, LA.T(Cm)); const sc = Math.sqrt(MK / sum(B.flat().map(x => x * x))); out[rk] = B.map(row => row.map(x => x * sc)); }); return out; })();
+function mvFit(X, Y) {
+  const N = X.length, mx = LA.colMeans(X), my = LA.colMeans(Y), Xc = X.map(r => r.map((v, j) => v - mx[j])), Yc = Y.map(r => r.map((v, j) => v - my[j]));
+  const Sxx = LA.mm(LA.T(Xc), Xc).map(r => r.map(v => v / N)), Syy = LA.mm(LA.T(Yc), Yc).map(r => r.map(v => v / N)), Sxy = LA.mm(LA.T(Xc), Yc).map(r => r.map(v => v / N));
+  const Bh = LA.T(LA.T(Sxy).map(col => LA.solve(Sxx, col)));                       // p × K, separate regressions
+  const Yih = LA.symFn(Syy, e => 1 / Math.sqrt(e)), Mq = LA.mm(LA.mm(Yih, LA.mm(LA.T(Sxy), Bh)), Yih);   // Syy^-½ Syx Sxx⁻¹ Sxy Syy^-½
+  const E = LA.eig(Mq), U = LA.mm(Yih, E.vecs), Ui = LA.mm(LA.T(U), Syy), c2 = E.vals.map(v => Math.max(0, Math.min(1, v)));
+  const keep = d => LA.mm(LA.mm(Bh, LA.mm(U, d.map((x, i) => d.map((_, j) => i === j ? x : 0)))), Ui);
+  return { mx, my, Bh, c2, U, Ui, keep };
+}
+function mvErr(Bt, f, B) { let s = 0; for (let i = 0; i < MP; i++) for (let k = 0; k < MK; k++) s += (B[i][k] - Bt[i][k]) ** 2; for (let k = 0; k < MK; k++) { let b0 = f.my[k]; for (let i = 0; i < MP; i++) b0 -= f.mx[i] * B[i][k]; s += b0 * b0; } return s / MK; }
+let MOC = null;
+function moCalc() {
+  const Bt = MB[MOS.r], s = MOS.s, lamCW = c2 => c2 / (c2 + (MP / MN) * (1 - c2)); const acc = { ls: 0, rr: new Array(MK + 1).fill(0), cw: 0 }; let first = null;
+  MSIM.forEach(({ X, E }, t) => { const Y = X.map((x, i) => range(MK).map(k => { let v = 0; for (let j = 0; j < MP; j++) v += x[j] * Bt[j][k]; return v + s * E[i][k]; }));
+    const f = mvFit(X, Y); if (!t) first = f; acc.ls += mvErr(Bt, f, f.Bh) + s * s;
+    for (let m = 1; m <= MK; m++) acc.rr[m] += mvErr(Bt, f, f.keep(range(MK).map(i => +(i < m)))) + s * s;
+    acc.cw += mvErr(Bt, f, f.keep(f.c2.map(lamCW))) + s * s; });
+  return { ls: acc.ls / MT, rr: acc.rr.map(v => v / MT), cw: acc.cw / MT, first, lamCW };
+}
+function drawMO() {
+  MOC = MOC || moCalc(); const C = C0(), R = MOC, s2 = MOS.s ** 2, m = MOS.m;
+  const vals = [R.ls, R.cw, ...R.rr.slice(1)], lo = Math.min(s2, ...vals), hi = Math.max(...vals), pad = (hi - lo) * 0.12 || 0.1;
+  const v = frame($('#mo-cv'), [0.6, 5.4], [Math.max(0, lo - pad), hi + pad], { l: 48 }); axes(v, 'rank kept m', 'test error', { sx: 1 }); clip(v);
+  seg(v, 0, s2, 6, s2, C.q, 1, [1, 4]); seg(v, 0, R.ls, 6, R.ls, C.muted, 2, [7, 4]); seg(v, 0, R.cw, 6, R.cw, C.b, 2, [7, 4]);
+  poly(v, range(MK).map(i => [i + 1, R.rr[i + 1]]), C.lda, 2.6); range(MK).forEach(i => dot(v, i + 1, R.rr[i + 1], C.lda, 4.2)); ring(v, m, R.rr[m], C.q, 9);
+  v.ctx.restore();
+  $('#mo-m-o').textContent = m; $('#mo-s-o').textContent = fmt(MOS.s, 2);
+  const how = 'average over 30 studies of σ² + (‖B − B̂‖² + intercept error²) / K\n(exact for new x ~ N(0, I))';
+  $('#mo-ls').innerHTML = tip(fmt(R.ls, 3), how); $('#mo-rr').innerHTML = tip(fmt(R.rr[m], 3), 'rank ' + m + ': ' + how); $('#mo-cw').innerHTML = tip(fmt(R.cw, 3), how);
+  const c = R.first.c2.map(Math.sqrt);
+  $('#mo-c').innerHTML = tip(c.map(x => fmt(x, 2)).join(' '), 'canonical correlations c₁ … c₅ in the first simulated study');
+  $('#run-mo').innerHTML = `<b>Running example</b>: in the first simulated study the canonical correlations are ${c.map((x, i) => `c${sub(i + 1)} = ${fmt(x, 2)}`).join(', ')}. With p/N = 6/40 = 0.15, curds and whey keeps ${c.map((x, i) => tip(fmt(R.lamCW(x * x), 2), `${fmt(x * x, 3)} / (${fmt(x * x, 3)} + 0.15 × ${fmt(1 - x * x, 3)})`)).join(', ')} of each canonical direction; reduced rank with m = ${m} keeps ${range(MK).map(i => i < m ? '1' : '0').join(', ')}.`;
+  const bm = range(MK).map(i => i + 1).reduce((a, k) => R.rr[k] < R.rr[a] ? k : a, 1), tr = MOS.r;
+  $('#mo-say').innerHTML = `${m === MK ? 'With m = 5 nothing is cut: reduced rank is the separate least-squares fits.' : `Rank ${m} gives ${fmt(R.rr[m], 3)} against ${fmt(R.ls, 3)} for separate fits.`} The best rank here is <b>${bm}</b>${tr < MK ? (bm === tr ? ', the true rank' : bm < tr ? `, below the true rank ${tr}: with this much noise the weaker hidden combination is not worth estimating` : `, above the true rank ${tr}`) : ''}. Curds and whey (${fmt(R.cw, 3)}) needs no rank at all and ${R.cw < R.ls ? 'beats' : 'does not beat'} the separate fits${R.cw <= R.rr[bm] + 1e-9 ? ', and even beats the best rank' : ''}.${tr === MK ? ' With a full-rank truth every cut costs bias; shrinkage is the safer bet.' : ''}`;
+}
+seg1('[data-mr]', 'data-mr', r => { MOS.r = +r; MOC = null; drawMO(); });
+$('#mo-m').addEventListener('input', e => { MOS.m = +e.target.value; drawMO(); });
+$('#mo-s').addEventListener('input', e => { MOS.s = +e.target.value; MOC = null; drawMO(); });
+fig($('#mo-cv'), drawMO);
+
+/* ---------- project: six methods, repeated 10-fold CV, one-standard-error rule ---------- */
+const LAMS = range(15).map(i => LA.lamForDf(D2, 0.5 * (i + 1)));
+const AMAX = Math.max(...MO.c.map(Math.abs)) / MO.n, ALPHAS = range(30).map(i => AMAX * Math.pow(10, -3 * (i + 1) / 30));
+const meanFit = mo => ({ b0: mo.my, b: new Array(mo.p).fill(0) });
+function gridFits(mo) {   // every method's whole grid on one training set
+  const as = LA.allSubsets(mo), E = LA.eig(mo.G); let b = null;
+  return {
+    LS: [LA.ols(mo, ALL)],
+    Subset: as.best.map(m => LA.ols(mo, LA.maskToS(m, P))),
+    Ridge: [meanFit(mo), ...LAMS.map(l => LA.ridge(mo, l)), LA.ols(mo, ALL)],
+    Lasso: [meanFit(mo), ...ALPHAS.map(a => { const f = LA.lasso(mo, a, b); b = f.b; return f; })],
+    PCR: LA.pcr(mo, P, E).path,
+    PLS: LA.pls(mo, P).path };
+}
+const METH = ['LS', 'Subset', 'Ridge', 'Lasso', 'PCR', 'PLS'];
+const FULL = gridFits(MO), L1LS = sum(LSF.b.map(Math.abs));
+const XS = { LS: [8], Subset: range(9), Ridge: range(17).map(i => i / 2), Lasso: FULL.Lasso.map(f => sum(f.b.map(Math.abs)) / L1LS), PCR: range(9), PLS: range(9) };
+const LAB = { LS: () => 'all 8', Subset: i => 'k = ' + i, Ridge: i => 'df = ' + fmt(i / 2, i % 2 ? 1 : 0), Lasso: i => 's = ' + fmt(XS.Lasso[i], 2), PCR: i => 'M = ' + i, PLS: i => 'M = ' + i };
+const XL = { Subset: 'subset size k', Ridge: 'degrees of freedom df(λ)', Lasso: 'shrinkage s = ‖β‖₁ / ‖β̂_LS‖₁', PCR: 'directions M', PLS: 'directions M' };
+const TESTS = {}; METH.forEach(m => { TESTS[m] = FULL[m].map(f => LA.sqErr(f, XTE, YTE)); });
+const PJ = { meth: 'Subset', sh: 0, err: null, done: false };
+function pjCompute() {
+  const err = {}; METH.forEach(m => { err[m] = FULL[m].map(() => new Float64Array(100)); });
+  let r = 0;
+  const one = () => {
+    const F = PD.folds[r];
+    for (let f = 0; f < 10; f++) { const Xa = [], ya = [], Xb = [], yb = []; F.forEach((g, i) => { if (g === f) { Xb.push(XTR[i]); yb.push(YTR[i]); } else { Xa.push(XTR[i]); ya.push(YTR[i]); } });
+      const G = gridFits(LA.moments(Xa, ya)); METH.forEach(m => G[m].forEach((fit, s) => { err[m][s][r * 10 + f] = LA.mse(fit, Xb, yb); })); }
+    r++; $('#pj-prog').textContent = r < 10 ? `Cross-validating in your browser: shuffle ${r} of 10…` : '';
+    if (r < 10) setTimeout(one, 0); else { PJ.err = err; PJ.done = true; drawPJ(); drawTable(); }
+  };
+  setTimeout(one, 30);
+}
+function cvStats(m, sh) {
+  const rows = PJ.err[m].map(a => { const v = sh ? Array.from(a.slice((sh - 1) * 10, sh * 10)) : Array.from(a), mu = LA.mean(v), sd = Math.sqrt(v.reduce((s, x) => s + (x - mu) ** 2, 0) / (v.length - 1)); return { mu, se: sd / Math.sqrt(10) }; });
+  const best = rows.reduce((a, r, i) => r.mu < rows[a].mu ? i : a, 0), thr = rows[best].mu + rows[best].se, pick = rows.findIndex(r => r.mu <= thr);
+  return { rows, best, thr, pick };
+}
+const teMean = (m, i) => LA.mean(TESTS[m][i]), teSe = (m, i) => { const v = TESTS[m][i], mu = LA.mean(v); return Math.sqrt(v.reduce((s, x) => s + (x - mu) ** 2, 0) / (v.length - 1)) / Math.sqrt(v.length); };
+function drawPJ() {
+  const C = C0(), m = PJ.meth, xs = XS[m], cv = $('#pj-cv');
+  $('#pj-sh-o').textContent = PJ.sh ? 'only shuffle ' + PJ.sh : 'all 10';
+  if (!PJ.done) { const v = frame(cv, [0, 1], [0, 1]); label(v, v.w / 2, v.h / 2, 'cross-validating…', C.muted, 'center'); return; }
+  const S = cvStats(m, PJ.sh), te = FULL[m].map((_, i) => teMean(m, i)), hi = Math.max(...S.rows.map(r => r.mu + r.se), ...te), lo = Math.min(...S.rows.map(r => r.mu - r.se), ...te);
+  const xr = m === 'Lasso' ? [-0.04, 1.04] : [-0.3, 8.3], v = frame(cv, xr, [Math.max(0, lo - 0.05), hi + 0.05], { l: 44 }); axes(v, XL[m], 'mean squared error', { sx: m === 'Lasso' ? 0.2 : 1 }); clip(v);
+  seg(v, -1, S.thr, 9, S.thr, C.muted, 1.2, [6, 4]);
+  poly(v, xs.map((x, i) => [x, te[i]]), C.b, 2, null, 0.85);
+  poly(v, xs.map((x, i) => [x, S.rows[i].mu]), C.lda, 1.6, null, 0.6);
+  xs.forEach((x, i) => { const r = S.rows[i]; seg(v, x, r.mu - r.se, x, r.mu + r.se, C.lda, 1.3, null, 0.7); dot(v, x, r.mu, C.lda, 3.8); });
+  ring(v, xs[S.best], S.rows[S.best].mu, C.muted, 8, 1.4); star(v, xs[S.pick], S.rows[S.pick].mu, C.q, 9);
+  v.ctx.restore();
+  const p = S.pick, b = S.best;
+  $('#pj-pick').innerHTML = tip(LAB[m](p), `simplest setting with CV ≤ ${fmt(S.rows[b].mu, 3)} + ${fmt(S.rows[b].se, 3)} = ${fmt(S.thr, 3)}`);
+  $('#pj-te').innerHTML = tip(fmt(te[p], 3), `mean squared error on the 30 test men\nstd error ${fmt(teSe(m, p), 3)}`);
+  $('#run-cv').innerHTML = `<b>Running example</b>: for ${m === 'Subset' ? 'best subset' : m}${PJ.sh ? ` (shuffle ${PJ.sh} only)` : ''}, the lowest CV error is ${tip(fmt(S.rows[b].mu, 3), `average of ${PJ.sh ? 10 : 100} fold errors`)} at ${LAB[m](b)}, with SE ${tip(fmt(S.rows[b].se, 3), 'standard deviation of the fold errors / √10')}. The threshold is ${fmt(S.rows[b].mu, 3)} + ${fmt(S.rows[b].se, 3)} = ${fmt(S.thr, 3)}, and the simplest setting under it is <b>${LAB[m](p)}</b> (CV ${fmt(S.rows[p].mu, 3)}).`;
+  const others = PJ.sh ? null : range(10).map(s => LAB[m](cvStats(m, s + 1).pick)), distinct = others ? [...new Set(others)] : null;
+  $('#pj-say').innerHTML = PJ.sh ? `With one shuffle of the folds, the rule picks ${LAB[m](p)}${p === cvStats(m, 0).pick ? ', the same as the 10-shuffle average' : `; averaging all 10 shuffles picks ${LAB[m](cvStats(m, 0).pick)}`}. Slide through the shuffles: with only 67 men, which men share a fold changes the answer.`
+    : `The CV curve is nearly flat from ${LAB[m](p)} onwards, and the error bars overlap, so the rule takes the simplest model it cannot tell apart from the best. One shuffle at a time it would pick ${distinct.length === 1 ? 'the same setting every time' : distinct.length + ' different settings (' + distinct.join(', ') + ')'}: that instability is why we average 10 shuffles.`;
+}
+function drawTable() {
+  if (!PJ.done) return;
+  const picks = METH.map(m => m === 'LS' ? 0 : cvStats(m, 0).pick), fits = METH.map((m, i) => FULL[m][picks[i]]);
+  const tes = METH.map((m, i) => teMean(m, picks[i])), ses = METH.map((m, i) => teSe(m, picks[i])), bestTe = Math.min(...tes);
+  const hd = { LS: 'Least squares', Subset: 'Best subset', Ridge: 'Ridge', Lasso: 'Lasso', PCR: 'PCR', PLS: 'PLS' };
+  const cell = (v, how) => Math.abs(v) < 5e-4 ? '<td class="num" style="color:var(--muted)">.</td>' : `<td class="num">${tip(fmt(v, 3), how)}</td>`;
+  $('#pj-tbl').innerHTML = `<thead><tr><th>Term</th>${METH.map(m => `<th>${hd[m]}</th>`).join('')}</tr></thead><tbody>`
+    + `<tr><td>picked by CV</td>${METH.map((m, i) => `<td>${LAB[m](picks[i])}</td>`).join('')}</tr>`
+    + `<tr><td>intercept</td>${fits.map(f => cell(f.b0, 'fitted on all 67 training men')).join('')}</tr>`
+    + NM.map((n, j) => `<tr><td>${n}</td>${fits.map((f, i) => cell(f.b[j], `${hd[METH[i]]}, ${LAB[METH[i]](picks[i])}`)).join('')}</tr>`).join('')
+    + `<tr style="font-weight:600"><td>test error</td>${tes.map(t => `<td class="num"${t < bestTe + 5e-4 ? ' style="color:var(--cA)"' : ''}>${tip(fmt(t, 3), 'mean of (y − ŷ)² over the 30 test men')}</td>`).join('')}</tr>`
+    + `<tr><td>std error</td>${ses.map(s => `<td class="num">${tip(fmt(s, 3), 'sd of the 30 squared errors / √30')}</td>`).join('')}</tr></tbody>`;
+  const w = METH.filter((m, i) => tes[i] < tes[0] - 1e-9).map(m => hd[m]);
+  $('#pj-tsay').innerHTML = `${w.length ? w.join(', ') + ' beat' + (w.length === 1 ? 's' : '') : 'No method beats'} least squares (${fmt(tes[0], 3)}) on the test men, and every method uses fewer effective inputs. But look at the standard errors: about ${fmt(LA.mean(ses), 2)}, far bigger than the gaps between the methods (${fmt(Math.max(...tes) - Math.min(...tes), 3)} from best to worst). Thirty test men cannot tell these methods apart; what they do show is that a model using two or three inputs predicts as well as one using all eight.`;
+  // compare with the scikit-learn printout
+  const out = $('#pj-out').textContent.split('\n'), want = {}; out.forEach(l => { const t = l.trim().split(/\s+/); if (t.length === 7 && (NM.includes(t[0]) || t[0] === 'intercept')) want[t[0]] = t.slice(1); else if (t.length === 8 && t[0] === 'test') want.test = t.slice(2); else if (t.length === 8 && t[0] === 'std') want.std = t.slice(2); });
+  const mine = { intercept: fits.map(f => f.b0), test: tes, std: ses }; NM.forEach((n, j) => { mine[n] = fits.map(f => f.b[j]); });
+  let cells = 0, bad = []; Object.keys(want).forEach(k => want[k].forEach((s, i) => { cells++; const v = mine[k][i], str = Math.abs(v) < 5e-4 && k !== 'test' && k !== 'std' ? '.' : fmt(v, 3); if (str !== s && !(s === '.' && str === '.')) bad.push(`${k}/${METH[i]}: ${str} vs ${s}`); }));
+  $('#pj-agree').innerHTML = cells ? (bad.length ? `Your browser&rsquo;s table differs from scikit-learn&rsquo;s printout in ${bad.length} of ${cells} cells: ${bad.join('; ')}.` : `Your browser&rsquo;s table matches scikit-learn&rsquo;s printout in all <b>${cells}</b> cells, and the CV picks are the same.`) + ' The page uses its own solvers (exhaustive subsets, a direct ridge solve, coordinate descent for the lasso with a tolerance of 10<sup>&minus;14</sup>, a Jacobi eigen-decomposition for PCR, and the book&rsquo;s PLS algorithm), so agreement is a real check, not a copy. The folds are the same because the page carries NumPy&rsquo;s fold assignments with the data.' : '';
+}
+seg1('[data-pm]', 'data-pm', m => { PJ.meth = m; drawPJ(); });
+$('#pj-sh').addEventListener('input', e => { PJ.sh = +e.target.value; drawPJ(); });
+fig($('#pj-cv'), drawPJ);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+drawHero(); drawWhy(); drawBest(); drawBoom(); drawSW(); drawSG(); drawPCR(); drawPD(); drawPLS(); drawCMP(); drawMO(); drawPJ();
+pjCompute();
+window.__x011 = { LA, MO, AS, PJ, FULL, cvStats, TESTS, MSIM, MB, MOS, mvFit, moCalc, SWD, SG, CMP, cmpPaths, PDS, pdCalc, XTR, YTR, XTE, YTE };
+redrawAll();
+})();
+</script>
+</body>
+</html>

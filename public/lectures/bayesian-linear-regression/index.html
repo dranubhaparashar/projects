@@ -1,0 +1,1397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on Bayesian linear regression: Bayesian curve fitting with a polynomial, a Gaussian prior over the weights, the posterior as prior times likelihood, sequential learning one point at a time, ridge regression as the MAP estimate and the lasso's Laplace prior, the predictive distribution and its error bars, the equivalent kernel, Normal-Gamma priors and Student-t predictions when the noise is unknown, and a project that forecasts Mauna Loa CO2 with widening predictive bands, verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Bayesian Linear Regression</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+table.race td:first-child { white-space: nowrap; }
+table.race td.num, table.race th { text-align: right; }
+table.race th:first-child { text-align: left; }
+table.race tr.sel td { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.duo { aspect-ratio: 2.1 / 1; }
+.sq-plot { aspect-ratio: 3 / 1.12; }
+.kn-plot { aspect-ratio: 16 / 11; }
+.pd-bar { aspect-ratio: 5.2 / 1; margin-top: 8px; }
+@media (max-width: 640px) {
+  .tall-m { aspect-ratio: 1 / 0.85; }
+  .duo { aspect-ratio: 1 / 1.75; }
+  .sq-plot { aspect-ratio: 1 / 2.45; }
+  .kn-plot { aspect-ratio: 1 / 1.95; }
+  .pd-bar { aspect-ratio: 3 / 1; }
+}
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Bayesian Linear Regression <span>&middot; error bars that know where the data are</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Curve fitting</a>
+      <a href="#prior">Prior</a>
+      <a href="#posterior">Posterior</a>
+      <a href="#sequential">Point by point</a>
+      <a href="#ridge">Ridge = MAP</a>
+      <a href="#predictive">Error bars</a>
+      <a href="#kernel">Equivalent kernel</a>
+      <a href="#noise">Unknown noise</a>
+      <a href="#project">CO&#8322; project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.2d · Bayesian linear regression</div>
+      <h1>Bayesian Linear Regression</h1>
+      <div class="sub">Error bars that know where the data are</div>
+      <p class="lead">Least squares hands you one set of weights and one curve, and it is equally sure of that curve everywhere. The Bayesian alternative treats the weights as unknown, puts a Gaussian belief over them, and lets every data point sharpen that belief. Predictions then come with honest error bars: <strong>narrow where you have data, wide where you don't</strong>. On the right, <strong>click anywhere to add a point</strong> and watch the band pinch around it.</p>
+      <dl class="facts">
+        <div><dt>The prior</dt><dd>w ~ N(0, &alpha;<sup>&minus;1</sup>I): small weights are more plausible than large ones</dd></div>
+        <div><dt>The answer</dt><dd>A Gaussian posterior over the weights, and predictions with variance 1/&beta; + &phi;(x)<sup>&top;</sup>S<sub>N</sub>&phi;(x)</dd></div>
+        <div><dt>In practice</dt><dd>Forecasting, active learning, Bayesian optimisation, and the road to Gaussian processes</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="fig-head"><div class="btns"><button type="button" class="btn" id="hero-undo">Undo</button><button type="button" class="btn" id="hero-clear">Clear</button><button type="button" class="btn" id="hero-draw">New draws</button></div></div>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Predictive band of a Bayesian regression; click to add data points"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Curve fitting, the Bayesian way</a></li>
+    <li><a href="#prior"><i>02</i>A Gaussian prior over the weights</a></li>
+    <li><a href="#posterior"><i>03</i>Prior times likelihood</a></li>
+    <li><a href="#sequential"><i>04</i>Learning one point at a time</a></li>
+    <li><a href="#ridge"><i>05</i>Ridge is the MAP estimate</a></li>
+    <li><a href="#predictive"><i>06</i>Error bars that widen</a></li>
+    <li><a href="#kernel"><i>07</i>The equivalent kernel</a></li>
+    <li><a href="#noise"><i>08</i>Unknown noise, Student-t bars</a></li>
+    <li><a href="#project"><i>09</i>Forecasting Mauna Loa CO₂</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Curve fitting, the Bayesian way</h2>
+    <div class="prose">
+      <p>Go back to the polynomial curve fit of chapter 1.2: noisy points drawn from a sine wave, and a polynomial y(x, w) = w<sub>0</sub> + w<sub>1</sub>x + &hellip; + w<sub>M</sub>x<sup>M</sup>. Maximum likelihood picks one weight vector w<sub>ML</sub>, estimates the noise level from the leftover scatter, and predicts every new target with the <em>same</em> error bar, whether x sits among the data or far from them. Adding a penalty on the weights (ridge) tames the wiggles but still gives one curve.</p>
+      <p>A Bayesian keeps <em>every</em> weight vector in play, each weighted by how plausible it is after seeing the data, and predicts by averaging over all of them. This averaging, called <em class="term">marginalising</em> over w, is the step that maximum likelihood and MAP skip. For a Gaussian prior and Gaussian noise the average can be done exactly, and it is again a Gaussian, whose mean and variance both depend on x. Bishop's classic setting is a 9th-order polynomial with &alpha; = 5&times;10<sup>&minus;3</sup> and &beta; = 11.1 (noise sd 0.3). <strong>Add points one by one, then hide the right-hand side of the data</strong>: maximum likelihood shrugs, while the Bayesian band balloons where there is nothing to learn from.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} p(t \mid x, \mathbf{x}, \mathbf{t}) &= \int p(t \mid x, \mathbf{w}) \\ &\qquad \times p(\mathbf{w} \mid \mathbf{x}, \mathbf{t})\, d\mathbf{w} \\ &= \mathcal{N}\big(t \mid m(x),\ s^2(x)\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> to predict the target t at a new input x, ask every possible weight vector for its prediction and average them, each weighted by its posterior probability given the training inputs <b>x</b> and targets <b>t</b>. With Gaussians throughout, the result is a Gaussian with a mean m(x) and a variance s&sup2;(x) that both change with x.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The predictive of t given x and the data is the integral of the model's prediction times the posterior over w; it is a Gaussian with mean m of x and variance s squared of x.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:18px"><div class="m">\[ \begin{aligned} m(x) &= \beta\, \boldsymbol\phi(x)^{\top} \mathbf{S} \textstyle\sum_{n} \boldsymbol\phi(x_n)\, t_n \\ s^2(x) &= \beta^{-1} + \boldsymbol\phi(x)^{\top} \mathbf{S}\, \boldsymbol\phi(x) \\ \mathbf{S}^{-1} &= \alpha \mathbf{I} + \beta \textstyle\sum_{n} \boldsymbol\phi(x_n)\, \boldsymbol\phi(x_n)^{\top} \end{aligned} \]</div><div class="read"><b>Read it as:</b> &phi;(x) = (1, x, x&sup2;, &hellip;, x<sup>M</sup>) lists the polynomial's features at x. S is the covariance of the weights after seeing the data: the prior precision &alpha; plus &beta; times the data's own &ldquo;spread&rdquo; matrix, inverted. The variance has two parts: the noise 1/&beta; that no amount of data removes, and the weights' remaining uncertainty seen through &phi;(x), which is large wherever the data say little.</div><div class="eq-say"><b>Say it</b><em>&ldquo;m of x is beta, phi-x transpose, S, times the sum of phi-x-n t-n. s squared is one over beta plus phi-x transpose S phi-x. S inverse is alpha I plus beta times the sum of phi phi-transpose.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-why" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Where the data are"><button type="button" data-wd="all" aria-pressed="true">Data everywhere</button><button type="button" data-wd="left">Only x &lt; 0.55</button></div></div>
+        <div class="plot ar-16x10"><canvas id="why-cv" aria-label="Maximum-likelihood fit and Bayesian predictive band for a polynomial; move the mouse to probe x"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--lda)"></i>Bayesian mean m(x), shaded &plusmn;1 and &plusmn;2 s(x)</span><span><i class="sw" style="background:var(--muted)"></i>maximum likelihood, dashed &plusmn;2 noise sd</span><span><i class="sw" style="background:var(--cA)"></i>true sin(2&pi;x)</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Polynomial order"><button type="button" data-wm="1">M = 1</button><button type="button" data-wm="3">M = 3</button><button type="button" data-wm="9" aria-pressed="true">M = 9</button></div>
+        <div class="ctrl"><div class="top"><label for="why-n">Points used, N</label><output id="why-n-o"></output></div><input type="range" id="why-n" min="0" max="25" step="1" value="10"></div>
+        <div class="ctrl"><div class="top"><label for="why-x">Probe input x</label><output id="why-x-o"></output></div><input type="range" id="why-x" min="0" max="1" step="0.005" value="0.8"></div>
+        <div class="stats"><div class="stat"><div class="v" id="why-m"></div><div class="k">Bayesian mean m(x)</div></div><div class="stat"><div class="v" id="why-s"></div><div class="k">Bayesian sd s(x)</div></div><div class="stat"><div class="v" id="why-ml"></div><div class="k">ML prediction &plusmn; sd</div></div></div>
+        <p class="note" id="why-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRIOR -->
+<section class="chap" id="prior">
+  <div class="wrap">
+    <div class="tag">Before any data</div>
+    <h2>A Gaussian prior over the weights</h2>
+    <div class="prose">
+      <p>To see the machinery clearly, shrink the model to a straight line, y(x, w) = w<sub>0</sub> + w<sub>1</sub>x, so that each weight vector is a single point in a flat <em class="term">weight space</em> and each point there is a whole line in <em class="term">data space</em>. The model has two ingredients. The <em class="term">likelihood</em> says how targets scatter around the line: Gaussian noise with precision &beta; (precision means one over the variance). The <em class="term">prior</em> says which lines we find plausible before seeing anything: a round Gaussian centred on w = 0, with precision &alpha;. Large &alpha; means &ldquo;I'm sure the weights are small&rdquo;; small &alpha; means &ldquo;almost anything goes&rdquo;.</p>
+      <p>Every weight vector drawn from the prior is a line. <strong>Turn &alpha; and draw again</strong>; click in the weight-space panel to pick your own w and see which line it is.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ p(\mathbf{w} \mid \alpha) = \mathcal{N}\big(\mathbf{w} \mid \mathbf{0},\ \alpha^{-1}\mathbf{I}\big) \]</div><div class="read"><b>Read it as:</b> each weight is an independent bell curve around 0 with variance 1/&alpha;, so its standard deviation is 1/&radic;&alpha;. The contours are circles in weight space. Bishop's straight-line example uses &alpha; = 2.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The prior on w given alpha is a Gaussian with mean zero and covariance alpha-inverse times the identity.&rdquo;</em></div><div class="eq-run" id="run-pr"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &p(\mathbf{t} \mid \mathbf{w}, \beta) \\ &\quad = \textstyle\prod_{n} \mathcal{N}\big(t_n \mid \mathbf{w}^{\top}\boldsymbol\phi(x_n),\ \beta^{-1}\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> given the weights, each target is the line's value at x<sub>n</sub> plus independent Gaussian noise of variance 1/&beta;. Here &phi;(x) = (1, x), but nothing changes if &phi; holds polynomials, bumps or any other fixed <em>basis functions</em>: the model stays linear in w.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The likelihood of the targets is the product over points of a Gaussian in t-n, centred on w-transpose phi of x-n, with variance one over beta.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot duo"><canvas id="pr-cv" aria-label="Prior density in weight space and the lines it implies in data space; click the left panel to pick a weight vector"></canvas></div>
+        <figcaption>Left: the prior over (w<sub>0</sub>, w<sub>1</sub>), with 1 and 2 sd circles. Right: the lines those weights draw. The diamond and the thick line are your pick.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pr-a">Prior precision &alpha;</label><output id="pr-a-o"></output></div><input type="range" id="pr-a" min="-1" max="1.5" step="0.05" value="0.3"></div>
+        <div class="btns"><button type="button" class="btn primary" id="pr-draw">Draw 8 new weight vectors</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pr-sd"></div><div class="k">prior sd of each weight</div></div><div class="stat"><div class="v" id="pr-y1"></div><div class="k">prior sd of y at x = 1</div></div><div class="stat"><div class="v" id="pr-p"></div><div class="k">your w: prior density</div></div></div>
+        <p class="note" id="pr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- POSTERIOR -->
+<section class="chap" id="posterior">
+  <div class="wrap">
+    <div class="tag">After the data</div>
+    <h2>The posterior: prior times likelihood</h2>
+    <div class="prose">
+      <p>Bayes' rule multiplies the prior by the likelihood. Both are exponentials of quadratics in w, so their product is too, and the posterior is Gaussian again: the Gaussian prior is <em class="term">conjugate</em> to this likelihood. Finding its mean and covariance is a matter of completing the square, and the result has a memorable shape: <b>precisions add</b>. The prior contributes &alpha;I; each data point contributes &beta;&phi;(x<sub>n</sub>)&phi;(x<sub>n</sub>)<sup>&top;</sup>. The mean is a compromise between the prior mean and the least-squares answer, weighted by those precisions.</p>
+      <p>Three special cases are worth knowing. With no data the posterior is the prior. With a very broad prior (&alpha; &rarr; 0) the posterior mean becomes the least-squares solution w<sub>ML</sub>. And because a Gaussian's peak is its mean, the most probable weights, w<sub>MAP</sub>, are simply m<sub>N</sub>. <strong>Drag the points</strong> and watch the three ellipses in weight space: the grey prior, the orange likelihood, and the blue posterior that sits where they agree.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(\mathbf{w} \mid \mathbf{t}) &= \mathcal{N}(\mathbf{w} \mid \mathbf{m}_N, \mathbf{S}_N) \\ \mathbf{m}_N &= \mathbf{S}_N\big(\mathbf{S}_0^{-1}\mathbf{m}_0 + \beta\,\boldsymbol\Phi^{\top}\mathbf{t}\big) \\ \mathbf{S}_N^{-1} &= \mathbf{S}_0^{-1} + \beta\,\boldsymbol\Phi^{\top}\boldsymbol\Phi \end{aligned} \]</div><div class="read"><b>Read it as:</b> for any Gaussian prior N(m<sub>0</sub>, S<sub>0</sub>). &Phi; is the <em>design matrix</em>, one row &phi;(x<sub>n</sub>)<sup>&top;</sup> per point. The posterior precision S<sub>N</sub><sup>&minus;1</sup> is the prior precision plus the data's precision. The mean blends the prior mean and the data, each multiplied by its precision, then divides by the total precision.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The posterior is Gaussian with mean m-N equals S-N times S-nought-inverse m-nought plus beta Phi-transpose t, and precision S-N-inverse equals S-nought-inverse plus beta Phi-transpose Phi.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{m}_N &= \beta\, \mathbf{S}_N \boldsymbol\Phi^{\top}\mathbf{t} \\ \mathbf{S}_N^{-1} &= \alpha \mathbf{I} + \beta\, \boldsymbol\Phi^{\top}\boldsymbol\Phi \end{aligned} \]</div><div class="read"><b>Read it as:</b> the same with our zero-mean, round prior N(0, &alpha;<sup>&minus;1</sup>I). As &alpha; &rarr; 0, m<sub>N</sub> &rarr; (&Phi;<sup>&top;</sup>&Phi;)<sup>&minus;1</sup>&Phi;<sup>&top;</sup>t, the least-squares weights. The posterior's tilt (the correlation between w<sub>0</sub> and w<sub>1</sub>) comes entirely from &Phi;<sup>&top;</sup>&Phi;, that is, from where the inputs sit.</div><div class="eq-say"><b>Say it</b><em>&ldquo;m-N is beta S-N Phi-transpose t; S-N inverse is alpha I plus beta Phi-transpose Phi.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-po" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="plot duo"><canvas id="po-cv" aria-label="Data space with draggable points and weight space with prior, likelihood and posterior ellipses"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--muted)"></i>prior</span><span><i class="sw" style="background:var(--cB)"></i>likelihood (least-squares ellipse)</span><span><i class="sw" style="background:var(--lda)"></i>posterior, 1 and 2 sd</span></span> Ellipses are drawn at 1 and 2 standard deviations. Faint lines on the left are draws from the posterior.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="po-a">Prior precision &alpha;</label><output id="po-a-o"></output></div><input type="range" id="po-a" min="-2" max="2" step="0.05" value="0.3"></div>
+        <div class="ctrl"><div class="top"><label for="po-b">Noise precision &beta;</label><output id="po-b-o"></output></div><input type="range" id="po-b" min="0" max="2.5" step="0.05" value="1.4"></div>
+        <div class="btns"><button type="button" class="btn" id="po-reset">Reset points</button><button type="button" class="btn" id="po-far">Move the points right</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="po-m"></div><div class="k">posterior mean m<sub>N</sub></div></div><div class="stat"><div class="v" id="po-sd"></div><div class="k">sd of w<sub>0</sub>, w<sub>1</sub></div></div><div class="stat"><div class="v" id="po-r"></div><div class="k">correlation</div></div></div>
+        <p class="note" id="po-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SEQUENTIAL -->
+<section class="chap" id="sequential">
+  <div class="wrap">
+    <div class="tag">Online learning</div>
+    <h2>Learning one point at a time</h2>
+    <div class="prose">
+      <p>Because precisions simply add, the order in which you see the data does not matter, and you never need to keep the data: after each point, today's posterior becomes tomorrow's prior. This is Bishop's famous figure, played live. The hidden truth is the line y = &minus;0.3 + 0.5x, observed with noise sd 0.2 (&beta; = 25), and the prior has &alpha; = 2.</p>
+      <p>The left panel is the likelihood of the newest point alone. One point cannot pin down two weights: every line that passes near it is about equally good, so its likelihood is a long ridge in weight space. Multiply that ridge into the current belief and the posterior (middle) shrinks across the ridge only. The right panel shows six lines drawn from the posterior. <strong>Press &ldquo;Add a point&rdquo; a few times</strong>, or click the right panel to add a point of your own.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbf{S}_n^{-1} &= \mathbf{S}_{n-1}^{-1} + \beta\, \boldsymbol\phi(x_n)\boldsymbol\phi(x_n)^{\top} \\ \mathbf{m}_n &= \mathbf{S}_n\big(\mathbf{S}_{n-1}^{-1}\mathbf{m}_{n-1} + \beta\, \boldsymbol\phi(x_n)\, t_n\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the general posterior formula with the previous posterior N(m<sub>n&minus;1</sub>, S<sub>n&minus;1</sub>) playing the prior and a single new point (x<sub>n</sub>, t<sub>n</sub>) as the data. Each point adds precision only along its own direction &phi;(x<sub>n</sub>) = (1, x<sub>n</sub>): a rank-one update. After all N points you get exactly the same posterior as processing them in one batch.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The new precision is the old precision plus beta phi phi-transpose; the new mean is the new covariance times the old precision times the old mean, plus beta phi t.&rdquo;</em></div><div class="eq-run" id="run-sq"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="plot sq-plot"><canvas id="sq-cv" aria-label="Likelihood of the latest point, the posterior, and lines drawn from it; click the right panel to add a point"></canvas></div>
+        <figcaption>Cross: the true weights (&minus;0.3, 0.5). Ringed point on the right: the newest observation.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="sq-1">Add a point</button><button type="button" class="btn" id="sq-5">Add 5</button><button type="button" class="btn" id="sq-0">Start again</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="sq-n"></div><div class="k">points seen</div></div><div class="stat"><div class="v" id="sq-sd"></div><div class="k">sd of w<sub>0</sub>, w<sub>1</sub></div></div><div class="stat"><div class="v" id="sq-ch"></div><div class="k">sequential vs batch</div></div></div>
+        <p class="note" id="sq-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- RIDGE -->
+<section class="chap" id="ridge">
+  <div class="wrap">
+    <div class="tag">A familiar face</div>
+    <h2>Ridge regression is the MAP estimate</h2>
+    <div class="prose">
+      <p>Take the logarithm of the posterior and something familiar appears. The log-likelihood is minus a sum of squared errors; the log of the Gaussian prior is minus a squared length. Maximising the posterior is therefore the same as minimising squared error plus a weight penalty: <b>ridge regression</b>, with penalty &lambda; = &alpha;/&beta;. So the &ldquo;regulariser&rdquo; of chapter 1.2 was a prior all along, and &lambda; is the ratio of how sure you are that weights are small to how sure you are about each data point.</p>
+      <p>Other priors give other penalties. A Laplace prior, with density falling like e<sup>&minus;|w|</sup>, gives the lasso, whose diamond-shaped contours have corners on the axes, so the most probable weights are often exactly zero. But notice what MAP throws away. Under the Laplace prior the posterior <em>mean</em> is not sparse at all; only its peak is. <strong>Switch between the two priors and slide &lambda;</strong>. The plot shows weight space for a model with two correlated features and no intercept.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \ln p(\mathbf{w} \mid \mathbf{t}) &= -\tfrac{\beta}{2}\textstyle\sum_{n} e_n^2 \\ &\quad - \tfrac{\alpha}{2}\,\mathbf{w}^{\top}\mathbf{w} + \text{const} \\ e_n &= t_n - \mathbf{w}^{\top}\boldsymbol\phi(x_n) \end{aligned} \]</div><div class="read"><b>Read it as:</b> e<sub>n</sub> is the model's error on point n. The log posterior is the log-likelihood (a scaled sum of squared errors) plus the log prior (a scaled squared length), up to a constant that does not depend on w. Divide by &minus;&beta; and maximising it becomes minimising &frac12;&Sigma;(error)&sup2; + &frac12;&lambda;&Vert;w&Vert;&sup2;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The log posterior is minus beta over two times the sum of squared errors, minus alpha over two times w-transpose w, plus a constant.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{w}_{\text{MAP}} &= \big(\lambda\mathbf{I} + \boldsymbol\Phi^{\top}\boldsymbol\Phi\big)^{-1}\boldsymbol\Phi^{\top}\mathbf{t} \\ &= \mathbf{m}_N \\ p(\mathbf{w} \mid \alpha) &\propto \exp\Big(-\tfrac{\alpha}{2}\textstyle\sum_{j}|w_j|^{q}\Big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the ridge solution with &lambda; = &alpha;/&beta; is exactly the posterior mean m<sub>N</sub>. The second line is a family of priors: q = 2 is the Gaussian (ridge), q = 1 the Laplace (lasso). With q = 1 the MAP minimises &frac12;&Sigma;(error)&sup2; + &frac12;&lambda;&Sigma;|w<sub>j</sub>|.</div><div class="eq-say"><b>Say it</b><em>&ldquo;w-MAP is lambda I plus Phi-transpose Phi, inverted, times Phi-transpose t, which equals m-N. The general prior is proportional to e to the minus alpha over two times the sum of the absolute weights to the power q.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-rd" style="max-width:none"></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Prior"><button type="button" data-rq="2" aria-pressed="true">Gaussian prior, q = 2 (ridge)</button><button type="button" data-rq="1">Laplace prior, q = 1 (lasso)</button></div></div>
+        <div class="plot ar-16x10 tall-m"><canvas id="rd-cv" aria-label="Weight space: squared-error contours, prior contours, MAP point and posterior mean"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--cB)"></i>squared-error contours around w<sub>ML</sub></span><span><i class="sw" style="background:var(--muted)"></i>prior contour through the MAP</span><span><i class="sw dot" style="background:var(--lda)"></i>w<sub>MAP</sub> and its path as &lambda; grows</span><span><i class="sw dot" style="background:transparent;border:1.5px solid var(--qda)"></i>posterior mean</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="rd-l">Penalty &lambda; = &alpha;/&beta;</label><output id="rd-l-o"></output></div><input type="range" id="rd-l" min="-1" max="2.5" step="0.02" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="rd-map"></div><div class="k">w<sub>MAP</sub></div></div><div class="stat"><div class="v" id="rd-pm"></div><div class="k">posterior mean</div></div><div class="stat"><div class="v" id="rd-e"></div><div class="k">squared error at MAP</div></div></div>
+        <p class="note" id="rd-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PREDICTIVE -->
+<section class="chap" id="predictive">
+  <div class="wrap">
+    <div class="tag">The payoff</div>
+    <h2>The predictive distribution and its error bars</h2>
+    <div class="prose">
+      <p>We rarely care about the weights for their own sake; we want to predict t at a new x. Averaging the model's prediction over the posterior gives the <em class="term">predictive distribution</em>. Its mean is the posterior-mean curve, and its variance has two parts that are worth keeping apart: the noise 1/&beta;, which would remain even if we knew w exactly, and the uncertainty about w, which shrinks as data arrive. Adding a point can only lower the variance everywhere (&sigma;<sup>2</sup><sub>N+1</sub>(x) &le; &sigma;<sup>2</sup><sub>N</sub>(x)), and with unlimited data the second part vanishes.</p>
+      <p>Russell and Norvig make the point with a plain straight line: its uncertainty grows with the squared distance from the middle of the data, so the error bars flare out like a trumpet. Bishop uses nine Gaussian bumps. Here the bumps hide a trap: far from every bump, &phi;(x) &asymp; 0, the weight term disappears, and the band collapses back to the noise level, <em>most</em> confident exactly where it has seen nothing. <strong>Switch models, add points, and move the probe outside the data</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(t \mid x, \mathbf{t}) &= \mathcal{N}\big(t \mid \mathbf{m}_N^{\top}\boldsymbol\phi(x),\ \sigma_N^2(x)\big) \\ \sigma_N^2(x) &= \underbrace{\frac{1}{\beta}}_{\text{noise}} + \underbrace{\boldsymbol\phi(x)^{\top}\mathbf{S}_N\boldsymbol\phi(x)}_{\text{weight uncertainty}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the prediction at x is Gaussian, centred on the posterior-mean curve. Its variance is the noise variance plus the variance of the curve's height at x, which is &phi;(x)<sup>&top;</sup>S<sub>N</sub>&phi;(x) because the height w<sup>&top;</sup>&phi;(x) is a weighted sum of Gaussian weights.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The predictive is a Gaussian in t, with mean m-N-transpose phi of x and variance sigma-N squared of x, which is one over beta plus phi-transpose S-N phi.&rdquo;</em></div><div class="eq-run" id="run-pd"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \operatorname{var}\big[y(x)\big] &\approx \frac{1}{\beta}\Big(\frac{1}{N} + \frac{(x-\bar x)^2}{S_{xx}}\Big) \\ S_{xx} &= \textstyle\sum_n (x_n-\bar x)^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> for a straight line with a nearly flat prior, the line's height at x is known best at the mean input x&#772; (to within the noise over N) and gets worse with the squared distance from it, relative to how spread out the inputs are. It is exact for a flat prior (&alpha; &rarr; 0); the lab's &alpha; = 2 pulls it in a little, as the running example shows.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The variance of the line at x is about one over beta times one over N plus x minus x-bar squared, over the sum of squared input deviations.&rdquo;</em></div><div class="eq-run" id="run-pd2"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Model"><button type="button" data-pb="line">Straight line</button><button type="button" data-pb="bump" aria-pressed="true">9 Gaussian bumps</button></div><div class="seg" role="group" aria-label="View"><button type="button" data-pv="band" aria-pressed="true">Band</button><button type="button" data-pv="draws">Draws</button><button type="button" data-pv="both">Both</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pd-cv" aria-label="Predictive mean and band; move the mouse to probe x"></canvas></div>
+        <div class="plot pd-bar"><canvas id="pd-bar" aria-label="Predictive variance split into noise and weight uncertainty across x"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--lda)"></i>predictive mean, shaded &plusmn;1 and &plusmn;2 &sigma;<sub>N</sub>(x)</span><span><i class="sw" style="background:var(--cA)"></i>truth</span><span><i class="sw" style="background:var(--muted)"></i>bump centres (ticks)</span></span> Lower strip: the predictive variance split into <span style="color:var(--muted)">noise</span> and <span style="color:var(--lda)">weight uncertainty</span>.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pd-n">Points seen, N</label><output id="pd-n-o"></output></div><input type="range" id="pd-n" min="0" max="25" step="1" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="pd-x">Probe input x</label><output id="pd-x-o"></output></div><input type="range" id="pd-x" min="-0.5" max="1.5" step="0.005" value="1.3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pd-s"></div><div class="k">predictive sd &sigma;<sub>N</sub>(x)</div></div><div class="stat"><div class="v" id="pd-w"></div><div class="k">share of variance from w</div></div><div class="stat"><div class="v" id="pd-d"></div><div class="k">change when point N arrived</div></div></div>
+        <p class="note" id="pd-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- KERNEL -->
+<section class="chap" id="kernel">
+  <div class="wrap">
+    <div class="tag">Another view</div>
+    <h2>The equivalent kernel</h2>
+    <div class="prose">
+      <p>Substitute m<sub>N</sub> = &beta;S<sub>N</sub>&Phi;<sup>&top;</sup>t into the prediction and regroup. The prediction at x turns out to be a <b>weighted sum of the training targets</b>, y(x) = &Sigma;<sub>n</sub> k(x, x<sub>n</sub>) t<sub>n</sub>. The weights k(x, x<sub>n</sub>) form the <em class="term">equivalent kernel</em>, sometimes called the smoother matrix. They depend only on the inputs, never on the targets, and they are largest for training points near x, even when the basis functions themselves are not local at all: polynomials and sigmoids give local kernels too.</p>
+      <p>This flips the point of view. Instead of choosing basis functions and solving for weights, we could choose a kernel and predict directly from the data: that is the idea behind Gaussian processes, and the kernel is also the covariance between the curve's values at two inputs. <strong>Pick a basis, move x, and turn &alpha;</strong>; the stems below show the weight each of the 41 training points gets.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} y(x, \mathbf{m}_N) &= \sum_{n=1}^{N} k(x, x_n)\, t_n \\ k(x, x') &= \beta\, \boldsymbol\phi(x)^{\top}\mathbf{S}_N\, \boldsymbol\phi(x') \end{aligned} \]</div><div class="read"><b>Read it as:</b> the posterior-mean prediction is a linear smoother: it mixes the observed targets with weights k(x, x<sub>n</sub>). The kernel is built from the basis and from S<sub>N</sub>, so it depends on the training inputs x<sub>n</sub> but not on their targets.</div><div class="eq-say"><b>Say it</b><em>&ldquo;y at x is the sum over n of k of x and x-n times t-n, where k of x and x-prime is beta phi-x transpose S-N phi-x-prime.&rdquo;</em></div><div class="eq-run" id="run-kn"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \operatorname{cov}\big[y(x), y(x')\big] &= \boldsymbol\phi(x)^{\top}\mathbf{S}_N\boldsymbol\phi(x') \\ &= \beta^{-1}k(x, x') \\ \textstyle\sum_{n} k(x, x_n) &\approx 1 \\ k(x, z) &= \boldsymbol\psi(x)^{\top}\boldsymbol\psi(z) \end{aligned} \]</div><div class="read"><b>Read it as:</b> nearby predictions move together, by exactly the kernel's amount. The weights sum to about 1 (exactly 1 when the basis contains a constant and &alpha; &rarr; 0), so the prediction is close to a weighted average of nearby targets. And k is an inner product of the new features &psi;(x) = &beta;<sup>&frac12;</sup>S<sub>N</sub><sup>&frac12;</sup>&phi;(x), which is what makes it a valid kernel.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The covariance of y at x and y at x-prime is phi-x transpose S-N phi-x-prime, which is k over beta. The kernel weights sum to about one, and k of x and z is psi-x dot psi-z.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Basis functions"><button type="button" data-kb="gauss" aria-pressed="true">Gaussian bumps</button><button type="button" data-kb="poly">Polynomials</button><button type="button" data-kb="sig">Sigmoids</button></div></div>
+        <div class="plot kn-plot"><canvas id="kn-cv" aria-label="Heat map of the equivalent kernel and the slice through the chosen x"></canvas></div>
+        <figcaption>Top left: the 11 basis functions plus a constant. Top right: k(x, x&prime;) for every pair, with the chosen x marked. Bottom: the slice k(x, x&prime;) through the chosen x; stems are the weights on the training points, <span style="color:var(--cB)">orange</span> where positive and <span style="color:var(--qda)">red</span> where negative.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="kn-x">Chosen input x</label><output id="kn-x-o"></output></div><input type="range" id="kn-x" min="-1" max="1" step="0.01" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="kn-a">Prior precision &alpha;</label><output id="kn-a-o"></output></div><input type="range" id="kn-a" min="-4" max="2" step="0.05" value="-2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="kn-sum"></div><div class="k">&Sigma;<sub>n</sub> k(x, x<sub>n</sub>)</div></div><div class="stat"><div class="v" id="kn-y1"></div><div class="k">&Sigma;<sub>n</sub> k(x, x<sub>n</sub>) t<sub>n</sub></div></div><div class="stat"><div class="v" id="kn-y2"></div><div class="k">m<sub>N</sub><sup>&top;</sup>&phi;(x)</div></div></div>
+        <p class="note" id="kn-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- NOISE -->
+<section class="chap" id="noise">
+  <div class="wrap">
+    <div class="tag">Honest error bars</div>
+    <h2>When the noise level is unknown too</h2>
+    <div class="prose">
+      <p>Everything so far assumed we knew &beta;. Guess it wrong and the error bars are wrong in proportion, however good the curve. The Bayesian fix is to treat &beta; as unknown as well. The conjugate prior for the pair (w, &beta;) is the <em class="term">Normal-Gamma</em>: a Gamma prior on the noise precision, and a Gaussian on w whose spread is measured in units of the noise. The posterior keeps the same form; the Gamma's parameters simply add half a count per data point and half the leftover squared error. Integrating out both w and &beta; turns the Gaussian predictive into a <em class="term">Student-t</em>, whose heavier tails admit that the noise level itself is uncertain, and which becomes Gaussian again once N is large.</p>
+      <p>Both models below share the same curve (ridge with &lambda; = &alpha;/&beta; = 0.08); only the bands differ. Each band is checked against 2,000 fresh points from the truth. <strong>Set the noise you assume far from the true noise</strong>, then change N.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf{w} \mid \beta &\sim \mathcal{N}\big(\mathbf{0}, (\beta\lambda)^{-1}\mathbf{I}\big) \\ \beta &\sim \operatorname{Gam}(a_0, b_0) \\ a_N &= a_0 + \tfrac{N}{2} \\ b_N &= b_0 + \tfrac12\big(\mathbf{t}^{\top}\mathbf{t} - \mathbf{m}_N^{\top}\mathbf{S}_N^{-1}\mathbf{m}_N\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> here S<sub>N</sub><sup>&minus;1</sup> = &lambda;I + &Phi;<sup>&top;</sup>&Phi; and m<sub>N</sub> = S<sub>N</sub>&Phi;<sup>&top;</sup>t, ridge once more. The noise precision's Gamma posterior gains half a count per point (a<sub>N</sub>) and half the penalised residual sum of squares (b<sub>N</sub>), so b<sub>N</sub>/a<sub>N</sub> is an estimate of the noise variance. We use a vague a<sub>0</sub> = b<sub>0</sub> = 0.01.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Given beta, w is Gaussian with covariance beta-lambda inverse; beta itself is Gamma with a-nought and b-nought. a-N is a-nought plus N over two; b-N is b-nought plus half of t-transpose-t minus m-N-transpose S-N-inverse m-N.&rdquo;</em></div><div class="eq-run" id="run-ns"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(t \mid x, \mathbf{t}) &= \operatorname{St}\big(t \mid \mu(x), s^2(x), \nu\big) \\ \nu &= 2a_N \\ \mu(x) &= \mathbf{m}_N^{\top}\boldsymbol\phi(x) \\ s^2(x) &= \tfrac{b_N}{a_N}\big(1 + \boldsymbol\phi(x)^{\top}\mathbf{S}_N\boldsymbol\phi(x)\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> a Student-t with the familiar centre &mu;(x), a squared scale s&sup2;(x) equal to the estimated noise variance b<sub>N</sub>/a<sub>N</sub> times (1 + the weight uncertainty), and &nu; = 2a<sub>N</sub> &asymp; N degrees of freedom. With few points the t's quantiles are far out (for 3 degrees of freedom the 95% point is 3.18 scales, not 1.96).</div><div class="eq-say"><b>Say it</b><em>&ldquo;The predictive is a Student-t in t, centred on m-N-transpose phi, with squared scale b-N over a-N times one plus phi-transpose S-N phi, and two a-N degrees of freedom.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="ns-cv" aria-label="Known-noise Gaussian band and learned-noise Student-t band over the data"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--cC)"></i>95% band with the noise you assume (Gaussian)</span><span><i class="sw" style="background:var(--lda)"></i>95% band with the noise learned (Student-t)</span><span><i class="sw" style="background:var(--cA)"></i>truth</span></span></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ns-n">Points seen, N</label><output id="ns-n-o"></output></div><input type="range" id="ns-n" min="2" max="60" step="1" value="8"></div>
+        <div class="ctrl"><div class="top"><label for="ns-a">Noise sd you assume</label><output id="ns-a-o"></output></div><input type="range" id="ns-a" min="0.04" max="0.8" step="0.01" value="0.1"></div>
+        <div class="ctrl"><div class="top"><label for="ns-t">True noise sd</label><output id="ns-t-o"></output></div><input type="range" id="ns-t" min="0.05" max="0.6" step="0.01" value="0.25"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ns-ck"></div><div class="k">coverage, assumed noise</div></div><div class="stat"><div class="v" id="ns-ct"></div><div class="k">coverage, learned noise</div></div><div class="stat"><div class="v" id="ns-s"></div><div class="k">learned noise sd</div></div></div>
+        <p class="note" id="ns-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: forecasting Mauna Loa CO&#8322;</h2>
+    <div class="prose">
+      <p>Since March 1958 the observatory on Mauna Loa, Hawai&#699;i, has measured the carbon dioxide in the air every day, first by Charles David Keeling of Scripps and now by NOAA's Global Monitoring Laboratory. Its monthly means, <span id="pj-nm"></span> of them through <span id="pj-last"></span>, form the Keeling curve: a steady, accelerating rise with a yearly breath as the northern forests grow and shed their leaves. NOAA publishes the data freely.</p>
+      <p>We fit a Bayesian basis-function regression: a straight-line start, a <b>hinge</b> max(0, t &minus; &kappa;<sub>k</sub>) at every knot &kappa;<sub>k</sub> (every 5 years from 1960 to 2040) so the growth rate can bend, and two harmonics for the seasons. Each hinge weight v<sub>k</sub> has a Gaussian prior with sd s<sub>v</sub>: how much, in ppm per year, we believe the growth rate can change at a knot. The trick that makes the bands widen honestly: <em>knots after the training cut-off have no data at all</em>, so their weights keep their prior uncertainty, and the forecast fans out. The noise sd &sigma; is set by refitting until it equals the root-mean-square training residual (the next chapter shows the principled way). <strong>Move the cut-off and watch the forecast meet the months it never saw</strong>.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} y(t) = {}& w_0 + w_1(t - 1958) \\ &+ \textstyle\sum_{k} v_k \max(0,\ t - \kappa_k) \\ &+ \textstyle\sum_{h=1}^{2} a_h \sin 2\pi h t \\ &+ \textstyle\sum_{h=1}^{2} b_h \cos 2\pi h t \\ v_k &\sim \mathcal{N}(0, s_v^2) \end{aligned} \]</div><div class="read"><b>Read it as:</b> t is the date in years. The level starts at w<sub>0</sub> with slope w<sub>1</sub> ppm per year; at each knot &kappa;<sub>k</sub> the slope changes by v<sub>k</sub>. The sines and cosines with periods of 12 and 6 months draw the seasonal cycle. The model is still linear in its weights, so every formula on this page applies, with a diagonal prior (very broad for w<sub>0</sub>, w<sub>1</sub>, a<sub>h</sub>, b<sub>h</sub>; sd s<sub>v</sub> for each v<sub>k</sub>).</div><div class="eq-say"><b>Say it</b><em>&ldquo;y of t is w-nought plus w-one times t minus 1958, plus the sum of v-k times the hinge at kappa-k, plus two harmonics; each v-k is Gaussian with sd s-v.&rdquo;</em></div><div class="eq-run" id="run-pj"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Knot spacing"><button type="button" data-pg="2">Knots every 2 years</button><button type="button" data-pg="5" aria-pressed="true">5 years</button><button type="button" data-pg="10">10 years</button></div></div>
+        <div class="plot ar-16x10 tall-m"><canvas id="pj-cv" aria-label="Mauna Loa CO2 with the Bayesian forecast and its widening 95% band; move the mouse to read a month"></canvas></div>
+        <figcaption><span class="legend"><span><i class="sw" style="background:var(--muted)"></i>training months</span><span><i class="sw" style="background:var(--cB)"></i>held-out months</span><span><i class="sw" style="background:var(--lda)"></i>predictive mean, shaded 50% and 95%</span></span> Ticks along the bottom mark the knots; hollow ticks have no training data.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-c">Training data end</label><output id="pj-c-o"></output></div><input type="range" id="pj-c" min="1975" max="2027" step="1" value="2010"></div>
+        <div class="ctrl"><div class="top"><label for="pj-s">Prior sd of each slope change s<sub>v</sub></label><output id="pj-s-o"></output></div><input type="range" id="pj-s" min="-1.5" max="0" step="0.02" value="-0.7"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-sig"></div><div class="k">noise sd &sigma;</div></div><div class="stat"><div class="v" id="pj-rm"></div><div class="k">held-out RMSE</div></div><div class="stat"><div class="v" id="pj-cov"></div><div class="k">held-out months inside 95%</div></div><div class="stat"><div class="v" id="pj-30"></div><div class="k">forecast, Jan 2030</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Forecast error against horizon</h3>
+    <div class="prose"><p>The same forecast, seen as errors: each held-out month's actual value minus the predictive mean, against how far past the cut-off it lies. The shaded trumpet is the 95% band. A well-calibrated forecast keeps about 19 in 20 dots inside it, at every horizon.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-3x1"><canvas id="pj-err" aria-label="Forecast errors against years after the cut-off, with the 95% band"></canvas></div>
+        <figcaption>Dots: actual &minus; forecast for each held-out month (red when outside the band). Shaded: &plusmn;1.96 &sigma;<sub>N</sub>.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="stats"><div class="stat"><div class="v" id="pj-h5"></div><div class="k">band half-width at +5 years</div></div><div class="stat"><div class="v" id="pj-h10"></div><div class="k">at +10 years</div></div></div>
+        <p class="note" id="pj-esay"></p>
+      </div></div>
+    </div>
+
+    <h3>Backtest: five cut-offs</h3>
+    <div class="prose"><p>One cut-off can be lucky. Here the current settings are refitted at five cut-offs and scored on the following 10 years (6.75 years for 2020, as the data end in September 2026).</p></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-bt"></table></div>
+    <p class="note" id="pj-btsay" style="max-width:72ch"></p>
+
+    <h3>The same project in Python</h3>
+<pre class="code"><code>import numpy as np, json
+from sklearn.linear_model import Ridge
+
+J = json.load(open("co2_mm_mlo.json"))                 # NOAA GML monthly means, Mauna Loa
+y = np.array(J["co2"]); k = np.arange(len(y))
+t = J["y0"] + (J["m0"] - 1 + k + 0.5) / 12             # mid-month, in years
+
+def basis(t, gap=5):
+    knots = np.arange(1960, 2041, gap)                 # a hinge every `gap` years, 1960..2040
+    cols = [np.ones_like(t), t - 1958] + [np.maximum(0, t - c) for c in knots]
+    cols += [f(2 * np.pi * h * t) for h in (1, 2) for f in (np.sin, np.cos)]
+    return np.column_stack(cols), len(knots)
+
+def fit(cut, gap=5, s_v=0.2):
+    tr = t &lt; cut
+    P, K = basis(t[tr], gap)
+    prior_var = np.array([1000.0**2, 10.0**2] + [s_v**2] * K + [10.0**2] * 4)
+    s2 = 1.0
+    for _ in range(100):                               # noise: refit until sigma^2 = mean residual^2
+        S_inv = np.diag(1 / prior_var) + P.T @ P / s2
+        m = np.linalg.solve(S_inv, P.T @ y[tr] / s2)
+        new = np.mean((y[tr] - P @ m) ** 2)
+        if abs(new - s2) &lt; 1e-12: s2 = new; break
+        s2 = new
+    S_inv = np.diag(1 / prior_var) + P.T @ P / s2
+    S = np.linalg.inv(S_inv); m = S @ P.T @ y[tr] / s2
+    return dict(m=m, S=S, s2=s2, prior_var=prior_var, P=P, tr=tr, gap=gap)
+
+def predict(F, tq):                                    # predictive mean and sd
+    Q, _ = basis(tq, F["gap"])
+    return Q @ F["m"], np.sqrt(F["s2"] + np.einsum("ij,jk,ik->i", Q, F["S"], Q))
+
+F = fit(2010.0); te = t &gt;= 2010.0
+mu, sd = predict(F, t[te]); err = y[te] - mu
+print(f"noise sigma = {np.sqrt(F['s2']):.4f}; held out {te.sum()} months: "
+      f"RMSE {np.sqrt(np.mean(err**2)):.3f}, inside 95% band {np.mean(np.abs(err) &lt; 1.96*sd):.3f}")
+for cut in (1980, 1990, 2000, 2010, 2020):             # backtest, next 10 years
+    G = fit(float(cut)); h = (t &gt;= cut) &amp; (t &lt; cut + 10); mu, sd = predict(G, t[h]); e = y[h] - mu
+    print(f"{cut}: sigma {np.sqrt(G['s2']):.3f}  RMSE {np.sqrt(np.mean(e**2)):.3f}  "
+          f"coverage {np.mean(np.abs(e) &lt; 1.96*sd):.3f}  half-width {np.mean(1.96*sd):.3f}")
+A = fit(2100.0); mu, sd = predict(A, np.array([2030 + 1/24, 2040 + 1/24]))
+print(f"all data: Jan 2030 {mu[0]:.2f} +/- {1.96*sd[0]:.2f}, Jan 2040 {mu[1]:.2f} +/- {1.96*sd[1]:.2f} ppm")
+sc = np.sqrt(F["prior_var"])                           # ridge on rescaled columns = posterior mean
+r = Ridge(alpha=F["s2"], fit_intercept=False).fit(F["P"] * sc, y[F["tr"]])
+print(f"max |ridge - posterior mean| = {np.max(np.abs(r.coef_ * sc - F['m'])):.1e}")</code></pre>
+<pre class="code out"><code id="pj-out">noise sigma = 0.4490; held out 201 months: RMSE 4.017, inside 95% band 0.935
+1980: sigma 0.402  RMSE 1.901  coverage 0.883  half-width 2.317
+1990: sigma 0.408  RMSE 2.063  coverage 0.650  half-width 2.323
+2000: sigma 0.442  RMSE 0.700  coverage 0.917  half-width 2.359
+2010: sigma 0.449  RMSE 2.048  coverage 0.933  half-width 2.368
+2020: sigma 0.455  RMSE 0.660  coverage 0.975  half-width 1.725
+all data: Jan 2030 438.46 +/- 1.34, Jan 2040 463.94 +/- 5.43 ppm
+max |ridge - posterior mean| = 1.6e-10</code></pre>
+    <p class="note" id="pj-check" style="max-width:72ch"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Put a Gaussian prior N(0, &alpha;<sup>&minus;1</sup>I) on the weights of a linear model with Gaussian noise of precision &beta;, and the posterior is Gaussian too: S<sub>N</sub><sup>&minus;1</sup> = &alpha;I + &beta;&Phi;<sup>&top;</sup>&Phi;, m<sub>N</sub> = &beta;S<sub>N</sub>&Phi;<sup>&top;</sup>t.</li>
+      <li>Precisions add, so you can learn one point at a time: each posterior is the prior for the next point, and the order does not matter.</li>
+      <li>The posterior mean is the MAP, and the MAP is ridge regression with &lambda; = &alpha;/&beta;; a Laplace prior gives the lasso instead, whose MAP is sparse but whose posterior mean is not.</li>
+      <li>The predictive variance 1/&beta; + &phi;(x)<sup>&top;</sup>S<sub>N</sub>&phi;(x) is noise plus weight uncertainty: it shrinks near data and grows away from them, unless the basis functions vanish there, which makes the model falsely confident.</li>
+      <li>The prediction is a weighted sum of the training targets through the equivalent kernel k(x, x&prime;) = &beta;&phi;(x)<sup>&top;</sup>S<sub>N</sub>&phi;(x&prime;), the first step towards Gaussian processes; learning &beta; too turns the Gaussian predictive into a Student-t.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A model with one weight, &phi;(x) = x, has prior precision &alpha; = 1 and noise precision &beta; = 4. You observe one point, x = 1, t = 2. What is the posterior?</summary><p>S<sub>1</sub><sup>&minus;1</sup> = 1 + 4&middot;1&sup2; = 5, so the posterior variance is 0.2, and m<sub>1</sub> = &beta;S<sub>1</sub>xt = 4 &times; 0.2 &times; 2 = 1.6. The prior pulls the least-squares answer, 2, back towards 0.</p></details>
+      <details class="q"><summary>Why does a single data point make the posterior over a line's (w<sub>0</sub>, w<sub>1</sub>) shrink in one direction only?</summary><p>It adds precision &beta;&phi;&phi;<sup>&top;</sup>, a rank-one matrix: it constrains w<sub>0</sub> + w<sub>1</sub>x<sub>n</sub> (the line's height at x<sub>n</sub>) but says nothing about how the line pivots around that point. A second point at a different x fixes the pivot.</p></details>
+      <details class="q"><summary>Your colleague fits ridge regression with &lambda; = 0.1 and says &ldquo;no priors here&rdquo;. What prior is she using?</summary><p>A zero-mean Gaussian on the weights with precision &alpha; = &lambda;&beta;, that is, variance 10/&beta;: ten times the noise variance. Ridge is the MAP (and the posterior mean) under that prior.</p></details>
+      <details class="q"><summary>Far outside the data, a model built from Gaussian bumps predicts with an error bar equal to the noise sd. Why is that a problem, and what fixes it?</summary><p>Far from every bump, &phi;(x) &asymp; 0, so the weight-uncertainty term &phi;<sup>&top;</sup>S<sub>N</sub>&phi; vanishes and only 1/&beta; is left: the model is most confident exactly where it knows least. Covering the whole input range with basis functions, adding a constant or trend, or switching to a Gaussian process (where the kernel's prior variance does not vanish) fixes it.</p></details>
+      <details class="q"><summary>Why does the CO&#8322; forecast band widen with the horizon, and why would it stay narrow if all the knots were in the training period?</summary><p>Knots after the cut-off have no data, so their slope changes keep their prior sd s<sub>v</sub>: each one adds a possible bend, and these add up as the horizon grows. Without future knots the forecast just extends the last fitted slope, whose uncertainty is small, so the band would stay narrow and miss real changes in the growth rate.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../bayesian-model-evidence/">Next chapter: Bayesian Model Comparison &amp; the Evidence &rarr;</a>
+      <a class="btn" href="../linear-model-inference/">&larr; Previous: Inference for Linear Models: Tests &amp; Gauss&ndash;Markov</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Bishop, C. M. (2006). <em>Pattern Recognition and Machine Learning</em>. Springer. &sect;1.2.6 (Bayesian curve fitting) and &sect;3.3 (Bayesian linear regression: parameter distribution, predictive distribution, equivalent kernel).</li>
+      <li>Russell, S. &amp; Norvig, P. (2021). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed. Pearson. &sect;20.2.6, Bayesian linear regression.</li>
+      <li>Rasmussen, C. E. &amp; Williams, C. K. I. (2006). <em>Gaussian Processes for Machine Learning</em>. MIT Press. &sect;2.1 (the weight-space view) and &sect;5.4.3 (the Mauna Loa CO&#8322; example).</li>
+      <li>Hoerl, A. E. &amp; Kennard, R. W. (1970). Ridge regression: biased estimation for nonorthogonal problems. <em>Technometrics</em> 12, 55&ndash;67.</li>
+      <li>Park, T. &amp; Casella, G. (2008). The Bayesian lasso. <em>Journal of the American Statistical Association</em> 103, 681&ndash;686.</li>
+      <li>Keeling, C. D. (1960). The concentration and isotopic abundances of carbon dioxide in the atmosphere. <em>Tellus</em> 12, 200&ndash;203.</li>
+      <li>Lan, X., Tans, P. &amp; Thoning, K. W. Trends in atmospheric carbon dioxide: Mauna Loa monthly means. NOAA Global Monitoring Laboratory, gml.noaa.gov/ccgg/trends/ (with Keeling, R., Scripps Institution of Oceanography, scrippsco2.ucsd.edu); data file co2_mm_mlo.csv, freely available.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- special functions (Student-t quantiles; checked against scipy) ---------- */
+const LG = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+function lgamma(x) {
+  if (x < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * x))) - lgamma(1 - x);
+  x -= 1; let a = LG[0]; const t = x + 7.5; for (let i = 1; i < 9; i++) a += LG[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+const betaln = (a, b) => lgamma(a) + lgamma(b) - lgamma(a + b);
+function betacf(x, a, b) {
+  const TINY = 1e-300; const qab = a + b, qap = a + 1, qam = a - 1; let c = 1, d = 1 - qab * x / qap; if (Math.abs(d) < TINY) d = TINY; d = 1 / d; let h = d;
+  for (let m = 1; m <= 500; m++) { const m2 = 2 * m; let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY; c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY; d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2)); d = 1 + aa * d; if (Math.abs(d) < TINY) d = TINY; c = 1 + aa / c; if (Math.abs(c) < TINY) c = TINY; d = 1 / d; const del = d * c; h *= del; if (Math.abs(del - 1) < 1e-15) break; }
+  return h;
+}
+function betainc(x, a, b) {
+  if (x <= 0) return 0; if (x >= 1) return 1;
+  const lbt = a * Math.log(x) + b * Math.log1p(-x) - betaln(a, b);
+  return x < (a + 1) / (a + b + 2) ? Math.exp(lbt) * betacf(x, a, b) / a : 1 - Math.exp(lbt) * betacf(1 - x, b, a) / b;
+}
+/* Student-t CDF and quantile with nu degrees of freedom */
+function tCdf(x, nu) { const z = nu / (nu + x * x), p = 0.5 * betainc(z, nu / 2, 0.5); return x >= 0 ? 1 - p : p; }
+function tPpf(p, nu) { let lo = 0, hi = 1; while (tCdf(hi, nu) < p) hi *= 2; for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; if (tCdf(mid, nu) < p) lo = mid; else hi = mid; if (hi - lo < 1e-13 * hi) break; } return (lo + hi) / 2; }
+
+/* ---------- small dense linear algebra ---------- */
+function chol(A) { const n = A.length, L = A.map(() => new Array(n).fill(0)); for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { let s = A[i][j]; for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k]; L[i][j] = i === j ? Math.sqrt(Math.max(s, 1e-300)) : s / L[j][j]; } return L; }
+function cholSolve(L, b) { const n = L.length, y = new Array(n), x = new Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let k = 0; k < i; k++) s -= L[i][k] * y[k]; y[i] = s / L[i][i]; } for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let k = i + 1; k < n; k++) s -= L[k][i] * x[k]; x[i] = s / L[i][i]; } return x; }
+function invSPD(A) { const L = chol(A), n = A.length, cols = []; for (let j = 0; j < n; j++) { const e = new Array(n).fill(0); e[j] = 1; cols.push(cholSolve(L, e)); } return A.map((_, i) => cols.map(c => c[i])); }
+const dotv = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+const matVec = (A, v) => A.map(r => dotv(r, v));
+const quadForm = (v, S) => { let s = 0; for (let i = 0; i < v.length; i++) { const r = S[i]; let q = 0; for (let j = 0; j < v.length; j++) q += r[j] * v[j]; s += v[i] * q; } return s; };
+const bilin = (u, S, v) => { let s = 0; for (let i = 0; i < u.length; i++) { const r = S[i]; let q = 0; for (let j = 0; j < v.length; j++) q += r[j] * v[j]; s += u[i] * q; } return s; };
+
+/* ---------- Bayesian linear regression with Gaussian prior N(m0, diag(1/a0)) and noise precision beta ----------
+   Phi: N rows of basis values; t: N targets; a0: prior precisions (number or array); m0 optional prior mean.
+   Returns the posterior N(m, S): S^-1 = A0 + beta Phi^T Phi,  m = S (A0 m0 + beta Phi^T t). */
+function gram(Phi, t) {
+  const M = Phi.length ? Phi[0].length : 0, G = Array.from({ length: M }, () => new Array(M).fill(0)), b = new Array(M).fill(0);
+  for (let n = 0; n < Phi.length; n++) { const p = Phi[n], tn = t[n]; for (let i = 0; i < M; i++) { const pi = p[i]; if (!pi) continue; b[i] += pi * tn; const Gi = G[i]; for (let j = 0; j <= i; j++) Gi[j] += pi * p[j]; } }
+  for (let i = 0; i < M; i++) for (let j = 0; j < i; j++) G[j][i] = G[i][j];
+  return { G, b, M };
+}
+function blrFromGram(G, b, M, a0, beta, m0) {
+  const A = (i) => Array.isArray(a0) ? a0[i] : a0;
+  const Si = G.map((r, i) => r.map((g, j) => beta * g + (i === j ? A(i) : 0)));
+  const rhs = b.map((v, i) => beta * v + (m0 ? A(i) * m0[i] : 0));
+  const L = chol(Si), m = cholSolve(L, rhs), S = invSPD(Si);
+  return { m, S, Si, L, M };
+}
+function blr(Phi, t, a0, beta, m0, M0) {
+  const M = M0 || (Phi.length ? Phi[0].length : 0);
+  if (!Phi.length) { const S = Array.from({ length: M }, (_, i) => Array.from({ length: M }, (_, j) => i === j ? 1 / (Array.isArray(a0) ? a0[i] : a0) : 0)); return { m: m0 ? m0.slice() : new Array(M).fill(0), S, Si: S.map((r, i) => r.map((v, j) => i === j ? 1 / v : 0)), L: null, M }; }
+  const g = gram(Phi, t); return blrFromGram(g.G, g.b, M, a0, beta, m0);
+}
+/* posterior draw of the weights: m + chol(S) z */
+function drawW(post, z) { const Lc = post.Lc || (post.Lc = chol(post.S)); return post.m.map((mi, i) => { let s = mi; for (let k = 0; k <= i; k++) s += Lc[i][k] * z[k]; return s; }); }
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), ink: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const sum = a => a.reduce((s, v) => s + v, 0);
+const f2 = v => fmt(v, 2), f3 = v => fmt(v, 3), f4 = v => fmt(v, 4);
+const nf = n => n.toLocaleString('en-GB');
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const gf = v => v >= 1000 ? nf(Math.round(v)) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.01 ? fmt(v, 3) : v.toExponential(1);
+const sciT = v => (v === 0 ? '0' : Math.abs(v) >= 1e-3 ? fmt(v, 4) : v.toExponential(2));
+const snap = lv => +Math.pow(10, lv).toPrecision(2);
+const linspace = (a, b, n) => Array.from({ length: n }, (_, i) => a + (b - a) * i / (n - 1));
+const gaussB = (cs, s) => x => cs.map(c => Math.exp(-0.5 * ((x - c) / s) ** 2));
+const vecS = (w, d) => '(' + w.map(v => fmt(v, d == null ? 3 : d)).join(', ') + ')';
+
+/* views that share one canvas */
+function subView(v, xl, yl, pad) {
+  const w = v.w, h = v.h, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  return { ctx: v.ctx, w, h, pad, pw, ph, xl, yl, X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph, iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function panes(cv, n, stackBelow) {
+  const base = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), W = base.w, H = base.h, stacked = W < (stackBelow || 560);
+  const rects = Array.from({ length: n }, (_, i) => stacked ? { x: 0, y: i * H / n, w: W, h: H / n } : { x: i * W / n, y: 0, w: W / n, h: H });
+  return { base, rects, stacked };
+}
+function paneView(base, R, xl, yl, pin, eq) {
+  pin = Object.assign({ l: 42, r: 10, t: 24, b: 28 }, pin || {});
+  const pad = { l: R.x + pin.l, r: base.w - R.x - R.w + pin.r, t: R.y + pin.t, b: base.h - R.y - R.h + pin.b };
+  if (eq) { const pw = base.w - pad.l - pad.r, ph = base.h - pad.t - pad.b, sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, hw = pw / sy / 2; xl = [c - hw, c + hw]; } else { const c = (yl[0] + yl[1]) / 2, hh = ph / sx / 2; yl = [c - hh, c + hh]; } }
+  return subView(base, xl, yl, pad);
+}
+function title(v, text, col) { const c = v.ctx; c.save(); c.font = '600 12px ' + css('--f-body'); c.fillStyle = col || css('--ink'); c.textAlign = 'left'; c.textBaseline = 'bottom'; c.fillText(text, v.pad.l, v.pad.t - 6); c.restore(); }
+function fillBand(v, xs, lo, hi, col, alpha) { const c = v.ctx; c.save(); c.globalAlpha = alpha; c.fillStyle = col; c.beginPath(); xs.forEach((x, i) => c.lineTo(v.X(x), clamp(v.Y(hi[i]), -4000, 4000))); for (let i = xs.length - 1; i >= 0; i--) c.lineTo(v.X(xs[i]), clamp(v.Y(lo[i]), -4000, 4000)); c.closePath(); c.fill(); c.restore(); }
+function pline(v, xs, ys, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); xs.forEach((x, i) => { const py = clamp(v.Y(ys[i]), -4000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); }); c.stroke(); c.restore(); }
+function vline(v, x, col, lw, dash) { seg(v, x, v.yl[0], x, v.yl[1], col, lw || 1.4, dash); }
+function ring(v, x, y, col, r) { const c = v.ctx; c.save(); c.beginPath(); c.arc(v.X(x), v.Y(y), r || 8, 0, 7); c.strokeStyle = col; c.lineWidth = 1.8; c.stroke(); c.restore(); }
+function cross(v, x, y, col, r) { const c = v.ctx, px = v.X(x), py = v.Y(y); r = r || 6; c.save(); c.strokeStyle = css('--surface'); c.lineWidth = 4; c.beginPath(); c.moveTo(px - r, py - r); c.lineTo(px + r, py + r); c.moveTo(px - r, py + r); c.lineTo(px + r, py - r); c.stroke(); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); c.restore(); }
+function diamond(v, x, y, col, r) { const c = v.ctx, px = v.X(x), py = v.Y(y); r = r || 7; c.save(); c.beginPath(); c.moveTo(px, py - r); c.lineTo(px + r, py); c.lineTo(px, py + r); c.lineTo(px - r, py); c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.4; c.stroke(); c.restore(); }
+/* k-sd contour of a 2-D Gaussian with mean m and covariance S */
+function ellPts(m, S, k) { const a = S[0][0], b = S[0][1], d = S[1][1], T = (a + d) / 2, D = Math.sqrt(((a - d) / 2) ** 2 + b * b), l1 = T + D, l2 = Math.max(T - D, 0), th = 0.5 * Math.atan2(2 * b, a - d), ct = Math.cos(th), st = Math.sin(th), P = [];
+  for (let i = 0; i <= 90; i++) { const f = i / 90 * 2 * Math.PI, u = k * Math.sqrt(l1) * Math.cos(f), w = k * Math.sqrt(l2) * Math.sin(f); P.push([m[0] + u * ct - w * st, m[1] + u * st + w * ct]); } return P; }
+function ell(v, m, S, k, col, lw, dash, fillA) { const c = v.ctx, P = ellPts(m, S, k); c.save(); c.beginPath(); P.forEach((p, i) => i ? c.lineTo(v.X(p[0]), v.Y(p[1])) : c.moveTo(v.X(p[0]), v.Y(p[1]))); c.closePath(); if (fillA) { c.globalAlpha = fillA; c.fillStyle = col; c.fill(); c.globalAlpha = 1; } c.strokeStyle = col; c.lineWidth = lw || 1.6; if (dash) c.setLineDash(dash); c.stroke(); c.restore(); }
+/* heat map of f (values in [0, 1]) over a view */
+function hexRgb(c) { c = c.trim(); if (c[0] === '#') { if (c.length === 4) c = '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3]; return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)]; } const m = c.match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : [80, 80, 200]; }
+/* smooth image over the box [x0,x1]×[y0,y1]: f(x, y) returns [colourIndex, alpha] */
+function imgMap(v, box, n, f, cols) {
+  const [x0, x1, y0, y1] = box, nx = n, ny = Math.max(8, Math.round(n * Math.abs((v.Y(y0) - v.Y(y1)) / (v.X(x1) - v.X(x0))))), oc = document.createElement('canvas'); oc.width = nx; oc.height = ny;
+  const g = oc.getContext('2d'), im = g.createImageData(nx, ny), rgb = cols.map(hexRgb);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const x = x0 + (x1 - x0) * (i + 0.5) / nx, y = y1 - (y1 - y0) * (j + 0.5) / ny, [ci, a] = f(x, y), o = 4 * (j * nx + i), c = rgb[ci]; im.data[o] = c[0]; im.data[o + 1] = c[1]; im.data[o + 2] = c[2]; im.data[o + 3] = Math.round(255 * clamp(a, 0, 1)); }
+  g.putImageData(im, 0, 0); const c = v.ctx; c.save(); c.imageSmoothingEnabled = true; c.drawImage(oc, v.X(x0), v.Y(y1), v.X(x1) - v.X(x0), v.Y(y0) - v.Y(y1)); c.restore();
+}
+function heat(v, f, col, n, amax) { imgMap(v, [v.xl[0], v.xl[1], v.yl[0], v.yl[1]], n, (x, y) => [0, clamp(f(x, y), 0, 1) * (amax || 0.85)], [col]); }
+function inv2(S) { const d = S[0][0] * S[1][1] - S[0][1] * S[1][0]; return [[S[1][1] / d, -S[0][1] / d], [-S[1][0] / d, S[0][0] / d]]; }
+function gauss2(m, S) { const P = inv2(S); return (x, y) => { const a = x - m[0], b = y - m[1]; return Math.exp(-0.5 * (P[0][0] * a * a + 2 * P[0][1] * a * b + P[1][1] * b * b)); }; }
+/* least squares by modified Gram-Schmidt QR (for the maximum-likelihood fit) */
+function lsq(A, b) {
+  const n = A.length, p = A[0].length, Q = A.map(r => r.slice()), R = Array.from({ length: p }, () => new Array(p).fill(0));
+  for (let j = 0; j < p; j++) { let nr = 0; for (let i = 0; i < n; i++) nr += Q[i][j] ** 2; nr = Math.sqrt(nr); R[j][j] = nr; for (let i = 0; i < n; i++) Q[i][j] /= nr;
+    for (let k = j + 1; k < p; k++) { let d = 0; for (let i = 0; i < n; i++) d += Q[i][j] * Q[i][k]; R[j][k] = d; for (let i = 0; i < n; i++) Q[i][k] -= d * Q[i][j]; } }
+  const qb = Array.from({ length: p }, (_, j) => { let s = 0; for (let i = 0; i < n; i++) s += Q[i][j] * b[i]; return s; });
+  const x = new Array(p).fill(0); for (let j = p - 1; j >= 0; j--) { let s = qb[j]; for (let k = j + 1; k < p; k++) s -= R[j][k] * x[k]; x[j] = s / R[j][j]; } return x;
+}
+/* predictive mean and variance of a posterior at basis vector p */
+const predAt = (post, p) => ({ m: dotv(post.m, p), q: quadForm(p, post.S) });
+
+/* ======================= hero ======================= */
+const HB = { phi: (() => { const g = gaussB(linspace(-0.1, 1.1, 11), 0.12); return x => [1, ...g(x)]; })(), alpha: 1, beta: 1 / 0.15 ** 2, r: mulberry32(3), z: null,
+  P: [[0.08, 0.52], [0.3, 0.86], [0.55, -0.31], [0.7, -0.9]] };
+let heroV = null;
+function drawHero() {
+  const C = C0(), v = heroV = frame($('#hero-cv'), [0, 1], [-2, 2], { l: 34, r: 12, t: 12, b: 28 }); axes(v, 'x', 't', { sx: 0.2, sy: 1 }); clip(v);
+  const post = blr(HB.P.map(p => HB.phi(p[0])), HB.P.map(p => p[1]), HB.alpha, HB.beta, null, 12), xs = linspace(0, 1, 181);
+  if (!HB.z) HB.z = Array.from({ length: 10 }, () => Array.from({ length: 12 }, () => gaussOf(HB.r)));
+  const pr = xs.map(x => predAt(post, HB.phi(x))), mu = pr.map(p => p.m), sd = pr.map(p => Math.sqrt(1 / HB.beta + p.q));
+  fillBand(v, xs, mu.map((m, i) => m - 2 * sd[i]), mu.map((m, i) => m + 2 * sd[i]), C.lda, 0.13);
+  fillBand(v, xs, mu.map((m, i) => m - sd[i]), mu.map((m, i) => m + sd[i]), C.lda, 0.17);
+  HB.z.forEach(z => { const w = drawW(post, z); pline(v, xs, xs.map(x => dotv(w, HB.phi(x))), C.lda, 1.1, null, 0.4); });
+  pline(v, xs, mu, C.lda, 2.8);
+  HB.P.forEach(p => dot(v, p[0], p[1], C.b, 5));
+  v.ctx.restore();
+  let lo = 0, hi = 0; sd.forEach((s, i) => { if (s < sd[lo]) lo = i; if (s > sd[hi]) hi = i; });
+  const n = HB.P.length;
+  $('#hero-cap').innerHTML = n ? `${n} point${n > 1 ? 's' : ''}. The predictive sd runs from ${tip(f2(sd[lo]), `smallest √(1/β + φᵀS_Nφ) on the grid,\nat x = ${f2(xs[lo])}; the noise sd alone is 0.15`)} near the data to ${tip(f2(sd[hi]), `largest √(1/β + φᵀS_Nφ), at x = ${f2(xs[hi])}`)} where the curve is least pinned down. Faint lines: ten curves drawn from the posterior.`
+    : `No data: the band is the prior's, the same width everywhere. Click to add a point.`;
+}
+$('#hero-cv').addEventListener('click', e => { if (!heroV) return; const [px, py] = evPos($('#hero-cv'), e); const x = heroV.iX(px), y = heroV.iY(py); if (x < 0 || x > 1 || y < -2 || y > 2 || HB.P.length >= 60) return; HB.P.push([x, y]); drawHero(); });
+$('#hero-cv').style.cursor = 'crosshair';
+$('#hero-undo').addEventListener('click', () => { HB.P.pop(); drawHero(); });
+$('#hero-clear').addEventListener('click', () => { HB.P = []; drawHero(); });
+$('#hero-draw').addEventListener('click', () => { HB.z = null; drawHero(); });
+fig($('#hero-cv'), drawHero);
+
+/* ======================= 1. Bayesian curve fitting (PRML 1.2.6) ======================= */
+const vdc = i => { let x = 0, f = 0.5; for (let k = i + 1; k; k >>= 1, f /= 2) if (k & 1) x += f; return x; };
+const WY = (() => { const r = mulberry32(11), mk = (lo, hi) => Array.from({ length: 25 }, (_, i) => { const x = lo + (hi - lo) * clamp(vdc(i) + 0.03 * (r() - 0.5), 0.01, 0.99); return [x, Math.sin(2 * Math.PI * x) + 0.3 * gaussOf(r)]; }); return { all: mk(0, 1), left: mk(0, 0.55), mode: 'all', M: 9, N: 10, x: 0.8, alpha: 5e-3, beta: 11.1 }; })();
+const polyPhi = M => x => { const p = [1]; for (let i = 1; i <= M; i++) p.push(p[i - 1] * x); return p; };
+function whyFit() {
+  const P = WY[WY.mode].slice(0, WY.N), phi = polyPhi(WY.M), Phi = P.map(p => phi(p[0])), t = P.map(p => p[1]);
+  const post = blr(Phi, t, WY.alpha, WY.beta, null, WY.M + 1);
+  let ml = null; if (P.length > WY.M) { const w = lsq(Phi, t), s2 = sum(P.map((p, i) => (t[i] - dotv(w, Phi[i])) ** 2)) / P.length; ml = { w, s: Math.sqrt(s2) }; }
+  return { P, phi, post, ml };
+}
+let whyV = null;
+function drawWhy() {
+  const C = C0(), F = whyFit(), xs = linspace(0, 1, 201), v = whyV = frame($('#why-cv'), [0, 1], [-2.2, 2.2], { l: 38, r: 12, t: 12, b: 28 }); axes(v, 'x', 't', { sx: 0.1, sy: 1 }); clip(v);
+  const pr = xs.map(x => predAt(F.post, F.phi(x))), mu = pr.map(p => p.m), sd = pr.map(p => Math.sqrt(1 / WY.beta + p.q));
+  fillBand(v, xs, mu.map((m, i) => m - 2 * sd[i]), mu.map((m, i) => m + 2 * sd[i]), C.lda, 0.12);
+  fillBand(v, xs, mu.map((m, i) => m - sd[i]), mu.map((m, i) => m + sd[i]), C.lda, 0.16);
+  curve(v, x => Math.sin(2 * Math.PI * x), C.a, 1.6, [2, 4]);
+  if (F.ml) { const ym = xs.map(x => dotv(F.ml.w, F.phi(x))); pline(v, xs, ym, C.muted, 1.8, [6, 4]); pline(v, xs, ym.map(y => y + 2 * F.ml.s), C.muted, 1, [2, 3]); pline(v, xs, ym.map(y => y - 2 * F.ml.s), C.muted, 1, [2, 3]); }
+  pline(v, xs, mu, C.lda, 2.8);
+  if (WY.mode === 'left') { const c = v.ctx; c.save(); c.fillStyle = C.soft; c.globalAlpha = 0.5; c.fillRect(v.X(0.55), v.pad.t, v.X(1) - v.X(0.55), v.ph); c.restore(); }
+  F.P.forEach(p => dot(v, p[0], p[1], C.b, 4.8));
+  const x0 = WY.x, p0 = predAt(F.post, F.phi(x0)), s0 = Math.sqrt(1 / WY.beta + p0.q);
+  vline(v, x0, C.ink, 1, [3, 3]); dot(v, x0, p0.m, C.lda, 5.5);
+  v.ctx.restore();
+  $('#why-n-o').textContent = WY.N; $('#why-x-o').textContent = f2(x0);
+  $('#why-m').innerHTML = tip(f3(p0.m), `β φ(x)ᵀ S Σₙ φ(xₙ) tₙ = m_Nᵀφ(x)\nat x = ${f3(x0)}, polynomial order M = ${WY.M}`);
+  $('#why-s').innerHTML = tip(f3(s0), `√(1/β + φᵀSφ) = √(${f4(1 / WY.beta)} + ${sciT(p0.q)})`);
+  if (F.ml) { const ym = dotv(F.ml.w, F.phi(x0)); $('#why-ml').innerHTML = tip(`${Math.abs(ym) > 999 ? (([m, e]) => `${m}&times;10<sup>${+e}</sup>`)(ym.toExponential(1).split('e')) : f2(ym)} &plusmn; ${f3(F.ml.s)}`, `w_ML by least squares (QR); σ_ML² = mean squared residual\n= ${sciT(F.ml.s ** 2)}, the same at every x`); }
+  else $('#why-ml').innerHTML = tip('none', `N = ${WY.N} points cannot pin down ${WY.M + 1} weights:\nleast squares has infinitely many solutions`);
+  $('#run-why').innerHTML = `<b>Running example</b>: M = ${WY.M}, N = ${F.P.length}, &alpha; = 0.005, &beta; = 11.1. At x = ${f2(x0)}, &phi;(x)<sup>&top;</sup>S&phi;(x) = ${tip(sciT(p0.q), 'the weights’ posterior variance seen through φ(x)')}, so s&sup2;(x) = 1/11.1 + ${sciT(p0.q)} = ${tip(f4(s0 * s0), `${f4(1 / WY.beta)} + ${sciT(p0.q)}`)} and s(x) = ${f3(s0)}. The 95% predictive interval is m(x) &plusmn; 1.96 s(x) = ${tip(`${f2(p0.m - 1.96 * s0)} to ${f2(p0.m + 1.96 * s0)}`, `${f3(p0.m)} ∓ 1.96 × ${f3(s0)}`)}; the true curve there is ${f3(Math.sin(2 * Math.PI * x0))}.`;
+  const maxX = F.P.length ? Math.max(...F.P.map(p => p[0])) : -1, ratio = s0 / 0.3;
+  let s;
+  if (!F.P.length) s = `No data yet: the prediction is the prior's, mean 0 everywhere, with sd ${f2(s0)} at this x (the prior on the weights plus the noise). Add points with the slider.`;
+  else if (WY.mode === 'left' && x0 > maxX + 0.03) s = `There is no data beyond x = ${f2(maxX)}, so the Bayesian band balloons: at x = ${f2(x0)} its sd is ${f2(s0)}, ${fmt(ratio, 1)}&times; the true noise sd 0.3. ${F.ml ? `Maximum likelihood still claims ${F.ml.s < 0.005 ? 'zero error, because its curve passes exactly through every point' : `&plusmn;${f2(F.ml.s)} here, the same as next to the data`}; out here its prediction ${Math.abs(dotv(F.ml.w, F.phi(x0))) > 2.2 ? 'has shot off the chart' : 'is simply a guess'}.` : 'Maximum likelihood has no unique answer at all with so few points.'}`;
+  else if (!F.ml) s = `With N = ${F.P.length} points and ${WY.M + 1} weights, least squares has infinitely many perfect fits and no way to choose. The Bayesian answer is still well defined, because the prior breaks the tie in favour of small weights. Its sd at this x is ${f2(s0)}.`;
+  else if (F.P.length === WY.M + 1) s = `N = ${F.P.length} = M + 1: the maximum-likelihood polynomial passes exactly through every point, so it estimates the noise as ${f3(F.ml.s)} and claims to be certain. That is overfitting in its purest form. The Bayesian curve stays calm, and its band (sd ${f2(s0)} here) never drops below the noise sd it was told, 0.30.`;
+  else s = `Near the data the Bayesian sd is close to the noise sd 0.30 (here ${f2(s0)}, of which the weights contribute ${pct(p0.q / (s0 * s0), 0)} of the variance). Maximum likelihood's noise estimate, ${f3(F.ml.s)}, is ${F.ml.s < 0.3 ? 'too small, because a flexible curve absorbs some of the noise' : 'close to the truth'}, and it uses the same &plusmn; at every x. ${WY.mode === 'all' ? '<b>Now try &ldquo;Only x &lt; 0.55&rdquo;</b> and move the probe to the right.' : ''}`;
+  $('#why-say').innerHTML = s;
+}
+seg1('[data-wm]', 'data-wm', m => { WY.M = +m; drawWhy(); });
+seg1('[data-wd]', 'data-wd', m => { WY.mode = m; drawWhy(); });
+$('#why-n').addEventListener('input', e => { WY.N = +e.target.value; drawWhy(); });
+$('#why-x').addEventListener('input', e => { WY.x = +e.target.value; drawWhy(); });
+$('#why-cv').addEventListener('pointermove', e => { if (!whyV || e.pointerType === 'touch') return; const x = whyV.iX(evPos($('#why-cv'), e)[0]); if (x < 0 || x > 1) return; WY.x = Math.round(x * 200) / 200; $('#why-x').value = WY.x; drawWhy(); });
+fig($('#why-cv'), drawWhy);
+
+/* ======================= 2. the prior ======================= */
+const PR = { la: 0.3, z: null, r: mulberry32(21), pick: [0.6, -0.9] };
+let prW = null;
+function drawPrior() {
+  const C = C0(), a = snap(PR.la), sd = 1 / Math.sqrt(a), L = panes($('#pr-cv'), 2);
+  if (!PR.z) PR.z = Array.from({ length: 8 }, () => [gaussOf(PR.r), gaussOf(PR.r)]);
+  const vw = prW = paneView(L.base, L.rects[0], [-3, 3], [-3, 3], { l: 40 }, true); title(vw, 'Weight space: prior p(w)'); axes(vw, 'w₀', 'w₁', { sx: 1, sy: 1 }); clip(vw);
+  heat(vw, gauss2([0, 0], [[sd * sd, 0], [0, sd * sd]]), C.lda, 70, 0.5);
+  ell(vw, [0, 0], [[sd * sd, 0], [0, sd * sd]], 1, C.muted, 1.4); ell(vw, [0, 0], [[sd * sd, 0], [0, sd * sd]], 2, C.muted, 1.2, [4, 3]);
+  const W = PR.z.map(z => [z[0] * sd, z[1] * sd]); W.forEach(w => dot(vw, w[0], w[1], C.ink, 4));
+  diamond(vw, PR.pick[0], PR.pick[1], C.b, 7); vw.ctx.restore();
+  const vd = paneView(L.base, L.rects[1], [-1, 1], [-3, 3], { l: 40 }); title(vd, 'Data space: the lines y = w₀ + w₁x'); axes(vd, 'x', 'y', { sx: 0.5, sy: 1 }); clip(vd);
+  W.forEach(w => seg(vd, -1, w[0] - w[1], 1, w[0] + w[1], C.ink, 1.3, null, 0.55));
+  seg(vd, -1, PR.pick[0] - PR.pick[1], 1, PR.pick[0] + PR.pick[1], C.b, 3); vd.ctx.restore();
+  const r2 = PR.pick[0] ** 2 + PR.pick[1] ** 2, dens = a / (2 * Math.PI) * Math.exp(-a * r2 / 2), rel = Math.exp(-a * r2 / 2), nsd = Math.sqrt(r2) / sd;
+  $('#pr-a-o').textContent = gf(a);
+  $('#pr-sd').innerHTML = tip(f3(sd), `1/√α = 1/√${gf(a)}`);
+  $('#pr-y1').innerHTML = tip(f3(Math.sqrt(2 / a)), `y(1) = w₀ + w₁ has variance 1/α + 1/α = 2/α\n√(2/${gf(a)})`);
+  $('#pr-p').innerHTML = tip(sciT(dens), `(α/2π) exp(−α‖w‖²/2), ‖w‖² = ${f3(r2)}\n= ${pct(rel, 1)} of the peak density at w = 0`);
+  $('#run-pr').innerHTML = `<b>Running example</b>: &alpha; = ${gf(a)}, so each weight has sd 1/&radic;&alpha; = ${tip(f3(sd), `1/√${gf(a)}`)} and a 95% range of &plusmn;${f2(1.96 * sd)}. Your pick w = (${f2(PR.pick[0])}, ${f2(PR.pick[1])}) lies ${tip(f2(nsd), `‖w‖ √α = ${f3(Math.sqrt(r2))} × ${f3(Math.sqrt(a))}`)} sd from the centre, where the prior density is ${pct(rel, 1)} of its peak.`;
+  const out = W.filter(w => Math.abs(w[0]) > 3 || Math.abs(w[1]) > 3).length;
+  $('#pr-say').innerHTML = (a >= 6 ? `&alpha; = ${gf(a)} is a strong prior: the weights are almost surely within &plusmn;${f2(2 * sd)} of 0, so every line is nearly flat and passes close to the origin. Data would have to work hard to convince this prior.`
+    : a <= 0.3 ? `&alpha; = ${gf(a)} is a weak prior: weights of &plusmn;${f2(2 * sd)} are still quite plausible, so the lines point every which way${out ? ` (${out} of the 8 draws fall outside this window)` : ''}. Almost any line is allowed until the data speak.`
+    : `&alpha; = ${gf(a)}: weights of about &plusmn;${f2(sd)} are typical. The prior has no favourite direction: steep and shallow, rising and falling lines are equally plausible, as long as they are not extreme.`)
+    + ` Your line, w = (${f2(PR.pick[0])}, ${f2(PR.pick[1])}), sits ${f2(nsd)} sd out, ${nsd > 2.5 ? 'so the prior finds it rather unlikely' : nsd < 1 ? 'well inside the bulk of the prior' : 'a perfectly ordinary line to this prior'}.`;
+}
+$('#pr-a').addEventListener('input', e => { PR.la = +e.target.value; drawPrior(); });
+$('#pr-draw').addEventListener('click', () => { PR.z = null; drawPrior(); });
+$('#pr-cv').addEventListener('click', e => { if (!prW) return; const [px, py] = evPos($('#pr-cv'), e), x = prW.iX(px), y = prW.iY(py); if (x < prW.xl[0] || x > prW.xl[1] || y < prW.yl[0] || y > prW.yl[1] || px > prW.pad.l + prW.pw || py > prW.pad.t + prW.ph) return; PR.pick = [x, y]; drawPrior(); });
+$('#pr-cv').style.cursor = 'crosshair';
+fig($('#pr-cv'), drawPrior);
+
+/* ======================= 3. the posterior ======================= */
+const PO0 = [[-0.8, -0.62], [-0.35, -0.53], [0.05, -0.2], [0.45, 0.02], [0.85, 0.05]];
+const PO = { P: PO0.map(p => p.slice()), la: 0.3, lb: 0.6, z: null, r: mulberry32(23) };
+let poD = null;
+function poFit() {
+  const a = snap(PO.la), b = snap(PO.lb), Phi = PO.P.map(p => [1, p[0]]), t = PO.P.map(p => p[1]);
+  const post = blr(Phi, t, a, b, null, 2); const g = gram(Phi, t); let ml = null;
+  const det = g.G[0][0] * g.G[1][1] - g.G[0][1] ** 2; if (det > 1e-9) { const Gi = inv2(g.G); ml = { w: matVec(Gi, g.b), S: Gi.map(r => r.map(x => x / b)) }; }
+  return { a, b, post, ml, g };
+}
+function drawPost() {
+  const C = C0(), F = poFit(), L = panes($('#po-cv'), 2);
+  if (!PO.z) PO.z = Array.from({ length: 8 }, () => [gaussOf(PO.r), gaussOf(PO.r)]);
+  const vd = poD = paneView(L.base, L.rects[0], [-1, 1], [-1.5, 1.5], { l: 40 }); title(vd, 'Data space: drag the points'); axes(vd, 'x', 't', { sx: 0.5, sy: 0.5 }); clip(vd);
+  PO.z.forEach(z => { const w = drawW(F.post, z); seg(vd, -1, w[0] - w[1], 1, w[0] + w[1], C.lda, 1.1, null, 0.35); });
+  if (F.ml) seg(vd, -1, F.ml.w[0] - F.ml.w[1], 1, F.ml.w[0] + F.ml.w[1], C.b, 1.8, [6, 4]);
+  seg(vd, -1, F.post.m[0] - F.post.m[1], 1, F.post.m[0] + F.post.m[1], C.lda, 2.8);
+  PO.P.forEach(p => dot(vd, p[0], p[1], C.ink, 5.5)); vd.ctx.restore();
+  const vw = paneView(L.base, L.rects[1], [-1.2, 1.2], [-1.2, 1.2], { l: 40 }, true); title(vw, 'Weight space'); axes(vw, 'w₀', 'w₁', { sx: 0.5, sy: 0.5 }); clip(vw);
+  const s0 = 1 / F.a, P0 = [[s0, 0], [0, s0]]; ell(vw, [0, 0], P0, 1, C.muted, 1.4); ell(vw, [0, 0], P0, 2, C.muted, 1.1, [4, 3]);
+  if (F.ml) { ell(vw, F.ml.w, F.ml.S, 1, C.b, 1.5); ell(vw, F.ml.w, F.ml.S, 2, C.b, 1.1, [4, 3]); dot(vw, F.ml.w[0], F.ml.w[1], C.b, 4.5); }
+  ell(vw, F.post.m, F.post.S, 2, C.lda, 1.4, null, 0.12); ell(vw, F.post.m, F.post.S, 1, C.lda, 2.2, null, 0.18); dot(vw, F.post.m[0], F.post.m[1], C.lda, 5.5); vw.ctx.restore();
+  const S = F.post.S, sd0 = Math.sqrt(S[0][0]), sd1 = Math.sqrt(S[1][1]), r = S[0][1] / (sd0 * sd1), Si = F.post.Si, xbar = sum(PO.P.map(p => p[0])) / PO.P.length;
+  $('#po-a-o').textContent = gf(F.a); $('#po-b-o').textContent = gf(F.b);
+  $('#po-m').innerHTML = tip(vecS(F.post.m, 2), `m_N = β S_N Φᵀt\n= (${f4(F.post.m[0])}, ${f4(F.post.m[1])})`);
+  $('#po-sd').innerHTML = tip(`${f3(sd0)}, ${f3(sd1)}`, `√ of the diagonal of S_N = (αI + βΦᵀΦ)⁻¹\nS_N = [[${sciT(S[0][0])}, ${sciT(S[0][1])}], [${sciT(S[1][0])}, ${sciT(S[1][1])}]]`);
+  $('#po-r').innerHTML = tip(f2(r), `S_N[0][1] / (sd₀ sd₁) = ${sciT(S[0][1])} / (${f3(sd0)} × ${f3(sd1)})`);
+  $('#run-po').innerHTML = `<b>Running example</b>: with N = ${PO.P.length} points, &Sigma;x<sub>n</sub> = ${f3(F.g.G[0][1])} and &Sigma;x<sub>n</sub>&sup2; = ${f3(F.g.G[1][1])}, so S<sub>N</sub><sup>&minus;1</sup> = &alpha;I + &beta;&Phi;<sup>&top;</sup>&Phi; = [[${tip(f2(Si[0][0]), `α + βN = ${gf(F.a)} + ${gf(F.b)} × ${PO.P.length}`)}, ${tip(f2(Si[0][1]), `βΣxₙ = ${gf(F.b)} × ${f3(F.g.G[0][1])}`)}], [${f2(Si[1][0])}, ${tip(f2(Si[1][1]), `α + βΣxₙ² = ${gf(F.a)} + ${gf(F.b)} × ${f3(F.g.G[1][1])}`)}]]. Inverting and multiplying by &beta;&Phi;<sup>&top;</sup>t = (${f2(F.b * F.g.b[0])}, ${f2(F.b * F.g.b[1])}) gives m<sub>N</sub> = ${tip(vecS(F.post.m, 3), 'S_N · βΦᵀt')}${F.ml ? `, against the least-squares w<sub>ML</sub> = ${tip(vecS(F.ml.w, 3), '(ΦᵀΦ)⁻¹Φᵀt')}` : ''}.`;
+  const shrink = F.ml ? Math.hypot(F.post.m[0] - F.ml.w[0], F.post.m[1] - F.ml.w[1]) : 0;
+  let s = Math.abs(r) > 0.3 ? `The points sit ${xbar > 0 ? 'to the right' : 'to the left'} of x = 0 (mean ${f2(xbar)}), so the line's height there is well known but its tilt is not: a steeper line needs a ${xbar > 0 ? 'lower' : 'higher'} intercept to pass through them. That ties w<sub>0</sub> and w<sub>1</sub> together (correlation ${f2(r)}): the ellipses are tilted.`
+    : `The points straddle x = 0 (mean ${f2(xbar)}), so intercept and slope are learned almost independently (correlation ${f2(r)}) and the ellipses are nearly upright.`;
+  s += F.ml ? (shrink > 0.1 ? ` The prior is strong compared with the data here: it pulls the posterior mean ${f2(shrink)} away from w<sub>ML</sub>, towards the origin.` : ` The data dominate: the posterior mean is only ${f3(shrink)} from w<sub>ML</sub>, and the posterior ellipse sits almost on the likelihood's, a little tighter.`) : ' With one distinct input the likelihood cannot fix the slope; only the prior keeps the posterior finite.';
+  $('#po-say').innerHTML = s + (Math.abs(r) <= 0.3 ? ' <b>Press &ldquo;Move the points right&rdquo;</b> to see the tilt appear.' : '');
+}
+draggable($('#po-cv'), () => poD, () => PO.P, drawPost);
+$('#po-a').addEventListener('input', e => { PO.la = +e.target.value; drawPost(); });
+$('#po-b').addEventListener('input', e => { PO.lb = +e.target.value; drawPost(); });
+$('#po-reset').addEventListener('click', () => { PO.P = PO0.map(p => p.slice()); drawPost(); });
+$('#po-far').addEventListener('click', () => { PO.P = PO0.map((p, i) => [0.3 + 0.14 * i, -0.3 + 0.5 * (0.3 + 0.14 * i) + (p[1] - (-0.3 + 0.5 * p[0]))]); drawPost(); });
+fig($('#po-cv'), drawPost);
+
+/* ======================= 4. sequential learning (PRML fig. 3.7) ======================= */
+const SQ = (() => { const r = mulberry32(71), pool = Array.from({ length: 200 }, () => { const x = 2 * r() - 1; return [x, -0.3 + 0.5 * x + 0.2 * gaussOf(r)]; }); const r2 = mulberry32(72); return { pool, used: 0, P: [], alpha: 2, beta: 25, z: Array.from({ length: 6 }, () => [gaussOf(r2), gaussOf(r2)]), Si: [[2, 0], [0, 2]], h: [0, 0], prevSi: null }; })();
+function sqAdd(p) { SQ.prevSi = SQ.Si.map(r => r.slice()); const f = [1, p[0]]; for (let i = 0; i < 2; i++) { for (let j = 0; j < 2; j++) SQ.Si[i][j] += SQ.beta * f[i] * f[j]; SQ.h[i] += SQ.beta * f[i] * p[1]; } SQ.P.push(p); }
+function sqPost() { const S = inv2(SQ.Si); return { m: matVec(S, SQ.h), S }; }
+let sqD = null;
+function drawSeq() {
+  const C = C0(), L = panes($('#sq-cv'), 3, 640), post = sqPost(), n = SQ.P.length, last = SQ.P[n - 1];
+  const v1 = paneView(L.base, L.rects[0], [-1, 1], [-1, 1], { l: 36 }, true); title(v1, n ? 'Likelihood of the newest point' : 'Likelihood: no data yet'); axes(v1, 'w₀', 'w₁', { sx: 0.5, sy: 0.5 }); clip(v1);
+  if (last) heat(v1, (w0, w1) => Math.exp(-0.5 * SQ.beta * (last[1] - w0 - w1 * last[0]) ** 2), C.b, 64, 0.75);
+  cross(v1, -0.3, 0.5, C.ink); v1.ctx.restore();
+  const v2 = paneView(L.base, L.rects[1], [-1, 1], [-1, 1], { l: 36 }, true); title(v2, n ? `Posterior after ${n} point${n > 1 ? 's' : ''}` : 'Prior (posterior after 0 points)'); axes(v2, 'w₀', 'w₁', { sx: 0.5, sy: 0.5 }); clip(v2);
+  heat(v2, gauss2(post.m, post.S), C.lda, 64, 0.8); cross(v2, -0.3, 0.5, C.ink); v2.ctx.restore();
+  const v3 = sqD = paneView(L.base, L.rects[2], [-1, 1], [-1, 1], { l: 36 }); title(v3, 'Data space: 6 lines from the posterior'); axes(v3, 'x', 't', { sx: 0.5, sy: 0.5 }); clip(v3);
+  const Lc = chol(post.S); SQ.z.forEach(z => { const w0 = post.m[0] + Lc[0][0] * z[0], w1 = post.m[1] + Lc[1][0] * z[0] + Lc[1][1] * z[1]; seg(v3, -1, w0 - w1, 1, w0 + w1, C.lda, 1.6, null, 0.75); });
+  SQ.P.forEach(p => dot(v3, p[0], p[1], C.b, 4.5)); if (last) ring(v3, last[0], last[1], C.ink, 8.5); v3.ctx.restore();
+  const sd0 = Math.sqrt(post.S[0][0]), sd1 = Math.sqrt(post.S[1][1]);
+  let diff = 0; if (n) { const B = blr(SQ.P.map(p => [1, p[0]]), SQ.P.map(p => p[1]), SQ.alpha, SQ.beta, null, 2); diff = Math.max(Math.abs(B.m[0] - post.m[0]), Math.abs(B.m[1] - post.m[1]), Math.abs(B.S[0][0] - post.S[0][0]), Math.abs(B.S[1][1] - post.S[1][1]), Math.abs(B.S[0][1] - post.S[0][1])); }
+  $('#sq-n').textContent = n;
+  $('#sq-sd').innerHTML = tip(`${f3(sd0)}, ${f3(sd1)}`, `√ diagonal of S_n\nprior: 1/√2 = 0.707 each`);
+  $('#sq-ch').innerHTML = n ? tip(diff < 1e-12 ? 'identical' : sciT(diff), `largest |difference| between the sequential\nand the one-batch m_N and S_N: ${diff.toExponential(1)}\n(rounding only)`) : tip('&mdash;', 'no data yet');
+  const d = [post.m[0] + 0.3, post.m[1] - 0.5], Pm = inv2(post.S), mah = Math.sqrt(d[0] * (Pm[0][0] * d[0] + Pm[0][1] * d[1]) + d[1] * (Pm[1][0] * d[0] + Pm[1][1] * d[1]));
+  if (last) { const a = SQ.prevSi, b = SQ.Si, f = [1, last[0]];
+    $('#run-sq').innerHTML = `<b>Running example</b>: point ${n} is (x, t) = (${f2(last[0])}, ${f2(last[1])}), so &phi; = (1, ${f2(last[0])}) and &beta;&phi;&phi;<sup>&top;</sup> = [[${f2(25)}, ${f2(25 * f[1])}], [${f2(25 * f[1])}, ${f2(25 * f[1] * f[1])}]]. The precision goes from [[${f2(a[0][0])}, ${f2(a[0][1])}], [${f2(a[1][0])}, ${f2(a[1][1])}]] to ${tip(`[[${f2(b[0][0])}, ${f2(b[0][1])}], [${f2(b[1][0])}, ${f2(b[1][1])}]]`, 'S_{n−1}⁻¹ + βφφᵀ')}, and the mean to m<sub>${n}</sub> = ${tip(vecS(post.m, 3), 'S_n (S_{n−1}⁻¹ m_{n−1} + βφ t_n)')}. The truth is (&minus;0.300, 0.500).`; }
+  else $('#run-sq').innerHTML = `<b>Running example</b>: no data yet, so the belief is the prior N(0, &frac12;I): precision [[2, 0], [0, 2]], mean (0, 0). Add a point to see the first update.`;
+  $('#sq-say').innerHTML = !n ? `Before any data the posterior is the round prior, and the six lines are anything-goes. <b>Add a point.</b>`
+    : n === 1 ? `One point. Its likelihood is a ridge: every (w<sub>0</sub>, w<sub>1</sub>) whose line passes near (${f2(last[0])}, ${f2(last[1])}) is equally good. The posterior is squeezed across the ridge only, and the six lines all pass close to the point but pivot freely around it.`
+    : n < 5 ? `${n} points. Each new ridge cuts the posterior at a different angle, so the uncertainty shrinks in both directions (sd ${f3(sd0)} and ${f3(sd1)}, down from 0.707). The lines now agree on the overall trend.`
+    : `${n} points. The posterior is a small blob around the truth (it is ${f2(mah)} posterior sd away), and the newest point's broad ridge barely changes it: each point now adds a small fraction to a large precision. The order of the points never mattered: the batch formula gives the same posterior.`;
+}
+$('#sq-1').addEventListener('click', () => { sqAdd(SQ.pool[SQ.used++ % 200]); drawSeq(); });
+$('#sq-5').addEventListener('click', () => { for (let i = 0; i < 5; i++) sqAdd(SQ.pool[SQ.used++ % 200]); drawSeq(); });
+$('#sq-0').addEventListener('click', () => { SQ.P = []; SQ.used = 0; SQ.Si = [[2, 0], [0, 2]]; SQ.h = [0, 0]; SQ.prevSi = null; drawSeq(); });
+$('#sq-cv').addEventListener('click', e => { if (!sqD) return; const [px, py] = evPos($('#sq-cv'), e); if (px < sqD.pad.l || px > sqD.pad.l + sqD.pw || py < sqD.pad.t || py > sqD.pad.t + sqD.ph) return; sqAdd([sqD.iX(px), sqD.iY(py)]); drawSeq(); });
+fig($('#sq-cv'), drawSeq);
+
+/* ======================= 5. ridge = MAP; Laplace prior = lasso ======================= */
+const RD = (() => { const r = mulberry32(36), X = [], t = []; for (let i = 0; i < 20; i++) { const z1 = gaussOf(r), z2 = gaussOf(r), x1 = z1, x2 = 0.8 * z1 + 0.6 * z2; X.push([x1, x2]); t.push(1.0 * x1 + 0.3 * x2 + gaussOf(r)); }
+  const g = gram(X, t); return { X, t, G: g.G, b: g.b, wml: matVec(inv2(g.G), g.b), q: 2, ll: 1, beta: 1 }; })();
+function rdMap(lam, q) {
+  if (q === 2) return matVec(inv2([[RD.G[0][0] + lam, RD.G[0][1]], [RD.G[1][0], RD.G[1][1] + lam]]), RD.b);
+  const w = [0, 0], soft = (z, g) => Math.sign(z) * Math.max(0, Math.abs(z) - g);   // minimise ½‖t − Xw‖² + (λ/2)Σ|wj|
+  for (let it = 0; it < 2000; it++) { const o0 = w[0], o1 = w[1]; w[0] = soft(RD.b[0] - RD.G[0][1] * w[1], lam / 2) / RD.G[0][0]; w[1] = soft(RD.b[1] - RD.G[1][0] * w[0], lam / 2) / RD.G[1][1]; if (Math.abs(w[0] - o0) + Math.abs(w[1] - o1) < 1e-15) break; }
+  return w;
+}
+const rdSSE = w => sum(RD.X.map((x, i) => (RD.t[i] - x[0] * w[0] - x[1] * w[1]) ** 2));
+function rdPostMean(lam, q) { // numerical integral of the posterior on a grid
+  const a = lam * RD.beta, Gi = inv2(RD.G), sd = [Math.sqrt(Gi[0][0] / RD.beta), Math.sqrt(Gi[1][1] / RD.beta)], n = 240;
+  const lo = [Math.min(0, RD.wml[0]) - 6 * sd[0], Math.min(0, RD.wml[1]) - 6 * sd[1]], hi = [Math.max(0, RD.wml[0]) + 6 * sd[0], Math.max(0, RD.wml[1]) + 6 * sd[1]];
+  const LP = [], W = []; let mx = -Infinity;
+  for (let i = 0; i <= n; i++) { const w0 = lo[0] + (hi[0] - lo[0]) * i / n; for (let j = 0; j <= n; j++) { const w1 = lo[1] + (hi[1] - lo[1]) * j / n, d0 = w0 - RD.wml[0], d1 = w1 - RD.wml[1];
+    const E = 0.5 * (RD.G[0][0] * d0 * d0 + 2 * RD.G[0][1] * d0 * d1 + RD.G[1][1] * d1 * d1), R = q === 2 ? w0 * w0 + w1 * w1 : Math.abs(w0) + Math.abs(w1), lp = -RD.beta * E - a / 2 * R;
+    LP.push(lp); W.push(w0, w1); if (lp > mx) mx = lp; } }
+  let Z = 0, m0 = 0, m1 = 0; LP.forEach((lp, k) => { const p = Math.exp(lp - mx); Z += p; m0 += p * W[2 * k]; m1 += p * W[2 * k + 1]; });
+  return [m0 / Z, m1 / Z];
+}
+function drawRidge() {
+  const C = C0(), lam = snap(RD.ll), q = RD.q, w = rdMap(lam, q), pm = rdPostMean(lam, q), H = RD.G, Hi = inv2(H);
+  const xl = [Math.min(0, RD.wml[0]) - 0.45, Math.max(0, RD.wml[0]) + 0.45], yl = [Math.min(0, RD.wml[1]) - 0.45, Math.max(0, RD.wml[1]) + 0.45];
+  const v = frame($('#rd-cv'), xl, yl, { l: 40, r: 12, t: 12, b: 28 }, true); axes(v, 'w₁', 'w₂', { sx: 0.5, sy: 0.5 }); clip(v);
+  seg(v, v.xl[0], 0, v.xl[1], 0, C.ink, 1, null, 0.5); seg(v, 0, v.yl[0], 0, v.yl[1], C.ink, 1, null, 0.5);
+  [0.5, 1, 1.5, 2, 2.5, 3, 4, 5].forEach(k => ell(v, RD.wml, Hi, k, C.b, 1, null, null));
+  const d = [w[0] - RD.wml[0], w[1] - RD.wml[1]], kMap = Math.sqrt(d[0] * (H[0][0] * d[0] + H[0][1] * d[1]) + d[1] * (H[1][0] * d[0] + H[1][1] * d[1]));
+  if (kMap > 1e-6) ell(v, RD.wml, Hi, kMap, C.b, 2.4);
+  const c = v.ctx; c.save(); c.strokeStyle = C.muted; c.lineWidth = 2; c.setLineDash([5, 3]); c.beginPath();
+  if (q === 2) { const rr = Math.hypot(w[0], w[1]); for (let i = 0; i <= 120; i++) { const f = i / 120 * 2 * Math.PI; c.lineTo(v.X(rr * Math.cos(f)), v.Y(rr * Math.sin(f))); } }
+  else { const rr = Math.abs(w[0]) + Math.abs(w[1]); [[rr, 0], [0, rr], [-rr, 0], [0, -rr], [rr, 0]].forEach((p, i) => i ? c.lineTo(v.X(p[0]), v.Y(p[1])) : c.moveTo(v.X(p[0]), v.Y(p[1]))); }
+  c.stroke(); c.restore();
+  const path = linspace(-1.5, 3, 140).map(l => rdMap(Math.pow(10, l), q)); pline(v, path.map(p => p[0]), path.map(p => p[1]), C.lda, 1.6, null, 0.55);
+  dot(v, RD.wml[0], RD.wml[1], C.b, 4.5);
+  const cc = v.ctx; cc.save(); cc.beginPath(); cc.arc(v.X(pm[0]), v.Y(pm[1]), 7, 0, 7); cc.strokeStyle = C.bad; cc.lineWidth = 2; cc.stroke(); cc.restore();
+  dot(v, w[0], w[1], C.lda, 6);
+  c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.b; c.fillText('w_ML', v.X(RD.wml[0]) + 7, v.Y(RD.wml[1]) - 6); c.restore();
+  v.ctx.restore();
+  $('#rd-l-o').textContent = gf(lam);
+  $('#rd-map').innerHTML = tip(vecS(w, 3), q === 2 ? `(λI + ΦᵀΦ)⁻¹Φᵀt with λ = ${gf(lam)}` : `coordinate descent on\n½Σ(t − wᵀx)² + (λ/2)(|w₁| + |w₂|), λ = ${gf(lam)}`);
+  $('#rd-pm').innerHTML = tip(q === 2 ? vecS(pm, 3) : vecS(pm, 3), `mean of p(w | t) ∝ exp(−β·½Σ(t − wᵀx)² − (α/2)Σ|wⱼ|^${q})\nwith β = 1, α = λβ = ${gf(lam)}: a numerical integral on a 241 × 241 grid`);
+  const e = rdSSE(w), e0 = rdSSE(RD.wml);
+  $('#rd-e').innerHTML = tip(f2(e), `Σₙ (tₙ − wᵀxₙ)² at w_MAP\nthe least-squares minimum is ${f2(e0)} at w_ML = ${vecS(RD.wml, 3)}`);
+  if (q === 2) { const mN = blr(RD.X, RD.t, lam * RD.beta, RD.beta, null, 2).m;
+    $('#run-rd').innerHTML = `<b>Running example</b>: ridge with &lambda; = ${gf(lam)} gives w<sub>MAP</sub> = (&lambda;I + &Phi;<sup>&top;</sup>&Phi;)<sup>&minus;1</sup>&Phi;<sup>&top;</sup>t = ${tip(vecS(w, 4), 'solve the 2 × 2 system')}. The Bayesian posterior with &beta; = 1 and &alpha; = &lambda;&beta; = ${gf(lam)} has m<sub>N</sub> = &beta;S<sub>N</sub>&Phi;<sup>&top;</sup>t = ${tip(vecS(mN, 4), `largest difference from ridge: ${Math.max(Math.abs(mN[0] - w[0]), Math.abs(mN[1] - w[1])).toExponential(1)}`)}: the same numbers. Its squared length is ${f3(w[0] ** 2 + w[1] ** 2)}, against ${f3(RD.wml[0] ** 2 + RD.wml[1] ** 2)} for w<sub>ML</sub>.`; }
+  else $('#run-rd').innerHTML = `<b>Running example</b>: with the Laplace prior and &lambda; = ${gf(lam)}, each coordinate update soft-thresholds by &lambda;/2 = ${f3(lam / 2)}, giving w<sub>MAP</sub> = ${tip(vecS(w, 4), 'coordinate descent, converged to 1e-15')}. The posterior mean, found by integrating over a grid, is ${tip(vecS(pm, 4), 'Σ w p(w | t) / Σ p(w | t) on the grid')}${Math.abs(w[1]) < 1e-12 ? `: the MAP sets w<sub>2</sub> to exactly 0, the mean does not (${f3(pm[1])})` : ''}.`;
+  const zero = Math.abs(w[1]) < 1e-12, both = zero && Math.abs(w[0]) < 1e-12;
+  $('#rd-say').innerHTML = q === 2 ? `The MAP sits where an error ellipse just touches a prior circle. As &lambda; grows it slides along the curved path towards 0, shrinking both weights but never setting either to exactly zero (w<sub>2</sub> = ${f3(w[1])}). The posterior mean (red ring) coincides with the MAP: a Gaussian's peak is its mean. Squared error has risen from ${f2(e0)} to ${f2(e)}.`
+    : both ? `&lambda; = ${gf(lam)} is so large that the MAP is the origin: both weights are exactly 0. The posterior still has spread, though, and its mean (${f2(pm[0])}, ${f2(pm[1])}) is not zero.`
+    : zero ? `The diamond's corner has caught the error ellipse: w<sub>MAP</sub> = (${f3(w[0])}, 0), a sparse answer. But the posterior mean (red ring) is (${f3(pm[0])}, ${f3(pm[1])}), with w<sub>2</sub> &ne; 0. Sparsity is a property of the peak, not of the Bayesian average. That is why the &ldquo;Bayesian lasso&rdquo; does not select variables by itself.`
+    : `At &lambda; = ${gf(lam)} the lasso MAP still keeps both weights non-zero (w<sub>2</sub> = ${f3(w[1])}). <b>Raise &lambda;</b>: the path heads for the w<sub>1</sub> axis and stops on it, setting w<sub>2</sub> to exactly 0. The posterior mean (red ring) is already away from the MAP here, because the Laplace posterior is not symmetric around its peak.`;
+}
+seg1('[data-rq]', 'data-rq', q => { RD.q = +q; drawRidge(); });
+$('#rd-l').addEventListener('input', e => { RD.ll = +e.target.value; drawRidge(); });
+fig($('#rd-cv'), drawRidge);
+
+/* ======================= 6. predictive distribution ======================= */
+const PD = (() => { const r1 = mulberry32(41), r2 = mulberry32(42);
+  const line = Array.from({ length: 25 }, () => { const x = r1(); return [x, -0.3 + 0.5 * x + 0.2 * gaussOf(r1)]; });
+  const bump = Array.from({ length: 25 }, () => { const x = r2(); return [x, Math.sin(2 * Math.PI * x) + 0.2 * gaussOf(r2)]; });
+  const cs = linspace(0, 1, 9);
+  return { line, bump, cs, basis: 'bump', view: 'band', N: 4, x: 1.3, alpha: 2, beta: 25, r: mulberry32(43), z: null,
+    phi: { line: x => [1, x], bump: gaussB(cs, 0.1) }, truth: { line: x => -0.3 + 0.5 * x, bump: x => Math.sin(2 * Math.PI * x) } }; })();
+function pdPost(N, basis) { basis = basis || PD.basis; const P = PD[basis].slice(0, N), phi = PD.phi[basis], M = basis === 'line' ? 2 : 9; return { P, phi, post: blr(P.map(p => phi(p[0])), P.map(p => p[1]), PD.alpha, PD.beta, null, M), M }; }
+let pdV = null;
+function drawPD() {
+  const C = C0(), F = pdPost(PD.N), Fp = PD.N ? pdPost(PD.N - 1) : null, xs = linspace(-0.5, 1.5, 241);
+  const v = pdV = frame($('#pd-cv'), [-0.5, 1.5], [-2, 2], { l: 38, r: 12, t: 12, b: 28 }); axes(v, 'x', 't', { sx: 0.25, sy: 1 }); clip(v);
+  const c = v.ctx; c.save(); c.fillStyle = C.soft; c.globalAlpha = 0.45; c.fillRect(v.pad.l, v.pad.t, v.X(0) - v.pad.l, v.ph); c.fillRect(v.X(1), v.pad.t, v.pad.l + v.pw - v.X(1), v.ph); c.restore();
+  const pr = xs.map(x => predAt(F.post, F.phi(x))), mu = pr.map(p => p.m), sd = pr.map(p => Math.sqrt(1 / PD.beta + p.q));
+  if (PD.view !== 'draws') { fillBand(v, xs, mu.map((m, i) => m - 2 * sd[i]), mu.map((m, i) => m + 2 * sd[i]), C.lda, 0.12); fillBand(v, xs, mu.map((m, i) => m - sd[i]), mu.map((m, i) => m + sd[i]), C.lda, 0.16); }
+  curve(v, PD.truth[PD.basis], C.a, 1.6, [2, 4]);
+  if (PD.view !== 'band') { if (!PD.z || PD.z[0].length !== F.M) PD.z = Array.from({ length: 6 }, () => Array.from({ length: F.M }, () => gaussOf(PD.r))); PD.z.forEach(z => { const w = drawW(F.post, z); pline(v, xs, xs.map(x => dotv(w, F.phi(x))), C.lda, 1.3, null, 0.6); }); }
+  pline(v, xs, mu, C.lda, 2.8);
+  if (PD.basis === 'bump') PD.cs.forEach(cx => seg(v, cx, -2, cx, -1.86, C.muted, 2));
+  F.P.forEach(p => dot(v, p[0], p[1], C.b, 4.8));
+  const x0 = PD.x, p0 = predAt(F.post, F.phi(x0)), s0 = Math.sqrt(1 / PD.beta + p0.q); vline(v, x0, C.ink, 1, [3, 3]); dot(v, x0, p0.m, C.lda, 5.5);
+  v.ctx.restore();
+  /* variance strip */
+  const tot = sd.map(s => s * s), ymax = Math.max(0.1, ...tot) * 1.08;
+  const vb = frame($('#pd-bar'), [-0.5, 1.5], [0, ymax], { l: 38, r: 12, t: 8, b: 22 }); axes(vb, '', 'variance', { sx: 0.25, ny: 2 }); clip(vb);
+  fillBand(vb, xs, xs.map(() => 0), xs.map(() => 1 / PD.beta), C.muted, 0.45); fillBand(vb, xs, xs.map(() => 1 / PD.beta), tot, C.lda, 0.4); pline(vb, xs, tot, C.lda, 1.6); vline(vb, x0, C.ink, 1, [3, 3]); vb.ctx.restore();
+  const dS = Fp ? s0 - Math.sqrt(1 / PD.beta + predAt(Fp.post, Fp.phi(x0)).q) : 0;
+  $('#pd-n-o').textContent = PD.N; $('#pd-x-o').textContent = f2(x0);
+  $('#pd-s').innerHTML = tip(f3(s0), `√(1/β + φᵀS_Nφ) = √(${f3(1 / PD.beta)} + ${sciT(p0.q)})`);
+  $('#pd-w').innerHTML = tip(pct(p0.q / (s0 * s0), 0), `φᵀS_Nφ / σ_N² = ${sciT(p0.q)} / ${sciT(s0 * s0)}`);
+  $('#pd-d').innerHTML = PD.N ? tip((dS > 0 ? '+' : '') + sciT(dS), `σ_N(x) − σ_{N−1}(x) at x = ${f2(x0)}\nnever positive: a new point can only add precision`) : tip('&mdash;', 'no point has arrived yet');
+  $('#run-pd').innerHTML = `<b>Running example</b>: at x = ${f2(x0)} with N = ${PD.N}, the mean is m<sub>N</sub><sup>&top;</sup>&phi;(x) = ${tip(f3(p0.m), `Σⱼ mⱼ φⱼ(${f2(x0)})`)} and &sigma;<sub>N</sub>&sup2;(x) = 1/25 + ${tip(sciT(p0.q), 'φ(x)ᵀ S_N φ(x)')} = ${f4(s0 * s0)}, so &sigma;<sub>N</sub>(x) = ${f3(s0)} (the noise alone gives 0.200).`;
+  { const G = pdPost(PD.N, 'line'), P = G.P;
+    if (P.length < 2) $('#run-pd2').innerHTML = `<b>Running example</b>: the straight-line formula needs at least two points; N = ${P.length}.`;
+    else { const xb = sum(P.map(p => p[0])) / P.length, Sxx = sum(P.map(p => (p[0] - xb) ** 2)), xq = clamp(x0, -0.5, 1.5), apx = (1 / PD.beta) * (1 / P.length + (xq - xb) ** 2 / Sxx), ex = predAt(G.post, [1, xq]).q;
+      $('#run-pd2').innerHTML = `<b>Running example</b> (straight-line data, N = ${P.length}): x&#772; = ${f3(xb)}, &Sigma;(x<sub>n</sub> &minus; x&#772;)&sup2; = ${f3(Sxx)}. At x = ${f2(xq)} the formula gives ${tip(sciT(apx), `(1/25)(1/${P.length} + (${f2(xq)} − ${f3(xb)})² / ${f3(Sxx)})`)}; the exact &phi;<sup>&top;</sup>S<sub>N</sub>&phi; with &alpha; = 2 is ${tip(sciT(ex), '[1, x] S_N [1, x]ᵀ')}, ${ex / apx > 0.9 ? 'almost the same: with this many points the prior hardly matters' : `${pct(1 - ex / apx, 0)} smaller, because with only ${P.length} points the prior's pull towards w = 0 still matters; add points and the two converge`}.`; } }
+  const outside = x0 < -0.02 || x0 > 1.02, share = p0.q / (s0 * s0);
+  let s;
+  if (!PD.N) s = `No data: the band is the prior's. ${PD.basis === 'bump' ? 'Even now it is narrow far outside [0, 1], where every bump is close to zero: the prior itself says the curve must be 0 there.' : 'For a line it widens away from x = 0, because the slope\'s uncertainty is multiplied by x.'}`;
+  else if (PD.basis === 'bump' && outside && share < 0.1) s = `<b>The trap.</b> At x = ${f2(x0)}, outside every bump, &phi;(x) &asymp; 0, so the weight term is only ${pct(share, 0)} of the variance and the band has shrunk back to the noise level (sd ${f3(s0)}). The model is <em>confidently</em> predicting ${f2(p0.m)} where it has never seen data. Covering the input range with basis functions or adding a trend fixes this; Gaussian processes avoid it altogether.`;
+  else if (PD.basis === 'line' && outside) s = `Outside the data the straight line's band flares like a trumpet: at x = ${f2(x0)}, weight uncertainty is ${pct(share, 0)} of the variance, because any error in the slope is multiplied by the distance from the data's centre. This is the honest behaviour Russell and Norvig describe.`;
+  else if (share < 0.25) s = `Close to the data. At x = ${f2(x0)} the weights contribute only ${pct(share, 0)} of the predictive variance; the rest is noise, which no amount of data removes. With N = ${PD.N} points the band ${PD.N >= 15 ? 'has almost settled at the noise level, &plusmn;0.2 per sd' : 'is still tightening'}.`
+  else s = `At x = ${f2(x0)} the posterior is still unsure of the curve: ${pct(share, 0)} of the variance comes from the weights. Adding a point near here shrinks it most; adding one anywhere never makes it larger (last change ${sciT(dS)}). <b>Move the probe outside [0, 1]</b> and compare the two models.`;
+  $('#pd-say').innerHTML = s;
+}
+seg1('[data-pb]', 'data-pb', b => { PD.basis = b; PD.z = null; drawPD(); });
+seg1('[data-pv]', 'data-pv', b => { PD.view = b; drawPD(); });
+$('#pd-n').addEventListener('input', e => { PD.N = +e.target.value; drawPD(); });
+$('#pd-x').addEventListener('input', e => { PD.x = +e.target.value; drawPD(); });
+$('#pd-cv').addEventListener('pointermove', e => { if (!pdV || e.pointerType === 'touch') return; const x = pdV.iX(evPos($('#pd-cv'), e)[0]); if (x < -0.5 || x > 1.5) return; PD.x = Math.round(x * 200) / 200; $('#pd-x').value = PD.x; drawPD(); });
+fig($('#pd-cv'), drawPD); fig($('#pd-bar'), drawPD);
+
+/* ======================= 7. equivalent kernel (PRML 3.3.3) ======================= */
+const KN = (() => { const r = mulberry32(61), xs = linspace(-1, 1, 41), t = xs.map(x => Math.sin(2.5 * x) + 0.2 * gaussOf(r)), cs = linspace(-1, 1, 11), g = gaussB(cs, 0.2);
+  const bases = { gauss: x => [1, ...g(x)], poly: x => { const p = [1]; for (let i = 1; i <= 11; i++) p.push(p[i - 1] * x); return p; }, sig: x => [1, ...cs.map(c => 1 / (1 + Math.exp(-(x - c) / 0.1)))] };
+  return { xs, t, bases, b: 'gauss', x: 0, la: -2, beta: 25 }; })();
+function knFit() { const phi = KN.bases[KN.b], a = snap(KN.la), post = blr(KN.xs.map(phi), KN.t, a, KN.beta, null, 12); return { phi, a, post, k: (x, z) => KN.beta * bilin(phi(x), post.S, phi(z)) }; }
+function drawKN() {
+  const C = C0(), F = knFit(), base = frame($('#kn-cv'), [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), W = base.w, H = base.h, st = W < 560;
+  const R = st ? [{ x: 0, y: 0, w: W, h: H * 0.27 }, { x: 0, y: H * 0.27, w: W, h: H * 0.42 }, { x: 0, y: H * 0.69, w: W, h: H * 0.31 }] : [{ x: 0, y: 0, w: W * 0.42, h: H * 0.56 }, { x: W * 0.42, y: 0, w: W * 0.58, h: H * 0.56 }, { x: 0, y: H * 0.56, w: W, h: H * 0.44 }];
+  const xs = linspace(-1, 1, 161);
+  const v1 = paneView(base, R[0], [-1, 1], KN.b === 'poly' ? [-1.05, 1.05] : [-0.05, 1.08], { l: 38 }); title(v1, 'Basis functions φⱼ(x)'); axes(v1, 'x', '', { sx: 0.5, ny: 2 }); clip(v1);
+  const B = xs.map(F.phi); for (let j = 1; j < 12; j++) pline(v1, xs, B.map(b => b[j]), j % 2 ? C.lda : C.c, 1.3, null, 0.8); v1.ctx.restore();
+  const v2 = paneView(base, R[1], [-1, 1], [-1, 1], { l: 38 }, true); title(v2, 'k(x, x′) for all pairs'); axes(v2, 'x′', 'x', { sx: 0.5, sy: 0.5 }); clip(v2);
+  const ng = 60, g = linspace(-1, 1, ng), Pg = g.map(F.phi), K = Pg.map(p => Pg.map(q => KN.beta * bilin(p, F.post.S, q))); let km = 0; K.forEach(r => r.forEach(k => km = Math.max(km, Math.abs(k))));
+  const kf = (x, z) => { const k = F.k(x, z) / km; return [k >= 0 ? 0 : 1, Math.min(1, Math.abs(k)) * 0.9]; };
+  imgMap(v2, [-1, 1, -1, 1], 90, (xp, x) => kf(x, xp), [C.b, C.bad]);
+  const c2 = v2.ctx; c2.save();
+  c2.restore(); seg(v2, -1, KN.x, 1, KN.x, C.ink, 1.4, [4, 3]); v2.ctx.restore();
+  const kx = KN.xs.map(xn => F.k(KN.x, xn)), kc = xs.map(z => F.k(KN.x, z)), kmax = Math.max(...kc.map(Math.abs), ...kx.map(Math.abs)) * 1.15;
+  const v3 = paneView(base, R[2], [-1, 1], [-kmax * 0.35, kmax], { l: 44 }); title(v3, `Slice at x = ${f2(KN.x)}: weights k(x, xₙ) on the 41 targets`); axes(v3, 'x′', '', { sx: 0.25, ny: 3 }); clip(v3);
+  pline(v3, xs, kc, C.muted, 1.4, [4, 3]); seg(v3, -1, 0, 1, 0, C.ink, 1, null, 0.5);
+  KN.xs.forEach((xn, i) => { seg(v3, xn, 0, xn, kx[i], kx[i] >= 0 ? C.b : C.bad, 2.2); dot(v3, xn, kx[i], kx[i] >= 0 ? C.b : C.bad, 2.8); });
+  vline(v3, KN.x, C.ink, 1, [3, 3]); v3.ctx.restore();
+  const S1 = sum(kx), y1 = sum(kx.map((k, i) => k * KN.t[i])), y2 = dotv(F.post.m, F.phi(KN.x));
+  $('#kn-x-o').textContent = f2(KN.x); $('#kn-a-o').textContent = gf(F.a);
+  $('#kn-sum').innerHTML = tip(f4(S1), `Σ over the 41 training inputs of β φ(x)ᵀ S_N φ(xₙ)`);
+  $('#kn-y1').innerHTML = tip(f4(y1), 'Σₙ k(x, xₙ) tₙ: the prediction as a weighted sum of targets');
+  $('#kn-y2').innerHTML = tip(f4(y2), `the prediction from the weights; difference ${Math.abs(y1 - y2).toExponential(1)}`);
+  let jmax = 0; kx.forEach((k, i) => { if (Math.abs(k) > Math.abs(kx[jmax])) jmax = i; }); const neg = kx.filter(k => k < 0).length, top5 = [...kx].map(Math.abs).sort((a, b) => b - a).slice(0, 5).reduce((s, v) => s + v, 0);
+  $('#run-kn').innerHTML = `<b>Running example</b>: at x = ${f2(KN.x)} the largest weight goes to the training point at x<sub>n</sub> = ${f2(KN.xs[jmax])}: k = ${tip(f4(kx[jmax]), `β φ(${f2(KN.x)})ᵀ S_N φ(${f2(KN.xs[jmax])})`)}. The 41 weights sum to ${f4(S1)}, and &Sigma; k(x, x<sub>n</sub>) t<sub>n</sub> = ${f4(y1)} equals m<sub>N</sub><sup>&top;</sup>&phi;(x) = ${f4(y2)}. The covariance of the curve's height at x with its height at x<sub>n</sub> = ${f2(KN.xs[jmax])} is k/&beta; = ${tip(sciT(kx[jmax] / KN.beta), `${f4(kx[jmax])} / 25`)}.`;
+  const nm = { gauss: 'Gaussian bumps', poly: 'polynomials', sig: 'sigmoids' }[KN.b];
+  let s = `With ${nm}, the kernel at x = ${f2(KN.x)} is ${KN.b === 'gauss' ? 'a bump, as you might expect from local basis functions' : `<b>local</b>, even though each ${KN.b === 'poly' ? 'power x<sup>j</sup> spreads over the whole interval' : 'sigmoid is a step that reaches across the whole interval'}`}: the five nearest-weighted points carry ${pct(top5 / sum(kx.map(Math.abs)), 0)} of the total absolute weight${neg ? `, and ${neg} distant points get small negative weights (the red side lobes)` : ''}. `;
+  s += F.a > 1 ? `&alpha; = ${gf(F.a)} is large, so the prior shrinks every prediction towards 0: the weights sum to only ${f3(S1)}, not 1.` : Math.abs(KN.x) > 0.85 ? `Near the edge the kernel leans inwards: all the data lie on one side, so the smoother must borrow from there.` : `The weights sum to ${f3(S1)}, so the prediction is essentially a weighted average of nearby targets. <b>Raise &alpha;</b> to see the sum drop below 1.`;
+  $('#kn-say').innerHTML = s;
+}
+seg1('[data-kb]', 'data-kb', b => { KN.b = b; drawKN(); });
+$('#kn-x').addEventListener('input', e => { KN.x = +e.target.value; drawKN(); });
+$('#kn-a').addEventListener('input', e => { KN.la = +e.target.value; drawKN(); });
+fig($('#kn-cv'), drawKN);
+
+/* ======================= 8. unknown noise: Normal-Gamma and Student-t ======================= */
+const NS = (() => { const r = mulberry32(51), r2 = mulberry32(52), phi = gaussB(linspace(0, 1, 9), 0.1);
+  const pool = Array.from({ length: 60 }, () => { const x = r(); return { x, z: gaussOf(r), p: phi(x) }; });
+  const test = Array.from({ length: 2000 }, () => { const x = r2(); return { x, z: gaussOf(r2), p: phi(x) }; });
+  return { pool, test, phi, N: 8, sa: 0.1, st: 0.25, lam: 0.08, a0: 0.01, b0: 0.01 }; })();
+const nsTruth = x => Math.sin(2 * Math.PI * x);
+function nsFit() {
+  const P = NS.pool.slice(0, NS.N), t = P.map(p => nsTruth(p.x) + NS.st * p.z), post = blr(P.map(p => p.p), t, NS.lam, 1, null, 9);   // S = (λI + ΦᵀΦ)⁻¹, m = SΦᵀt
+  const tt = sum(t.map(v => v * v)), mSm = quadForm(post.m, post.Si), aN = NS.a0 + NS.N / 2, bN = NS.b0 + 0.5 * (tt - mSm), nu = 2 * aN, q = tPpf(0.975, nu), s2 = bN / aN;
+  let inK = 0, inT = 0; NS.test.forEach(o => { const m = dotv(post.m, o.p), u = 1 + quadForm(o.p, post.S), y = nsTruth(o.x) + NS.st * o.z, e = Math.abs(y - m); if (e < 1.96 * NS.sa * Math.sqrt(u)) inK++; if (e < q * Math.sqrt(s2 * u)) inT++; });
+  return { P, t, post, aN, bN, nu, q, s2, cK: inK / NS.test.length, cT: inT / NS.test.length, tt, mSm };
+}
+function drawNS() {
+  const C = C0(), F = nsFit(), xs = linspace(0, 1, 201), v = frame($('#ns-cv'), [0, 1], [-2.2, 2.2], { l: 38, r: 12, t: 12, b: 28 }); axes(v, 'x', 't', { sx: 0.1, sy: 1 }); clip(v);
+  const mu = xs.map(x => dotv(F.post.m, NS.phi(x))), u = xs.map(x => Math.sqrt(1 + quadForm(NS.phi(x), F.post.S)));
+  const hT = u.map(s => F.q * Math.sqrt(F.s2) * s), hK = u.map(s => 1.96 * NS.sa * s);
+  fillBand(v, xs, mu.map((m, i) => m - hT[i]), mu.map((m, i) => m + hT[i]), C.lda, 0.18);
+  fillBand(v, xs, mu.map((m, i) => m - hK[i]), mu.map((m, i) => m + hK[i]), C.c, 0.12);
+  pline(v, xs, mu.map((m, i) => m + hK[i]), C.c, 1.6, [5, 3]); pline(v, xs, mu.map((m, i) => m - hK[i]), C.c, 1.6, [5, 3]);
+  curve(v, nsTruth, C.a, 1.6, [2, 4]); pline(v, xs, mu, C.lda, 2.6);
+  F.P.forEach((p, i) => dot(v, p.x, F.t[i], C.b, 4.6)); v.ctx.restore();
+  $('#ns-n-o').textContent = NS.N; $('#ns-a-o').textContent = f2(NS.sa); $('#ns-t-o').textContent = f2(NS.st);
+  $('#ns-ck').innerHTML = tip(pct(F.cK, 1), `share of 2,000 fresh points from the truth with\n|t − mean| < 1.96 × ${f2(NS.sa)} × √(1 + φᵀSφ)`);
+  $('#ns-ct').innerHTML = tip(pct(F.cT, 1), `share of the same points with\n|t − mean| < t₀.₉₇₅(ν = ${f2(F.nu)}) × √(b_N/a_N) × √(1 + φᵀSφ)\n= ${f3(F.q)} × ${f3(Math.sqrt(F.s2))} × √(1 + φᵀSφ)`);
+  $('#ns-s').innerHTML = tip(f3(Math.sqrt(F.s2)), `√(b_N / a_N) = √(${f4(F.bN)} / ${f2(F.aN)})`);
+  $('#run-ns').innerHTML = `<b>Running example</b>: N = ${NS.N}, so a<sub>N</sub> = 0.01 + ${NS.N}/2 = ${f2(F.aN)}; t<sup>&top;</sup>t = ${f3(F.tt)} and m<sub>N</sub><sup>&top;</sup>S<sub>N</sub><sup>&minus;1</sup>m<sub>N</sub> = ${f3(F.mSm)}, so b<sub>N</sub> = 0.01 + &frac12;(${f3(F.tt)} &minus; ${f3(F.mSm)}) = ${tip(f4(F.bN), 'b₀ + ½(tᵀt − m_Nᵀ S_N⁻¹ m_N)')}. The noise estimate is &radic;(b<sub>N</sub>/a<sub>N</sub>) = ${f3(Math.sqrt(F.s2))} (truth ${f2(NS.st)}), and with &nu; = ${f2(F.nu)} degrees of freedom the 95% point of the t is ${tip(f3(F.q), `Student-t quantile at 0.975, ν = 2a_N = ${f2(F.nu)}`)} scales instead of 1.96.`;
+  const r = NS.sa / NS.st;
+  let s = r < 0.75 ? `You assume noise sd ${f2(NS.sa)}, but the truth is ${f2(NS.st)}: the purple band is too narrow and catches only ${pct(F.cK, 0)} of fresh points instead of 95%. Same curve, wrong error bars.` : r > 1.35 ? `You assume noise sd ${f2(NS.sa)}, well above the true ${f2(NS.st)}: the purple band is needlessly wide and catches ${pct(F.cK, 0)} of fresh points, more than the promised 95%. Safe, but uninformative.` : `Your assumed noise sd (${f2(NS.sa)}) is close to the truth (${f2(NS.st)}), so the known-noise band is about right: ${pct(F.cK, 0)} coverage.`;
+  s += ` The learned band estimates the noise as ${f3(Math.sqrt(F.s2))} from ${NS.N} points and covers ${pct(F.cT, 0)}.`;
+  s += NS.N <= 12 ? ` With so few points, the t's 95% point is ${f2(F.q)} rather than 1.96: the heavier tails pay for not knowing &sigma;. ${F.cT < 0.9 ? 'Even so, the flexible curve has soaked up some of the noise, so the estimate runs low; more points cure this.' : ''}` : ` With ${NS.N} points the t is already close to a Gaussian (95% point ${f2(F.q)}), and its coverage sits near 95% whatever the true noise.`;
+  $('#ns-say').innerHTML = s;
+}
+$('#ns-n').addEventListener('input', e => { NS.N = +e.target.value; drawNS(); });
+$('#ns-a').addEventListener('input', e => { NS.sa = +e.target.value; drawNS(); });
+$('#ns-t').addEventListener('input', e => { NS.st = +e.target.value; drawNS(); });
+fig($('#ns-cv'), drawNS);
+
+/* ======================= project: Mauna Loa CO2 ======================= */
+const CO = {"y0":1958,"m0":3,"co2":[315.71,317.45,317.51,317.27,315.87,314.93,313.21,312.42,313.33,314.67,315.58,316.49,316.65,317.72,318.29,318.15,316.54,314.8,313.84,313.33,314.81,315.58,316.43,316.98,317.58,319.03,320.03,319.58,318.18,315.9,314.17,313.83,315.0,316.19,316.89,317.7,318.54,319.48,320.58,319.77,318.56,316.79,314.99,315.31,316.1,317.01,317.94,318.55,319.68,320.57,321.02,320.62,319.61,317.4,316.24,315.42,316.69,317.7,318.74,319.07,319.86,321.38,322.24,321.49,319.74,317.77,316.21,315.99,317.07,318.35,319.57,320.04,320.75,321.84,322.25,321.89,320.44,318.69,316.71,316.87,317.68,318.71,319.44,320.44,320.89,322.14,322.17,321.87,321.21,318.87,317.82,317.3,318.87,319.42,320.62,321.6,322.39,323.7,324.08,323.75,322.37,320.36,318.64,318.1,319.78,321.02,322.33,322.5,323.03,324.41,325.0,324.09,322.54,320.92,319.25,319.39,320.73,321.96,322.57,323.15,323.89,325.02,325.57,325.36,324.14,322.11,320.33,320.25,321.32,322.89,324.0,324.41,325.63,326.66,327.38,326.71,325.88,323.66,322.38,321.78,322.85,324.11,325.06,325.99,326.93,328.13,328.08,327.67,326.34,324.68,323.1,323.06,324.01,325.13,326.17,326.69,327.18,327.78,328.93,328.57,327.36,325.43,323.36,323.56,324.8,326.01,326.77,327.63,327.75,329.72,330.07,329.09,328.04,326.32,324.84,325.2,326.5,327.55,328.55,329.57,330.3,331.5,332.48,332.07,330.87,329.31,327.52,327.19,328.17,328.65,329.36,330.71,331.49,332.65,333.19,332.2,331.07,329.15,327.33,327.28,328.31,329.58,330.73,331.46,331.94,333.11,333.95,333.42,331.97,329.95,328.49,328.36,329.38,330.77,331.56,332.74,333.36,334.74,334.72,333.97,333.08,330.68,328.96,328.72,330.16,331.62,332.68,333.17,334.96,336.14,336.93,336.17,334.89,332.56,331.29,331.28,332.46,333.6,334.94,335.26,336.66,337.69,338.02,338.01,336.5,334.42,332.36,332.45,333.76,334.91,336.14,336.69,338.27,338.82,339.24,339.26,337.54,335.72,333.97,334.24,335.32,336.81,337.9,338.34,340.07,340.93,341.45,341.36,339.45,337.67,336.25,336.14,337.3,338.29,339.29,340.55,341.63,342.6,343.04,342.54,340.82,338.48,336.95,337.05,338.58,339.91,340.93,341.76,342.78,343.96,344.77,343.88,342.42,340.24,338.37,338.41,339.44,340.78,341.57,342.78,343.37,345.4,346.14,345.76,344.32,342.51,340.46,340.53,341.79,343.2,344.21,344.92,345.68,347.37,347.77,347.16,345.79,343.74,341.59,341.86,343.31,345.0,345.48,346.41,347.91,348.66,349.28,348.65,346.9,345.26,343.47,343.35,344.73,346.12,346.78,347.48,348.25,349.86,350.52,349.98,348.25,346.17,345.48,344.82,346.22,347.48,348.73,348.92,349.81,351.4,352.15,351.58,350.21,348.2,346.66,346.72,348.08,349.28,350.51,351.7,352.5,353.67,354.35,353.88,352.8,350.49,348.97,349.37,350.42,351.62,353.07,353.43,354.08,355.72,355.95,355.44,354.05,351.84,350.09,350.33,351.55,352.91,353.86,355.1,355.75,356.38,357.38,356.39,354.89,353.06,351.38,351.69,353.14,354.41,354.93,355.82,357.33,358.77,359.23,358.23,356.3,353.97,352.34,352.43,353.89,355.21,356.34,357.21,357.97,359.22,359.71,359.44,357.15,354.99,353.01,353.4,354.42,355.68,357.1,357.42,358.59,359.39,360.3,359.64,357.45,355.76,354.14,354.23,355.53,357.03,358.36,359.04,360.11,361.36,361.78,360.94,359.51,357.59,355.86,356.21,357.65,359.1,360.04,361.0,361.98,363.44,363.83,363.33,361.78,359.33,358.32,358.14,359.61,360.82,362.2,363.36,364.28,364.69,365.25,365.06,363.69,361.55,359.69,359.72,361.04,362.39,363.24,364.21,364.65,366.49,366.77,365.73,364.46,362.4,360.44,360.97,362.65,364.51,365.39,366.1,367.36,368.79,369.56,369.13,367.98,366.1,364.16,364.54,365.67,367.3,368.35,369.28,369.84,371.15,371.12,370.46,369.61,367.06,364.95,365.52,366.88,368.26,369.45,369.71,370.75,371.98,371.75,371.87,370.02,368.27,367.15,367.18,368.53,369.83,370.76,371.69,372.63,373.55,374.03,373.4,371.68,369.78,368.34,368.61,369.94,371.42,372.7,373.37,374.3,375.19,375.93,375.69,374.16,372.03,370.92,370.73,372.43,373.98,375.07,375.82,376.64,377.92,378.78,378.46,376.88,374.57,373.34,373.31,374.84,376.17,377.17,378.05,379.06,380.54,380.8,379.87,377.65,376.17,374.43,374.63,376.33,377.68,378.63,379.91,380.95,382.48,382.64,382.4,380.93,378.93,376.89,377.19,378.54,380.31,381.58,382.4,382.86,384.8,385.22,384.24,382.65,380.6,379.04,379.33,380.35,382.02,383.1,384.12,384.81,386.73,386.78,386.33,384.73,382.24,381.2,381.37,382.7,384.19,385.78,386.06,386.28,387.33,388.78,387.99,386.62,384.32,383.41,383.22,384.41,385.79,387.17,387.7,389.04,389.76,390.36,389.7,388.24,386.29,384.95,384.64,386.23,387.63,388.91,390.41,391.37,392.67,393.21,392.38,390.41,388.54,387.03,387.43,388.87,389.99,391.5,392.05,392.8,393.44,394.41,393.95,392.72,390.33,389.28,389.19,390.48,392.06,393.31,394.04,394.59,396.38,396.93,395.91,394.56,392.59,391.32,391.27,393.2,394.57,395.78,397.03,397.66,398.64,400.02,398.81,397.51,395.39,393.72,393.9,395.36,397.03,398.04,398.27,399.91,401.51,401.96,401.43,399.27,397.18,395.54,396.16,397.4,399.08,400.18,400.55,401.74,403.35,404.15,402.97,401.46,399.11,397.82,398.49,400.27,402.06,402.73,404.25,405.06,407.6,407.9,406.99,404.59,402.45,401.23,401.79,403.72,404.64,406.36,406.66,407.54,409.22,409.89,409.08,407.33,405.32,403.57,403.82,405.31,407.0,408.15,408.52,409.59,410.45,411.44,410.99,408.9,407.16,405.71,406.19,408.21,409.27,411.03,411.96,412.18,413.54,414.86,414.15,411.96,410.17,408.76,408.74,410.47,411.97,413.59,414.32,414.72,416.42,417.28,416.58,414.58,412.75,411.5,411.49,413.1,414.23,415.49,416.72,417.61,419.01,419.09,418.93,416.9,414.42,413.26,413.9,414.97,416.67,418.13,419.24,418.76,420.19,420.97,420.94,418.85,417.15,415.91,415.74,417.47,418.99,419.48,420.31,420.99,423.35,424.0,423.68,421.83,419.68,418.5,418.82,420.46,421.86,422.8,424.55,425.38,426.51,426.9,426.91,425.55,422.99,422.03,422.38,423.85,425.4,426.65,427.09,428.15,429.64,430.51,429.61,427.87,425.48,424.37,424.87,426.46,427.49,428.62,429.35,430.15,431.12,432.34,431.43,429.13,427.55,426.07]};
+const PJ = (() => { const y = CO.co2, n = y.length, t = y.map((_, k) => CO.y0 + (CO.m0 - 1 + k + 0.5) / 12);
+  const tf = []; for (let k = 0; ; k++) { const tt = CO.y0 + (CO.m0 - 1 + k + 0.5) / 12; if (tt > 2041) break; tf.push(tt); }
+  return { y, n, t, tf, cut: 2010, ls: -0.7, gap: 5, hover: null, cache: {} }; })();
+const svOf = ls => +Math.pow(10, ls).toPrecision(2);
+function pjBasis(gap) { const knots = []; for (let k = 1960; k <= 2040; k += gap) knots.push(k); return { knots, f: tt => { const r = [1, tt - 1958]; knots.forEach(c => r.push(Math.max(0, tt - c))); r.push(Math.sin(2 * Math.PI * tt), Math.cos(2 * Math.PI * tt), Math.sin(4 * Math.PI * tt), Math.cos(4 * Math.PI * tt)); return r; } }; }
+function pjFit(cut, gap, sv) {
+  const key = `${cut}|${gap}|${sv}`; if (PJ.cache[key]) return PJ.cache[key];
+  const B = pjBasis(gap), K = B.knots.length, M = K + 6, idx = PJ.t.map((tt, k) => tt < cut ? k : -1).filter(k => k >= 0), Phi = idx.map(k => B.f(PJ.t[k])), y = idx.map(k => PJ.y[k]);
+  const pv = [1000 ** 2, 10 ** 2, ...B.knots.map(() => sv * sv), 100, 100, 100, 100], a0 = pv.map(v => 1 / v), g = gram(Phi, y);
+  let s2 = 1, post = null, it = 0;
+  for (; it < 100; it++) { post = blrFromGram(g.G, g.b, M, a0, 1 / s2, null); let r = 0; for (let i = 0; i < Phi.length; i++) r += (y[i] - dotv(post.m, Phi[i])) ** 2; const nw = r / Phi.length; if (Math.abs(nw - s2) < 1e-12) { s2 = nw; break; } s2 = nw; }
+  post = blrFromGram(g.G, g.b, M, a0, 1 / s2, null);
+  const F = { B, K, M, s2, post, nTr: idx.length, it, pred: tt => { const p = B.f(tt); return [dotv(post.m, p), Math.sqrt(s2 + quadForm(p, post.S))]; } };
+  PJ.cache[key] = F; const keys = Object.keys(PJ.cache); if (keys.length > 60) delete PJ.cache[keys[0]];
+  return F;
+}
+function pjScore(F, cut, horizon) { let n = 0, se = 0, inb = 0, hw = 0; PJ.t.forEach((tt, k) => { if (tt < cut || (horizon && tt >= cut + horizon)) return; const [m, s] = F.pred(tt), e = PJ.y[k] - m; n++; se += e * e; if (Math.abs(e) < 1.96 * s) inb++; hw += 1.96 * s; }); return { n, rmse: n ? Math.sqrt(se / n) : NaN, cov: n ? inb / n : NaN, hw: n ? hw / n : NaN }; }
+const monthName = tt => { const k = Math.floor((tt - Math.floor(tt)) * 12 + 1e-6); return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][k] + ' ' + Math.floor(tt); };
+let pjV = null;
+function drawPJ(hv) {
+  const C = C0(), cut = PJ.cut, sv = svOf(PJ.ls), F = pjFit(cut, PJ.gap, sv), all = cut > 2026.8;
+  const v = pjV = frame($('#pj-cv'), [1956, 2041], [300, 480], { l: 44, r: 12, t: 12, b: 30 }); axes(v, 'year', 'CO₂ (ppm)', { sx: 10, sy: 20 }); clip(v);
+  const fx = PJ.tf.filter(tt => tt >= Math.min(cut, 2026.7) - 0.01), pr = fx.map(F.pred), mu = pr.map(p => p[0]);
+  fillBand(v, fx, pr.map(p => p[0] - 1.96 * p[1]), pr.map(p => p[0] + 1.96 * p[1]), C.lda, 0.18); fillBand(v, fx, pr.map(p => p[0] - 0.674 * p[1]), pr.map(p => p[0] + 0.674 * p[1]), C.lda, 0.22);
+  const tr = PJ.t.map((tt, k) => [tt, PJ.y[k]]).filter(p => p[0] < cut), ho = PJ.t.map((tt, k) => [tt, PJ.y[k]]).filter(p => p[0] >= cut);
+  pline(v, tr.map(p => p[0]), tr.map(p => p[1]), C.muted, 1.3); if (ho.length) pline(v, ho.map(p => p[0]), ho.map(p => p[1]), C.b, 1.5);
+  pline(v, fx, mu, C.lda, 2.2);
+  const tf0 = PJ.t.filter(tt => tt < cut); pline(v, tf0, tf0.map(tt => F.pred(tt)[0]), C.lda, 1.1, null, 0.6);
+  if (!all) vline(v, cut, C.ink, 1.2, [4, 3]);
+  F.B.knots.forEach(kk => { const c = v.ctx, px = v.X(kk), py = v.Y(300) - 2; c.save(); c.strokeStyle = C.ink; c.fillStyle = C.ink; c.lineWidth = 1.4; c.beginPath(); c.moveTo(px, py); c.lineTo(px - 4, py - 8); c.lineTo(px + 4, py - 8); c.closePath(); kk < cut ? c.fill() : c.stroke(); c.restore(); });
+  if (PJ.hover != null) { const tt = PJ.hover, [m, s] = F.pred(tt), k = Math.round((tt - PJ.t[0]) * 12), act = k >= 0 && k < PJ.n ? PJ.y[k] : null, c = v.ctx; vline(v, tt, C.ink, 1, [2, 3]);
+    const lines = [monthName(tt), `forecast ${f2(m)} ± ${f2(1.96 * s)}`, act != null ? `actual ${f2(act)}${tt >= cut ? ' (held out)' : ' (training)'}` : 'no measurement yet'];
+    c.save(); c.font = '11px ' + css('--f-mono'); const tw = Math.max(...lines.map(l => c.measureText(l).width)) + 14, bx = v.X(tt) + (v.X(tt) > v.w * 0.6 ? -tw - 8 : 8), by = v.pad.t + 8;
+    c.fillStyle = C.surf; c.globalAlpha = 0.92; c.fillRect(bx, by, tw, 50); c.globalAlpha = 1; c.strokeStyle = C.line; c.strokeRect(bx, by, tw, 50); c.fillStyle = C.ink; c.textBaseline = 'top'; lines.forEach((l, i) => c.fillText(l, bx + 7, by + 6 + i * 14)); c.restore(); }
+  v.ctx.restore();
+  /* errors vs horizon */
+  const ve = frame($('#pj-err'), [0, all ? 15 : Math.max(5, 2026.75 - cut + 0.5)], [-1, 1], { l: 44, r: 12, t: 12, b: 28 });
+  const hz = linspace(0, ve.xl[1], 120), hs = hz.map(h => 1.96 * F.pred(cut + h)[1]), errs = ho.map(p => [p[0] - cut, p[1] - F.pred(p[0])[0], 1.96 * F.pred(p[0])[1]]);
+  const ymx = Math.max(2, ...hs, ...errs.map(e => Math.abs(e[1]))) * 1.1; const ve2 = frame($('#pj-err'), ve.xl, [-ymx, ymx], { l: 44, r: 12, t: 12, b: 28 }); axes(ve2, 'years after the cut-off', 'actual − forecast (ppm)', { nx: 6, ny: 4 }); clip(ve2);
+  fillBand(ve2, hz, hs.map(h => -h), hs, C.lda, 0.18); seg(ve2, 0, 0, ve2.xl[1], 0, C.ink, 1, null, 0.6);
+  errs.forEach(e => dot(ve2, e[0], e[1], Math.abs(e[1]) < e[2] ? C.b : C.bad, 2.6)); ve2.ctx.restore();
+  /* stats */
+  const S = pjScore(F, cut, 0), [m30, s30] = F.pred(2030 + 1 / 24), h5 = 1.96 * F.pred(cut + 5)[1], h10 = 1.96 * F.pred(cut + 10)[1];
+  $('#pj-c-o').textContent = all ? 'all data (to Sep 2026)' : `Dec ${cut - 1}`; $('#pj-s-o').textContent = `${sv} ppm/yr`;
+  $('#pj-sig').innerHTML = tip(f3(Math.sqrt(F.s2)), `refitted ${F.it + 1} times until σ² equals the mean\nsquared residual over ${F.nTr} training months`);
+  $('#pj-rm').innerHTML = S.n ? tip(f2(S.rmse), `√(mean (actual − forecast)²) over ${S.n} held-out months`) : tip('none', 'no held-out months: every month is used for training');
+  $('#pj-cov').innerHTML = S.n ? tip(pct(S.cov, 1), `held-out months with |actual − forecast| < 1.96 σ_N(t)\n${Math.round(S.cov * S.n)} of ${S.n}`) : tip('none', 'no held-out months');
+  $('#pj-30').innerHTML = tip(`${f2(m30)} &plusmn; ${f2(1.96 * s30)}`, `predictive mean ± 1.96 σ_N at mid-January 2030\nσ_N = √(σ² + φᵀS_Nφ) = √(${f3(F.s2)} + ${f3(s30 * s30 - F.s2)})`);
+  $('#pj-h5').innerHTML = tip(f2(h5), `1.96 σ_N at ${f2(cut + 5)}`); $('#pj-h10').innerHTML = tip(f2(h10), `1.96 σ_N at ${f2(cut + 10)}`);
+  const fut = F.B.knots.filter(kk => kk >= cut).length, kNext = F.B.knots.find(kk => kk >= cut);
+  const p0 = F.pred(Math.min(cut, 2026.7)), w = F.post.m;
+  $('#run-pj').innerHTML = `<b>Running example</b>: ${F.nTr} training months, ${F.M} weights (${F.K} hinges). The fitted starting slope is w<sub>1</sub> = ${tip(f3(w[1]), 'posterior mean of w₁, ppm per year in 1958')} ppm/yr and the seasonal swing has amplitude ${tip(f2(Math.hypot(w[F.M - 4], w[F.M - 3])), '√(a₁² + b₁²)')} ppm. ${fut} knot${fut === 1 ? '' : 's'} (${kNext != null ? 'from ' + kNext : ''}) lie at or after the cut-off and keep their prior sd ${sv}; at Jan 2030 the predictive variance is &sigma;&sup2; + &phi;<sup>&top;</sup>S<sub>N</sub>&phi; = ${f3(F.s2)} + ${tip(f3(s30 * s30 - F.s2), 'weight uncertainty, mostly from the knots with no data')}, so the 95% band is &plusmn;${f2(1.96 * s30)} ppm.`;
+  let s;
+  if (all) s = `Trained on every month to September 2026, the model forecasts ${f2(m30)} ppm for January 2030, give or take ${f2(1.96 * s30)}. The band is narrow at first, because the last fitted growth rate is well determined, then fans out as the knots of 2030, 2035 and 2040 add their unknown bends.`;
+  else { s = `Trained to Dec ${cut - 1}, the forecast misses the ${S.n} held-out months by ${f2(S.rmse)} ppm (RMS), and ${pct(S.cov, 1)} of them fall inside the 95% band. `;
+    if (cut >= 1992 && cut <= 1997) s += `This cut-off follows the 1991 Pinatubo eruption, which slowed CO&#8322; growth for two years; the model extrapolates that slowdown and under-forecasts the recovery. Bad luck the prior could not know about.`;
+    else if (S.cov < 0.8) s += `That is fewer than promised: the band is too narrow for how much the growth rate really changed. <b>Raise s<sub>v</sub></b> to allow bigger bends.`;
+    else if (S.cov > 0.99 && h10 > 6) s += `Every month is inside, but the band is wide (&plusmn;${f2(h10)} ppm at 10 years): s<sub>v</sub> = ${sv} allows more bending than CO&#8322; has shown. <b>Lower s<sub>v</sub></b> to sharpen it.`;
+    else s += `The band widens from &plusmn;${f2(1.96 * F.pred(cut)[1])} at the cut-off to &plusmn;${f2(h10)} ten years on, about as fast as the real errors grow.`; }
+  $('#pj-say').innerHTML = s;
+  $('#pj-esay').innerHTML = !errs.length ? 'No held-out months: move the cut-off back to see the errors.' : `${errs.filter(e => Math.abs(e[1]) >= e[2]).length} of ${errs.length} held-out months fall outside the band (red). ${errs.length > 60 && errs.slice(-24).every(e => e[1] > 0) ? 'The last two years are all above the forecast: CO&#8322; has kept accelerating faster than the training data suggested.' : ''} Near the cut-off the band is set by the noise &sigma; = ${f3(Math.sqrt(F.s2))} and the last segment's slope; further out by the knots that never saw data.`;
+  if (hv !== true) drawBT(sv);
+}
+function drawBT(sv) {
+  const cuts = [1980, 1990, 2000, 2010, 2020], rows = cuts.map(c => { const F = pjFit(c, PJ.gap, sv); return [c, Math.sqrt(F.s2), pjScore(F, c, 10)]; });
+  $('#pj-bt').innerHTML = `<thead><tr><th>Cut-off</th><th>noise &sigma;</th><th>RMSE, next 10 yrs</th><th>inside 95% band</th><th>mean half-width</th></tr></thead><tbody>` + rows.map(r => `<tr${r[0] === PJ.cut ? ' class="sel"' : ''}><td>${r[0]}</td><td class="num">${f3(r[1])}</td><td class="num">${f3(r[2].rmse)}</td><td class="num">${f3(r[2].cov)}</td><td class="num">${f3(r[2].hw)}</td></tr>`).join('') + '</tbody>';
+  const avg = sum(rows.map(r => r[2].cov)) / rows.length, worst = rows.reduce((a, r) => r[2].cov < a[2].cov ? r : a, rows[0]);
+  const why = worst[0] === 1990 ? ' (the 1991 Pinatubo eruption slowed CO&#8322; growth just after it, and the model then under-forecast the recovery)' : worst[0] === 1980 ? ' (growth sped up through the 1980s faster than the 1970s suggested)' : '';
+  $('#pj-btsay').innerHTML = `With knots every ${PJ.gap} years and s<sub>v</sub> = ${sv}, the five backtests average ${pct(avg, 1)} coverage against the promised 95%; the weakest is ${worst[0]}, at ${pct(worst[2].cov, 1)}${why}. `
+    + (avg < 0.8 ? 'The bands are far too confident: this prior does not let the growth rate bend as much as it really did.' : avg < 0.92 ? 'So the bands are a little over-confident. Part of the reason is the noise model: it treats months as independent, but residuals are correlated (El Ni&ntilde;o years run high together), so the data look more informative than they are.' : avg > 0.98 ? 'The bands are cautious: wider than the errors they have to cover. Lower s<sub>v</sub> to sharpen them.' : 'That is close to calibrated.');
+}
+$('#pj-c').addEventListener('input', e => { PJ.cut = +e.target.value; drawPJ(); });
+$('#pj-s').addEventListener('input', e => { PJ.ls = +e.target.value; drawPJ(); });
+seg1('[data-pg]', 'data-pg', g => { PJ.gap = +g; drawPJ(); });
+$('#pj-cv').addEventListener('pointermove', e => { if (!pjV) return; const tt = pjV.iX(evPos($('#pj-cv'), e)[0]); PJ.hover = tt >= PJ.t[0] && tt <= 2040.95 ? PJ.t[0] + Math.round((tt - PJ.t[0]) * 12) / 12 : null; drawPJ(true); });
+$('#pj-cv').addEventListener('pointerleave', () => { PJ.hover = null; drawPJ(true); });
+fig($('#pj-cv'), drawPJ); fig($('#pj-err'), drawPJ);
+$('#pj-nm').textContent = nf(PJ.n); $('#pj-last').textContent = monthName(PJ.t[PJ.n - 1]).replace('Sep', 'September');
+{ const F = pjFit(2010, 5, 0.2), S = pjScore(F, 2010, 0), A = pjFit(2100, 5, 0.2), a30 = A.pred(2030 + 1 / 24), a40 = A.pred(2040 + 1 / 24);
+  const bt = [1980, 1990, 2000, 2010, 2020].map(c => { const G = pjFit(c, 5, 0.2), q = pjScore(G, c, 10); return `${c}: ${f3(Math.sqrt(G.s2))} / ${f3(q.rmse)} / ${f3(q.cov)} / ${f3(q.hw)}`; }).join('; ');
+  $('#pj-check').innerHTML = `<b>Checked in your browser</b> at the Python settings (cut-off 2010, knots every 5 years, s<sub>v</sub> = 0.2): noise &sigma; = ${f4(Math.sqrt(F.s2))}, held-out RMSE ${f3(S.rmse)} over ${S.n} months, ${f3(S.cov)} inside the 95% band. Backtest (&sigma; / RMSE / coverage / half-width): ${bt}. All data: Jan 2030 ${f2(a30[0])} &plusmn; ${f2(1.96 * a30[1])}, Jan 2040 ${f2(a40[0])} &plusmn; ${f2(1.96 * a40[1])} ppm. These match the Python output above to the printed digits. The page solves the same equations with its own Cholesky factorisation; the ridge line shows that scikit-learn's Ridge on rescaled columns lands on the same posterior mean.`;
+  window.__x014 = { PJ, pjFit, pjScore, WY, whyFit, RD, rdMap, rdPostMean, PD, pdPost, KN, knFit, NS, nsFit, SQ, sqPost, PO, poFit, tPpf, tCdf };
+}
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

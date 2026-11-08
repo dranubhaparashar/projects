@@ -1,0 +1,1374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on model selection criteria: the optimism of the training error and its covariance formula, Mallows' Cp and Akaike's AIC, the effective number of parameters for ridge, nearest neighbours and adaptive selection, BIC as a Laplace approximation to the evidence, AIC versus BIC (efficient versus consistent), minimum description length, and conditional versus expected test error, ending with choosing the lag order of a forecast of Great Britain's daily electricity demand (NESO data) by AIC, BIC and cross-validation, verified against scikit-learn.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Model Selection Criteria: Optimism, Cp, AIC, BIC &amp; MDL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+table.race tr.win td { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+.bitstrip { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; font-size: 0.8rem; line-height: 1.6; color: var(--ink); word-break: break-all; letter-spacing: 0.04em; }
+#mdl-code td.mono { font-family: var(--f-mono); }
+.wide-a { aspect-ratio: 3.4 / 1; } .wide-b { aspect-ratio: 3 / 1; } .wide-c { aspect-ratio: 3.2 / 1; } .wide-d { aspect-ratio: 4 / 1; }
+@media (max-width: 560px) { .wide-a, .wide-b { aspect-ratio: 1.6 / 1; } .wide-c { aspect-ratio: 2 / 1; } .wide-d { aspect-ratio: 2.6 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Model Selection Criteria <span>&middot; paying for parameters</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Optimism</a>
+      <a href="#cov">Self-influence</a>
+      <a href="#cp">Cp &amp; AIC</a>
+      <a href="#df">Effective df</a>
+      <a href="#bic">BIC</a>
+      <a href="#race">AIC vs BIC</a>
+      <a href="#mdl">MDL</a>
+      <a href="#cond">Which error?</a>
+      <a href="#project">Demand project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.10a · model selection criteria</div>
+      <h1>Model Selection Criteria</h1>
+      <div class="sub">Optimism, Cp, AIC, BIC and minimum description length</div>
+      <p class="lead">Cross-validation judges a model by refitting it again and again. There is a cheaper route: fit each candidate once, take its training error, and add a penalty for every parameter it used. Choose the penalty well and the training error stops flattering. This chapter derives four such penalties, Mallows&rsquo; C<sub>p</sub>, Akaike&rsquo;s AIC, Schwarz&rsquo;s BIC and Rissanen&rsquo;s minimum description length, and shows when to trust each one. On the right, <strong>drag any point</strong> and watch AIC and BIC choose their polynomials.</p>
+      <dl class="facts">
+        <div><dt>The flaw</dt><dd>Training error is too low by a predictable amount: on average 2d&sigma;&sup2;/N</dd></div>
+        <div><dt>The fix</dt><dd>Add that amount back: C<sub>p</sub> and AIC estimate the error on fresh responses</dd></div>
+        <div><dt>The rival</dt><dd>BIC charges log N per parameter and finds the true model, when there is one</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Twenty points with the polynomials chosen by AIC and BIC; drag the points"></canvas></div>
+      <div class="plot wide-c" style="margin-top:8px"><canvas id="hero-crit" aria-label="Training error, AIC and BIC against the number of parameters"></canvas></div>
+      <div class="btns" style="margin-top:8px"><button type="button" class="btn" id="hero-new">New sample</button></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Training error is optimistic</a></li>
+    <li><a href="#cov"><i>02</i>Each point pulls its own fit</a></li>
+    <li><a href="#cp"><i>03</i>Cp and AIC</a></li>
+    <li><a href="#df"><i>04</i>Effective number of parameters</a></li>
+    <li><a href="#bic"><i>05</i>BIC: the Bayesian shortcut</a></li>
+    <li><a href="#race"><i>06</i>AIC or BIC?</a></li>
+    <li><a href="#mdl"><i>07</i>Minimum description length</a></li>
+    <li><a href="#cond"><i>08</i>Conditional or expected error?</a></li>
+    <li><a href="#project"><i>09</i>Lags for UK demand</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The flaw</div>
+    <h2>Training error is optimistic</h2>
+    <div class="prose">
+      <p>Chapter 1.10 measured a model on data it had never seen. This chapter takes the other road: keep the training error, but <em>correct</em> it. To do that we must say exactly which error we are after. Keep the inputs x<sub>1</sub>, &hellip;, x<sub>N</sub> fixed, fit the model to their responses y<sub>i</sub>, and then imagine nature drawing <em>fresh</em> responses Y<sup>0</sup><sub>i</sub> at the very same inputs. The average loss on those fresh responses is the <em class="term">in-sample error</em>. The loss on the responses the model was fitted to is the <em class="term">training error</em>. The fit has already bent towards the noise in its own y<sub>i</sub>, and it gets no such help with the fresh ones, so the training error comes out too low. The gap is called the <em class="term">optimism</em>.</p>
+      <p>In-sample error is not the same as the test error at <em>new</em> inputs from chapter 1.10, but for choosing between models it usually ranks them the same way, and it has one great advantage: its gap from the training error can be worked out exactly. <strong>Raise the number of parameters</strong>: the average optimism climbs in a straight line.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \overline{\text{err}} &= \frac{1}{N}\sum_{i=1}^{N} L\big(y_i,\hat f(x_i)\big) \\ \text{Err}_{\text{in}} &= \frac{1}{N}\sum_{i=1}^{N} \mathbb{E}_{Y^0}\big[L_i^0 \mid \mathcal{T}\big] \\ L_i^0 &= L\big(Y_i^0,\hat f(x_i)\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> err-bar averages the loss L over the N training pairs, the very responses the fit was built from. Err<sub>in</sub> keeps the fitted model f&#770; and the same inputs, but scores it on new responses Y<sup>0</sup><sub>i</sub> drawn at those inputs, averaged over that fresh noise; the bar &ldquo;| &#x1D4AF;&rdquo; says the training set is held fixed. With squared error and a known truth f, Err<sub>in</sub> = &sigma;&sup2; + (1/N)&sum;(f(x<sub>i</sub>) &minus; f&#770;(x<sub>i</sub>))&sup2;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;err-bar is the average training loss; Err-in is the average loss on fresh responses at the same inputs.&rdquo;</em></div><div class="eq-run" id="run-why1"></div></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{op} &\equiv \text{Err}_{\text{in}} - \overline{\text{err}} \\ \omega &\equiv \mathbb{E}_{\mathbf{y}}(\text{op}) = 2\,\frac{d}{N}\,\sigma_\varepsilon^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> op is the optimism of one training set: how much its training error flatters. &omega; is its average over many training sets that share the inputs and differ only in their noise. For a least-squares fit with d parameters and noise variance &sigma;<sub>&epsilon;</sub>&sup2;, that average is exactly 2d&sigma;<sub>&epsilon;</sub>&sup2;/N: every parameter adds the same amount, and more data shrinks it.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Optimism is in-sample error minus training error; on average it is two d sigma-squared over N.&rdquo;</em></div><div class="eq-run" id="run-why2"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="why-cv" aria-label="Training points, the fitted polynomial and fresh responses at the same inputs"></canvas></div><figcaption><span style="color:var(--lda)">&#9679;</span> training responses &nbsp; <span style="color:var(--qda)">&#9675;</span> fresh responses at the same x &nbsp; <span style="color:var(--cA)">&#9644;</span> the fit &nbsp; <span style="color:var(--ink)">- -</span> the true curve</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="why-chart" aria-label="Average optimism against the number of parameters"></canvas></div><figcaption><span style="color:var(--cA)">&#9679;</span> average optimism over 400 training sets &nbsp; <span style="color:var(--ink)">&#9644;</span> 2d&sigma;&sup2;/N</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="why-d">Parameters d (degree d&minus;1)</label><output id="why-d-o"></output></div><input type="range" id="why-d" min="1" max="12" step="1" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="why-n">Training points N</label><output id="why-n-o"></output></div><input type="range" id="why-n" min="15" max="100" step="5" value="30"></div>
+        <div class="ctrl"><div class="top"><label for="why-s">Noise &sigma;</label><output id="why-s-o"></output></div><input type="range" id="why-s" min="0.1" max="1" step="0.05" value="0.5"></div>
+        <div class="btns"><button type="button" class="btn" id="why-new">Draw new responses</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="why-err"></div><div class="k">training error, this draw</div></div><div class="stat"><div class="v" id="why-ein"></div><div class="k">in-sample error, this draw</div></div><div class="stat"><div class="v" id="why-op"></div><div class="k">average optimism (400 draws)</div></div><div class="stat"><div class="v" id="why-th"></div><div class="k">2d&sigma;&sup2;/N</div></div></div>
+        <p class="note" id="why-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- COV -->
+<section class="chap" id="cov">
+  <div class="wrap">
+    <div class="tag">Where optimism comes from</div>
+    <h2>Each point pulls its own fit</h2>
+    <div class="prose">
+      <p>Why is the training error too low? Because each y<sub>i</sub> helps choose its own fitted value. If the noise pushes y<sub>i</sub> up, the fit leans up towards it, and the residual y<sub>i</sub> &minus; &ycirc;<sub>i</sub> comes out smaller than the real miss. The more a fitted value follows its own response, the larger the covariance between them, and the larger the optimism. That gives a general formula, valid for squared error, 0&ndash;1 loss and several other losses, which no longer mentions parameters at all.</p>
+      <p>For a <em class="term">linear smoother</em>, any method whose fitted values are a fixed matrix S times the responses (least squares, ridge, k-nearest neighbours, splines), the covariance is simply &sigma;&sup2; times the diagonal entry S<sub>ii</sub>, the point&rsquo;s <em class="term">self-influence</em> or leverage. <strong>Drag any point up or down</strong>: its own fitted value follows by exactly S<sub>ii</sub> times your move.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \omega = \frac{2}{N}\sum_{i=1}^{N}\operatorname{Cov}(\hat y_i, y_i) \]</div><div class="read"><b>Read it as:</b> the covariance is taken over repeated training sets at the same inputs: when the noise in y<sub>i</sub> goes up, how far does &ycirc;<sub>i</sub> go up with it? Sum over points, double, divide by N. A model that ignores its own responses (a fixed constant) has zero optimism; one that interpolates them (&ycirc;<sub>i</sub> = y<sub>i</sub>) has the most.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Omega is two over N times the sum of the covariances between each fitted value and its own response.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{gathered} \hat{\mathbf y} = \mathbf S\mathbf y \;\Rightarrow\; \operatorname{Cov}(\hat y_i, y_i) = \sigma_\varepsilon^2\, S_{ii} \\ \omega = \frac{2\,\sigma_\varepsilon^2}{N}\operatorname{trace}(\mathbf S) \end{gathered} \]</div><div class="read"><b>Read it as:</b> nudge y<sub>i</sub> by &Delta; and &ycirc;<sub>i</sub> moves by S<sub>ii</sub>&Delta;. For least squares S is the hat matrix, whose trace is the number of parameters d, so the formula gives back 2d&sigma;&sup2;/N.</div><div class="eq-say"><b>Say it</b><em>&ldquo;If y-hat is S times y, each covariance is sigma-squared times S-i-i, and omega is two sigma-squared over N times the trace of S.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-cov" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="cov-cv" aria-label="Fifteen points and a smoother; drag a point vertically"></canvas></div></figure>
+        <figure style="margin-top:8px"><div class="plot wide-d"><canvas id="cov-lev" aria-label="Self-influence S_ii of every point"></canvas></div><figcaption><span style="color:var(--lda)">&#9679;</span> responses (drag them) &nbsp; <span style="color:var(--cA)">&#9644;</span> the fit &nbsp; bars: each point&rsquo;s self-influence S<sub>ii</sub>; they add up to trace(S)</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Smoother"><button type="button" data-cv="poly" aria-pressed="true">Polynomial</button><button type="button" data-cv="knn">k-nearest neighbours</button></div>
+        <div class="ctrl"><div class="top"><label for="cov-k" id="cov-k-l">Parameters d</label><output id="cov-k-o"></output></div><input type="range" id="cov-k" min="1" max="10" step="1" value="4"></div>
+        <div class="btns"><button type="button" class="btn" id="cov-reset">Reset the points</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cov-sii"></div><div class="k">S<sub>ii</sub> of the point you moved</div></div><div class="stat"><div class="v" id="cov-ratio"></div><div class="k">fit moved &divide; point moved</div></div><div class="stat"><div class="v" id="cov-tr"></div><div class="k">trace(S) = &Sigma; S<sub>ii</sub></div></div><div class="stat"><div class="v" id="cov-om"></div><div class="k">&omega; at &sigma; = 0.5</div></div></div>
+        <p class="note" id="cov-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CP AIC -->
+<section class="chap" id="cp">
+  <div class="wrap">
+    <div class="tag">Estimating in-sample error</div>
+    <h2>C<sub>p</sub> and AIC: add the optimism back</h2>
+    <div class="prose">
+      <p>If the training error is too low by 2d&sigma;&sup2;/N on average, the remedy writes itself: add that amount back. The only unknown is the noise variance &sigma;&sup2;. Mallows&rsquo; suggestion is to estimate it from a <em>low-bias</em> model, the largest one in the list, whose residuals are mostly noise. The result is the C<sub>p</sub> statistic, an estimate of the in-sample error for each candidate. Compute it for every model and keep the smallest.</p>
+      <p>Akaike asked the same question for any model fitted by maximum likelihood. His <em class="term">information criterion</em> estimates how well the fitted model would predict new data, measured by log-likelihood, and the correction is again two per parameter. For Gaussian noise with known variance AIC and C<sub>p</sub> rank models identically; for logistic regression the log-likelihood is the binomial one. When a model has a tuning knob &alpha; instead of a parameter count, replace d by its effective count d(&alpha;), the subject of the next section. Below, the truth is known, so the page can also draw the real in-sample error that C<sub>p</sub> is trying to estimate. <strong>Change how &sigma;&sup2; is estimated</strong> and watch the choice move.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ C_p = \overline{\text{err}} + 2\,\frac{d}{N}\,\hat\sigma_\varepsilon^2 \]</div><div class="read"><b>Read it as:</b> the training error plus the average optimism, with &sigma;&sup2; replaced by an estimate. Because it uses an average optimism, C<sub>p</sub> is right on average, not for every sample: for one data set it can still pick too big or too small a model.</div><div class="eq-say"><b>Say it</b><em>&ldquo;C-p is the training error plus two d over N times the estimated noise variance.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{gathered} \text{AIC} = -\frac{2}{N}\,\text{loglik} + 2\,\frac{d}{N} \\ \text{loglik} = \sum_{i=1}^{N}\log \Pr\nolimits_{\hat\theta}(y_i) \end{gathered} \]</div><div class="read"><b>Read it as:</b> loglik is the maximised log-likelihood; &minus;2/N times it is the training loss on the log scale, and 2d/N is its optimism (exact for linear Gaussian models, and approximately true for large N in general). With Gaussian noise and known &sigma;&sup2;, AIC = C<sub>p</sub>/&sigma;&sup2; + a constant. With &sigma;&sup2; unknown and set to RSS/N, N&middot;AIC = N log(RSS/N) + 2d + a constant, the form used in the project.</div><div class="eq-say"><b>Say it</b><em>&ldquo;AIC is minus two over N times the log-likelihood, plus two d over N.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-cp" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="cp-cv" aria-label="Training error, Cp and the true in-sample error against the number of parameters"></canvas></div><figcaption><span style="color:var(--muted)">&#9644;</span> training error &nbsp; <span style="color:var(--cA)">&#9644;</span> C<sub>p</sub> &nbsp; <span style="color:var(--qda)">&#9644;</span> true in-sample error for this sample &nbsp; <span style="color:var(--ink)">- -</span> its average over samples. Stars mark each curve&rsquo;s minimum.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <span class="mini-h">Estimate &sigma;&sup2; from</span>
+        <div class="seg" role="group" aria-label="How sigma squared is estimated"><button type="button" data-cs="big" aria-pressed="true">the largest model</button><button type="button" data-cs="true">the truth</button><button type="button" data-cs="line">a straight line</button></div>
+        <div class="ctrl"><div class="top"><label for="cp-d">Inspect d</label><output id="cp-d-o"></output></div><input type="range" id="cp-d" min="1" max="15" step="1" value="6"></div>
+        <div class="btns"><button type="button" class="btn" id="cp-new">New sample</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cp-pick"></div><div class="k">d chosen by C<sub>p</sub></div></div><div class="stat"><div class="v" id="cp-best"></div><div class="k">truly best d, this sample</div></div><div class="stat"><div class="v" id="cp-s2"></div><div class="k">&sigma;&#770;&sup2; used (truth 0.25)</div></div><div class="stat"><div class="v" id="cp-cost"></div><div class="k">in-sample error at C<sub>p</sub>&rsquo;s pick</div></div></div>
+        <p class="note" id="cp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- DF -->
+<section class="chap" id="df">
+  <div class="wrap">
+    <div class="tag">When d is not a count</div>
+    <h2>The effective number of parameters</h2>
+    <div class="prose">
+      <p>C<sub>p</sub> and AIC need d. For least squares, d counts the columns. But ridge regression keeps all its coefficients and shrinks them; a nearest-neighbour smoother has no coefficients at all; and a procedure that <em>chooses</em> its predictors from many has looked at the data more than its final count admits. The covariance formula from the last section gives one definition that covers them all: the <em class="term">effective degrees of freedom</em> is the total self-influence, measured in units of &sigma;&sup2;.</p>
+      <p>For a linear smoother it is trace(S): 12 coefficients under a ridge penalty may be worth only 4 parameters, and k-NN on N points is worth N/k. For an adaptive procedure there is no S, but the covariance can still be estimated by simulation. Picking the best one of ten useless predictors costs nearly four parameters, not one. <strong>Pick a method and slide its knob</strong>: the line is the formula, the dots are simulation.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \operatorname{df}(\hat{\mathbf y}) = \frac{1}{\sigma_\varepsilon^2}\sum_{i=1}^{N}\operatorname{Cov}(\hat y_i, y_i) \]</div><div class="read"><b>Read it as:</b> the effective number of parameters is the total covariance between fitted values and their own responses, divided by the noise variance. Plug it in for d in C<sub>p</sub> or AIC and the optimism formula stays correct.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The degrees of freedom of y-hat is the sum of the covariances of each fitted value with its response, over sigma-squared.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{gathered} \operatorname{df}(\mathbf S) = \operatorname{trace}(\mathbf S) \\ \operatorname{df}_{\text{ridge}}(\lambda) = \sum_{j=1}^{p}\frac{d_j^2}{d_j^2+\lambda} \end{gathered} \]</div><div class="read"><b>Read it as:</b> for a linear smoother, add up the diagonal of S. For ridge regression S = X(X<sup>T</sup>X + &lambda;I)<sup>&minus;1</sup>X<sup>T</sup>, and with d<sub>j</sub>&sup2; the eigenvalues of X<sup>T</sup>X each direction contributes a fraction between 0 and 1: all of it at &lambda; = 0, almost none when &lambda; is huge.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The df of a smoother is the trace of S; for ridge it is the sum of d-j-squared over d-j-squared plus lambda.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-df" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="df-cv" aria-label="Effective degrees of freedom: formula and simulation"></canvas></div><figcaption id="df-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Method"><button type="button" data-dm="ridge" aria-pressed="true">Ridge</button><button type="button" data-dm="knn">k-NN</button><button type="button" data-dm="sub">Best k of 10</button></div>
+        <div class="ctrl"><div class="top"><label for="df-k" id="df-k-l">log&#8321;&#8320; &lambda;</label><output id="df-k-o"></output></div><input type="range" id="df-k" min="0" max="12" step="1" value="6"></div>
+        <div class="stats"><div class="stat"><div class="v" id="df-f"></div><div class="k" id="df-f-k">formula</div></div><div class="stat"><div class="v" id="df-mc"></div><div class="k">simulation (2,000 runs)</div></div><div class="stat"><div class="v" id="df-n"></div><div class="k">parameters you would count</div></div><div class="stat"><div class="v" id="df-om"></div><div class="k">optimism 2&middot;df&middot;&sigma;&sup2;/N</div></div></div>
+        <p class="note" id="df-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BIC -->
+<section class="chap" id="bic">
+  <div class="wrap">
+    <div class="tag">A different question</div>
+    <h2>BIC: the Bayesian shortcut</h2>
+    <div class="prose">
+      <p>C<sub>p</sub> and AIC ask which model will <em>predict</em> best. A Bayesian asks which model is most <em>probable</em> given the data. Give each candidate a prior probability; then its posterior probability is proportional to the prior times its <em class="term">evidence</em> Pr(Z | &#x2133;), the probability the model gave to the data, averaged over its own parameter prior (chapter 1.2e computed it exactly). That integral is usually hard. Schwarz&rsquo;s shortcut is a Laplace approximation around the best fit: the evidence is roughly the best-fit likelihood times a penalty of N<sup>&minus;1/2</sup> per parameter, because the region of good parameter values shrinks like 1/&radic;N in every direction.</p>
+      <p>Multiply the log by &minus;2 and you have the <em class="term">Bayesian information criterion</em>. Its penalty, log N per parameter, beats AIC&rsquo;s 2 as soon as N &gt; e&sup2; &asymp; 7.4. Below is a polynomial regression with a Gaussian prior, where the exact evidence is available, so you can see how good the shortcut is. <strong>Slide N</strong> and compare the two curves and the posterior probabilities they imply.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \frac{\Pr(\mathcal{M}_m\mid \mathbf{Z})}{\Pr(\mathcal{M}_\ell\mid \mathbf{Z})} &= \frac{\Pr(\mathcal{M}_m)}{\Pr(\mathcal{M}_\ell)} \\ &\quad\times\frac{\Pr(\mathbf{Z}\mid \mathcal{M}_m)}{\Pr(\mathbf{Z}\mid \mathcal{M}_\ell)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the posterior odds of model m against model &#8467; are the prior odds times the <em>Bayes factor</em>, the ratio of the two evidences. With equal prior probabilities only the evidence matters. Z is the whole training set.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Posterior odds equal prior odds times the Bayes factor.&rdquo;</em></div></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{gathered} \log \Pr(\mathbf{Z}\mid \mathcal{M}_m) = \text{loglik}_m \\ \qquad - \frac{d_m}{2}\log N + O(1) \\[6pt] \text{BIC} = -2\,\text{loglik} + (\log N)\,d \end{gathered} \]</div><div class="read"><b>Read it as:</b> the log evidence is the maximised log-likelihood loglik<sub>m</sub> = log Pr(Z | &theta;&#770;<sub>m</sub>, &#x2133;<sub>m</sub>), minus half log N for each of the d<sub>m</sub> parameters, plus a remainder that stays bounded as N grows (it depends on the prior). BIC is &minus;2 times the first two terms. For Gaussian noise with known &sigma;&sup2;, BIC = (N/&sigma;&sup2;)[err-bar + (log N)(d/N)&sigma;&sup2;]: AIC with 2 replaced by log N.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Log evidence is about the best log-likelihood minus d over two log N; BIC is minus two log-likelihood plus log N times d.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \Pr(\mathcal{M}_m\mid \mathbf{Z}) \approx \frac{e^{-\frac{1}{2}\text{BIC}_m}}{\sum_{\ell=1}^{M} e^{-\frac{1}{2}\text{BIC}_\ell}} \]</div><div class="read"><b>Read it as:</b> with equal priors, turn BIC values into approximate posterior probabilities of the M candidates. Only differences in BIC matter: a lead of 2 means odds of e &asymp; 2.7 to 1, a lead of 10 means about 150 to 1. Treat these as rough, because the O(1) term has been thrown away.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The probability of model m is about e to the minus half its BIC, over the same sum for every model.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-bic" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="bic-cv" aria-label="Exact log evidence and the BIC approximation against the number of parameters"></canvas></div><figcaption><span style="color:var(--lda)">&#9644;</span> exact log evidence &nbsp; <span style="color:var(--cB)">&#9644;</span> &minus;BIC/2 = loglik &minus; (d/2) log N &nbsp; <span style="color:var(--muted)">&#9644;</span> maximised log-likelihood. All three relative to the exact evidence at its best d.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="bic-bars" aria-label="Posterior probability of each model, exact and from BIC"></canvas></div><figcaption><span style="color:var(--lda)">&#9632;</span> posterior probability from the exact evidence &nbsp; <span style="color:var(--cB)">&#9632;</span> from BIC (equal priors over d = 1&ndash;10)</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="bic-n">Training points N</label><output id="bic-n-o"></output></div><input type="range" id="bic-n" min="0" max="7" step="1" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="bic-t">Prior width &tau; on each weight</label><output id="bic-t-o"></output></div><input type="range" id="bic-t" min="-1" max="1" step="0.1" value="0"></div>
+        <div class="btns"><button type="button" class="btn" id="bic-new">New sample</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="bic-pe"></div><div class="k">d with the highest evidence</div></div><div class="stat"><div class="v" id="bic-pb"></div><div class="k">d with the lowest BIC</div></div><div class="stat"><div class="v" id="bic-gap"></div><div class="k">evidence &minus; BIC approx., per parameter</div></div><div class="stat"><div class="v" id="bic-pen"></div><div class="k">BIC penalty per parameter</div></div></div>
+        <p class="note" id="bic-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- RACE -->
+<section class="chap" id="race">
+  <div class="wrap">
+    <div class="tag">Consistent or efficient</div>
+    <h2>AIC or BIC? It depends on the truth</h2>
+    <div class="prose">
+      <p>BIC&rsquo;s heavier penalty makes it choose smaller models. Which habit is better depends on what the world is like. If one of the candidates is exactly true, BIC is <em class="term">consistent</em>: as N grows, the chance that it picks the true model goes to 1. AIC never gets there; it keeps a fixed chance of adding a parameter it does not need. If none of the candidates is true, because the truth is more complicated than any model in the list (the usual situation with real data), the right model size keeps growing with N. Then AIC is <em class="term">efficient</em>: its choice predicts about as well as the best possible choice, while BIC tends to stop too early. And with small samples, BIC&rsquo;s penalty often makes it choose models that are too simple.</p>
+      <p>Below, 300 data sets are drawn for every N and both criteria choose a polynomial from d = 1 to 12. <strong>Switch the truth</strong>, then slide N.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{AIC} &= N\log\hat\sigma^2_d + 2d \\ \text{BIC} &= N\log\hat\sigma^2_d + (\log N)\,d \end{aligned} \]</div><div class="read"><b>Read it as:</b> with &sigma;&sup2; unknown, &minus;2 loglik = N log &sigma;&#770;<sub>d</sub>&sup2; + a constant, where &sigma;&#770;<sub>d</sub>&sup2; = RSS<sub>d</sub>/N. An extra parameter is worth adding only if it lowers N log &sigma;&#770;&sup2; by more than 2 (AIC) or more than log N (BIC). A useless parameter lowers it by roughly a &chi;&sup2;<sub>1</sub> amount, which tops 2 about 16% of the time, whatever N is; topping log N becomes ever rarer as N grows.</div><div class="eq-say"><b>Say it</b><em>&ldquo;AIC is N log sigma-hat-squared plus two d; BIC is the same with log N in place of two.&rdquo;</em></div><div class="eq-run" id="run-race"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="race-cv" aria-label="How often each number of parameters is chosen by AIC and BIC"></canvas></div><figcaption><span style="color:var(--cA)">&#9632;</span> AIC &nbsp; <span style="color:var(--cB)">&#9632;</span> BIC: how often each d is chosen in 300 data sets. <span style="color:var(--ink)">&#9650;</span> the true d, or the best d for this N when the truth is not in the list.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="race-n" aria-label="Performance of AIC and BIC against N"></canvas></div><figcaption id="race-ncap"></figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="The truth"><button type="button" data-rt="cubic" aria-pressed="true">A cubic: in the list</button><button type="button" data-rt="decay">An endless wave: not in the list</button></div>
+        <div class="ctrl"><div class="top"><label for="race-n-s">Training points N</label><output id="race-n-o"></output></div><input type="range" id="race-n-s" min="0" max="6" step="1" value="2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="race-a"></div><div class="k" id="race-a-k">AIC picks the true d</div></div><div class="stat"><div class="v" id="race-b"></div><div class="k" id="race-b-k">BIC picks the true d</div></div><div class="stat"><div class="v" id="race-la"></div><div class="k">AIC: excess error</div></div><div class="stat"><div class="v" id="race-lb"></div><div class="k">BIC: excess error</div></div></div>
+        <p class="note" id="race-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MDL -->
+<section class="chap" id="mdl">
+  <div class="wrap">
+    <div class="tag">Models as codes</div>
+    <h2>Minimum description length</h2>
+    <div class="prose">
+      <p>Rissanen&rsquo;s view starts somewhere else entirely: a model is a way to <em>compress</em> data. Suppose you must send your data to a friend down a wire, as cheaply as possible. Shannon showed that a message with probability Pr(z) needs about &minus;log&#8322; Pr(z) bits in the best code, so likely messages get short codewords and rare ones long. No code can beat the <em class="term">entropy</em> on average. Here is a code for a five-symbol weather report:</p>
+    </div>
+    <div class="tbl-wrap block" style="max-width:640px"><table class="hand" id="mdl-code"></table></div>
+    <div class="prose"><p>To send data with a model you first send the model&rsquo;s parameters, then the data coded with the model&rsquo;s probabilities. A rich model makes the data cheap but costs bits to describe. Pick the model with the shortest <em>total</em> message. Sending a parameter to the precision the data justify (about 1/&radic;N) costs about &frac12; log&#8322; N bits, so the total length is BIC/2 measured in bits: MDL and BIC are the same criterion reached from coding instead of probability. Below, a stream of bits; the candidate models predict each bit from the previous k bits, with 2<sup>k</sup> probabilities to send. <strong>Pick a source</strong> and see which memory length compresses best.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{gathered} \mathbb{E}(\text{length}) \ge -\sum_{i} p_i\log_2 p_i \\ p_i = \Pr(z_i) \end{gathered} \]</div><div class="read"><b>Read it as:</b> whatever prefix code you use for messages z<sub>i</sub> sent with probabilities Pr(z<sub>i</sub>), the average codeword length is at least the entropy. Codeword lengths of exactly &minus;log&#8322; Pr(z<sub>i</sub>) reach it; whole bits get within one bit of it.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected code length is at least minus the sum of p log-two p.&rdquo;</em></div><div class="eq-run" id="run-mdl1"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{length} &= -\log \Pr(\mathbf{y}\mid \theta, \mathcal{M}, \mathbf{X}) \\ &\quad - \log \Pr(\theta\mid \mathcal{M}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the cost of sending the responses y with model &#x2133; is the bits for the data given the parameters &theta; (the receiver already has the inputs X) plus the bits for &theta; itself. Minimising it is the same as maximising the posterior of &theta;, and choosing the model with the minimum length is, to first order, choosing by BIC.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Length is minus log the probability of the data given the model, minus log the probability of the parameters.&rdquo;</em></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} L(k) &= \underbrace{-\sum_{t}\log_2 \hat p_k(x_t \mid \mathbf{h}_t)}_{\text{data, given the model}} \\ &\quad + \underbrace{\frac{2^k}{2}\log_2 N}_{\text{parameters}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> a model with memory k keeps one probability of a 1 for each of the 2<sup>k</sup> possible histories h<sub>t</sub> = (x<sub>t&minus;k</sub>, &hellip;, x<sub>t&minus;1</sub>), estimated by counting. The first term is the length of the bit stream coded with those probabilities; the second sends the 2<sup>k</sup> probabilities at &frac12; log&#8322; N bits each. Sending the raw bits costs exactly N.</div><div class="eq-say"><b>Say it</b><em>&ldquo;L of k is the code length of the data under the order-k model plus two-to-the-k over two times log-two N.&rdquo;</em></div><div class="eq-run" id="run-mdl2"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="mdl-cv" aria-label="Description length of the bit stream for each memory length"></canvas></div><figcaption><span style="color:var(--lda)">&#9632;</span> bits for the data &nbsp; <span style="color:var(--cB)">&#9632;</span> bits for the parameters &nbsp; <span style="color:var(--ink)">- -</span> N bits: sending the raw stream</figcaption></figure>
+        <div class="bitstrip mono block" id="mdl-bits" aria-label="The first bits of the stream"></div>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Source of the bits"><button type="button" data-ms="coin">Biased coin</button><button type="button" data-ms="sticky" aria-pressed="true">Sticky</button><button type="button" data-ms="rhythm">Two-step rule</button></div>
+        <div class="ctrl"><div class="top"><label for="mdl-n">Stream length N</label><output id="mdl-n-o"></output></div><input type="range" id="mdl-n" min="50" max="2000" step="50" value="300"></div>
+        <div class="btns"><button type="button" class="btn" id="mdl-new">New stream</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="mdl-k"></div><div class="k">memory with the shortest code</div></div><div class="stat"><div class="v" id="mdl-bpb"></div><div class="k">bits per symbol, best model</div></div></div>
+        <p class="note" id="mdl-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- COND -->
+<section class="chap" id="cond">
+  <div class="wrap">
+    <div class="tag">What the estimates estimate</div>
+    <h2>Conditional or expected test error?</h2>
+    <div class="prose">
+      <p>Chapter 1.10 had two targets. Err<sub>&#x1D4AF;</sub> is the test error of <em>the</em> model you fitted, on your training set &#x1D4AF;. Err is its average over all the training sets you might have drawn. Err<sub>&#x1D4AF;</sub> is what you would like to know. The awkward truth is that cross-validation, and criteria like C<sub>p</sub>, mostly estimate Err: they tell you how well this <em>kind</em> of model does on this kind of data, and very little about this particular fit.</p>
+      <p>To see it, take ordinary least squares with p = 10 Gaussian inputs and draw many training sets. With identity-covariance inputs the true conditional error is known exactly for each one, so we can set the 10-fold CV estimate beside it. If CV knew about the particular training set, the dots would hug the diagonal. <strong>Run more training sets</strong> and look at the cloud.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{Err}_{\mathcal{T}} &= \mathbb{E}_{X^0,Y^0}\big[L\big(Y^0,\hat f(X^0)\big)\,\big|\,\mathcal{T}\big] \\ \text{Err} &= \mathbb{E}_{\mathcal{T}}\big[\text{Err}_{\mathcal{T}}\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> Err<sub>&#x1D4AF;</sub> fixes the training set and averages the loss over new inputs and responses; Err also averages over the training set. Unlike Err<sub>in</sub>, both use new inputs.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Err-T is the expected loss at a new point given this training set; Err is its average over training sets.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{Err}_{\mathcal{T}} &= \sigma^2 + \lVert\hat\beta - \beta\rVert^2 \\ \text{Err} &= \sigma^2\Big(1 + \frac{p}{N-p-1}\Big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> for least squares with inputs X ~ N(0, I) and no intercept, a new point&rsquo;s squared error is the noise plus the squared distance of the fitted coefficients from the true ones. Averaging over training sets gives the second line (the mean of an inverse Wishart matrix).</div><div class="eq-say"><b>Say it</b><em>&ldquo;Err-T is sigma-squared plus the squared coefficient error; Err is sigma-squared times one plus p over N minus p minus one.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-cond" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10" style="aspect-ratio:1.3/1"><canvas id="cond-cv" aria-label="CV estimate against the true conditional error, one dot per training set"></canvas></div><figcaption><span style="color:var(--lda)">&#9679;</span> 10-fold CV estimate &nbsp; <span style="color:var(--cA)">&#9679;</span> C<sub>p</sub> estimate &nbsp; one dot per training set, against its true Err<sub>&#x1D4AF;</sub>. <span style="color:var(--ink)">- -</span> the diagonal, where a perfect estimate would sit; <span style="color:var(--qda)">&#9644;</span> Err.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cond-n">Training points N</label><output id="cond-n-o"></output></div><input type="range" id="cond-n" min="20" max="100" step="5" value="40"></div>
+        <div class="btns"><button type="button" class="btn primary" id="cond-run">Run 100 more training sets</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="cond-r"></div><div class="k">correlation of CV with Err<sub>&#x1D4AF;</sub></div></div><div class="stat"><div class="v" id="cond-rcp"></div><div class="k">correlation of C<sub>p</sub> with Err<sub>&#x1D4AF;</sub></div></div><div class="stat"><div class="v" id="cond-m"></div><div class="k">mean Err<sub>&#x1D4AF;</sub> (theory: Err)</div></div><div class="stat"><div class="v" id="cond-mcv"></div><div class="k">mean CV &middot; mean C<sub>p</sub></div></div></div>
+        <p class="note" id="cond-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: how far back should a demand forecast look?</h2>
+    <div class="prose">
+      <p>Great Britain&rsquo;s electricity system operator, NESO, publishes the <strong>national demand</strong> on the transmission network every half hour (Historic Demand Data, NESO Open Data Licence). Averaging the 48 half-hours gives one number per day, in gigawatts. Demand has a strong weekly rhythm (weekends are quieter), a yearly one (winters are dearer) and a slow downward drift as rooftop solar grows. A classic forecaster is the <em class="term">autoregression</em> AR(p): tomorrow&rsquo;s demand is a weighted sum of the last p days plus a constant. The question for this chapter is <b>p</b>. One day back? A week? Four?</p>
+      <p>We fit on 2022&ndash;2024 and keep 2025 sealed for one-day-ahead forecasts. Every candidate uses the same 1,068 training days (the first 28 are reserved as history), so the criteria compare like with like; with a pure autoregression, ordinary 10-fold cross-validation over those rows is valid (Bergmeir, Hyndman &amp; Koo, 2018). Everything below is computed in your browser from the embedded data.</p>
+    </div>
+    <div class="btns block"><div class="seg" role="group" aria-label="Period"><button type="button" data-pp="A" aria-pressed="true">Train 2022&ndash;24, test 2025</button><button type="button" data-pp="B">Train 2016&ndash;18, test 2019</button></div></div>
+    <figure class="block"><div class="plot wide-a"><canvas id="pj-series" aria-label="Daily mean national demand, training years and test year"></canvas></div><figcaption id="pj-scap"></figcaption></figure>
+
+    <h3>1 &middot; Every criterion, every lag order</h3>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="pj-crit" aria-label="AIC and BIC against lag order"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> AIC &nbsp; <span style="color:var(--cB)">&#9644;</span> BIC, each minus its own minimum (so the chosen p sits at 0). Stars: the minima.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="pj-rmse" aria-label="Training, cross-validated and test RMSE against lag order"></canvas></div><figcaption><span style="color:var(--muted)">&#9644;</span> training RMSE &nbsp; <span style="color:var(--lda)">&#9644;</span> 10-fold CV RMSE &nbsp; <span style="color:var(--qda)">- -</span> test-year RMSE (hindsight: no criterion sees it)</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-p">Lag order p</label><output id="pj-p-o"></output></div><input type="range" id="pj-p" min="1" max="28" step="1" value="7"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-aic"></div><div class="k">AIC &minus; min</div></div><div class="stat"><div class="v" id="pj-bic"></div><div class="k">BIC &minus; min</div></div><div class="stat"><div class="v" id="pj-cv"></div><div class="k">CV RMSE (GW)</div></div><div class="stat"><div class="v" id="pj-te"></div><div class="k">test RMSE (GW)</div></div></div>
+        <span class="mini-h" style="margin-top:6px">The fitted weights &phi;<sub>1</sub>&hellip;&phi;<sub>p</sub></span>
+        <div class="plot" style="aspect-ratio:2.2/1"><canvas id="pj-coef" aria-label="Autoregressive weights for each lag"></canvas></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>2 &middot; The verdicts</h3>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-tbl"></table></div>
+    <p class="note block" style="max-width:72ch" id="pj-tsay"></p>
+
+    <h3>3 &middot; The sealed year, forecast one day at a time</h3>
+    <div class="btns block"><div class="seg" role="group" aria-label="Which model forecasts"><button type="button" data-pf="aic" aria-pressed="true">AIC&rsquo;s p</button><button type="button" data-pf="bic">BIC&rsquo;s p</button><button type="button" data-pf="p1">p = 1</button><button type="button" data-pf="naive">Same day last week</button></div></div>
+    <figure class="block"><div class="plot wide-b"><canvas id="pj-fc" aria-label="Actual and forecast demand in the test year"></canvas></div><figcaption id="pj-fcap"></figcaption></figure>
+
+    <h3>The same project in Python</h3>
+<pre class="code"><code>import numpy as np, pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import KFold, cross_val_predict
+
+def daily(years):                                   # NESO Historic Demand Data, one CSV per year
+    d = pd.concat(pd.read_csv(f"demanddata_{y}.csv", usecols=["SETTLEMENT_DATE", "ND"]) for y in years)
+    s = d.SETTLEMENT_DATE.str.strip('"')
+    iso = s.str[4] == "-"                           # 2025 switched to ISO dates
+    d["date"] = pd.to_datetime(s.where(iso), format="%Y-%m-%d").fillna(pd.to_datetime(s.where(~iso), format="mixed", dayfirst=True))
+    return (d.groupby("date").ND.mean() / 1000).round(3)          # daily mean demand, GW (to 1 MW)
+
+P = 28                                              # look back at most four weeks
+for train, test in (((2022, 2023, 2024), 2025), ((2016, 2017, 2018), 2019)):
+    y = daily(list(train) + [test]).values
+    n_tr = len(y) - (366 if test % 4 == 0 else 365)
+    lags = np.column_stack([y[P - j:n_tr - j] for j in range(1, P + 1)])   # column j-1 = demand j days earlier
+    target = y[P:n_tr]; N = len(target)
+    rows = []
+    for p in range(1, P + 1):
+        X = lags[:, :p]
+        m = LinearRegression().fit(X, target)
+        rss = np.sum((target - m.predict(X)) ** 2); d = p + 1          # p lags + intercept
+        aic = N * np.log(rss / N) + 2 * d
+        bic = N * np.log(rss / N) + np.log(N) * d
+        cv = np.mean((target - cross_val_predict(LinearRegression(), X, target, cv=KFold(10))) ** 2)
+        Xt = np.column_stack([y[n_tr - j:len(y) - j] for j in range(1, p + 1)])
+        test_rmse = np.sqrt(np.mean((y[n_tr:] - m.predict(Xt)) ** 2))
+        rows.append((p, np.sqrt(rss / N), aic, bic, np.sqrt(cv), test_rmse))
+    r = np.array(rows)
+    pick = {k: int(r[np.argmin(r[:, c]), 0]) for k, c in (("AIC", 2), ("BIC", 3), ("10-fold CV", 4))}
+    naive = np.sqrt(np.mean((y[n_tr:] - y[n_tr - 7:len(y) - 7]) ** 2))
+    print(f"train {train[0]}-{train[-1]} (N = {N} days), test {test}: picks {pick}")
+    print("   p  train RMSE      AIC        BIC     CV RMSE  test RMSE")
+    for p in sorted({1, 7, 14, 21, *pick.values(), 28}):
+        print("  %2d   %.5f  %9.4f  %9.4f   %.5f   %.5f" % tuple(r[p - 1]))
+    print(f"  same day last week: test RMSE {naive:.5f}\n")</code></pre>
+<pre class="code out"><code>train 2022-2024 (N = 1068 days), test 2025: picks {'AIC': 27, 'BIC': 22, '10-fold CV': 27}
+   p  train RMSE      AIC        BIC     CV RMSE  test RMSE
+   1   1.92272  1400.3871  1410.3342   1.93170   1.84092
+   7   1.52374   915.6194   955.4078   1.55642   1.56947
+  14   1.35955   686.0864   760.6896   1.38840   1.44945
+  21   1.29528   596.6417   706.0597   1.32818   1.41444
+  22   1.27182   559.6054   673.9969   1.30463   1.40471
+  27   1.25990   549.4778   688.7370   1.30108   1.38643
+  28   1.25880   549.6217   693.8545   1.30129   1.38670
+  same day last week: test RMSE 2.41056
+
+train 2016-2018 (N = 1068 days), test 2019: picks {'AIC': 22, 'BIC': 22, '10-fold CV': 22}
+   p  train RMSE      AIC        BIC     CV RMSE  test RMSE
+   1   2.25994  1745.5609  1755.5079   2.27138   2.21356
+   7   1.65617  1093.6229  1133.4112   1.67562   1.63007
+  14   1.44571   817.3274   891.9305   1.46991   1.45311
+  21   1.36814   713.5320   822.9500   1.40062   1.40530
+  22   1.34764   683.2937   797.6852   1.37995   1.38920
+  28   1.34304   687.9842   832.2170   1.38652   1.39292
+  same day last week: test RMSE 2.22840</code></pre>
+    <p class="note" style="max-width:72ch">The browser fits every order with one QR factorisation of the lagged design (one per fold for CV) instead of separate least-squares solves; every AIC, BIC and RMSE in the printout is matched by the page to the digits shown, and the chosen orders are identical. Two honest caveats. First, demand has no true finite order: AIC and CV keep finding small gains at each weekly echo (lags 22, 27, 29, 43, 50&hellip;), so if you let them look further back than four weeks they choose longer models still, while BIC holds at 22. Second, the differences between the leading orders are small, about 0.02 GW in test RMSE, against a typical one-day miss of 1.4 GW; a criterion is a principled tie-breaker, not an oracle. The data were downloaded from NESO in November 2026; 2025 values may still be revised.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Training error flatters by the optimism, on average (2/N)&sum;Cov(&ycirc;<sub>i</sub>, y<sub>i</sub>): exactly 2d&sigma;&sup2;/N for least squares with d parameters.</li>
+      <li>C<sub>p</sub> and AIC add that optimism back: training loss + 2&middot;d/N (times &sigma;&#770;&sup2; for squared error), with &sigma;&#770;&sup2; from a low-bias model.</li>
+      <li>When parameters are shrunk, smoothed or selected, use the effective degrees of freedom: trace(S) for linear smoothers, simulation for adaptive ones.</li>
+      <li>BIC = &minus;2 loglik + (log N)d approximates &minus;2 log evidence; it is consistent when the true model is in the list, while AIC predicts better when it is not. MDL reaches BIC by counting bits.</li>
+      <li>CV and these criteria estimate the expected error Err, not the error of your particular fit, Err<sub>&#x1D4AF;</sub>.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A least-squares model with 20 parameters is fitted to 100 points with noise variance 4. By how much does its training error flatter, on average?</summary><p>&omega; = 2d&sigma;&sup2;/N = 2 &times; 20 &times; 4 / 100 = 1.6 in mean squared error. Its in-sample error is on average 1.6 higher than its training error.</p></details>
+      <details class="q"><summary>Why does C<sub>p</sub> estimate &sigma;&sup2; from the largest model rather than from each candidate?</summary><p>A small candidate&rsquo;s residuals contain its bias as well as noise, so its own variance estimate is too big, and an inflated &sigma;&#770;&sup2; makes every extra parameter look too expensive. The largest model has little bias, so its residual variance (with N &minus; d in the denominator) is close to the noise alone.</p></details>
+      <details class="q"><summary>A 5-nearest-neighbour smoother is fitted to 200 points. What is its effective number of parameters?</summary><p>Each fitted value is the average of 5 responses including its own, so S<sub>ii</sub> = 1/5, and df = trace(S) = 200/5 = 40.</p></details>
+      <details class="q"><summary>With N = 1,000, how much must an extra parameter lower &minus;2 loglik to be accepted by AIC? By BIC?</summary><p>AIC needs a drop of more than 2; BIC needs more than log 1000 &asymp; 6.9. A useless parameter passes AIC&rsquo;s bar about 16% of the time, BIC&rsquo;s under 1%.</p></details>
+      <details class="q"><summary>Your 10-fold CV error is unusually low for this kind of model. Does that mean your particular fitted model is unusually good?</summary><p>Not necessarily. CV&rsquo;s estimate is only weakly related to the conditional error of the specific fit; it mostly estimates the average error over training sets. A low CV number can come from an easy split of the data as much as from a good fit.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../learning-theory/">Next chapter: Learning Theory: PAC, VC Dimension &amp; Sample Complexity &rarr;</a>
+      <a class="btn" href="../evaluating-models/">&larr; Previous: Evaluating Models</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Hastie, Tibshirani &amp; Friedman (2009). <em>The Elements of Statistical Learning</em>, 2nd ed., ch. 7: &sect;7.4&ndash;7.8 (optimism, C<sub>p</sub>, AIC, effective parameters, BIC, MDL) and &sect;7.12 (conditional or expected test error).</li>
+      <li>Mallows, C. L. (1973). Some comments on C<sub>p</sub>. <em>Technometrics</em> 15(4), 661&ndash;675.</li>
+      <li>Akaike, H. (1974). A new look at the statistical model identification. <em>IEEE Transactions on Automatic Control</em> 19(6), 716&ndash;723.</li>
+      <li>Schwarz, G. (1978). Estimating the dimension of a model. <em>The Annals of Statistics</em> 6(2), 461&ndash;464.</li>
+      <li>Kass, R. E. &amp; Wasserman, L. (1995). A reference Bayesian test for nested hypotheses and its relationship to the Schwarz criterion. <em>Journal of the American Statistical Association</em> 90(431), 928&ndash;934.</li>
+      <li>Rissanen, J. (1978). Modeling by shortest data description. <em>Automatica</em> 14(5), 465&ndash;471.</li>
+      <li>Efron, B. (1986). How biased is the apparent error rate of a prediction rule? <em>Journal of the American Statistical Association</em> 81(394), 461&ndash;470.</li>
+      <li>Shibata, R. (1981). An optimal selection of regression variables. <em>Biometrika</em> 68(1), 45&ndash;54.</li>
+      <li>Bergmeir, C., Hyndman, R. J. &amp; Koo, B. (2018). A note on the validity of cross-validation for evaluating autoregressive time series prediction. <em>Computational Statistics &amp; Data Analysis</em> 120, 70&ndash;83.</li>
+      <li>National Energy System Operator. <em>Historic Demand Data</em>, 2016&ndash;2025, NESO Open Data Licence.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- x031 core: orthogonal polynomial fits, criteria, simulations (no DOM) ---------- */
+const LN2 = Math.LN2;
+/* Legendre polynomials P_0..P_{D-1} at t in [-1, 1] */
+function legendre(t, D) { const P = [1]; if (D > 1) P.push(t); for (let k = 2; k < D; k++) P.push(((2 * k - 1) * t * P[k - 1] - (k - 1) * P[k - 2]) / k); return P; }
+/* orthonormal columns (modified Gram-Schmidt, twice) for a design given column-wise; returns {Q, R} with X = Q R */
+function mgs(cols) {
+  const m = cols.length, n = cols[0].length, Q = [], R = Array.from({ length: m }, () => new Float64Array(m));
+  for (let j = 0; j < m; j++) {
+    const v = Float64Array.from(cols[j]);
+    for (let pass = 0; pass < 2; pass++) for (let i = 0; i < j; i++) { let s = 0; const q = Q[i]; for (let t = 0; t < n; t++) s += q[t] * v[t]; R[i][j] += s; for (let t = 0; t < n; t++) v[t] -= s * q[t]; }
+    let nr = 0; for (let t = 0; t < n; t++) nr += v[t] * v[t]; nr = Math.sqrt(nr); R[j][j] = nr;
+    for (let t = 0; t < n; t++) v[t] /= nr || 1; Q.push(v);
+  }
+  return { Q, R };
+}
+/* fixed design on [0,1]: x_i = (i + 0.5) / N, Legendre basis in 2x - 1, orthonormalised */
+const _QC = {};
+function polyQ(N, D) { const key = N + ':' + D; if (_QC[key]) return _QC[key]; const xs = Array.from({ length: N }, (_, i) => (i + 0.5) / N); const cols = Array.from({ length: D }, () => new Float64Array(N)); xs.forEach((x, i) => legendre(2 * x - 1, D).forEach((p, j) => { cols[j][i] = p; })); const { Q } = mgs(cols); return (_QC[key] = { xs, Q, N, D }); }
+const dotv = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+/* projections z_j = q_j . y, fits and RSS for every size d = 1..D */
+function nestFit(B, y) {
+  const z = B.Q.map(q => dotv(q, y)); let r2 = dotv(y, y); const rss = [];
+  // RSS by explicit residuals (stable)
+  const r = Float64Array.from(y);
+  for (let j = 0; j < B.D; j++) { const q = B.Q[j]; for (let t = 0; t < B.N; t++) r[t] -= z[j] * q[t]; rss.push(dotv(r, r)); }
+  return { z, rss, yy: r2 };
+}
+function fitted(B, z, d) { const f = new Float64Array(B.N); for (let j = 0; j < d; j++) { const q = B.Q[j]; for (let t = 0; t < B.N; t++) f[t] += z[j] * q[t]; } return f; }
+/* evaluate the degree-(d-1) least-squares polynomial at arbitrary x: solve on the Legendre basis */
+function polyCoef(xs, y, d) { const A = Array.from({ length: d }, () => new Array(d).fill(0)), b = new Array(d).fill(0); xs.forEach((x, i) => { const P = legendre(2 * x - 1, d); for (let a = 0; a < d; a++) { b[a] += P[a] * y[i]; for (let c = 0; c < d; c++) A[a][c] += P[a] * P[c]; } }); return linSolve(A, b); }
+function linSolve(A, rhs) {
+  const n = rhs.length, M = A.map((r, i) => [...r, rhs[i]]);
+  for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r; [M[c], M[p]] = [M[p], M[c]]; const dd = M[c][c] || 1e-300; for (let r = c + 1; r < n; r++) { const f = M[r][c] / dd; if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; } }
+  const x = new Array(n).fill(0); for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / (M[r][r] || 1e-300); } return x;
+}
+const polyEval = (w, x) => { const P = legendre(2 * x - 1, w.length); let s = 0; for (let k = 0; k < w.length; k++) s += w[k] * P[k]; return s; };
+/* Gaussian-likelihood criteria with unknown variance, per N (sizes d = 1..D) */
+function crit(rss, N) { return rss.map((r, k) => { const d = k + 1, l = N * Math.log(r / N); return { d, rss: r, lsig: Math.log(r / N), aic: l + 2 * d, bic: l + Math.log(N) * d }; }); }
+const argmin = a => a.reduce((b, v, i) => v < a[b] ? i : b, 0);
+
+/* truths on [0,1] */
+const TRUTH = {
+  wave: x => Math.sin(2 * Math.PI * x) + 0.5 * Math.cos(5 * x),
+  cubic: x => { const t = 2 * x - 1; return 1.6 * t * t * t - 1.2 * t + 0.4 * t * t; },
+  decay: x => { let s = 0; for (let k = 1; k <= 40; k++) s += Math.sin(k * Math.PI * x) * 1.6 / Math.pow(k, 1.6); return s; }
+};
+
+/* ---------- section: optimism by Monte Carlo (fixed x) ---------- */
+function optimismMC(N, sig, D, M, seed, f) {
+  const B = polyQ(N, D), r = mulberry32(seed), fv = B.xs.map(f), out = Array.from({ length: D }, () => ({ err: 0, ein: 0 }));
+  const y = new Float64Array(N);
+  for (let m = 0; m < M; m++) {
+    for (let i = 0; i < N; i++) y[i] = fv[i] + sig * gaussOf(r);
+    const z = B.Q.map(q => dotv(q, y)), fit = new Float64Array(N);
+    for (let j = 0; j < D; j++) { const q = B.Q[j]; let err = 0, bias = 0; for (let t = 0; t < N; t++) { fit[t] += z[j] * q[t]; err += (y[t] - fit[t]) ** 2; bias += (fv[t] - fit[t]) ** 2; } out[j].err += err / N; out[j].ein += sig * sig + bias / N; }
+  }
+  return out.map((o, j) => ({ d: j + 1, err: o.err / M, ein: o.ein / M, op: (o.ein - o.err) / M, theory: 2 * (j + 1) * sig * sig / N }));
+}
+
+/* ---------- section: effective degrees of freedom ---------- */
+/* Jacobi eigenvalues of a symmetric matrix */
+function jacobiEig(A0) {
+  const n = A0.length, A = A0.map(r => r.slice());
+  for (let sweep = 0; sweep < 60; sweep++) {
+    let off = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += A[i][j] * A[i][j]; if (off < 1e-22) break;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+      if (Math.abs(A[p][q]) < 1e-300) continue; const th = (A[q][q] - A[p][p]) / (2 * A[p][q]), t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < n; k++) { const akp = A[k][p], akq = A[k][q]; A[k][p] = c * akp - s * akq; A[k][q] = s * akp + c * akq; }
+      for (let k = 0; k < n; k++) { const apk = A[p][k], aqk = A[q][k]; A[p][k] = c * apk - s * aqk; A[q][k] = s * apk + c * aqk; }
+    }
+  }
+  return A.map((r, i) => r[i]).sort((a, b) => b - a);
+}
+/* ridge on a raw (non-orthonormal) Legendre basis with D columns at N fixed x: smoother matrix S */
+function ridgeS(N, D, lam) {
+  const xs = Array.from({ length: N }, (_, i) => (i + 0.5) / N), X = xs.map(x => legendre(2 * x - 1, D));
+  const A = Array.from({ length: D }, (_, a) => Array.from({ length: D }, (_, c) => { let s = 0; for (let i = 0; i < N; i++) s += X[i][a] * X[i][c]; return s + (a === c ? lam : 0); }));
+  // W = A^{-1} X^T  (D x N)
+  const W = []; for (let i = 0; i < N; i++) W.push(linSolve(A, X[i]));
+  const S = Array.from({ length: N }, (_, i) => Array.from({ length: N }, (_, k) => { let s = 0; for (let a = 0; a < D; a++) s += X[i][a] * W[k][a]; return s; }));
+  return { S, X, xs };
+}
+function knnS(N, k) { const xs = Array.from({ length: N }, (_, i) => (i + 0.5) / N), S = xs.map((x, i) => { const o = xs.map((u, j) => [Math.abs(u - x) + j * 1e-12, j]).sort((a, b) => a[0] - b[0]).slice(0, k), row = new Array(N).fill(0); o.forEach(([, j]) => { row[j] = 1 / k; }); return row; }); return { S, xs }; }
+const trace = S => S.reduce((s, r, i) => s + r[i], 0);
+/* Monte Carlo df = sum_i Cov(yhat_i, y_i) / sigma^2 for a linear smoother S */
+function mcDfLinear(S, f, sig, M, seed) { const N = S.length, r = mulberry32(seed), e = new Float64Array(N); let acc = 0; for (let m = 0; m < M; m++) { for (let i = 0; i < N; i++) e[i] = sig * gaussOf(r); for (let i = 0; i < N; i++) { let yh = 0; const Si = S[i]; for (let j = 0; j < N; j++) yh += Si[j] * (f[j] + e[j]); acc += yh * e[i]; } } return acc / M / (sig * sig); }
+/* adaptive: keep the k of p orthonormal predictors with the largest |q_j . y|, refit; pure-noise truth */
+function mcDfSubset(N, p, k, M, seed) { const B = polyQ(N, p), r = mulberry32(seed), y = new Float64Array(N); let acc = 0; for (let m = 0; m < M; m++) { for (let i = 0; i < N; i++) y[i] = gaussOf(r); const z = B.Q.map(q => dotv(q, y)).map(Math.abs).sort((a, b) => b - a); for (let j = 0; j < k; j++) acc += z[j] * z[j]; } return acc / M; }
+
+/* ---------- section: BIC versus the exact evidence (known sigma, prior w ~ N(0, tau^2) on sqrt(N)-scaled orthonormal columns) ---------- */
+function evidenceCurve(y, B, sig, tau) {
+  const N = B.N, s2 = sig * sig, a = tau * tau * N, yy = dotv(y, y), z = B.Q.map(q => dotv(q, y)); let zz = 0; const out = [];
+  for (let d = 1; d <= B.D; d++) { zz += z[d - 1] * z[d - 1]; const rss = yy - zz, ll = -N / 2 * Math.log(2 * Math.PI * s2) - rss / (2 * s2);
+    const quad = (yy - zz * a / (s2 + a)) / s2, logdet = N * Math.log(s2) + d * Math.log(1 + a / s2), lev = -0.5 * quad - 0.5 * logdet - N / 2 * Math.log(2 * Math.PI);
+    out.push({ d, ll, lev, bicHalf: ll - d / 2 * Math.log(N), bic: -2 * ll + d * Math.log(N), aic: -2 * ll + 2 * d }); }
+  return out;
+}
+const softmaxNeg = (v, scale) => { const m = Math.min(...v), e = v.map(x => Math.exp(-(x - m) * scale)), s = e.reduce((a, b) => a + b, 0); return e.map(x => x / s); };
+const softmaxPos = v => { const m = Math.max(...v), e = v.map(x => Math.exp(x - m)), s = e.reduce((a, b) => a + b, 0); return e.map(x => x / s); };
+
+/* ---------- section: AIC vs BIC race ---------- */
+function raceRun(N, truthKey, sig, D, R, seed) {
+  const B = polyQ(N, D), f = B.xs.map(TRUTH[truthKey]), r = mulberry32(seed), y = new Float64Array(N);
+  // projections of the truth: the excess in-sample error of size d is (|f|^2 - sum_{j<d} (q_j.f)^2)/N + sigma^2 d/N in expectation
+  const zf = B.Q.map(q => dotv(q, f)), ff = dotv(f, f); let cum = 0; const exErr = [];
+  for (let d = 1; d <= D; d++) { cum += zf[d - 1] ** 2; exErr.push(Math.max(0, ff - cum) / N + sig * sig * d / N); }
+  const oracle = argmin(exErr) + 1, pickA = new Array(D + 1).fill(0), pickB = new Array(D + 1).fill(0); let lossA = 0, lossB = 0;
+  for (let m = 0; m < R; m++) {
+    for (let i = 0; i < N; i++) y[i] = f[i] + sig * gaussOf(r);
+    const z = B.Q.map(q => dotv(q, y)); let yy = dotv(y, y), zz = 0, bA = Infinity, bB = Infinity, dA = 1, dB = 1;
+    const loss = []; let lcum = 0;
+    for (let d = 1; d <= D; d++) { zz += z[d - 1] ** 2; const rss = Math.max(yy - zz, 1e-300), l = N * Math.log(rss / N); if (l + 2 * d < bA) { bA = l + 2 * d; dA = d; } if (l + Math.log(N) * d < bB) { bB = l + Math.log(N) * d; dB = d; } lcum += (z[d - 1] - zf[d - 1]) ** 2; loss.push((Math.max(0, ff - (zf.slice(0, d).reduce((s, v) => s + v * v, 0))) + lcum) / N); }
+    pickA[dA]++; pickB[dB]++; lossA += loss[dA - 1]; lossB += loss[dB - 1];
+  }
+  return { pickA, pickB, oracle, exErr, lossA: lossA / R, lossB: lossB / R, oracleLoss: exErr[oracle - 1], R, N };
+}
+
+/* ---------- section: MDL for Markov order ---------- */
+function mkBits(kind, N, seed) {
+  const r = mulberry32(seed), b = [];
+  for (let t = 0; t < N; t++) {
+    let p1;
+    if (kind === 'coin') p1 = 0.7;
+    else if (kind === 'sticky') p1 = t === 0 ? 0.5 : (b[t - 1] ? 0.85 : 0.15);
+    else p1 = t < 2 ? 0.5 : ((b[t - 1] ^ b[t - 2]) ? 0.88 : 0.12);
+    b.push(r() < p1 ? 1 : 0);
+  }
+  return b;
+}
+const KMAX = 6;
+function mdlCurve(bits) {
+  const N = bits.length - KMAX, out = [];
+  for (let k = 0; k <= KMAX; k++) {
+    const c = new Array(1 << k).fill(0).map(() => [0, 0]);
+    for (let t = KMAX; t < bits.length; t++) { let ctx = 0; for (let j = 1; j <= k; j++) ctx = ctx * 2 + bits[t - j]; c[ctx][bits[t]]++; }
+    let data = 0; c.forEach(([n0, n1]) => { const n = n0 + n1; if (n0) data -= n0 * Math.log2(n0 / n); if (n1) data -= n1 * Math.log2(n1 / n); });
+    const npar = 1 << k, par = npar / 2 * Math.log2(N);
+    out.push({ k, npar, data, par, total: data + par, counts: c });
+  }
+  return { N, out };
+}
+const H2 = p => (p <= 0 || p >= 1) ? 0 : -(p * Math.log2(p) + (1 - p) * Math.log2(1 - p));
+
+/* ---------- section: conditional vs expected test error (random-X OLS, Sigma = I) ---------- */
+function condRun(N, p, sig, beta, R, seed, K) {
+  const r = mulberry32(seed), out = [];
+  for (let m = 0; m < R; m++) {
+    const X = Array.from({ length: N }, () => Array.from({ length: p }, () => gaussOf(r))), y = X.map(x => { let s = 0; for (let j = 0; j < p; j++) s += x[j] * beta[j]; return s + sig * gaussOf(r); });
+    const ols = idx => { const A = Array.from({ length: p }, () => new Array(p).fill(0)), b = new Array(p).fill(0); idx.forEach(i => { const x = X[i]; for (let a = 0; a < p; a++) { b[a] += x[a] * y[i]; for (let c = a; c < p; c++) A[a][c] += x[a] * x[c]; } }); for (let a = 0; a < p; a++) for (let c = 0; c < a; c++) A[a][c] = A[c][a]; return linSolve(A, b); };
+    const all = [...Array(N).keys()], bh = ols(all); let errT = sig * sig; for (let j = 0; j < p; j++) errT += (bh[j] - beta[j]) ** 2;
+    let rss = 0; X.forEach((x, i) => { let s = 0; for (let j = 0; j < p; j++) s += x[j] * bh[j]; rss += (y[i] - s) ** 2; });
+    let cv = 0; for (let f = 0; f < K; f++) { const tr = all.filter(i => i % K !== f), te = all.filter(i => i % K === f), bf = ols(tr); te.forEach(i => { let s = 0; for (let j = 0; j < p; j++) s += X[i][j] * bf[j]; cv += (y[i] - s) ** 2; }); }
+    const s2 = rss / (N - p);
+    out.push({ errT, cv: cv / N, cp: rss / N + 2 * p * s2 / N, tr: rss / N });
+  }
+  return out;
+}
+const corr = (a, b) => { const n = a.length, ma = a.reduce((s, v) => s + v, 0) / n, mb = b.reduce((s, v) => s + v, 0) / n; let sab = 0, saa = 0, sbb = 0; for (let i = 0; i < n; i++) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) ** 2; sbb += (b[i] - mb) ** 2; } return sab / Math.sqrt(saa * sbb); };
+
+/* ---------- project: AR(p) by nested QR on lag-embedded rows ---------- */
+function arDesign(y, start, end, P) { // rows t = start..end-1 (indices into y), columns [1, y_{t-1}, ..., y_{t-P}]
+  const n = end - start, cols = [new Float64Array(n).fill(1)]; for (let j = 1; j <= P; j++) { const c = new Float64Array(n); for (let t = 0; t < n; t++) c[t] = y[start + t - j]; cols.push(c); }
+  const tgt = new Float64Array(n); for (let t = 0; t < n; t++) tgt[t] = y[start + t]; return { cols, tgt, n };
+}
+function nestedLS(cols, tgt) { // RSS and coefficients for every prefix of columns
+  const { Q, R } = mgs(cols), m = cols.length, n = tgt.length, z = Q.map(q => dotv(q, tgt)), r = Float64Array.from(tgt), rss = [];
+  for (let j = 0; j < m; j++) { const q = Q[j]; for (let t = 0; t < n; t++) r[t] -= z[j] * q[t]; rss.push(dotv(r, r)); }
+  const coef = p => { const k = p + 1, b = new Array(k).fill(0); for (let i = k - 1; i >= 0; i--) { let s = z[i]; for (let c = i + 1; c < k; c++) s -= R[i][c] * b[c]; b[i] = s / R[i][i]; } return b; };
+  return { rss, coef };
+}
+
+const DEMAND = {"A":{"start":"2022-01-01","v":[22.92,24.701,26.874,32.1,34.27,35.267,34.486,31.208,31.086,35.46,34.945,34.382,34.935,35.205,32.942,31.001,34.81,35.785,33.631,35.737,36.146,32.358,32.18,35.993,36.833,34.234,33.006,33.578,28.004,29.292,32.271,30.682,32.433,31.516,31.344,28.408,27.498,32.892,31.383,31.649,32.283,33.459,28.008,29.0,32.361,33.056,30.097,30.065,30.531,29.42,27.023,31.171,30.54,30.727,31.102,30.936,26.466,25.856,31.917,33.037,33.297,33.16,32.644,28.855,29.274,32.17,30.49,29.826,29.796,29.337,25.676,25.862,29.981,30.433,32.468,29.57,28.94,23.702,25.229,30.471,28.5,28.514,28.412,27.469,24.248,24.822,28.927,30.576,31.118,30.174,30.38,28.174,26.521,28.483,27.756,26.967,27.478,28.74,25.368,25.157,26.33,28.819,27.825,27.584,23.534,21.555,20.686,22.544,26.498,25.535,24.52,24.281,21.617,21.141,26.862,26.871,28.522,28.861,27.325,23.224,24.382,24.978,27.843,27.052,26.206,25.251,22.456,21.222,23.793,23.502,25.064,24.317,22.393,21.055,22.036,25.434,24.726,24.006,24.38,24.772,21.078,20.689,25.196,24.493,24.259,24.083,21.717,21.258,21.186,25.19,25.2,24.692,21.583,21.02,20.282,22.791,26.226,25.441,24.249,24.852,22.064,18.515,18.761,23.762,24.159,24.588,25.013,23.21,22.282,20.537,23.264,23.5,24.017,24.808,24.13,19.057,18.293,22.94,22.732,24.387,24.461,23.408,20.766,20.647,22.927,23.806,23.493,24.036,23.208,20.704,20.541,24.224,25.765,24.504,24.302,23.82,21.322,20.928,25.124,26.466,26.447,26.071,25.057,21.307,19.822,23.705,24.402,24.453,24.629,23.174,21.268,21.429,23.427,23.603,23.555,23.216,22.387,19.74,19.384,23.643,24.274,24.43,24.605,24.763,22.012,22.105,26.075,25.902,25.12,24.826,23.04,19.697,20.796,25.307,25.249,25.378,25.504,23.567,21.235,20.79,21.572,23.991,24.127,24.296,24.616,21.751,21.336,24.588,25.388,24.875,25.613,24.437,22.432,21.842,24.866,25.648,24.818,25.354,23.522,21.319,21.776,22.732,25.439,25.267,24.883,24.642,22.179,21.365,24.303,25.835,25.991,26.22,25.756,20.727,22.421,25.544,25.185,24.557,23.594,23.897,22.371,21.572,25.156,27.116,27.315,27.238,26.867,22.145,21.892,24.51,26.514,25.748,27.842,26.592,23.32,23.948,25.945,26.256,24.39,26.625,24.411,23.528,22.573,25.999,26.695,26.254,28.657,27.597,26.139,25.176,27.265,26.691,27.189,26.38,26.158,25.113,24.624,28.858,28.909,29.46,28.784,28.319,27.118,26.631,31.191,31.108,29.743,29.402,28.711,25.822,26.521,30.993,32.027,32.062,32.522,32.794,29.242,29.073,32.853,33.169,34.354,35.335,35.151,33.12,33.263,37.158,37.346,36.595,37.587,36.591,33.132,31.981,30.874,30.177,30.393,31.799,29.172,25.431,23.096,23.17,26.095,26.364,25.805,25.745,25.853,24.19,27.006,29.646,27.967,29.392,28.316,25.281,26.629,30.403,31.144,29.85,30.084,29.245,26.709,27.735,33.672,35.442,34.685,34.829,34.21,31.439,31.328,35.039,35.124,34.792,34.143,34.123,31.32,27.744,30.565,29.863,30.108,29.771,29.485,27.872,28.041,31.858,32.795,31.781,31.52,31.042,28.144,28.129,30.433,31.021,30.011,30.375,27.382,25.305,24.233,27.63,30.124,30.365,30.447,30.149,27.893,27.702,32.134,32.316,31.968,31.808,32.557,29.705,29.436,32.193,32.506,34.467,34.015,32.245,29.414,25.847,27.563,29.775,32.106,29.396,28.545,25.856,24.942,29.427,27.189,25.517,26.422,25.533,24.14,26.073,28.696,30.134,29.148,26.565,27.523,25.678,24.59,26.786,26.604,28.789,26.325,23.37,22.333,21.418,21.682,25.165,26.212,25.791,28.562,24.64,24.569,27.27,25.842,25.253,24.184,26.604,24.35,24.254,27.807,27.287,28.513,28.515,27.099,23.289,22.861,22.915,25.997,24.129,23.963,24.916,23.619,21.409,22.966,25.526,24.996,25.284,24.771,21.976,21.121,22.88,24.164,25.024,24.293,24.584,19.932,19.689,22.65,23.576,22.494,23.577,22.231,18.872,18.847,19.033,22.43,23.41,22.907,21.422,18.828,18.681,22.692,23.936,23.023,21.827,21.395,20.108,20.744,24.144,23.096,22.928,23.339,22.984,21.206,21.191,22.804,25.312,23.611,24.226,23.344,20.489,19.656,22.03,24.671,25.245,23.164,23.467,18.467,17.715,21.194,23.979,22.935,22.478,21.324,21.559,20.361,23.12,23.212,22.408,23.375,24.029,18.78,17.97,22.087,24.255,23.707,23.434,23.05,21.399,19.422,23.287,22.797,23.122,24.076,22.927,18.209,19.081,23.181,22.747,22.979,22.584,22.69,21.169,19.489,21.856,23.461,23.133,23.486,21.834,19.465,19.825,23.724,23.513,23.875,23.181,23.314,18.696,19.472,22.162,22.445,23.981,24.379,23.185,20.615,20.137,20.964,23.687,23.333,24.973,24.13,21.238,20.073,23.88,24.771,25.927,25.926,25.714,22.874,23.43,25.479,26.066,24.346,24.402,24.633,22.186,22.254,23.905,24.522,24.363,24.795,24.317,21.92,20.508,22.904,24.677,25.381,24.51,22.552,22.46,22.688,26.219,23.956,24.351,25.148,23.404,21.807,21.541,25.106,24.321,25.309,27.12,25.184,21.708,23.213,28.632,26.743,26.404,26.599,26.205,24.564,23.744,27.593,28.331,28.684,28.667,27.566,24.743,24.289,28.114,29.241,28.037,29.034,28.178,27.362,25.775,28.919,29.387,29.9,30.452,30.491,27.782,28.316,28.162,29.904,29.841,32.573,30.875,26.045,25.38,29.515,30.822,29.877,27.921,29.42,29.907,30.793,32.64,33.216,34.665,35.367,36.019,33.827,33.31,34.835,35.295,35.109,33.659,32.151,28.242,28.661,32.228,32.515,33.237,33.542,31.784,27.283,26.337,30.153,30.777,29.479,27.905,26.637,24.224,22.972,22.776,23.796,25.386,25.081,26.255,26.518,25.701,25.27,29.282,30.733,32.171,32.196,29.717,30.668,35.313,34.624,34.561,34.72,34.82,31.265,30.774,34.973,36.32,37.012,36.743,34.868,29.8,27.934,30.081,31.669,30.494,31.17,28.676,28.169,27.034,31.76,31.879,31.378,31.315,28.846,25.841,25.246,28.632,29.431,33.116,32.825,31.042,28.594,27.996,29.321,31.828,30.91,29.4,28.844,26.686,25.573,28.104,28.581,29.504,30.594,30.963,29.029,28.598,31.315,31.939,31.472,30.71,31.261,29.603,28.659,30.916,31.362,31.122,30.933,28.575,26.243,27.34,32.304,31.148,28.171,28.907,27.308,26.481,25.59,27.231,27.568,28.991,27.044,25.949,22.849,23.923,29.343,28.848,28.054,27.897,24.597,23.127,23.438,23.873,27.509,27.19,27.809,24.448,20.943,20.308,26.017,26.208,27.443,25.528,23.615,21.056,21.134,23.957,25.538,26.34,26.211,25.357,23.774,23.745,28.831,27.585,27.304,28.572,27.492,25.61,24.109,24.598,24.223,26.058,25.177,26.198,22.222,21.925,23.055,24.53,23.959,23.33,22.997,19.81,19.771,23.31,24.517,24.225,25.419,23.531,21.503,19.499,22.9,25.088,25.4,23.846,24.585,20.707,20.165,19.934,24.262,23.136,23.01,22.674,20.492,18.769,23.469,23.399,21.873,22.949,22.026,19.203,19.692,22.529,24.414,25.032,24.531,23.035,21.355,19.909,23.019,23.779,23.044,22.953,21.725,19.933,20.553,24.147,24.223,23.949,21.38,20.677,20.115,20.919,23.642,23.696,23.809,20.643,23.02,20.288,20.376,23.906,24.874,23.698,24.07,24.108,21.493,20.908,24.947,24.592,23.536,23.24,22.911,22.578,20.23,23.547,23.924,24.135,24.642,22.062,20.44,19.24,22.167,23.039,23.752,24.14,22.917,20.439,19.836,22.591,22.988,22.266,23.437,20.094,20.09,19.423,23.204,22.974,23.957,22.884,21.8,20.141,19.005,23.018,21.371,22.028,22.269,20.422,20.416,18.115,20.168,22.399,24.108,22.77,22.73,20.675,21.56,26.083,25.221,25.028,25.208,24.618,23.566,22.848,23.681,23.424,23.275,24.924,24.663,20.072,21.981,24.082,24.157,24.224,24.344,24.653,22.069,23.389,27.053,26.599,27.064,25.446,24.732,23.804,24.031,27.427,27.282,26.985,26.782,26.059,22.655,24.747,26.758,27.5,26.536,27.67,27.035,24.406,26.151,29.524,28.938,28.729,26.454,25.904,24.033,22.816,26.912,27.592,27.884,27.145,28.18,24.933,23.698,28.224,28.898,29.304,27.965,28.476,26.68,27.183,30.629,30.827,30.921,30.431,30.669,28.877,27.491,30.027,31.36,30.991,31.399,30.435,27.551,27.842,32.899,33.983,34.462,35.805,34.253,29.315,25.857,28.799,32.439,34.37,34.445,31.541,27.487,27.127,31.288,34.014,33.088,30.897,31.018,28.66,28.097,32.826,34.55,35.178,34.805,34.218,29.747,27.36,30.174,31.307,29.69,31.234,31.473,26.751,26.376,30.792,27.443,24.57,25.268,28.692,28.329,26.134,26.733,25.261,25.428,31.568,33.568,32.383,30.737,33.264,35.213,37.574,37.397,37.983,35.002,33.482,34.414,34.203,33.224,33.553,33.306,32.158,32.943,35.467,35.305,35.761,34.501,30.777,28.927,30.08,31.941,32.697,32.996,32.867,33.666,30.296,28.781,32.138,31.266,33.012,33.655,33.652,32.335,30.549,34.476,35.507,35.462,35.39,34.127,32.454,30.9,33.901,33.231,33.854,30.21,28.174,25.737,25.998,28.372,29.579,32.072,30.891,30.948,27.908,26.876,29.931,28.833,28.011,27.561,28.618,24.021,23.95,28.393,29.45,30.449,31.57,31.228,27.986,27.917,31.702,28.438,29.404,27.159,26.754,25.487,25.949,27.702,28.484,26.99,26.108,24.558,22.868,20.737,25.821,24.445,24.003,24.39,23.855,20.528,21.023,24.756,25.483,25.934,25.047,23.644,21.951,21.757,24.548,27.255,24.333,24.42,23.139,20.979,20.816,23.767,24.288,26.101,25.382,24.789,22.618,19.944,22.853,23.015,22.931,23.365,22.247,19.627,20.133,21.759,24.569,24.13,24.807,22.469,19.403,19.682,22.896,22.179,21.762,23.21,21.498,19.79,19.645,22.974,22.715,23.198,23.435,22.266,20.677,16.487,19.024,23.367,22.451,21.788,21.905,19.448,18.343,21.212,21.328,21.332,24.514,22.18,21.686,19.681,23.285,22.387,22.345,23.341,22.268,19.941,19.021,22.158,22.209,23.096,23.463,23.654,21.978,19.398,20.495,23.106,24.635,22.337,21.314,19.621,21.375,23.721,25.87,24.087,22.122,20.53,19.776,20.945,21.301,21.799,23.27,23.704,23.675,20.617,20.568,22.783,22.98,23.529,25.215,23.987,23.064,21.401,23.811,24.058,23.712,24.077,22.123,21.11,20.152,22.266,23.94,23.111,23.052,22.297,20.057,19.791,21.814,19.927,21.659,22.07,20.696,18.179,19.171,23.67,24.049,24.923,24.52,23.224,21.344,19.132,24.2,24.159,23.808,23.672,22.926,21.435,20.154,18.961,22.52,23.173,22.769,22.893,20.522,18.349,21.995,24.421,24.719,24.408,23.144,20.286,20.948,22.647,23.234,24.141,22.586,22.032,20.765,22.807,22.796,23.599,25.406,24.627,23.779,23.406,21.373,24.614,25.75,26.045,24.695,26.409,23.444,23.34,25.941,25.519,26.212,25.543,25.237,21.091,21.174,24.307,26.258,26.907,26.132,27.16,24.891,25.317,28.378,29.304,29.332,29.253,28.785,25.586,24.759,28.412,27.476,27.88,28.084,27.009,24.198,25.148,27.323,26.73,29.372,29.106,26.626,24.09,25.21,27.078,27.821,28.624,29.176,28.762,25.673,25.994,29.635,29.256,29.565,28.476,28.856,27.436,27.97,31.642,33.77,33.323,35.044,34.552,31.799,29.352,33.197,34.158,34.768,30.662,29.202,29.291,29.19,31.681,32.096,33.043,34.043,33.106,29.358,29.164,31.095,30.101,29.648,30.692,31.455,27.283,26.332,32.319,33.074,32.015,31.832,29.812,28.788,28.863,30.737,31.271,28.727,25.394,26.057,27.954,28.899,30.724,30.9,30.377]},"B":{"start":"2016-01-01","v":[29.36,30.071,30.849,36.098,37.104,37.386,36.213,37.653,33.691,32.405,38.662,38.279,39.283,39.146,39.027,37.228,36.48,40.757,41.345,41.214,40.326,37.354,33.34,31.64,34.845,35.912,35.949,35.882,34.876,31.508,32.817,34.6,35.303,37.349,36.946,35.097,32.608,30.531,36.302,36.926,37.499,38.214,38.258,34.724,32.854,38.09,37.589,39.231,38.051,36.323,31.736,30.18,35.788,37.063,38.266,38.809,38.461,34.523,33.472,37.499,36.0,36.855,37.341,36.503,33.553,33.526,37.638,39.014,38.441,38.404,36.501,32.377,30.822,34.674,36.634,35.833,35.688,37.174,33.25,31.788,35.32,35.82,36.313,34.816,28.259,28.098,26.168,28.415,33.37,33.731,33.404,32.222,29.196,28.625,33.263,32.057,31.229,33.164,33.015,29.589,27.826,32.262,33.124,32.431,32.915,33.775,29.443,27.881,32.128,32.117,31.13,31.587,32.526,28.161,28.034,32.189,32.077,33.603,33.549,31.363,28.522,26.514,26.893,30.3,29.812,29.495,29.742,25.6,23.944,28.499,30.682,30.514,28.171,28.006,25.221,24.932,29.1,29.461,30.333,29.842,28.321,25.538,25.235,28.807,28.451,30.62,30.217,29.069,25.085,23.328,24.423,27.986,29.305,28.453,29.139,26.101,24.158,28.519,29.721,29.704,29.303,29.823,26.516,25.827,30.178,29.898,29.865,29.746,29.211,25.839,24.663,28.658,28.929,29.743,30.296,28.211,25.269,24.601,27.339,29.784,29.68,28.934,27.221,23.046,23.419,28.833,28.073,28.545,28.749,27.3,24.795,23.364,27.535,29.295,28.48,28.291,28.23,24.448,23.745,28.55,29.438,29.743,29.411,28.897,25.231,24.89,27.362,28.512,27.993,28.796,28.151,24.428,23.052,28.429,29.151,26.375,26.87,27.266,23.503,20.882,25.447,27.218,28.301,27.493,25.82,23.892,24.759,27.485,27.789,28.21,28.982,28.565,23.31,23.15,28.238,28.956,29.678,30.957,27.426,25.631,24.666,24.329,27.441,28.292,28.157,28.667,25.771,24.752,29.769,30.676,30.841,28.227,27.604,26.285,23.121,28.372,30.781,30.041,30.848,28.837,25.786,25.459,30.646,31.059,30.48,29.672,27.918,23.982,23.79,30.38,29.561,28.787,27.82,29.053,27.777,25.989,29.776,29.806,28.902,30.874,32.328,28.785,27.514,31.817,32.219,32.137,32.229,31.992,28.919,27.208,30.925,31.704,32.772,33.422,33.049,29.369,28.01,33.879,34.16,32.715,32.066,32.523,30.173,29.299,32.881,34.429,34.504,35.666,35.097,30.115,30.49,35.945,38.584,37.974,36.492,35.767,32.689,31.648,35.243,34.997,33.448,35.25,36.514,34.146,33.642,37.527,37.443,38.27,37.381,36.71,34.633,33.401,37.645,39.362,39.413,39.233,39.475,35.143,33.77,40.291,39.773,35.66,36.52,34.763,32.58,31.908,38.433,37.84,35.926,37.043,36.762,33.51,32.96,38.0,36.542,35.886,34.881,32.822,29.361,25.531,26.391,31.656,33.988,34.086,33.47,30.63,29.423,32.316,36.371,37.805,39.646,38.876,34.945,33.202,35.849,36.701,35.229,38.463,37.698,35.208,34.156,38.814,39.147,39.332,39.539,38.835,36.179,35.923,40.303,38.834,38.658,40.509,40.244,34.918,34.824,38.45,38.165,37.091,34.875,34.809,32.793,34.088,38.283,37.777,39.154,40.145,40.176,36.047,33.954,35.834,37.675,37.184,35.057,35.694,30.811,30.195,32.513,33.615,33.264,34.225,34.69,30.651,29.288,35.689,36.336,36.435,34.068,36.344,31.065,31.019,35.299,35.265,34.05,32.512,34.355,30.44,29.626,32.181,32.063,32.247,32.453,31.686,28.879,27.021,31.861,31.895,34.988,33.539,32.851,28.053,26.712,32.526,33.071,32.686,30.258,29.111,27.516,26.508,29.535,31.098,30.224,30.402,30.109,25.76,23.604,28.691,28.4,28.641,30.014,27.448,24.126,25.276,27.024,29.555,30.432,30.87,29.885,26.371,25.431,29.843,30.185,31.756,32.308,31.659,26.914,24.063,26.48,30.07,29.927,28.602,27.466,26.544,25.162,29.161,30.758,29.139,29.157,29.943,24.815,23.397,29.095,28.865,31.366,29.657,29.543,25.414,23.734,27.475,29.06,28.486,28.145,26.333,23.918,22.875,25.884,27.396,27.856,26.713,28.226,23.393,22.844,27.734,27.425,25.984,28.045,26.742,23.395,21.258,25.969,28.215,27.636,26.203,26.367,23.416,23.288,28.517,28.914,28.962,28.901,26.243,23.102,22.613,27.453,28.986,28.955,28.759,28.251,23.268,21.748,27.092,28.868,28.264,28.899,28.299,24.004,23.768,28.537,29.848,27.736,27.595,26.501,24.135,23.625,26.594,27.563,28.852,27.591,26.729,24.288,23.82,26.795,27.75,27.291,26.362,25.953,23.696,22.574,25.86,26.534,27.562,25.833,25.16,23.267,22.412,27.17,28.415,27.516,26.804,26.204,23.852,23.075,27.386,26.884,26.689,27.019,25.583,21.928,23.734,28.877,29.0,28.457,27.806,27.213,24.349,22.769,23.061,28.338,28.938,28.437,27.388,24.246,24.155,29.223,29.443,28.009,28.759,27.912,25.068,24.225,26.696,27.701,27.568,28.386,29.004,26.657,26.207,30.286,30.321,30.137,30.278,28.856,25.757,25.491,31.027,30.71,29.829,29.73,29.308,26.954,25.477,27.445,28.837,29.939,28.481,29.945,26.497,27.216,31.262,29.811,29.415,29.505,28.703,26.406,25.317,29.601,29.674,32.766,32.257,30.595,25.78,25.261,31.915,30.985,29.923,32.177,30.474,26.15,26.643,33.385,32.874,32.617,34.313,33.385,29.4,28.827,33.98,34.563,34.99,34.211,32.068,31.781,29.227,36.514,36.234,36.061,33.987,34.506,31.433,32.12,35.189,34.151,33.052,33.461,35.573,32.305,31.823,35.297,36.636,37.306,37.555,37.954,34.793,33.0,36.855,36.404,34.666,34.135,36.182,36.027,36.313,40.218,40.749,38.856,38.706,37.894,36.253,34.871,38.561,38.669,37.195,36.475,34.079,29.605,27.753,26.389,27.892,32.03,33.575,33.734,30.5,28.146,29.072,34.863,34.5,36.414,36.976,33.659,33.38,38.863,39.206,38.398,38.932,37.77,33.658,32.938,35.471,36.216,36.837,37.376,37.088,36.005,34.934,36.107,34.559,34.284,35.879,37.147,31.551,29.489,34.138,36.0,34.852,35.329,36.417,34.971,33.645,38.901,39.428,38.69,37.725,36.546,33.467,30.613,36.175,37.334,37.581,34.557,35.197,32.391,32.779,36.77,34.614,37.078,37.236,36.568,32.015,31.838,38.723,39.931,39.443,40.297,39.689,36.755,35.279,38.253,37.488,36.867,36.197,36.656,31.527,31.022,36.2,35.725,33.279,33.873,32.731,32.129,33.95,37.192,37.775,35.218,34.508,32.603,32.191,29.456,33.416,33.741,35.217,35.081,31.824,30.401,30.008,30.477,32.39,33.079,31.457,30.036,29.673,29.461,33.508,33.329,33.603,33.88,34.152,28.041,27.513,29.344,28.868,27.967,28.578,28.043,25.125,23.817,27.005,29.894,28.178,27.652,32.008,28.924,27.901,30.797,29.387,29.572,29.57,29.142,23.944,22.594,23.913,27.581,27.782,27.144,26.676,26.151,24.235,26.84,27.379,28.105,27.509,27.556,23.452,22.317,27.306,26.014,26.825,28.353,28.238,22.764,22.229,24.012,27.35,28.938,28.917,28.255,24.909,23.549,28.334,27.988,27.172,27.937,27.981,24.527,23.463,26.71,28.088,26.789,24.861,26.588,23.878,23.405,25.765,27.95,27.052,25.05,25.421,23.253,22.529,27.084,27.7,27.387,27.376,26.4,22.835,23.16,26.657,26.855,27.978,27.998,27.485,24.63,23.661,28.336,27.977,28.34,28.591,28.074,24.089,23.168,28.301,28.359,28.678,28.033,27.793,24.409,23.385,28.164,28.378,27.686,28.209,28.046,21.208,22.319,26.703,25.581,25.798,27.101,27.884,23.802,22.858,26.898,27.975,26.824,27.486,26.526,23.698,24.073,27.643,27.638,26.66,26.797,25.648,23.491,23.614,28.785,28.245,28.096,27.544,25.436,23.078,24.046,23.793,28.164,28.225,28.091,26.652,24.012,23.178,28.164,29.053,28.728,29.067,26.9,25.38,23.005,27.003,27.911,28.549,27.68,27.478,24.961,23.364,27.822,26.751,26.646,28.812,25.789,26.986,26.059,29.018,28.621,28.076,28.031,28.561,24.731,25.219,29.222,28.644,30.154,29.666,30.162,27.592,25.631,29.039,27.775,28.89,29.124,28.011,25.199,27.249,31.633,30.992,31.602,31.176,30.204,26.639,25.409,29.17,29.064,29.639,31.139,29.939,28.851,29.134,34.266,35.414,34.524,34.479,33.345,27.634,28.942,33.365,32.375,32.148,32.672,31.75,29.45,29.059,31.954,31.946,31.705,33.007,33.706,29.395,29.263,34.356,35.727,36.847,38.216,37.287,33.095,32.198,36.794,36.773,34.263,33.115,32.531,31.895,29.803,34.131,37.217,37.236,34.597,31.986,29.445,30.296,36.596,37.026,35.673,36.079,37.721,33.714,33.431,36.414,34.892,35.667,34.961,33.628,29.877,31.2,32.04,29.01,27.876,31.454,31.352,28.338,28.884,28.915,27.655,35.041,37.296,37.372,34.352,32.741,34.011,34.493,37.222,38.26,36.718,30.513,28.548,35.34,34.676,35.013,36.236,37.95,35.146,34.366,37.821,38.307,39.063,39.454,35.575,30.96,29.887,36.477,38.919,39.098,40.085,38.906,34.483,33.607,36.351,37.776,36.047,35.04,33.383,29.62,31.678,35.93,35.633,34.035,33.963,32.913,29.814,27.493,32.589,33.494,32.49,32.283,31.702,28.357,28.575,32.252,32.274,32.293,34.297,33.854,27.738,27.874,31.54,33.058,33.114,32.175,33.135,27.694,28.341,31.393,33.019,31.544,30.945,30.407,28.965,27.245,33.838,33.424,32.195,32.248,31.083,28.478,25.521,30.132,31.792,32.276,30.963,29.644,27.353,26.803,30.389,33.047,33.075,33.083,30.891,28.56,27.76,30.673,31.268,30.575,31.205,31.344,26.976,27.069,28.641,31.137,29.32,27.848,24.676,23.532,21.505,22.875,26.847,28.149,28.239,27.397,24.876,25.842,29.754,29.338,30.011,29.399,29.946,24.169,25.383,26.928,29.756,30.003,30.355,29.942,25.917,24.249,26.892,26.775,27.104,26.657,28.245,25.747,24.768,27.581,26.803,26.756,26.163,26.017,23.291,21.438,22.625,26.684,27.994,25.648,25.451,22.99,21.576,24.467,28.236,27.0,26.137,27.308,22.988,22.764,28.103,27.501,28.622,29.083,27.65,24.059,22.778,25.654,28.021,28.177,26.224,25.783,22.696,23.067,27.641,28.359,27.474,25.572,24.814,23.382,21.186,24.635,26.49,26.751,25.761,25.618,23.736,22.87,26.675,27.904,27.439,27.372,26.063,23.872,23.201,26.755,27.014,27.176,26.468,27.194,22.194,21.824,24.856,26.868,27.584,27.953,28.003,24.702,23.033,25.817,26.358,25.829,26.362,26.014,23.728,23.145,25.499,25.694,25.17,26.256,25.018,21.586,21.624,26.109,25.982,28.069,24.884,25.88,20.817,20.333,24.601,26.092,25.782,25.46,25.4,22.872,22.659,24.083,27.89,27.856,25.533,24.337,21.591,21.361,25.552,26.422,25.119,25.472,25.649,23.945,23.347,29.003,27.906,26.497,27.231,26.262,22.563,23.277,28.572,27.249,28.197,27.958,26.426,22.537,24.879,27.523,28.64,29.1,26.871,26.836,23.956,24.528,29.377,29.114,28.92,30.906,29.121,26.834,24.909,29.551,27.85,28.447,28.312,28.384,27.372,27.619,31.67,31.234,30.198,30.728,30.34,27.278,27.083,31.913,31.551,31.675,31.799,31.52,28.626,26.808,33.356,33.253,32.78,33.487,32.392,28.738,28.744,32.783,33.06,34.881,33.83,34.193,32.732,30.812,33.133,34.021,35.647,35.39,34.831,32.45,32.175,35.636,37.413,35.708,36.254,35.246,31.558,31.584,34.701,34.36,34.788,34.358,35.598,33.764,33.089,37.135,36.44,36.314,35.165,32.882,29.845,27.712,33.815,34.492,35.344,36.738,34.688,30.652,30.946,35.728,37.151,36.071,33.845,33.91,31.165,30.246,31.112,30.28,27.628,27.521,30.448,28.716,27.675,30.155,31.047]}};
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), lda: css('--lda'), bad: css('--qda'), ink: css('--ink'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const sum = a => a.reduce((s, v) => s + v, 0), meanOf = a => sum(a) / a.length;
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sgn = v => (v < 0 ? '&minus;' + fmt(-v, 3) : fmt(v, 3));
+function polyline(v, pts, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); c.beginPath(); pts.forEach((p, i) => { const x = v.X(p[0]), y = clamp(v.Y(p[1]), -2000, 4000); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); }
+function bar(v, x0, x1, y0, y1, col, alpha) { const c = v.ctx; c.save(); c.fillStyle = col; c.globalAlpha = alpha == null ? 0.85 : alpha; const a = v.X(x0), b = v.X(x1), t = v.Y(Math.max(y0, y1)), u = v.Y(Math.min(y0, y1)); c.fillRect(Math.min(a, b), t, Math.abs(b - a), Math.max(0.5, u - t)); c.restore(); }
+function tri(v, x, y, col) { const c = v.ctx, px = v.X(x), py = v.Y(y); c.save(); c.fillStyle = col; c.beginPath(); c.moveTo(px, py - 9); c.lineTo(px - 6, py + 2); c.lineTo(px + 6, py + 2); c.closePath(); c.fill(); c.restore(); }
+function label(v, x, y, text, col, align, base) { const c = v.ctx; c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = col; c.textAlign = align || 'center'; c.textBaseline = base || 'bottom'; c.fillText(text, v.X(x), v.Y(y)); c.restore(); }
+/* erfc (Abramowitz & Stegun 7.1.26) for chi-square(1) tails */
+function erfc(x) { const t = 1 / (1 + 0.3275911 * x), y = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429)))); return y * Math.exp(-x * x); }
+const chi1tail = c => erfc(Math.sqrt(c / 2));
+/* vertical-only dragging of points [x, y] */
+function vdrag(cv, getV, getPts, onStart, onMove) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 22 * 22; getPts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e), i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; if (onStart) onStart(i); e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'ns-resize' : 'default'; return; } getPts()[drag][1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onMove(drag); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+const ord = d => d === 1 ? 'a constant' : d === 2 ? 'a straight line' : d === 3 ? 'a quadratic' : d === 4 ? 'a cubic' : `degree ${d - 1}`;
+
+/* =============== HERO =============== */
+const HF = x => Math.sin(2 * Math.PI * x) + 0.5 * Math.cos(5 * x), HN = 20, HD = 10, HSIG = 0.3;
+const HERO = { seed: 3, pts: null, v: null };
+function heroData() { const r = mulberry32(HERO.seed), B = polyQ(HN, HD); HERO.pts = B.xs.map(x => [x, HF(x) + HSIG * gaussOf(r)]); }
+function heroCalc() { const B = polyQ(HN, HD), y = HERO.pts.map(p => p[1]), nf = nestFit(B, y), cr = crit(nf.rss, HN); return { cr, a: argmin(cr.map(c => c.aic)) + 1, b: argmin(cr.map(c => c.bic)) + 1 }; }
+function drawHero() {
+  const C = C0(), H = heroCalc(), xs = HERO.pts.map(p => p[0]), ys = HERO.pts.map(p => p[1]);
+  const v = HERO.v = frame($('#hero-cv'), [0, 1], [-2.1, 2.3], { l: 34, b: 26 }); axes(v, 'x', 'y', { sx: 0.2, sy: 1 }); clip(v);
+  curve(v, HF, C.ink, 1.3, [6, 5]);
+  const wA = polyCoef(xs, ys, H.a), wB = polyCoef(xs, ys, H.b);
+  curve(v, x => polyEval(wA, x), C.a, 2.8); curve(v, x => polyEval(wB, x), C.b, 2.4, H.a === H.b ? [7, 6] : null);
+  HERO.pts.forEach(p => dot(v, p[0], p[1], C.lda, 5.5)); v.ctx.restore();
+  const cr = H.cr, all = cr.flatMap(c => [c.lsig, c.aic / HN, c.bic / HN]), lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.12;
+  const w = frame($('#hero-crit'), [0.5, HD + 0.5], [lo - pad, hi + pad], { l: 40, b: 24, t: 10 }); axes(w, 'parameters d', '', { sx: 1, ny: 3 }); clip(w);
+  polyline(w, cr.map(c => [c.d, c.lsig]), C.muted, 2); polyline(w, cr.map(c => [c.d, c.aic / HN]), C.a, 2.4); polyline(w, cr.map(c => [c.d, c.bic / HN]), C.b, 2.4);
+  star(w, H.a, cr[H.a - 1].aic / HN, C.a, 8); star(w, H.b, cr[H.b - 1].bic / HN, C.b, 8); w.ctx.restore();
+  const lN = Math.log(HN);
+  $('#hero-cap').innerHTML = `<span style="color:var(--muted)">&#9644;</span> log training error, ln(RSS/N) &nbsp;<span style="color:var(--cA)">&#9644;</span> AIC/N &nbsp;<span style="color:var(--cB)">&#9644;</span> BIC/N. AIC charges 2 per parameter and picks ${tip('<b>d = ' + H.a + '</b>', `AIC = N·ln(RSS/N) + 2d\n= ${HN}·ln(${fmt(cr[H.a - 1].rss, 3)}/${HN}) + 2·${H.a}\n= ${fmt(cr[H.a - 1].aic, 2)}, the smallest of d = 1…${HD}`)} (${ord(H.a)}); BIC charges ln ${HN} = ${fmt(lN, 2)} and picks ${tip('<b>d = ' + H.b + '</b>', `BIC = N·ln(RSS/N) + ln(N)·d\n= ${HN}·ln(${fmt(cr[H.b - 1].rss, 3)}/${HN}) + ${fmt(lN, 3)}·${H.b}\n= ${fmt(cr[H.b - 1].bic, 2)}`)}${H.a === H.b ? ': they agree' : ''}. Training error alone would always take d = ${HD}.`;
+}
+vdrag($('#hero-cv'), () => HERO.v, () => HERO.pts, null, drawHero);
+$('#hero-new').addEventListener('click', () => { HERO.seed++; heroData(); drawHero(); });
+fig($('#hero-cv'), drawHero);
+
+/* =============== WHY: optimism =============== */
+const WF = TRUTH.wave, W = { d: 4, N: 30, s: 0.5, seed: 1, mc: {} };
+function whyMC() { const k = W.N + '|' + W.s; return W.mc[k] || (W.mc[k] = optimismMC(W.N, W.s, 12, 400, 77, WF)); }
+function drawWhy() {
+  const C = C0(), { d, N, s } = W, B = polyQ(N, 12), r = mulberry32(W.seed * 7919 + N), r0 = mulberry32(W.seed * 104729 + N + 1);
+  const f = B.xs.map(WF), y = f.map(v => v + s * gaussOf(r)), y0 = f.map(v => v + s * gaussOf(r0));
+  const z = B.Q.map(q => dotv(q, y)), yh = fitted(B, z, d);
+  let rss = 0, bias = 0, fresh = 0; for (let i = 0; i < N; i++) { rss += (y[i] - yh[i]) ** 2; bias += (f[i] - yh[i]) ** 2; fresh += (y0[i] - yh[i]) ** 2; }
+  const err = rss / N, ein = s * s + bias / N, op = ein - err, mc = whyMC(), th = 2 * d * s * s / N, m = mc[d - 1];
+  const v = frame($('#why-cv'), [0, 1], [-2.6, 2.6], { l: 34, b: 26 }); axes(v, 'x', 'y', { sx: 0.2, sy: 1 }); clip(v);
+  curve(v, WF, C.ink, 1.3, [6, 5]); const w = polyCoef(B.xs, y, d); curve(v, x => polyEval(w, x), C.a, 2.6);
+  B.xs.forEach((x, i) => { seg(v, x, y[i], x, yh[i], C.muted, 1, null, 0.5); dot(v, x, y0[i], C.bad, 3.6, true); dot(v, x, y[i], C.lda, 4); }); v.ctx.restore();
+  const ymax = Math.max(...mc.map(o => Math.max(o.op, o.theory))) * 1.15;
+  const u = frame($('#why-chart'), [0.5, 12.5], [Math.min(0, ...mc.map(o => o.op)) * 1.1, ymax], { l: 46, b: 24, t: 8 }); axes(u, 'parameters d', 'optimism', { sx: 1, ny: 3 }); clip(u);
+  polyline(u, [[0, 0], [13, 26 * s * s / N]], C.ink, 1.6); mc.forEach(o => dot(u, o.d, o.op, C.a, o.d === d ? 6 : 3.5)); u.ctx.restore();
+  $('#why-d-o').textContent = d; $('#why-n-o').textContent = N; $('#why-s-o').textContent = fmt(s, 2);
+  $('#why-err').innerHTML = tip(fmt(err, 4), `RSS/N = ${fmt(rss, 3)} / ${N}\n(loss on the responses it was fitted to)`);
+  $('#why-ein').innerHTML = tip(fmt(ein, 4), `σ² + (1/N)Σ(f(xᵢ) − ŷᵢ)²\n= ${fmt(s * s, 4)} + ${fmt(bias, 3)} / ${N}\n(expected loss on fresh responses; the ${N} hollow dots give ${fmt(fresh / N, 4)})`);
+  $('#why-op').innerHTML = tip(fmt(m.op, 4), `average over 400 training sets of\nErr_in − err-bar at d = ${d}\n(mean err-bar ${fmt(m.err, 4)}, mean Err_in ${fmt(m.ein, 4)})`);
+  $('#why-th').innerHTML = tip(fmt(th, 4), `2 × ${d} × ${fmt(s, 2)}² / ${N}`);
+  $('#run-why1').innerHTML = `<b>Running example</b>: this draw, d = ${d}: err-bar = ${tip(fmt(err, 4), `RSS/N = ${fmt(rss, 3)}/${N}`)}, while Err<sub>in</sub> = ${fmt(s * s, 4)} + ${fmt(bias / N, 4)} = ${tip(fmt(ein, 4), 'σ² + mean squared distance of the fit from the truth')}. The training error flatters this fit by op = ${tip(fmt(op, 4), `${fmt(ein, 4)} − ${fmt(err, 4)}`)}.`;
+  $('#run-why2').innerHTML = `<b>Running example</b>: &omega; = 2 &times; ${d} &times; ${fmt(s, 2)}&sup2; / ${N} = ${tip('<b>' + fmt(th, 4) + '</b>', 'the exact average optimism for least squares')}; the simulation&rsquo;s average over 400 training sets is ${tip(fmt(m.op, 4), `${fmt(m.ein, 4)} − ${fmt(m.err, 4)}`)}.`;
+  $('#why-say').innerHTML = (op < 0 ? `On this one draw the training error happens to be <em>higher</em> than the in-sample error (op = ${fmt(op, 3)}): optimism is a statement about averages, and single samples scatter. ` : `On this draw the training error flatters by ${fmt(op, 3)}. `) +
+    (d >= 9 && N <= 30 ? `With ${d} parameters for ${N} points the fit chases the blue dots; the gap 2d&sigma;&sup2;/N = ${fmt(th, 3)} is now ${pct(th / (s * s), 0)} of the noise variance itself.` : `Averaged over 400 draws the optimism is ${fmt(m.op, 4)}, against the formula&rsquo;s ${fmt(th, 4)}. Every parameter adds 2&sigma;&sup2;/N = ${fmt(2 * s * s / N, 4)}; double N and the whole line halves.`);
+}
+[['#why-d', 'd'], ['#why-n', 'N'], ['#why-s', 's']].forEach(([id, k]) => $(id).addEventListener('input', e => { W[k] = +e.target.value; drawWhy(); }));
+$('#why-new').addEventListener('click', () => { W.seed++; drawWhy(); });
+fig($('#why-cv'), drawWhy);
+
+/* =============== COV: self-influence =============== */
+const CN = 15, CF = TRUTH.wave, CV = { mode: 'poly', k: 4, pts: null, v: null, last: null };
+function covInit() { const r = mulberry32(5); CV.pts = Array.from({ length: CN }, (_, i) => { const x = (i + 0.5) / CN; return [x, CF(x) + 0.35 * gaussOf(r)]; }); CV.last = null; }
+function covS() { if (CV.mode === 'poly') { const B = polyQ(CN, CV.k); return Array.from({ length: CN }, (_, i) => Array.from({ length: CN }, (_, j) => { let s = 0; for (let l = 0; l < CV.k; l++) s += B.Q[l][i] * B.Q[l][j]; return s; })); } return knnS(CN, CV.k).S; }
+function covFit(S) { const y = CV.pts.map(p => p[1]); return S.map(r => dotv(r, y)); }
+function knnAt(x, k) { const xs = CV.pts.map(p => p[0]), o = xs.map((u, j) => [Math.abs(u - x) + j * 1e-12, j]).sort((a, b) => a[0] - b[0]).slice(0, k); return o.reduce((s, [, j]) => s + CV.pts[j][1], 0) / k; }
+function drawCov() {
+  const C = C0(), S = covS(), yh = covFit(S), tr = trace(S), v = CV.v = frame($('#cov-cv'), [0, 1], [-2.4, 2.4], { l: 34, b: 26 }); axes(v, 'x', 'y', { sx: 0.2, sy: 1 }); clip(v);
+  if (CV.mode === 'poly') { const w = polyCoef(CV.pts.map(p => p[0]), CV.pts.map(p => p[1]), CV.k); curve(v, x => polyEval(w, x), C.a, 2.6); }
+  else { const c = v.ctx; c.save(); c.strokeStyle = C.a; c.lineWidth = 2.6; c.beginPath(); for (let i = 0; i <= 300; i++) { const x = i / 300, y = knnAt(x, CV.k); i ? c.lineTo(v.X(x), v.Y(y)) : c.moveTo(v.X(x), v.Y(y)); } c.stroke(); c.restore(); }
+  const L = CV.last;
+  CV.pts.forEach((p, i) => { seg(v, p[0], p[1], p[0], yh[i], C.muted, 1, null, 0.6); if (L && L.i === i) { seg(v, p[0], L.y0, p[0], p[1], C.b, 2, [3, 3]); seg(v, p[0] + 0.012, L.h0, p[0] + 0.012, yh[i], C.a, 3); dot(v, p[0], L.y0, C.b, 4, true); } dot(v, p[0], p[1], C.lda, L && L.i === i ? 7 : 5); });
+  v.ctx.restore();
+  const u = frame($('#cov-lev'), [0, 1], [0, 1.05], { l: 34, b: 8, t: 8 }); axes(u, '', 'Sᵢᵢ', { sx: 2, sy: 0.5 });
+  CV.pts.forEach((p, i) => bar(u, p[0] - 0.022, p[0] + 0.022, 0, S[i][i], L && L.i === i ? C.b : C.lda, 0.8));
+  const om = 2 * 0.25 * tr / CN;
+  $('#cov-k-l').textContent = CV.mode === 'poly' ? 'Parameters d' : 'Neighbours k'; $('#cov-k-o').textContent = CV.k;
+  $('#cov-tr').innerHTML = tip(fmt(tr, 3), `Σ Sᵢᵢ over the ${CN} points\n${CV.mode === 'poly' ? '= d for least squares' : `= ${CN} × (1/${CV.k}) for k-NN`}`);
+  $('#cov-om').innerHTML = tip(fmt(om, 4), `2σ²·trace(S)/N = 2 × 0.25 × ${fmt(tr, 3)} / ${CN}`);
+  if (L) {
+    const sii = S[L.i][L.i], dy = CV.pts[L.i][1] - L.y0, dh = yh[L.i] - L.h0, ok = Math.abs(dy) > 0.02;
+    $('#cov-sii').innerHTML = tip(fmt(sii, 3), `diagonal entry ${L.i + 1} of S`); $('#cov-ratio').innerHTML = ok ? tip(fmt(dh / dy, 3), `Δŷ / Δy = ${fmt(dh, 3)} / ${fmt(dy, 3)}`) : '&ndash;';
+    $('#run-cov').innerHTML = `<b>Running example</b>: point ${L.i + 1} has S<sub>ii</sub> = ${fmt(sii, 3)}. You moved it by &Delta; = ${fmt(dy, 3)}, so its fitted value moved by ${fmt(sii, 3)} &times; ${fmt(dy, 3)} = ${tip('<b>' + fmt(sii * dy, 3) + '</b>', `measured: ${fmt(dh, 3)}`)}. Over all points trace(S) = ${fmt(tr, 3)}, so &omega; = 2 &times; 0.5&sup2; &times; ${fmt(tr, 3)} / ${CN} = ${fmt(om, 4)}.`;
+    $('#cov-say').innerHTML = CV.mode === 'poly' ? (sii > 0.45 ? `Point ${L.i + 1} sits near the edge, where a polynomial has little else to lean on: ${pct(sii, 0)} of your move went straight into its own fit. Edge points carry most of the optimism.` : `Point ${L.i + 1} is ${L.i > 2 && L.i < CN - 3 ? 'in the middle, where its neighbours hold the curve in place' : 'fairly well supported'}: only ${pct(sii, 0)} of your move reached its own fitted value. Raise d and every bar grows; they always add up to d.`)
+      : `Each k-NN fit averages k = ${CV.k} responses including the point&rsquo;s own, so every S<sub>ii</sub> is 1/${CV.k} = ${fmt(1 / CV.k, 3)} and trace(S) = ${CN}/${CV.k}. ${CV.k === 1 ? 'With k = 1 the fit copies each response: the training error is zero and all of it is optimism.' : 'Fewer neighbours, more self-influence, more optimism.'}`;
+  } else {
+    $('#cov-sii').innerHTML = '&ndash;'; $('#cov-ratio').innerHTML = '&ndash;';
+    $('#run-cov').innerHTML = `<b>Running example</b>: drag a point to see S<sub>ii</sub> at work. Right now trace(S) = ${tip(fmt(tr, 3), 'sum of the bars')}, so &omega; = 2 &times; 0.5&sup2; &times; ${fmt(tr, 3)} / ${CN} = ${fmt(om, 4)}.`;
+    $('#cov-say').innerHTML = CV.mode === 'poly' ? `The bars show how strongly each point controls its own fitted value. For a polynomial they are tallest at the two ends. Their sum is exactly d = ${CV.k}.` : `For k-NN every bar has the same height, 1/k: each fitted value is an average of k responses, one of them its own.`;
+  }
+}
+vdrag($('#cov-cv'), () => CV.v, () => CV.pts, i => { const yh = covFit(covS()); CV.last = { i, y0: CV.pts[i][1], h0: yh[i] }; }, drawCov);
+seg1('[data-cv]', 'data-cv', m => { CV.mode = m; CV.last = null; drawCov(); });
+$('#cov-k').addEventListener('input', e => { CV.k = +e.target.value; CV.last = null; drawCov(); });
+$('#cov-reset').addEventListener('click', () => { covInit(); drawCov(); });
+fig($('#cov-cv'), drawCov);
+
+/* =============== CP and AIC =============== */
+const PN = 40, PD = 15, PS = 0.5, PF = TRUTH.decay, CP = { seed: 2, how: 'big', d: 6 };
+function cpCalc() {
+  const B = polyQ(PN, PD), f = B.xs.map(PF), r = mulberry32(CP.seed * 31 + 3), y = f.map(v => v + PS * gaussOf(r)), nf = nestFit(B, y);
+  const zf = B.Q.map(q => dotv(q, f)), ff = dotv(f, f); let cf = 0, cz = 0; const ein = [], eexp = [];
+  for (let d = 1; d <= PD; d++) { cf += zf[d - 1] ** 2; cz += (nf.z[d - 1] - zf[d - 1]) ** 2; ein.push(PS * PS + (ff - cf + cz) / PN); eexp.push(PS * PS + (ff - cf) / PN + PS * PS * d / PN); }
+  const s2 = CP.how === 'true' ? PS * PS : CP.how === 'big' ? nf.rss[PD - 1] / (PN - PD) : nf.rss[1] / (PN - 2);
+  const err = nf.rss.map(r => r / PN), cp = err.map((e, k) => e + 2 * (k + 1) / PN * s2);
+  return { err, cp, ein, eexp, s2, pick: argmin(cp) + 1, best: argmin(ein) + 1, rss: nf.rss };
+}
+function drawCp() {
+  const C = C0(), K = cpCalc(), d = CP.d, ymax = Math.max(K.err[2], K.ein[2], K.cp[2]) * 1.25;
+  const v = frame($('#cp-cv'), [0.5, PD + 0.5], [0, ymax], { l: 46, b: 30 }); axes(v, 'parameters d', 'squared error', { sx: 1, ny: 5 }); clip(v);
+  seg(v, d, 0, d, 1e3, C.muted, 1, [4, 4]); seg(v, 0, PS * PS, 99, PS * PS, C.muted, 1, [2, 4]);
+  polyline(v, K.eexp.map((e, k) => [k + 1, e]), C.ink, 1.4, [6, 5]); polyline(v, K.err.map((e, k) => [k + 1, e]), C.muted, 2.2); polyline(v, K.ein.map((e, k) => [k + 1, e]), C.bad, 2.4); polyline(v, K.cp.map((e, k) => [k + 1, e]), C.a, 2.6);
+  K.cp.forEach((e, k) => dot(v, k + 1, e, C.a, 3)); star(v, K.pick, K.cp[K.pick - 1], C.a, 9); star(v, K.best, K.ein[K.best - 1], C.bad, 9);
+  label(v, PD, PS * PS, 'σ² = 0.25', C.muted, 'right', 'bottom'); v.ctx.restore();
+  const how = CP.how === 'big' ? `RSS₁₅/(N − 15) = ${fmt(K.rss[PD - 1], 3)}/${PN - PD}` : CP.how === 'true' ? 'the true σ² (known only in a simulation)' : `RSS₂/(N − 2) = ${fmt(K.rss[1], 3)}/${PN - 2}`;
+  $('#cp-d-o').textContent = d; $('#cp-pick').innerHTML = tip(K.pick, `smallest Cp: ${fmt(K.cp[K.pick - 1], 4)}`); $('#cp-best').innerHTML = tip(K.best, `smallest true Err_in: ${fmt(K.ein[K.best - 1], 4)}\n(needs the truth; Cp never sees it)`);
+  $('#cp-s2').innerHTML = tip(fmt(K.s2, 4), how); $('#cp-cost').innerHTML = tip(fmt(K.ein[K.pick - 1], 4), `true Err_in of d = ${K.pick}\nbest possible: ${fmt(K.ein[K.best - 1], 4)} at d = ${K.best}`);
+  $('#run-cp').innerHTML = `<b>Running example</b>, d = ${d} on this sample: C<sub>p</sub> = ${tip(fmt(K.err[d - 1], 4), `err-bar = RSS/N = ${fmt(K.rss[d - 1], 3)}/${PN}`)} + 2 &times; ${d}/${PN} &times; ${tip(fmt(K.s2, 4), how)} = ${tip('<b>' + fmt(K.cp[d - 1], 4) + '</b>', 'estimate of the in-sample error')}; the true in-sample error of this fit is ${tip(fmt(K.ein[d - 1], 4), 'σ² + (1/N)Σ(f − ŷ)², using the known truth')}. As AIC with &sigma;&sup2; known: ${tip(fmt(K.cp[d - 1] / K.s2, 3), `Cp/σ̂² = err-bar/σ̂² + 2d/N`)} + a constant.`;
+  const ratio = K.s2 / (PS * PS);
+  $('#cp-say').innerHTML = CP.how === 'line' ? `A straight line misses most of the curve, so its residual variance ${fmt(K.s2, 3)} is ${fmt(ratio, 1)}&times; the real noise: bias masquerading as noise. Every parameter now looks ${fmt(ratio, 1)}&times; too expensive, and C<sub>p</sub> chooses d = ${K.pick}${K.pick < K.best ? `, smaller than the best d = ${K.best}` : ''}.`
+    : CP.how === 'true' ? `With the true &sigma;&sup2;, C<sub>p</sub> is an unbiased estimate of the <em>average</em> in-sample error (dashed) at every d. It chooses d = ${K.pick}; the best for this sample is d = ${K.best}${K.pick === K.best ? '. A perfect choice.' : `. Unbiased on average still means noisy for one sample: the cost of the miss is ${fmt(K.ein[K.pick - 1] - K.ein[K.best - 1], 4)}.`}`
+    : `The largest model (d = ${PD}) has little bias, so its residuals estimate &sigma;&sup2; well: ${fmt(K.s2, 3)} against the true 0.25. C<sub>p</sub> estimates the average in-sample error (dashed), not this sample&rsquo;s red curve; it chooses d = ${K.pick} (best for this sample: ${K.best}). Notice how flat both curves are near the bottom: neighbouring choices cost almost nothing.`;
+}
+seg1('[data-cs]', 'data-cs', h => { CP.how = h; drawCp(); });
+$('#cp-d').addEventListener('input', e => { CP.d = +e.target.value; drawCp(); });
+$('#cp-new').addEventListener('click', () => { CP.seed++; drawCp(); });
+fig($('#cp-cv'), drawCp);
+
+/* =============== DF: effective parameters =============== */
+const DFN = 30, DFS = 0.5, DFM = 2000, SUBN = 50, SUBP = 10;
+const DF = { mode: 'ridge', i: 6, cache: {}, ridgeEig: null };
+const dfSet = { ridge: { max: 12, x: i => -3 + 0.5 * i, lab: 'log₁₀ λ' }, knn: { max: 12, x: i => i + 1, lab: 'Neighbours k' }, sub: { max: 9, x: i => i + 1, lab: 'Keep the best k of 10' } };
+function mcCentered(fitFn, f, sig, N, M, seed) {
+  const r = mulberry32(seed), e = new Float64Array(N), y = new Float64Array(N), sye = new Float64Array(N), sy = new Float64Array(N), se = new Float64Array(N);
+  for (let m = 0; m < M; m++) { for (let i = 0; i < N; i++) { e[i] = sig * gaussOf(r); y[i] = f[i] + e[i]; } const yh = fitFn(y); for (let i = 0; i < N; i++) { sye[i] += yh[i] * e[i]; sy[i] += yh[i]; se[i] += e[i]; } }
+  let s = 0; for (let i = 0; i < N; i++) s += (sye[i] - sy[i] * se[i] / M) / (M - 1); return s / (sig * sig);
+}
+const matVec = S => y => S.map(r => { let s = 0; for (let j = 0; j < r.length; j++) s += r[j] * y[j]; return s; });
+function subsetFit(k) { const B = polyQ(SUBN, SUBP); return y => { const z = B.Q.map(q => dotv(q, y)), keep = z.map((v, j) => [Math.abs(v), j]).sort((a, b) => b[0] - a[0]).slice(0, k), out = new Float64Array(SUBN); keep.forEach(([, j]) => { for (let t = 0; t < SUBN; t++) out[t] += z[j] * B.Q[j][t]; }); return out; }; }
+function dfPoint(mode, i) {
+  const key = mode + i; if (DF.cache[key]) return DF.cache[key]; const x = dfSet[mode].x(i); let res;
+  if (mode === 'ridge') { const R = ridgeS(DFN, 12, Math.pow(10, x)); res = { f: trace(R.S), mc: mcCentered(matVec(R.S), R.xs.map(TRUTH.wave), DFS, DFN, DFM, 100 + i) }; }
+  else if (mode === 'knn') { const K = knnS(DFN, x); res = { f: trace(K.S), mc: mcCentered(matVec(K.S), K.xs.map(TRUTH.wave), DFS, DFN, DFM, 200 + i) }; }
+  else res = { f: x, mc: mcCentered(subsetFit(x), new Float64Array(SUBN), 1, SUBN, DFM, 300 + i) };
+  return (DF.cache[key] = res);
+}
+function ridgeEig() { if (DF.ridgeEig) return DF.ridgeEig; const R = ridgeS(DFN, 12, 0); const A = Array.from({ length: 12 }, (_, a) => Array.from({ length: 12 }, (_, c) => R.X.reduce((s, x) => s + x[a] * x[c], 0))); return (DF.ridgeEig = jacobiEig(A)); }
+function drawDf() {
+  const C = C0(), M = DF.mode, set = dfSet[M], n = set.max + 1, pts = [...Array(n).keys()].map(i => [set.x(i), dfPoint(M, i)]), cur = dfPoint(M, DF.i), x = set.x(DF.i);
+  const ymax = M === 'sub' ? 11 : M === 'knn' ? DFN + 2 : 13;
+  const v = frame($('#df-cv'), [set.x(0) - (M === 'ridge' ? 0.2 : 0.5), set.x(set.max) + (M === 'ridge' ? 0.2 : 0.5)], [0, ymax], { l: 40, b: 30 });
+  axes(v, M === 'ridge' ? 'log₁₀ λ' : 'k', 'effective df', { sx: M === 'ridge' ? 1 : M === 'knn' ? 2 : 1, ny: 5 }); clip(v);
+  if (M === 'ridge') { const ev = ridgeEig(); curve(v, t => ev.reduce((s, e) => s + e / (e + Math.pow(10, t)), 0), C.ink, 2); seg(v, -9, 12, 9, 12, C.muted, 1, [3, 4]); }
+  else if (M === 'knn') polyline(v, pts.map(p => [p[0], DFN / p[0]]), C.ink, 2);
+  else polyline(v, pts.map(p => [p[0], p[0]]), C.ink, 2, [6, 5]);
+  if (M === 'sub') polyline(v, pts.map(p => [p[0], p[1].mc]), C.a, 1.6);
+  seg(v, x, 0, x, 1e3, C.muted, 1, [4, 4]);
+  pts.forEach(p => dot(v, p[0], p[1].mc, C.a, 4)); dot(v, x, cur.mc, C.a, 7); v.ctx.restore();
+  const sig = M === 'sub' ? 1 : DFS, N = M === 'sub' ? SUBN : DFN, om = 2 * cur.mc * sig * sig / N;
+  $('#df-k-l').textContent = set.lab; $('#df-k-o').textContent = M === 'ridge' ? fmt(x, 1) : x;
+  $('#df-f-k').textContent = M === 'ridge' ? 'formula: trace(S)' : M === 'knn' ? 'formula: N/k' : 'predictors kept, k';
+  $('#df-f').innerHTML = tip(fmt(cur.f, 3), M === 'ridge' ? `Σ dⱼ²/(dⱼ² + λ), λ = ${fmt(Math.pow(10, x), 3)}` : M === 'knn' ? `${DFN} / ${x}` : 'the count you would naively use for d');
+  $('#df-mc').innerHTML = tip(fmt(cur.mc, 3), `Σᵢ Cov(ŷᵢ, yᵢ)/σ² estimated from ${DFM} noise draws\n(sample covariance at each point, summed)`);
+  $('#df-n').innerHTML = tip(M === 'ridge' ? '12' : M === 'knn' ? '0' : String(x), M === 'ridge' ? '12 polynomial coefficients, all kept (and shrunk)' : M === 'knn' ? 'k-NN has no coefficients at all' : `the ${x} chosen predictors`);
+  $('#df-om').innerHTML = tip(fmt(om, 4), `2 × ${fmt(cur.mc, 3)} × ${fmt(sig, 1)}² / ${N}`);
+  $('#df-cap').innerHTML = M === 'ridge' ? `Ridge on 12 polynomial terms, N = ${DFN}. <span style="color:var(--ink)">&#9644;</span> &Sigma; d<sub>j</sub>&sup2;/(d<sub>j</sub>&sup2; + &lambda;) &nbsp;<span style="color:var(--cA)">&#9679;</span> simulated &Sigma; Cov(&ycirc;<sub>i</sub>, y<sub>i</sub>)/&sigma;&sup2;; dotted: the 12 coefficients you would count.`
+    : M === 'knn' ? `k-nearest-neighbour smoothing of N = ${DFN} points. <span style="color:var(--ink)">&#9644;</span> N/k &nbsp;<span style="color:var(--cA)">&#9679;</span> simulated &Sigma; Cov(&ycirc;<sub>i</sub>, y<sub>i</sub>)/&sigma;&sup2;.`
+    : `Keep the k of 10 orthogonal predictors most correlated with y, then refit; y is pure noise, N = ${SUBN}. <span style="color:var(--ink)">- -</span> the naive count k &nbsp;<span style="color:var(--cA)">&#9679;</span> simulated effective df.`;
+  if (M === 'ridge') { const ev = ridgeEig(), lam = Math.pow(10, x), terms = ev.slice(0, 3).map(e => `${fmt(e, 1)}/(${fmt(e, 1)} + ${fmt(lam, lam < 1 ? 3 : 1)})`).join(' + ');
+    $('#run-df').innerHTML = `<b>Running example</b>: ridge with &lambda; = ${fmt(lam, lam < 1 ? 3 : 1)}: the eigenvalues of X<sup>T</sup>X are ${ev.slice(0, 4).map(e => fmt(e, 1)).join(', ')}, &hellip;, so df = ${terms} + &hellip; = ${tip('<b>' + fmt(cur.f, 3) + '</b>', '12 terms in all; equals trace(S)')}; simulation gives ${fmt(cur.mc, 3)}.`; }
+  else if (M === 'knn') $('#run-df').innerHTML = `<b>Running example</b>: k = ${x}: every S<sub>ii</sub> = 1/${x}, so df = trace(S) = ${DFN} &times; 1/${x} = ${tip('<b>' + fmt(DFN / x, 3) + '</b>', 'N/k')}; simulation gives ${fmt(cur.mc, 3)}.`;
+  else $('#run-df').innerHTML = `<b>Running example</b>: keep the best ${x} of 10: there is no S to take the trace of, so simulate. Over ${DFM} pure-noise data sets, &Sigma; Cov(&ycirc;<sub>i</sub>, y<sub>i</sub>)/&sigma;&sup2; = ${tip('<b>' + fmt(cur.mc, 3) + '</b>', 'sample covariances, summed over the 50 points')}, not ${x}.`;
+  $('#df-say').innerHTML = M === 'ridge' ? (x <= -2 ? `With almost no penalty ridge is least squares: all 12 coefficients count in full (df ${fmt(cur.f, 2)}).` : x >= 2 ? `A heavy penalty pins the coefficients near zero; only the strongest direction (eigenvalue ${fmt(ridgeEig()[0], 1)}) survives in part, worth ${fmt(cur.f, 2)} parameters.` : `Twelve coefficients, but shrunk: they are worth ${fmt(cur.f, 2)} parameters. Use this number as d in C<sub>p</sub> to tune &lambda;.`)
+    : M === 'knn' ? `${x === 1 ? 'One neighbour copies each response: df = N, the maximum.' : `Averaging ${x} neighbours gives ${fmt(DFN / x, 1)} effective parameters from a method with none.`} The simulation agrees with the trace up to its own noise (about &plusmn;0.2).`
+    : x === 10 ? `Keep all 10 predictors and nothing is chosen: the procedure is plain least squares again, and the simulation gives ${fmt(cur.mc, 2)}, the count of 10 up to its noise. Slide k down to watch selection inflate the cost.` : `Choosing ${x === 1 ? 'the best single predictor' : `the best ${x}`} out of 10 uses the data twice: once to choose, once to fit. The chosen ${x === 1 ? 'one looks' : `${x} look`} useful even on pure noise, so the effective df is ${fmt(cur.mc, 2)}, ${fmt(cur.mc / x, 1)}&times; the count. ${x === 10 ? 'Keep all 10 and there is no choice left: df = 10 again.' : 'Counting parameters after selection understates the optimism.'}`;
+}
+seg1('[data-dm]', 'data-dm', m => { DF.mode = m; const s = $('#df-k'); s.max = dfSet[m].max; DF.i = m === 'ridge' ? 6 : m === 'knn' ? 4 : 0; s.value = DF.i; drawDf(); });
+$('#df-k').addEventListener('input', e => { DF.i = +e.target.value; drawDf(); });
+fig($('#df-cv'), drawDf);
+
+/* =============== BIC vs exact evidence =============== */
+const BNS = [10, 20, 40, 80, 160, 320, 640, 1280], BD = 10, BF = x => 1.5 * TRUTH.cubic(x), BIC = { ni: 3, lt: 0, seed: 4 };
+function bicCalc() { const N = BNS[BIC.ni], B = polyQ(N, BD), r = mulberry32(BIC.seed * 977 + N), y = B.xs.map(x => BF(x) + gaussOf(r)); return { N, y, xs: B.xs, ev: evidenceCurve(y, B, 1, Math.pow(10, BIC.lt)) }; }
+function drawBic() {
+  const C = C0(), { N, ev } = bicCalc(), lev = ev.map(e => e.lev), bh = ev.map(e => e.bicHalf), ll = ev.map(e => e.ll), m = Math.max(...lev), pe = argmin(lev.map(v => -v)) + 1, pb = argmin(ev.map(e => e.bic)) + 1;
+  const all = [...lev, ...bh].map(v => v - m), lo = Math.min(...all, -8), hi = Math.max(5, ...ll.slice(0, BD).map(v => v - m).filter(v => v < 40)) + 2;
+  const v = frame($('#bic-cv'), [0.5, BD + 0.5], [Math.max(lo, -60), Math.min(hi, 30)], { l: 44, b: 30 }); axes(v, 'parameters d', 'log scale, nats', { sx: 1, ny: 5 }); clip(v);
+  seg(v, 0, 0, 99, 0, C.muted, 1, [3, 4]);
+  polyline(v, ll.map((y, k) => [k + 1, y - m]), C.muted, 1.8); polyline(v, lev.map((y, k) => [k + 1, y - m]), C.lda, 2.6); polyline(v, bh.map((y, k) => [k + 1, y - m]), C.b, 2.4, [7, 4]);
+  lev.forEach((y, k) => dot(v, k + 1, y - m, C.lda, 3)); star(v, pe, 0, C.lda, 9); star(v, pb, bh[pb - 1] - m, C.b, 8); v.ctx.restore();
+  const pE = softmaxPos(lev), pB = softmaxPos(bh);
+  const u = frame($('#bic-bars'), [0.5, BD + 0.5], [0, 1.08], { l: 44, b: 24, t: 8 }); axes(u, 'parameters d', 'P(d | Z)', { sx: 1, sy: 0.5 });
+  pE.forEach((p, k) => { bar(u, k + 1 - 0.34, k + 1, 0, p, C.lda); bar(u, k + 1, k + 1 + 0.34, 0, pB[k], C.b); });
+  const lt = Math.pow(10, BIC.lt), gap = (lev[pb - 1] - bh[pb - 1]) / pb, LN = Math.log(N);
+  $('#bic-n-o').textContent = N; $('#bic-t-o').textContent = fmt(lt, 2);
+  $('#bic-pe').innerHTML = tip(pe, `largest exact log evidence: ${fmt(lev[pe - 1], 2)} nats`); $('#bic-pb').innerHTML = tip(pb, `BIC = −2·loglik + d·ln N = ${fmt(ev[pb - 1].bic, 2)}`);
+  $('#bic-gap').innerHTML = tip(fmt(gap, 2), `(log evidence − (loglik − (d/2) ln N)) / d at d = ${pb}\n= (${fmt(lev[pb - 1], 2)} − ${fmt(bh[pb - 1], 2)}) / ${pb}\nthe O(1) term, shared out per parameter`);
+  $('#bic-pen').innerHTML = tip(fmt(LN, 2), `ln ${N}; AIC charges 2`);
+  const e4 = ev[pb - 1];
+  $('#run-bic').innerHTML = `<b>Running example</b>, N = ${N}, d = ${pb}: loglik = ${tip(fmt(e4.ll, 2), 'with σ = 1 known: −(N/2)ln 2π − RSS/2')}, and &minus;(${pb}/2) ln ${N} = ${fmt(-pb / 2 * LN, 2)}, so &minus;BIC/2 = ${tip(fmt(e4.bicHalf, 2), `BIC = ${fmt(e4.bic, 2)}`)} against the exact log evidence ${tip(fmt(e4.lev, 2), `Gaussian prior w ~ N(0, ${fmt(lt, 2)}²) on each weight;\nthe integral done exactly`)}. Turned into probabilities: P(d = ${pb} | Z) &asymp; ${tip(fmt(pB[pb - 1], 3), 'e^(−BIC/2) normalised over d = 1…10')} from BIC, ${tip(fmt(pE[pb - 1], 3), 'exact evidence, normalised')} exactly.`;
+  $('#bic-say').innerHTML = (pe === pb ? `Exact evidence and BIC agree on d = ${pb}${pb === 4 ? ', the true cubic' : ''}. ` : `The exact evidence prefers d = ${pe}, BIC d = ${pb}: at N = ${N} the bounded remainder still matters. `) +
+    `The two curves differ by about ${fmt(Math.abs(gap), 2)} nats per parameter, a gap that depends on the prior width &tau; but not on N, while the penalty that both share, &frac12; ln N per parameter, keeps growing. ${N >= 320 ? 'With this much data the posterior piles onto one model.' : N <= 20 ? 'With so little data, both spread their bets across several models.' : ''} ${BIC.lt <= -0.6 ? 'A very narrow prior says the weights must be small, so the exact evidence punishes the cubic&rsquo;s real coefficients; BIC knows nothing about the prior.' : BIC.lt >= 0.6 ? 'A very wide prior wastes probability on huge coefficients: the exact evidence now penalises each parameter harder than BIC does.' : Math.abs(BIC.lt) < 0.25 ? 'At &tau; near 1 the prior on each weight carries about as much information as one observation (a &ldquo;unit-information&rdquo; prior), the case in which BIC is known to be especially accurate (Kass &amp; Wasserman, 1995).' : ''}`;
+}
+$('#bic-n').addEventListener('input', e => { BIC.ni = +e.target.value; drawBic(); });
+$('#bic-t').addEventListener('input', e => { BIC.lt = +e.target.value; drawBic(); });
+$('#bic-new').addEventListener('click', () => { BIC.seed++; drawBic(); });
+fig($('#bic-cv'), drawBic);
+
+/* =============== AIC vs BIC race =============== */
+const RNS = [20, 50, 100, 200, 500, 1000, 2000], RD = 12, RR = 300, RACE = { truth: 'cubic', ni: 2, cache: {} };
+function raceAt(t, ni) { const k = t + ni; return RACE.cache[k] || (RACE.cache[k] = raceRun(RNS[ni], t, 1, RD, RR, 1000 + 17 * ni + (t === 'cubic' ? 0 : 5000))); }
+function drawRace() {
+  const C = C0(), t = RACE.truth, R = raceAt(t, RACE.ni), N = RNS[RACE.ni], target = t === 'cubic' ? 4 : R.oracle, mx = Math.max(...R.pickA, ...R.pickB) / RR;
+  const v = frame($('#race-cv'), [0.5, RD + 0.5], [0, Math.min(1.05, mx * 1.2 + 0.05)], { l: 44, b: 30 }); axes(v, 'parameters d chosen', 'share of 300 data sets', { sx: 1, ny: 5, fy: y => pct(y, 0) });
+  for (let d = 1; d <= RD; d++) { bar(v, d - 0.36, d, 0, R.pickA[d] / RR, C.a); bar(v, d, d + 0.36, 0, R.pickB[d] / RR, C.b); }
+  tri(v, target, 0, C.ink);
+  const all = RNS.map((_, i) => raceAt(t, i)), yv = r => t === 'cubic' ? [r.pickA[4] / RR, r.pickB[4] / RR] : [r.lossA / r.oracleLoss, r.lossB / r.oracleLoss];
+  const ys = all.map(yv), yhi = t === 'cubic' ? 1.05 : Math.max(2, ...ys.flat()) * 1.08;
+  const u = frame($('#race-n'), [Math.log10(15), Math.log10(2600)], [t === 'cubic' ? 0 : 1, yhi], { l: 44, b: 24, t: 8 }); axes(u, 'N (log scale)', '', { sx: 10, ny: 3, fy: y => t === 'cubic' ? pct(y, 0) : fmt(y, 1) + '×' });
+  const c = u.ctx; c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'center'; c.textBaseline = 'top'; RNS.forEach(n => { c.fillText(n, u.X(Math.log10(n)), u.h - u.pad.b + 5); }); c.restore();
+  clip(u); polyline(u, ys.map((p, i) => [Math.log10(RNS[i]), p[0]]), C.a, 2.2); polyline(u, ys.map((p, i) => [Math.log10(RNS[i]), p[1]]), C.b, 2.2);
+  ys.forEach((p, i) => { dot(u, Math.log10(RNS[i]), p[0], C.a, i === RACE.ni ? 6 : 3); dot(u, Math.log10(RNS[i]), p[1], C.b, i === RACE.ni ? 6 : 3); }); u.ctx.restore();
+  $('#race-ncap').innerHTML = t === 'cubic' ? `<span style="color:var(--cA)">&#9644;</span> AIC &nbsp;<span style="color:var(--cB)">&#9644;</span> BIC: share of data sets in which the true d = 4 is chosen, for every N. BIC&rsquo;s climbs towards 100%; AIC&rsquo;s levels off.` : `<span style="color:var(--cA)">&#9644;</span> AIC &nbsp;<span style="color:var(--cB)">&#9644;</span> BIC: average excess error of the chosen model divided by that of the best fixed d for this N (1&times; is perfect).`;
+  const [a, b] = yv(R), LN = Math.log(N);
+  $('#race-n-o').textContent = N; $('#race-a-k').textContent = t === 'cubic' ? 'AIC picks the true d = 4' : `AIC picks the best d = ${R.oracle}`; $('#race-b-k').textContent = t === 'cubic' ? 'BIC picks the true d = 4' : `BIC picks the best d = ${R.oracle}`;
+  $('#race-a').innerHTML = tip(pct(R.pickA[target] / RR, 0), `${R.pickA[target]} of ${RR} data sets`); $('#race-b').innerHTML = tip(pct(R.pickB[target] / RR, 0), `${R.pickB[target]} of ${RR} data sets`);
+  $('#race-la').innerHTML = tip(fmt(R.lossA, 4), `average of (1/N)Σ(f(xᵢ) − ŷᵢ)² for AIC's choices\nbest fixed d (${R.oracle}) gives ${fmt(R.oracleLoss, 4)} on average`); $('#race-lb').innerHTML = tip(fmt(R.lossB, 4), `same for BIC's choices\nbest fixed d (${R.oracle}) gives ${fmt(R.oracleLoss, 4)}`);
+  $('#run-race').innerHTML = `<b>Running example</b>: N = ${N}, so BIC charges ln ${N} = ${tip(fmt(LN, 2), 'natural log')} per parameter against AIC&rsquo;s 2. A useless extra parameter gets past AIC with probability P(&chi;&sup2;<sub>1</sub> &gt; 2) = ${tip(pct(chi1tail(2)), 'erfc(√(2/2))')} and past BIC with P(&chi;&sup2;<sub>1</sub> &gt; ${fmt(LN, 2)}) = ${tip(pct(chi1tail(LN)), `erfc(√(${fmt(LN, 2)}/2))`)}.`;
+  const overA = sum(R.pickA.slice(target + 1)) / RR, under = sum(R.pickB.slice(1, target)) / RR;
+  $('#race-say').innerHTML = t === 'cubic' ? (under > 0.25 ? `With N = ${N}, BIC&rsquo;s heavy penalty often stops short: ${pct(under, 0)} of its choices are smaller than the cubic, which is hard to see through noise this size. AIC, less strict, finds the cubic more often for now (${pct(a, 0)} vs ${pct(b, 0)}). Slide N up.` : `AIC overshoots in ${pct(overA, 0)} of data sets, and that share will not shrink however large N gets; BIC finds the cubic ${pct(b, 0)} of the time and keeps improving. When the truth is in the list, BIC is consistent.`)
+    : (N >= 500 ? `Now the truth is an endless sum of waves, so the best d grows with N (${R.oracle} here). AIC tracks it; BIC lags behind with smaller models, and its excess error is ${fmt(R.lossB / R.lossA, 2)}&times; AIC&rsquo;s. That is AIC&rsquo;s efficiency.` : `Even with no true model, at N = ${N} the best d is small (${R.oracle}), and AIC&rsquo;s occasional large models cost more than BIC&rsquo;s caution: excess error ${fmt(R.lossA, 4)} vs ${fmt(R.lossB, 4)}. Slide N up and watch the order flip.`);
+}
+seg1('[data-rt]', 'data-rt', t => { RACE.truth = t; drawRace(); });
+$('#race-n-s').addEventListener('input', e => { RACE.ni = +e.target.value; drawRace(); });
+fig($('#race-cv'), drawRace);
+
+/* =============== MDL =============== */
+const CODE = [['sun', 0.4, '0'], ['cloud', 0.2, '10'], ['rain', 0.2, '110'], ['wind', 0.1, '1110'], ['snow', 0.1, '1111']];
+function drawCode() {
+  const H = -sum(CODE.map(c => c[1] * Math.log2(c[1]))), A = sum(CODE.map(c => c[1] * c[2].length));
+  $('#mdl-code').innerHTML = `<thead><tr><th>symbol</th><th>probability</th><th>&minus;log&#8322; p (ideal bits)</th><th>codeword</th><th>bits</th></tr></thead><tbody>` +
+    CODE.map(c => `<tr><td>${c[0]}</td><td class="num">${fmt(c[1], 1)}</td><td class="num">${tip(fmt(-Math.log2(c[1]), 3), `−log₂ ${c[1]}`)}</td><td class="mono">${c[2]}</td><td class="num">${c[2].length}</td></tr>`).join('') +
+    `</tbody><tfoot><tr><th colspan="2">average</th><th>${tip(fmt(H, 3), 'entropy: Σ p × (−log₂ p)')}</th><th></th><th>${tip(fmt(A, 1), 'Σ p × codeword length')}</th></tr></tfoot>`;
+  $('#run-mdl1').innerHTML = `<b>Running example</b>: for the weather code, entropy = 0.4&times;${fmt(-Math.log2(0.4), 3)} + 2&times;0.2&times;${fmt(-Math.log2(0.2), 3)} + 2&times;0.1&times;${fmt(-Math.log2(0.1), 3)} = ${tip('<b>' + fmt(H, 3) + '</b>', 'bits per symbol, the floor')} bits, and the code averages 0.4&times;1 + 0.2&times;2 + 0.2&times;3 + 0.1&times;4 + 0.1&times;4 = ${tip('<b>' + fmt(A, 1) + '</b>', 'whole-bit codewords cannot hit −log₂ 0.4 = 1.32 exactly')} bits. No prefix code does better than ${fmt(H, 3)}.`;
+}
+const MD = { kind: 'sticky', N: 300, seed: 11 }, TRUEK = { coin: 0, sticky: 1, rhythm: 2 }, KNAME = { coin: 'a biased coin (70% ones, no memory)', sticky: 'a sticky source (repeats the last bit 85% of the time)', rhythm: 'a two-step rule (the next bit is usually the XOR of the last two)' };
+function drawMdl() {
+  const C = C0(), bits = mkBits(MD.kind, MD.N + KMAX, MD.seed), M = mdlCurve(bits), O = M.out, best = argmin(O.map(o => o.total)), tk = TRUEK[MD.kind];
+  const ymax = Math.max(MD.N, ...O.map(o => o.total)) * 1.08;
+  const v = frame($('#mdl-cv'), [-0.6, KMAX + 0.6], [0, ymax], { l: 50, b: 30 }); axes(v, 'memory k (bits of history)', 'bits', { sx: 1, ny: 5 });
+  O.forEach(o => { bar(v, o.k - 0.32, o.k + 0.32, 0, o.data, C.lda, 0.85); bar(v, o.k - 0.32, o.k + 0.32, o.data, o.total, C.b, 0.85); });
+  seg(v, -1, MD.N, 9, MD.N, C.ink, 1.4, [6, 5]); star(v, best, O[best].total + ymax * 0.04, C.ink, 8);
+  $('#mdl-bits').innerHTML = `<span class="mini-h">the first 120 bits</span>` + bits.slice(KMAX, KMAX + 120).join('').replace(/(.{10})/g, '$1 ');
+  const o = O[best], LN2N = Math.log2(M.N);
+  $('#mdl-n-o').textContent = MD.N; $('#mdl-k').innerHTML = tip('k = ' + best, `shortest total: ${fmt(o.total, 1)} bits\n(${fmt(o.data, 1)} data + ${fmt(o.par, 1)} parameters)`);
+  $('#mdl-bpb').innerHTML = tip(fmt(o.total / M.N, 3), `${fmt(o.total, 1)} bits / ${M.N} symbols\nraw: 1 bit per symbol`);
+  const ex = O[Math.min(best + 1, KMAX)];
+  $('#run-mdl2').innerHTML = `<b>Running example</b>: k = ${best}, N = ${M.N}: data ${tip(fmt(o.data, 1), `−Σ log₂ p̂(xₜ | last ${best} bits), counts in ${o.npar} histories`)} + parameters ${o.npar}/2 &times; log&#8322; ${M.N} = ${o.npar}/2 &times; ${fmt(LN2N, 2)} = ${tip(fmt(o.par, 1), 'half log₂ N bits per probability sent')}, so L(${best}) = ${tip('<b>' + fmt(o.total, 1) + '</b>', 'bits')} against ${M.N} raw bits. One more bit of memory (k = ${ex.k}) would save ${fmt(o.data - ex.data, 1)} data bits but cost ${fmt(ex.par - o.par, 1)} more parameter bits.`;
+  $('#mdl-say').innerHTML = `The source is ${KNAME[MD.kind]}, so the true memory is ${tk}. ` + (best === tk ? `MDL finds it: shorter memories leave predictable structure uncompressed, longer ones pay for ${O[Math.min(tk + 1, KMAX)].npar} or more probabilities that buy almost nothing. The best code needs ${fmt(o.total / M.N, 2)} bits per symbol.` : best < tk ? `With only ${M.N} symbols, MDL settles for k = ${best}: the extra probabilities of the true model are not yet worth their ${fmt(O[tk].par, 0)} bits. Lengthen the stream.` : `MDL picked k = ${best}, more than the truth needs; the counts happened to make the extra history look useful in this short stream.`);
+}
+seg1('[data-ms]', 'data-ms', k => { MD.kind = k; drawMdl(); });
+$('#mdl-n').addEventListener('input', e => { MD.N = +e.target.value; drawMdl(); });
+$('#mdl-new').addEventListener('click', () => { MD.seed++; drawMdl(); });
+fig($('#mdl-cv'), drawMdl);
+
+/* =============== Conditional vs expected error =============== */
+const CP_P = 10, BETA = [1, 0.8, 0.6, 0.4, 0.2, 0, 0, 0, 0, 0], CD = { N: 40, runs: [], seed: 1 };
+function condMore(R) { CD.runs.push(...condRun(CD.N, CP_P, 1, BETA, R, 4000 + CD.seed++ * 13 + CD.N, 10)); }
+function drawCond() {
+  const C = C0(), R = CD.runs, e = R.map(r => r.errT), cv = R.map(r => r.cv), cp = R.map(r => r.cp), Err = 1 + CP_P / (CD.N - CP_P - 1);
+  const lo = Math.min(...e, ...cv, ...cp), hi = Math.min(Math.max(...e, ...cv, ...cp), Err * 3.2), pad = (hi - lo) * 0.06;
+  const v = frame($('#cond-cv'), [lo - pad, hi + pad], [lo - pad, hi + pad], { l: 46, b: 30 }); axes(v, 'true Err_T of this training set', 'estimate', { nx: 5, ny: 5 }); clip(v);
+  seg(v, -10, -10, 50, 50, C.ink, 1.2, [6, 5]); seg(v, Err, -10, Err, 50, C.bad, 1.4); seg(v, -10, Err, 50, Err, C.bad, 1.4, null, 0.5);
+  R.forEach(r => { v.ctx.globalAlpha = 0.6; dot(v, r.errT, r.cp, C.a, 2.8); dot(v, r.errT, r.cv, C.lda, 3.2); v.ctx.globalAlpha = 1; }); v.ctx.restore();
+  const rc = corr(e, cv), rp = corr(e, cp), me = meanOf(e), mcv = meanOf(cv), mcp = meanOf(cp);
+  $('#cond-n-o').textContent = CD.N;
+  $('#cond-r').innerHTML = tip(fmt(rc, 2), `Pearson correlation over ${R.length} training sets`); $('#cond-rcp').innerHTML = tip(fmt(rp, 2), `Pearson correlation over ${R.length} training sets`);
+  $('#cond-m').innerHTML = tip(fmt(me, 3), `mean of σ² + ‖β̂ − β‖² over ${R.length} sets\ntheory Err = 1 + 10/(${CD.N} − 11) = ${fmt(Err, 3)}`);
+  $('#cond-mcv').innerHTML = tip(`${fmt(mcv, 2)} · ${fmt(mcp, 2)}`, `CV slightly overestimates Err (it trains on 90% of N);\nCp estimates the in-sample error 1 + p/N = ${fmt(1 + CP_P / CD.N, 3)}`);
+  $('#run-cond').innerHTML = `<b>Running example</b>: N = ${CD.N}, p = ${CP_P}, &sigma; = 1: Err = 1 &times; (1 + ${CP_P}/(${CD.N} &minus; ${CP_P} &minus; 1)) = ${tip('<b>' + fmt(Err, 3) + '</b>', 'expected test error over training sets')}; the ${R.length} simulated training sets average ${tip(fmt(me, 3), 'mean of their exact Err_T')}, ranging from ${fmt(Math.min(...e), 2)} to ${fmt(Math.max(...e), 2)}.`;
+  $('#cond-say').innerHTML = `The true errors spread from ${fmt(Math.min(...e), 2)} to ${fmt(Math.max(...e), 2)}: some training sets really did produce worse models than others. Yet the CV estimates barely line up with them (correlation ${fmt(rc, 2)}): the cloud is a blob, not a diagonal. ${Math.abs(rc) < 0.2 ? 'Knowing the CV score tells you almost nothing about which training sets were unlucky.' : 'There is a little signal, but most of the spread in CV is its own noise.'} What CV does get right is the <em>centre</em>: its average ${fmt(mcv, 2)} sits near Err = ${fmt(Err, 2)}. C<sub>p</sub>&rsquo;s average ${fmt(mcp, 2)} is lower because it targets the in-sample error, which uses the training inputs again.`;
+}
+$('#cond-n').addEventListener('input', e => { CD.N = +e.target.value; CD.runs = []; condMore(200); drawCond(); });
+$('#cond-run').addEventListener('click', () => { condMore(100); drawCond(); });
+fig($('#cond-cv'), drawCond);
+
+/* =============== PROJECT: AR order for GB demand =============== */
+const PP = 28, PJ = { per: 'A', p: 7, fc: 'aic', R: {} };
+const dateAt = (start, i) => { const d = new Date(start + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + i); return d; };
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dstr = d => `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+function pjCompute(per) {
+  if (PJ.R[per]) return PJ.R[per];
+  const D = DEMAND[per], y = D.v, nTr = y.length - 365, start = PP, { cols, tgt, n } = arDesign(y, start, nTr, PP), N = n;
+  const full = nestedLS(cols, tgt), LN = Math.log(N), rows = [];
+  // 10 contiguous folds (scikit-learn KFold): the first N % 10 folds get one extra row
+  const base = Math.floor(N / 10), extra = N % 10, folds = []; let at = 0; for (let f = 0; f < 10; f++) { const sz = base + (f < extra ? 1 : 0); folds.push([at, at + sz]); at += sz; }
+  const cvSS = new Array(PP + 1).fill(0);
+  folds.forEach(([a, b]) => {
+    const keep = i => i < a || i >= b, ctr = cols.map(c => c.filter((_, i) => keep(i))), ttr = tgt.filter((_, i) => keep(i)), F = nestedLS(ctr, ttr);
+    for (let p = 1; p <= PP; p++) { const w = F.coef(p); for (let i = a; i < b; i++) { let s = w[0]; for (let j = 1; j <= p; j++) s += w[j] * cols[j][i]; cvSS[p] += (tgt[i] - s) ** 2; } }
+  });
+  for (let p = 1; p <= PP; p++) {
+    const rss = full.rss[p], w = full.coef(p), d = p + 1; let te = 0; const fc = [];
+    for (let t = nTr; t < y.length; t++) { let s = w[0]; for (let j = 1; j <= p; j++) s += w[j] * y[t - j]; fc.push(s); te += (y[t] - s) ** 2; }
+    rows.push({ p, d, rss, tr: Math.sqrt(rss / N), aic: N * Math.log(rss / N) + 2 * d, bic: N * Math.log(rss / N) + LN * d, cv: Math.sqrt(cvSS[p] / N), te: Math.sqrt(te / 365), w, fc });
+  }
+  const naive = []; let nte = 0; for (let t = nTr; t < y.length; t++) { naive.push(y[t - 7]); nte += (y[t] - y[t - 7]) ** 2; }
+  const pick = k => rows.reduce((b, r) => r[k] < b[k] ? r : b, rows[0]).p;
+  const aMin = Math.min(...rows.map(r => r.aic)), bMin = Math.min(...rows.map(r => r.bic));
+  const aw = softmaxNeg(rows.map(r => r.aic), 0.5), bw = softmaxNeg(rows.map(r => r.bic), 0.5);
+  rows.forEach((r, i) => { r.aw = aw[i]; r.bw = bw[i]; });
+  return (PJ.R[per] = { y, nTr, N, rows, naive, naiveRmse: Math.sqrt(nte / 365), picks: { aic: pick('aic'), bic: pick('bic'), cv: pick('cv') }, aMin, bMin, start: D.start });
+}
+function drawSeries() {
+  const C = C0(), R = pjCompute(PJ.per), y = R.y, lo = Math.min(...y) - 1, hi = Math.max(...y) + 1;
+  const v = frame($('#pj-series'), [0, y.length], [lo, hi], { l: 40, b: 24, t: 10 }); axes(v, '', 'GW', { sx: 1e9, ny: 4, fx: () => '' });
+  const c = v.ctx; c.save(); c.fillStyle = C.bad; c.globalAlpha = 0.07; c.fillRect(v.X(R.nTr), v.pad.t, v.X(y.length) - v.X(R.nTr), v.ph); c.restore();
+  c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'center'; c.textBaseline = 'top';
+  let i0 = 0; for (let k = 0; k < 4; k++) { const yr = +R.start.slice(0, 4) + k, len = yr % 4 === 0 ? 366 : 365; c.fillText(yr, v.X(i0 + len / 2), v.h - v.pad.b + 5); if (k) { c.strokeStyle = C.line; c.beginPath(); c.moveTo(v.X(i0), v.pad.t); c.lineTo(v.X(i0), v.h - v.pad.b); c.stroke(); } i0 += len; } c.restore();
+  clip(v); polyline(v, y.slice(0, R.nTr + 1).map((u, i) => [i, u]), C.lda, 1.2); polyline(v, y.slice(R.nTr).map((u, i) => [R.nTr + i, u]), C.bad, 1.2); v.ctx.restore();
+  const yrs = PJ.per === 'A' ? ['2022–2024', '2025'] : ['2016–2018', '2019'], mean = a => meanOf(a);
+  $('#pj-scap').innerHTML = `<span style="color:var(--lda)">&#9644;</span> training years ${yrs[0]} (${R.nTr} days, mean ${tip(fmt(mean(y.slice(0, R.nTr)), 2), 'GW, daily means averaged')} GW) &nbsp;<span style="color:var(--qda)">&#9644;</span> sealed test year ${yrs[1]} (365 days, mean ${fmt(mean(y.slice(R.nTr)), 2)} GW). Weekly ripples, winter peaks, a dip each Christmas.`;
+}
+function drawCrit() {
+  const C = C0(), R = pjCompute(PJ.per), rows = R.rows, p = PJ.p, r = rows[p - 1], YM = 80;
+  const v = frame($('#pj-crit'), [0.5, PP + 0.5], [-3, YM], { l: 40, b: 30 }); axes(v, 'lag order p', v.w > 520 ? 'criterion − its minimum' : 'Δ from min', { sx: 7, sy: 20 }); clip(v);
+  seg(v, p, -10, p, 1e3, C.muted, 1, [4, 4]); [7, 14, 21, 28].forEach(k => seg(v, k, -10, k, 1e3, C.line, 1));
+  polyline(v, rows.map(o => [o.p, o.aic - R.aMin]), C.a, 2.4); polyline(v, rows.map(o => [o.p, o.bic - R.bMin]), C.b, 2.4);
+  rows.forEach(o => { dot(v, o.p, o.aic - R.aMin, C.a, 2.6); dot(v, o.p, o.bic - R.bMin, C.b, 2.6); });
+  star(v, R.picks.aic, 0, C.a, 9); star(v, R.picks.bic, 0, C.b, 9); if (v.w > 520) label(v, PP, YM - 3, 'curves continue above', C.muted, 'right', 'top'); v.ctx.restore();
+  const ts = rows.flatMap(o => [o.tr, o.cv, o.te]), lo = Math.min(...ts), hi = Math.max(...rows.slice(6).flatMap(o => [o.tr, o.cv, o.te]));
+  const u = frame($('#pj-rmse'), [0.5, PP + 0.5], [lo - 0.03, hi + 0.06], { l: 40, b: 24, t: 8 }); axes(u, 'lag order p', 'RMSE, GW', { sx: 7, ny: 3 }); clip(u);
+  seg(u, p, -10, p, 1e3, C.muted, 1, [4, 4]);
+  polyline(u, rows.map(o => [o.p, o.tr]), C.muted, 2); polyline(u, rows.map(o => [o.p, o.cv]), C.lda, 2.4); polyline(u, rows.map(o => [o.p, o.te]), C.bad, 2, [6, 4]); star(u, R.picks.cv, rows[R.picks.cv - 1].cv, C.lda, 8); u.ctx.restore();
+  // coefficients
+  const w = r.w.slice(1), wm = Math.max(0.3, ...w.map(Math.abs)) * 1.1;
+  const q = frame($('#pj-coef'), [0.4, PP + 0.6], [-wm, wm], { l: 36, b: 22, t: 6 }); axes(q, 'lag', '', { sx: 7, ny: 4 });
+  w.forEach((b, j) => bar(q, j + 1 - 0.35, j + 1 + 0.35, 0, b, (j + 1) % 7 === 0 ? C.b : (j === 0 ? C.a : C.lda), 0.85));
+  $('#pj-p-o').textContent = p;
+  $('#pj-aic').innerHTML = tip(fmt(r.aic - R.aMin, 1), `AIC = N·ln(RSS/N) + 2(p+1)\n= ${R.N}·ln(${fmt(r.rss, 2)}/${R.N}) + ${2 * r.d}\n= ${fmt(r.aic, 4)}; minimum ${fmt(R.aMin, 4)} at p = ${R.picks.aic}`);
+  $('#pj-bic').innerHTML = tip(fmt(r.bic - R.bMin, 1), `BIC = N·ln(RSS/N) + ln(N)·(p+1)\n= ${R.N}·ln(${fmt(r.rss, 2)}/${R.N}) + ${fmt(Math.log(R.N), 3)}·${r.d}\n= ${fmt(r.bic, 4)}; minimum ${fmt(R.bMin, 4)} at p = ${R.picks.bic}`);
+  $('#pj-cv').innerHTML = tip(fmt(r.cv, 4), `√(pooled squared error over 10 contiguous folds)\ntraining RMSE ${fmt(r.tr, 4)}`); $('#pj-te').innerHTML = tip(fmt(r.te, 4), 'one-day-ahead forecasts over the 365 test days');
+  const big = w.map((b, j) => [Math.abs(b), j + 1, b]).sort((a, b) => b[0] - a[0]).slice(0, 3);
+  $('#pj-say').innerHTML = `AR(${p}): ${p + 1} parameters. The largest weights sit at lags ${big.map(b => `${b[1]} (${sgn(b[2])})`).join(', ')}${p >= 7 ? '; orange bars mark whole weeks back, the same weekday' : ''}. ${p === R.picks.aic && p === R.picks.bic ? 'AIC and BIC both choose this order.' : p === R.picks.aic ? 'AIC chooses this order.' : p === R.picks.bic ? 'BIC chooses this order.' : `AIC sits ${fmt(r.aic - R.aMin, 1)} above its best, BIC ${fmt(r.bic - R.bMin, 1)}.`}`;
+}
+function drawTable() {
+  const R = pjCompute(PJ.per), rows = R.rows, lines = [['AIC', R.picks.aic], ['BIC', R.picks.bic], ['10-fold CV', R.picks.cv], ['one day back', 1], ['one week back', 7], ['largest model', PP]];
+  const best = Math.min(...rows.map(r => r.te));
+  $('#pj-tbl').innerHTML = `<thead><tr><th>choice</th><th>p</th><th>parameters</th><th>train RMSE</th><th>CV RMSE</th><th>Akaike weight</th><th>BIC weight</th><th>test RMSE, ${PJ.per === 'A' ? 2025 : 2019}</th></tr></thead><tbody>` +
+    lines.map(([name, p], i) => { const r = rows[p - 1]; return `<tr class="${i < 3 ? 'win' : ''}"><td>${name}</td><td class="num">${p}</td><td class="num">${p + 1}</td><td class="num">${tip(fmt(r.tr, 4), `√(RSS/N) = √(${fmt(r.rss, 3)}/${R.N})`)}</td><td class="num">${tip(fmt(r.cv, 4), '10 contiguous folds')}</td><td class="num">${tip(fmt(r.aw, 3), 'e^(−ΔAIC/2), normalised over p = 1…28')}</td><td class="num">${tip(fmt(r.bw, 3), 'e^(−ΔBIC/2), normalised: approximate posterior probability')}</td><td class="num">${tip(fmt(r.te, 4), `one-day-ahead over 365 days\nbest of all 28 orders: ${fmt(best, 4)}`)}</td></tr>`; }).join('') +
+    `<tr><td>same day last week</td><td class="num">&ndash;</td><td class="num">0</td><td class="num">&ndash;</td><td class="num">&ndash;</td><td class="num">&ndash;</td><td class="num">&ndash;</td><td class="num">${tip(fmt(R.naiveRmse, 4), 'forecast = demand 7 days earlier')}</td></tr></tbody>`;
+  const a = rows[R.picks.aic - 1], b = rows[R.picks.bic - 1];
+  $('#pj-tsay').innerHTML = R.picks.aic === R.picks.bic ? `All three criteria land on p = ${R.picks.aic}${R.picks.cv === R.picks.aic ? '' : ` (CV: ${R.picks.cv})`}: three weeks back plus one day, the weekly echo of yesterday. Its test RMSE, ${fmt(a.te, 3)} GW, is within ${fmt(a.te - best, 3)} of the best order in hindsight and ${fmt(R.naiveRmse / a.te, 2)}&times; better than repeating last week.`
+    : `AIC and CV choose p = ${R.picks.aic}; BIC, charging ln ${R.N} = ${fmt(Math.log(R.N), 2)} per parameter, stops at p = ${R.picks.bic}, ${R.picks.aic - R.picks.bic} parameters fewer. In 2025 the bigger model forecasts slightly better (${fmt(a.te, 3)} vs ${fmt(b.te, 3)} GW), the efficiency story from the race above: no finite AR model is the truth for electricity demand. BIC is ${pct(b.bw, 0)} sure of its choice; Akaike weights are more spread out. Both beat &ldquo;same day last week&rdquo; (${fmt(R.naiveRmse, 3)} GW) by a wide margin.`;
+}
+function drawFc() {
+  const C = C0(), R = pjCompute(PJ.per), y = R.y.slice(R.nTr), k = PJ.fc, p = k === 'aic' ? R.picks.aic : k === 'bic' ? R.picks.bic : k === 'p1' ? 1 : 0, fc = k === 'naive' ? R.naive : R.rows[p - 1].fc;
+  const lo = Math.min(...y, ...fc) - 0.5, hi = Math.max(...y, ...fc) + 0.5, v = frame($('#pj-fc'), [0, 365], [lo, hi], { l: 40, b: 24, t: 10 });
+  axes(v, '', 'GW', { sx: 1e9, ny: 4, fx: () => '' });
+  const c = v.ctx; c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'center'; c.textBaseline = 'top'; const st = dateAt(R.start, R.nTr);
+  for (let m = 0; m < 12; m += 2) { const d = new Date(Date.UTC(st.getUTCFullYear(), m, 1)), i = Math.round((d - st) / 864e5); c.fillText(MON[m], v.X(i), v.h - v.pad.b + 5); } c.restore();
+  clip(v); polyline(v, y.map((u, i) => [i, u]), C.ink, 1.3); polyline(v, fc.map((u, i) => [i, u]), k === 'naive' ? C.muted : k === 'bic' ? C.b : k === 'p1' ? C.c : C.a, 1.6);
+  let wi = 0; y.forEach((u, i) => { if (Math.abs(u - fc[i]) > Math.abs(y[wi] - fc[wi])) wi = i; }); dot(v, wi, y[wi], C.bad, 5); v.ctx.restore();
+  const rm = Math.sqrt(meanOf(y.map((u, i) => (u - fc[i]) ** 2))), name = k === 'naive' ? 'same day last week' : `AR(${p})${k === 'aic' ? ', AIC&rsquo;s choice' : k === 'bic' ? ', BIC&rsquo;s choice' : ''}`;
+  $('#pj-fcap').innerHTML = `<span style="color:var(--ink)">&#9644;</span> actual &nbsp;<span style="color:var(${k === 'naive' ? '--muted' : k === 'bic' ? '--cB' : k === 'p1' ? '--cC' : '--cA'})">&#9644;</span> forecast from ${name}, one day ahead, using the real demand of earlier days. Test RMSE ${tip('<b>' + fmt(rm, 3) + ' GW</b>', '√(mean squared miss over 365 days)')}; the worst miss (<span style="color:var(--qda)">&#9679;</span>) is ${fmt(Math.abs(fc[wi] - y[wi]), 2)} GW ${fc[wi] < y[wi] ? "too low" : "too high"}, on ${dstr(dateAt(R.start, R.nTr + wi))}, when actual demand was ${fmt(y[wi], 2)} GW. Unusual days, such as holidays and sudden cold spells, break the patterns the model relies on.`;
+}
+function drawProject() { drawSeries(); drawCrit(); drawTable(); drawFc(); }
+seg1('[data-pp]', 'data-pp', k => { PJ.per = k; drawProject(); });
+seg1('[data-pf]', 'data-pf', k => { PJ.fc = k; drawFc(); });
+$('#pj-p').addEventListener('input', e => { PJ.p = +e.target.value; drawCrit(); });
+fig($('#pj-series'), drawSeries); fig($('#pj-crit'), drawCrit); fig($('#pj-fc'), drawFc);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+heroData(); covInit(); condMore(200); drawCode();
+drawHero(); drawWhy(); drawCov(); drawCp(); drawDf(); drawBic(); drawRace(); drawMdl(); drawCond(); drawProject();
+window.__x031 = { HERO, pjCompute, PJ, raceAt, dfPoint, bicCalc, heroCalc, cpCalc, CD };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

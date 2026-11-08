@@ -1,0 +1,1671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on the bootstrap and maximum-likelihood inference: resampling a sample to get standard errors and percentile intervals, the 63.2% rule and the leave-one-out bootstrap, the .632 and .632+ estimators of prediction error, choosing k by cross-validation or the bootstrap, least-squares, nonparametric and parametric bootstrap bands for a spline, the score, observed and Fisher information with Wald and likelihood-ratio intervals, why the parametric bootstrap reproduces maximum likelihood, and the bootstrap as an approximate Bayesian posterior, ending with Fisher, sandwich and bootstrap intervals on spline fits to London's monthly NO2 (London Datastore, OGL), verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Likelihood Inference &amp; the Bootstrap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+table.race tr.win td { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+@media (max-width: 480px) { .eq .m { font-size: 0.95rem; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Likelihood &amp; the Bootstrap <span>&middot; how sure is the fit?</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Resampling</a>
+      <a href="#oob">Left out</a>
+      <a href="#plus">.632 &amp; .632+</a>
+      <a href="#select">Choosing k</a>
+      <a href="#smooth">Bands</a>
+      <a href="#mle">Fisher information</a>
+      <a href="#versus">Bootstrap vs ML</a>
+      <a href="#bayes">Bayes</a>
+      <a href="#project">London NO&#8322;</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Machine learning · chapter 1.10c · likelihood inference and the bootstrap</div>
+      <h1>Likelihood Inference &amp; the Bootstrap</h1>
+      <div class="sub">How sure is the fit? Ask the data again, or ask the likelihood</div>
+      <p class="lead">Every curve we fit comes from one sample. Draw another sample from the same world and the curve would move. How far? There are two classic answers. The first is a formula: maximum likelihood says the spread of an estimate is the inverse of the <em>Fisher information</em>, the curvature of the log-likelihood at its peak. The second needs no formula at all: pretend your sample is the world, draw new samples from it with replacement, refit each one and watch the curve wobble. That is Efron&rsquo;s <em>bootstrap</em>. On the right, <strong>click the plot</strong> to draw a resample. Big dots were picked several times, hollow dots not at all, and each resample adds one faint curve.</p>
+      <dl class="facts">
+        <div><dt>The bootstrap</dt><dd>Resample the data with replacement, refit, and read the spread of the answers</dd></div>
+        <div><dt>The likelihood</dt><dd>The sharper the log-likelihood&rsquo;s peak, the smaller the standard error: se &asymp; 1/&radic;I(&theta;&#770;)</dd></div>
+        <div><dt>They meet</dt><dd>The parametric bootstrap reproduces the likelihood answer; the plain bootstrap is close to a Bayesian posterior</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Fifty points with a spline fit; click to draw a bootstrap resample and add its curve"></canvas></div>
+      <div class="btns" style="margin-top:8px"><button type="button" class="btn primary" id="hero-one">Draw a resample</button><button type="button" class="btn" id="hero-100">Draw 100</button><button type="button" class="btn" id="hero-clear">Start again</button></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Resampling the data you have</a></li>
+    <li><a href="#oob"><i>02</i>Every resample leaves out a third</a></li>
+    <li><a href="#plus"><i>03</i>The .632 and .632+ estimators</a></li>
+    <li><a href="#select"><i>04</i>Choosing k: CV against the bootstrap</a></li>
+    <li><a href="#smooth"><i>05</i>Three ways to put a band on a curve</a></li>
+    <li><a href="#mle"><i>06</i>Fisher information</a></li>
+    <li><a href="#versus"><i>07</i>The bootstrap is likelihood by computer</a></li>
+    <li><a href="#bayes"><i>08</i>The bootstrap as a poor man&rsquo;s posterior</a></li>
+    <li><a href="#project"><i>09</i>How fast is London&rsquo;s NO₂ falling?</a></li>
+    <li><a href="#summary"><i>10</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Resampling the data you have</h2>
+    <div class="prose">
+      <p>Most of the models in this book were fitted by minimising a sum of squares or a cross-entropy. Both are special cases of one idea, <em class="term">maximum likelihood</em>, and this chapter is about the question that comes after every fit: how much would the answer change with different data? A standard error, a confidence band, a p-value: all of them describe the spread of an estimate over samples we never drew.</p>
+      <p>Bradley Efron&rsquo;s idea (1979) is to make those samples. Call the training data Z = (z<sub>1</sub>, &hellip;, z<sub>N</sub>) and the quantity you compute from it S(Z): a mean, a median, a fitted curve. In the real world Z was drawn from an unknown distribution F. We cannot draw from F again, but we <em>can</em> draw from the next best thing, the data itself: pick N points from Z at random <em>with replacement</em>. Some points appear twice or three times, some not at all. That is a <em class="term">bootstrap sample</em> Z*. Make B of them, compute S(Z*<sup>1</sup>), &hellip;, S(Z*<sup>B</sup>), and their spread stands in for the spread you would see over real repeated samples.</p>
+      <p>Below, the data are N draws from a skewed distribution that we know (so we can cheat and also draw fresh samples from the real world). <strong>Pick a statistic and compare the two histograms</strong>: the bootstrap world, built from one sample, against the real world, built from 4,000 fresh ones.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \widehat{\mathrm{Var}}[S] &= \frac{1}{B-1}\sum_{b=1}^{B}\big(S^{*b} - \bar S^{*}\big)^2 \\ \bar S^{*} &= \frac{1}{B}\sum_{b=1}^{B} S^{*b}, \quad S^{*b} = S(\mathbf{Z}^{*b}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> compute the statistic on each of the B bootstrap samples, then take the ordinary sample variance of those B numbers. Its square root is the <em>bootstrap standard error</em>. Nothing about S has to be known: no formula, no derivative, just the ability to compute it.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The bootstrap variance of S is one over B minus one times the sum of the squared deviations of S of Z-star-b from their mean.&rdquo;</em></div><div class="eq-run" id="run-bs1"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \Big[\,S^{*}_{(2.5\%)},\ S^{*}_{(97.5\%)}\,\Big] \]</div><div class="read"><b>Read it as:</b> the <em>percentile interval</em>. Sort the B bootstrap values and keep the middle 95%. If the bootstrap histogram is skewed, so is the interval, which a &ldquo;&plusmn; 1.96 standard errors&rdquo; interval can never be.</div><div class="eq-say"><b>Say it</b><em>&ldquo;From the 2.5th percentile of the bootstrap values to the 97.5th.&rdquo;</em></div><div class="eq-run" id="run-bs2"></div></div>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Statistic"><button type="button" data-bs="mean" aria-pressed="true">Mean</button><button type="button" data-bs="median">Median</button><button type="button" data-bs="p90">90th percentile</button><button type="button" data-bs="sd">Std. deviation</button></div></div>
+        <div class="plot" style="aspect-ratio:6/1"><canvas id="bs-strip" aria-label="The sample, one dot per value"></canvas></div>
+        <div class="plot ar-16x10" style="margin-top:6px"><canvas id="bs-cv" aria-label="The sample on a strip, and histograms of the statistic in the bootstrap world and the real world"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9632;</span> bootstrap world: S(Z*) over B resamples of the one sample &nbsp; <span style="color:var(--muted)">&#9633;</span> real world: S over 4,000 fresh samples from F &nbsp; <span style="color:var(--ink)">&#9474;</span> S(Z), your sample&rsquo;s value &nbsp; <span style="color:var(--ink)">&#9650;</span> the true value S(F). Top strip: the sample itself.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="bs-n">Sample size N</label><output id="bs-n-o"></output></div><input type="range" id="bs-n" min="10" max="200" step="5" value="30"></div>
+        <div class="ctrl"><div class="top"><label for="bs-b">Bootstrap samples B</label><output id="bs-b-o"></output></div><input type="range" id="bs-b" min="20" max="4000" step="20" value="1000"></div>
+        <div class="btns"><button type="button" class="btn primary" id="bs-new">Draw a new sample</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="bs-s"></div><div class="k">S(Z), this sample</div></div><div class="stat"><div class="v" id="bs-se"></div><div class="k">bootstrap se</div></div><div class="stat"><div class="v" id="bs-true"></div><div class="k">real-world se</div></div><div class="stat"><div class="v" id="bs-form"></div><div class="k">textbook formula</div></div></div>
+        <p class="note" id="bs-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- OOB -->
+<section class="chap" id="oob">
+  <div class="wrap">
+    <div class="tag">Prediction error</div>
+    <h2>Every resample leaves out a third</h2>
+    <div class="prose">
+      <p>Can the bootstrap also estimate a model&rsquo;s prediction error? The obvious recipe fits the model to each bootstrap sample and scores it on the <em>original</em> training set, treating the original as the test set. That is the plain bootstrap error estimate.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \widehat{\text{Err}}_{\text{boot}} = \frac{1}{BN}\sum_{b=1}^{B}\sum_{i=1}^{N} L\big(y_i, \hat f^{*b}(x_i)\big) \]</div><div class="read"><b>Read it as:</b> f&#770;<sup>*b</sup> is the model fitted to bootstrap sample b, and L is the loss, here the squared error. Score every resampled model on every original point, then average. The flaw: most of the points it is scored on were also in its training sample.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Err-boot is the average over b and i of the loss of f-star-b at x-i.&rdquo;</em></div><div class="eq-run" id="run-ob1"></div></div>
+    <div class="prose"><p>How many? A given point is missed by one draw with probability 1 &minus; 1/N, and by all N draws with probability (1 &minus; 1/N)<sup>N</sup>. So a bootstrap sample contains about 63.2% of the distinct original points, and leaves out the other 36.8%: the <em class="term">out-of-bag</em> points.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \Pr\{\,i \in \mathbf{Z}^{*b}\} &= 1 - \Big(1 - \frac{1}{N}\Big)^{N} \\ &\approx 1 - e^{-1} = 0.632 \end{aligned} \]</div><div class="read"><b>Read it as:</b> the chance that observation i is drawn at least once. The limit e<sup>&minus;1</sup> = 0.368 arrives fast: at N = 10 the chance of being left out is already 0.349.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The probability that point i is in bootstrap sample b is one minus one-minus-one-over-N to the N, about one minus e to the minus one, or 0.632.&rdquo;</em></div><div class="eq-run" id="run-ob2"></div></div>
+    <div class="prose"><p>The cure mirrors cross-validation: score each point only with models that never saw it. Let C<sup>&minus;i</sup> be the set of bootstrap samples that do not contain point i. The <em class="term">leave-one-out bootstrap</em> estimate averages each point&rsquo;s loss over those samples only. <strong>Draw resamples</strong>: in-bag points (filled, sized by how often they were drawn) hug the fit; out-of-bag points (hollow, with their misses drawn in red) are the honest test.</p></div>
+    <div class="eq"><div class="m">\[ \widehat{\text{Err}}^{(1)} = \frac{1}{N}\sum_{i=1}^{N}\frac{1}{|C^{-i}|}\sum_{b\in C^{-i}} L_i^{*b} \]</div><div class="read"><b>Read it as:</b> L<sub>i</sub><sup>*b</sup> = L(y<sub>i</sub>, f&#770;<sup>*b</sup>(x<sub>i</sub>)) is point i&rsquo;s loss under the model fitted to resample b. For each point i, average its loss over the |C<sup>&minus;i</sup>| models trained without it, then average over points. No point is ever scored by a model that trained on it, so the overfitting bias is gone. A new bias appears instead: each model learned from only about 0.632N distinct points, so it is a little worse than a model trained on all N.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Err-one is the average over i of the mean loss of point i over the bootstrap samples that leave it out.&rdquo;</em></div><div class="eq-run" id="run-ob3"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="ob-cv" aria-label="A bootstrap sample: in-bag points sized by count, out-of-bag points hollow, and the fitted k-NN curve"></canvas></div><figcaption><span style="color:var(--lda)">&#9679;</span> in the resample (bigger = drawn more often) &nbsp; <span style="color:var(--qda)">&#9675;</span> out of bag, with its miss &nbsp; <span style="color:var(--cA)">&#9644;</span> k-NN fitted to this resample &nbsp; <span style="color:var(--muted)">- -</span> the truth</figcaption></figure>
+        <figure style="margin-top:10px"><div class="plot ar-3x1"><canvas id="ob-frac" aria-label="Fraction of distinct points in each resample drawn so far"></canvas></div><figcaption>Fraction of the N points that made it into each resample so far. <span style="color:var(--lda)">&#9644;</span> 1 &minus; (1 &minus; 1/N)<sup>N</sup> &nbsp; <span style="color:var(--muted)">- -</span> the limit 0.632</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ob-n">Training points N</label><output id="ob-n-o"></output></div><input type="range" id="ob-n" min="10" max="100" step="5" value="30"></div>
+        <div class="ctrl"><div class="top"><label for="ob-k">Neighbours k</label><output id="ob-k-o"></output></div><input type="range" id="ob-k" min="1" max="15" step="1" value="1"></div>
+        <div class="btns"><button type="button" class="btn primary" id="ob-one">Draw a resample</button><button type="button" class="btn" id="ob-100">Draw 100</button><button type="button" class="btn" id="ob-new">New data</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ob-tr"></div><div class="k">training error err-bar</div></div><div class="stat"><div class="v" id="ob-naive"></div><div class="k">plain Err<sub>boot</sub></div></div><div class="stat"><div class="v" id="ob-e1"></div><div class="k">leave-one-out Err<sup>(1)</sup></div></div><div class="stat"><div class="v" id="ob-true"></div><div class="k">true test error</div></div></div>
+        <p class="note" id="ob-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PLUS -->
+<section class="chap" id="plus">
+  <div class="wrap">
+    <div class="tag">Correcting the bias</div>
+    <h2>The .632 and .632+ estimators</h2>
+    <div class="prose">
+      <p>The training error is too low and the leave-one-out bootstrap is usually too high. Efron (1983) proposed a weighted average that pulls Err<sup>(1)</sup> back towards the training error by the amount you would expect when a model sees 63.2% of the data:</p>
+    </div>
+    <div class="eq"><div class="m">\[ \widehat{\text{Err}}^{(.632)} = 0.368\cdot\overline{\text{err}} + 0.632\cdot\widehat{\text{Err}}^{(1)} \]</div><div class="read"><b>Read it as:</b> err-bar is the training error of the model fitted to all N points. The weights come from the 63.2% calculation above: roughly, Err<sup>(1)</sup> behaves like a model trained on 0.632N points, so its excess over the training error is scaled back by that factor.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Err point-six-three-two is 0.368 times the training error plus 0.632 times Err-one.&rdquo;</em></div><div class="eq-run" id="run-pl1"></div></div>
+    <div class="prose"><p>It works well when the model overfits a little, and breaks when it overfits a lot. The classic failure: two classes with <em>no</em> relation to x, and a 1-nearest-neighbour classifier. Every training point is its own nearest neighbour, so err-bar = 0; every prediction is a coin toss, so the true error and Err<sup>(1)</sup> are both 0.5. The .632 rule reports 0.632 &times; 0.5 = 0.316, far too hopeful. Efron and Tibshirani (1997) repaired this with two more ingredients. The first is the error you would get if inputs and labels had nothing to do with each other: pair every response with every prediction.</p></div>
+    <div class="eq"><div class="m">\[ \hat\gamma = \frac{1}{N^2}\sum_{i=1}^{N}\sum_{i'=1}^{N} L\big(y_i,\ \hat f(x_{i'})\big) \]</div><div class="read"><b>Read it as:</b> the <em>no-information error rate</em>. Score every response y<sub>i</sub> against every prediction f&#770;(x<sub>i&prime;</sub>), matched or not. For two classes this is p&#770;<sub>1</sub>(1 &minus; q&#770;<sub>1</sub>) + (1 &minus; p&#770;<sub>1</sub>)q&#770;<sub>1</sub>, where p&#770;<sub>1</sub> is the share of class-1 labels and q&#770;<sub>1</sub> the share of class-1 predictions.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Gamma-hat is the average loss over all N-squared pairings of a response with a prediction.&rdquo;</em></div><div class="eq-run" id="run-pl2"></div></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \hat R &= \frac{\widehat{\text{Err}}^{(1)} - \overline{\text{err}}}{\hat\gamma - \overline{\text{err}}} \\ \hat w &= \frac{0.632}{1 - 0.368\,\hat R} \\ \widehat{\text{Err}}^{(.632+)} &= (1 - \hat w)\,\overline{\text{err}} \\ &\quad + \hat w\,\widehat{\text{Err}}^{(1)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> R&#770; is the <em>relative overfitting rate</em>: 0 when Err<sup>(1)</sup> equals the training error (no overfitting), 1 when it reaches the no-information rate (all fit, no signal). The weight on Err<sup>(1)</sup> slides from 0.632 at R&#770; = 0 up to 1 at R&#770; = 1. In practice Err<sup>(1)</sup> is capped at &gamma;&#770; and R&#770; is kept between 0 and 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;R-hat is Err-one minus err-bar over gamma-hat minus err-bar; w-hat is 0.632 over one minus 0.368 R-hat; Err point-six-three-two-plus is the w-hat blend of err-bar and Err-one.&rdquo;</em></div><div class="eq-run" id="run-pl3"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="pl-cv" aria-label="Two classes with the k-NN decision regions"></canvas></div><figcaption><span style="color:var(--cA)">&#9679;</span> class 0 &nbsp; <span style="color:var(--cB)">&#9679;</span> class 1 &nbsp; shading: the k-NN classifier fitted to all N points &nbsp; <span style="color:var(--ink)">- -</span> the true boundary, P(class 1 | x) = &frac12;</figcaption></figure>
+        <figure style="margin-top:10px"><div class="plot ar-3x1"><canvas id="pl-bars" aria-label="Training error, leave-one-out bootstrap, .632 and .632+ against the true error"></canvas></div><figcaption>Each estimate as a bar; <span style="color:var(--ink)">&#9474;</span> the true test error of this classifier, computed exactly from the known class probabilities.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Neighbours k"><button type="button" data-pk="1" aria-pressed="true">1-NN</button><button type="button" data-pk="3">3-NN</button><button type="button" data-pk="7">7-NN</button><button type="button" data-pk="15">15-NN</button></div>
+        <div class="ctrl"><div class="top"><label for="pl-s">Signal strength (0 = labels are pure noise)</label><output id="pl-s-o"></output></div><input type="range" id="pl-s" min="0" max="3" step="0.1" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="pl-n">Training points N</label><output id="pl-n-o"></output></div><input type="range" id="pl-n" min="30" max="200" step="10" value="60"></div>
+        <div class="btns"><button type="button" class="btn" id="pl-new">New data</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pl-632"></div><div class="k">.632 estimate</div></div><div class="stat"><div class="v" id="pl-plus"></div><div class="k">.632+ estimate</div></div><div class="stat"><div class="v" id="pl-true"></div><div class="k">true test error</div></div><div class="stat"><div class="v" id="pl-R"></div><div class="k">overfitting rate R&#770;</div></div></div>
+        <p class="note" id="pl-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SELECT -->
+<section class="chap" id="select">
+  <div class="wrap">
+    <div class="tag">The example, continued</div>
+    <h2>Choosing k: cross-validation against the bootstrap</h2>
+    <div class="prose">
+      <p>Chapter 1.10 used cross-validation to choose a model&rsquo;s complexity. The bootstrap estimators can do the same job. Which is better? Hastie, Tibshirani and Friedman ran the comparison on k-nearest-neighbour models, for regression and for classification: draw a training set, estimate the error of every candidate k with each method, let each method pick its k, and measure how much worse the picked model is than the best one available, using the <em>true</em> error, which a simulation knows.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{rel. error} &= \frac{\text{Err}(\hat\alpha) - E_{\min}}{E_{\max} - E_{\min}} \\ E_{\min} &= \min_\alpha \text{Err}(\alpha) \\ E_{\max} &= \max_\alpha \text{Err}(\alpha) \end{aligned} \]</div><div class="read"><b>Read it as:</b> &alpha; runs over the candidate models (here the values of k) and &alpha;&#770; is the one the method chose. 0 means it chose the best model there was; 1 means it chose the worst. Only the <em>ranking</em> of the candidates matters, not whether the estimated error is right in level.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The relative error is the true error of the chosen model minus the smallest true error, over the range of true errors.&rdquo;</em></div><div class="eq-run" id="run-se1"></div></div>
+    <div class="prose"><p><strong>Run the race</strong>. Each training set adds one dot per method below; the curves show the latest training set: the true error of every k against what each method thinks it is.</p></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="se-curve" aria-label="True error and estimated error against k for the latest training set"></canvas></div><figcaption id="se-cap"></figcaption></figure>
+        <figure style="margin-top:10px"><div class="plot" style="aspect-ratio:2.6/1"><canvas id="se-rel" aria-label="Relative error of the k each method chose, one dot per training set"></canvas></div><figcaption>One dot per training set: the relative error of the model each method chose. <span style="color:var(--ink)">&#9670;</span> the method&rsquo;s average.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Problem"><button type="button" data-sp="reg" aria-pressed="true">Regression</button><button type="button" data-sp="cls">Classification</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="se-run">Run 50 training sets</button><button type="button" class="btn" id="se-reset">Reset</button></div>
+        <div class="tbl-wrap"><table class="hand race" id="se-tbl"></table></div>
+        <p class="note" style="margin:0">Columns: average relative error; share of training sets where the method picked the truly best k; average (estimate &minus; true error) at that best k.</p>
+        <p class="note" id="se-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SMOOTH -->
+<section class="chap" id="smooth">
+  <div class="wrap">
+    <div class="tag">A smoothing example</div>
+    <h2>Three ways to put a band on a curve</h2>
+    <div class="prose">
+      <p>Now the inference problem proper. We have N = 50 points and want a smooth curve through them with an honest band around it. Use a cubic spline with K basis functions h<sub>1</sub>(x), &hellip;, h<sub>K</sub>(x): with 7 functions, three interior knots sit at the quartiles of x (the B-splines are drawn under the plot). Stack the basis values into an N &times; K matrix <b>H</b> whose row i is h(x<sub>i</sub>)<sup>&#8868;</sup>, and fit by least squares.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mu(x) &= \sum_{j=1}^{K}\beta_j h_j(x) \\ \hat\beta &= (\mathbf{H}^\top\mathbf{H})^{-1}\mathbf{H}^\top\mathbf{y} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the curve is a weighted sum of K bumps. Least squares picks the weights &beta;&#770;, exactly as in linear regression, with the bumps playing the role of features.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Mu of x is the sum of beta-j h-j of x; beta-hat is H-transpose-H inverse, H-transpose y.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \widehat{\mathrm{Var}}(\hat\beta) &= (\mathbf{H}^\top\mathbf{H})^{-1}\hat\sigma^2 \\ \hat\sigma^2 &= \frac{1}{N}\sum_{i=1}^{N}\big(y_i - \hat\mu(x_i)\big)^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> the weights inherit the noise of y through the fixed matrix (H<sup>&#8868;</sup>H)<sup>&minus;1</sup>H<sup>&#8868;</sup>. &sigma;&#770;&sup2; is the noise variance estimated from the residuals; dividing by N rather than N &minus; K makes it the maximum-likelihood estimate.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The variance of beta-hat is H-transpose-H inverse times sigma-hat squared.&rdquo;</em></div><div class="eq-run" id="run-sm1"></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \widehat{\mathrm{se}}\big[\hat\mu(x)\big] &= \hat\sigma\,\sqrt{h(x)^\top(\mathbf{H}^\top\mathbf{H})^{-1}h(x)} \\ \text{band:}\ \ &\hat\mu(x) \pm 1.96\cdot\widehat{\mathrm{se}}\big[\hat\mu(x)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> the fitted value at x is h(x)<sup>&#8868;</sup>&beta;&#770;, so its variance is the quadratic form of h(x) with the covariance of &beta;&#770;. Where data are sparse (the ends), the form is large and the band widens. &plusmn;1.96 standard errors gives a pointwise 95% band if the errors are Gaussian.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The standard error of mu-hat at x is the square root of h-of-x-transpose H-transpose-H inverse h of x, times sigma-hat.&rdquo;</em></div><div class="eq-run" id="run-sm2"></div></div>
+    <div class="prose"><p>The bootstrap gets a band with no algebra. The <em class="term">nonparametric bootstrap</em> resamples the (x<sub>i</sub>, y<sub>i</sub>) pairs. The <em class="term">parametric bootstrap</em> keeps the x<sub>i</sub> and the fitted curve, and makes new responses by adding Gaussian noise of the estimated size. Either way, refit B times and keep the middle 95% of the curves at every x.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\text{nonparametric: } (x_i^*, y_i^*) \text{ drawn} \\ &\qquad\text{with replacement from } \mathbf{Z} \\ &\text{parametric: } y_i^* = \hat\mu(x_i) + \varepsilon_i^* \\ &\qquad \varepsilon_i^* \sim N(0, \hat\sigma^2) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the nonparametric version trusts nothing but the data; the parametric one trusts the model: the curve&rsquo;s shape and Gaussian noise of variance &sigma;&#770;&sup2;. Each new data set gives a new &mu;&#770;<sup>*</sup>(x); the 2.5% and 97.5% points across them, at each x, make the band.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Either draw the pairs again with replacement, or keep x and set y-star to mu-hat of x plus fresh Gaussian noise with variance sigma-hat squared.&rdquo;</em></div><div class="eq-run" id="run-sm3"></div></div>
+    <div class="prose"><p><strong>Switch between the three bands</strong>, change the number of basis functions, and drag any point up or down to see which parts of the band respond.</p></div>
+    <div class="lab">
+      <div>
+        <figure>
+          <div class="fig-head"><div class="seg" role="group" aria-label="Band"><button type="button" data-sm="formula" aria-pressed="true">Least-squares formula</button><button type="button" data-sm="pairs">Nonparametric bootstrap</button><button type="button" data-sm="param">Parametric bootstrap</button></div></div>
+          <div class="plot ar-16x10"><canvas id="sm-cv" aria-label="Spline fit with a 95% band; drag points vertically"></canvas></div>
+          <div class="plot" style="aspect-ratio:4.2/1; margin-top:6px"><canvas id="sm-basis" aria-label="The cubic B-spline basis functions, scaled by their fitted weights"></canvas></div>
+          <figcaption id="sm-cap"></figcaption>
+        </figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="sm-k">Basis functions K</label><output id="sm-k-o"></output></div><input type="range" id="sm-k" min="4" max="12" step="1" value="7"></div>
+        <div class="ctrl"><div class="top"><label for="sm-b">Bootstrap samples B</label><output id="sm-b-o"></output></div><input type="range" id="sm-b" min="20" max="1000" step="20" value="200"></div>
+        <div class="ctrl"><div class="top"><label for="sm-x">Probe at x</label><output id="sm-x-o"></output></div><input type="range" id="sm-x" min="0" max="3" step="0.05" value="1.5"></div>
+        <div class="btns"><button type="button" class="btn" id="sm-reset">Reset the points</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="sm-sef"></div><div class="k">formula se at the probe</div></div><div class="stat"><div class="v" id="sm-sep"></div><div class="k">nonparametric se</div></div><div class="stat"><div class="v" id="sm-sem"></div><div class="k">parametric se</div></div><div class="stat"><div class="v" id="sm-sig"></div><div class="k">&sigma;&#770;</div></div></div>
+        <p class="note" id="sm-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MLE -->
+<section class="chap" id="mle">
+  <div class="wrap">
+    <div class="tag">Maximum likelihood inference</div>
+    <h2>The log-likelihood&rsquo;s curvature: Fisher information</h2>
+    <div class="prose">
+      <p>Where did the least-squares formula come from? From a general recipe. Write down a probability model for one observation, a density g<sub>&theta;</sub>(z) with unknown parameter &theta;. The <em class="term">likelihood</em> is the probability of the whole data set, viewed as a function of &theta;; its logarithm turns the product into a sum.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} L(\theta;\mathbf{Z}) &= \prod_{i=1}^{N} g_\theta(z_i) \\ \ell(\theta;\mathbf{Z}) &= \sum_{i=1}^{N}\log g_\theta(z_i) \end{aligned} \]</div><div class="read"><b>Read it as:</b> plug the data into the model and ask how probable they are for each candidate &theta;. The maximum-likelihood estimate &theta;&#770; is the &theta; that makes the data most probable. Its log, &ell;, has the same peak and is easier to work with.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The likelihood of theta is the product of g-theta of z-i; the log-likelihood is the sum of their logs.&rdquo;</em></div><div class="eq-run" id="run-ml1"></div></div>
+    <div class="prose"><p>The slope of &ell; is the <em class="term">score</em>; it is zero at the peak. How sharply the peak curves is measured by the <em class="term">information</em>: minus the second derivative. A sharp peak means the data rule out nearby values of &theta; firmly, so the estimate is precise.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \dot\ell(\theta;\mathbf{Z}) &= \sum_{i=1}^{N}\frac{\partial\,\ell(\theta;z_i)}{\partial\theta} \\ \dot\ell(\hat\theta;\mathbf{Z}) &= 0 \\ \mathbf{I}(\theta) &= -\sum_{i=1}^{N}\frac{\partial^2\ell(\theta;z_i)}{\partial\theta\,\partial\theta^\top} \\ \mathbf{i}(\theta) &= \mathrm{E}_\theta\big[\mathbf{I}(\theta)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> &ell;&#775; (&ldquo;ell-dot&rdquo;) is the score. <b>I</b>(&theta;) is the information matrix; evaluated at &theta;&#770; it is the <em>observed information</em>. <b>i</b>(&theta;), its average over data sets drawn from the model, is the <em>Fisher information</em>. With one parameter both are single numbers; with several, matrices.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The score is the sum of the first derivatives of the log-likelihood; the information is minus the sum of second derivatives; the Fisher information is its expectation.&rdquo;</em></div><div class="eq-run" id="run-ml2"></div></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \hat\theta &\;\to\; N\big(\theta_0,\ \mathbf{i}(\theta_0)^{-1}\big) \\ \widehat{\mathrm{se}}(\hat\theta_j) &= \sqrt{\mathbf{i}(\hat\theta)^{-1}_{jj}} \text{ or } \sqrt{\mathbf{I}(\hat\theta)^{-1}_{jj}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> as N grows, over repeated samples from the true parameter &theta;<sub>0</sub>, the estimate is approximately normal, centred on the truth, with variance equal to the inverse Fisher information. We don&rsquo;t know &theta;<sub>0</sub>, so we plug in &theta;&#770;. The <em>Wald interval</em> &theta;&#770;<sub>j</sub> &plusmn; 1.96&middot;se follows.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Theta-hat tends to a normal with mean theta-zero and variance the inverse Fisher information; the standard error is the root of the jj-th entry of the inverse information.&rdquo;</em></div><div class="eq-run" id="run-ml3"></div></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \Big\{\theta:\ &2\big[\ell(\hat\theta) - \ell(\theta)\big] \le 3.84\Big\} \\ &3.84 = \chi^{2\,(0.95)}_{1} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the <em>likelihood-ratio interval</em>: keep every &theta; whose log-likelihood is within 1.92 of the peak. The Wald interval replaces the curve by its best-fitting parabola at the peak; this one uses the curve itself, so it can be lopsided and stays inside the parameter&rsquo;s allowed range.</div><div class="eq-say"><b>Say it</b><em>&ldquo;All theta for which twice the drop in log-likelihood from the peak is at most the chi-squared one quantile, 3.84.&rdquo;</em></div><div class="eq-run" id="run-ml4"></div></div>
+    <div class="prose"><p><strong>Drag the marker along the curve</strong> to read the score and the information at any &theta;, then press the coverage button to test both intervals on 2,000 fresh data sets.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Model"><button type="button" data-mm="bern" aria-pressed="true">Coin: Bernoulli p</button><button type="button" data-mm="pois">Counts: Poisson &lambda;</button><button type="button" data-mm="expo">Waiting times: exponential rate</button></div></div>
+        <div class="plot ar-16x10"><canvas id="ml-cv" aria-label="Log-likelihood curve with its quadratic approximation, Wald and likelihood-ratio intervals; drag the marker"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9644;</span> &ell;(&theta;) &minus; &ell;(&theta;&#770;) &nbsp; <span style="color:var(--cB)">- -</span> the parabola &minus;&frac12;I(&theta;&#770;)(&theta; &minus; &theta;&#770;)&sup2; &nbsp; <span style="color:var(--cA)">&#9644;</span> tangent at the marker (slope = score) &nbsp; bars: <span style="color:var(--cB)">Wald</span> and <span style="color:var(--lda)">likelihood-ratio</span> 95% intervals, <span style="color:var(--ink)">&#9650;</span> the true &theta;<sub>0</sub></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ml-n">Observations N</label><output id="ml-n-o"></output></div><input type="range" id="ml-n" min="5" max="200" step="1" value="20"></div>
+        <div class="btns"><button type="button" class="btn" id="ml-new">New data</button><button type="button" class="btn" id="ml-cov">New coverage run</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ml-hat"></div><div class="k">&theta;&#770; and its se</div></div><div class="stat"><div class="v" id="ml-sc"></div><div class="k">score at the marker</div></div><div class="stat"><div class="v" id="ml-io"></div><div class="k">observed I(&theta;) at the marker</div></div><div class="stat"><div class="v" id="ml-ie"></div><div class="k">Fisher i(&theta;) at the marker</div></div><div class="stat"><div class="v" id="ml-cw"></div><div class="k">Wald coverage</div></div><div class="stat"><div class="v" id="ml-cl"></div><div class="k">likelihood-ratio coverage</div></div></div>
+        <p class="note" id="ml-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>Back to the spline. Its model says y<sub>i</sub> = &mu;(x<sub>i</sub>) + &epsilon;<sub>i</sub> with Gaussian &epsilon;<sub>i</sub> of variance &sigma;&sup2;, so &theta; = (&beta;, &sigma;&sup2;). Maximising the Gaussian log-likelihood over &beta; is minimising the sum of squares, which is why least squares is maximum likelihood. Differentiate twice and the information for &beta; drops out in one line:</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \ell(\beta,\sigma^2) &= -\frac{N}{2}\log(2\pi\sigma^2) \\ &\quad - \frac{1}{2\sigma^2}\sum_{i=1}^{N}\big(y_i - h(x_i)^\top\beta\big)^2 \\ \mathbf{I}(\beta) &= \frac{\mathbf{H}^\top\mathbf{H}}{\sigma^2} \\ \mathbf{I}(\hat\beta)^{-1} &= (\mathbf{H}^\top\mathbf{H})^{-1}\hat\sigma^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> the second derivative of the sum of squares with respect to &beta; is 2H<sup>&#8868;</sup>H, so minus the second derivative of &ell; is H<sup>&#8868;</sup>H/&sigma;&sup2;. Its inverse, with &sigma;&#770;&sup2; plugged in, is exactly the covariance used for the band above. The ML estimate of &sigma;&sup2; is RSS/N.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The information for beta is H-transpose-H over sigma squared, so its inverse is H-transpose-H inverse times sigma-hat squared.&rdquo;</em></div><div class="eq-run" id="run-ml5"></div></div>
+  </div>
+</section>
+
+<!-- VERSUS -->
+<section class="chap" id="versus">
+  <div class="wrap">
+    <div class="tag">Bootstrap versus maximum likelihood</div>
+    <h2>The bootstrap is likelihood by computer</h2>
+    <div class="prose">
+      <p>In the spline example the parametric bootstrap and the formula are not merely close: they are the same thing. Each parametric resample is the fixed matrix (H<sup>&#8868;</sup>H)<sup>&minus;1</sup>H<sup>&#8868;</sup> applied to Gaussian data, so the resampled weights have an exactly known distribution.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \hat\beta^{*} &= (\mathbf{H}^\top\mathbf{H})^{-1}\mathbf{H}^\top\mathbf{y}^{*} \\ &\sim N\big(\hat\beta,\ \hat\sigma^2(\mathbf{H}^\top\mathbf{H})^{-1}\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> with y* = H&beta;&#770; + &epsilon;*, the weights &beta;&#770;* are a linear function of Gaussian noise, so they are Gaussian with mean &beta;&#770; and exactly the inverse-information covariance. As B grows, the bootstrap band converges to the least-squares band. In general (non-Gaussian models) the parametric bootstrap agrees with maximum likelihood, not with least squares.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Beta-hat-star is H-transpose-H inverse H-transpose y-star, distributed normally with mean beta-hat and covariance sigma-hat squared H-transpose-H inverse.&rdquo;</em></div><div class="eq-run" id="run-vs1"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="vs-conv" aria-label="Error of the parametric bootstrap standard error against the number of resamples B"></canvas></div><figcaption><span style="color:var(--lda)">&#9679;</span> one run: average relative gap between the bootstrap se and the formula se over the curve &nbsp; <span style="color:var(--ink)">&#9644;</span> 1/&radic;(2B)&middot;&radic;(2/&pi;), the expected size of that gap. Both axes are logarithmic.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn" id="vs-again">Run again (fresh noise)</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="vs-g10"></div><div class="k">gap at B = 10</div></div><div class="stat"><div class="v" id="vs-g5k"></div><div class="k">gap at B = 5,000</div></div></div>
+        <p class="note" id="vs-csay"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px">
+      <p>So why bother with the bootstrap? Because the formula only exists for the fit you wrote down in advance. Real analyses make choices from the data: which variables, how many knots, how much smoothing. The band from the formula pretends those choices were fixed. The bootstrap can repeat the choice inside every resample, so the band carries that extra uncertainty too. Here the number of basis functions K is chosen by 5-fold cross-validation, once on the data (for the fit) and again in every bootstrap sample. <strong>Switch between fixed K and K chosen afresh</strong>.</p>
+    </div>
+    <div class="lab">
+      <div>
+        <figure>
+          <div class="fig-head"><div class="seg" role="group" aria-label="How K is set in each resample"><button type="button" data-va="fixed" aria-pressed="true">K fixed at the data&rsquo;s choice</button><button type="button" data-va="cv">K re-chosen in every resample</button></div></div>
+          <div class="plot ar-16x10"><canvas id="vs-cv" aria-label="Nonparametric bootstrap bands with K fixed and K re-chosen by cross-validation"></canvas></div>
+          <figcaption id="vs-cap"></figcaption>
+        </figure>
+        <figure style="margin-top:10px"><div class="plot ar-3x1"><canvas id="vs-k" aria-label="How often each K was chosen across the resamples"></canvas></div><figcaption>How often each K was chosen by 5-fold CV across the 200 resamples. <span style="color:var(--ink)">&#9650;</span> the K chosen on the original data.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn" id="vs-run">Draw 200 new resamples</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="vs-k0"></div><div class="k">K chosen on the data</div></div><div class="stat"><div class="v" id="vs-wf"></div><div class="k">mean band width, K fixed</div></div><div class="stat"><div class="v" id="vs-wa"></div><div class="k">mean band width, K re-chosen</div></div><div class="stat"><div class="v" id="vs-sw"></div><div class="k">resamples with a different K</div></div></div>
+        <p class="note" id="vs-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BAYES -->
+<section class="chap" id="bayes">
+  <div class="wrap">
+    <div class="tag">Bootstrap and Bayes</div>
+    <h2>The bootstrap as a poor man&rsquo;s posterior</h2>
+    <div class="prose">
+      <p>A Bayesian answers &ldquo;how sure?&rdquo; differently: put a prior distribution on &theta;, then update it with the data to a <em class="term">posterior</em>, which is a distribution for &theta; itself. The bootstrap distribution, built by resampling, turns out to resemble a posterior for a prior that says almost nothing.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \Pr(\theta \mid \mathbf{Z}) = \frac{\Pr(\mathbf{Z}\mid\theta)\,\Pr(\theta)}{\int \Pr(\mathbf{Z}\mid\theta)\,\Pr(\theta)\,d\theta} \]</div><div class="read"><b>Read it as:</b> posterior = likelihood &times; prior, rescaled to integrate to 1. The likelihood is the same L(&theta;; Z) as in maximum likelihood; the prior Pr(&theta;) is what you believed before the data.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The posterior of theta given Z is the likelihood times the prior, over its integral.&rdquo;</em></div></div>
+    <div class="prose"><p>The simplest case shows the link. One observation z ~ N(&theta;, 1) and a prior &theta; ~ N(0, &tau;). The parametric bootstrap would draw z* ~ N(z, 1).</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \theta \mid z \;&\sim\; N\!\left(\frac{z}{1 + 1/\tau},\ \frac{1}{1 + 1/\tau}\right) \\ &\to\ N(z,\ 1) \ \text{ as } \tau\to\infty \end{aligned} \]</div><div class="read"><b>Read it as:</b> the posterior mean shrinks z towards the prior mean 0 by the factor 1/(1 + 1/&tau;), and the posterior variance is a little less than 1. As the prior variance &tau; grows, the prior stops mattering and the posterior becomes N(z, 1): exactly the parametric bootstrap distribution of z*.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Theta given z is normal with mean z over one plus one-over-tau and variance one over one plus one-over-tau, which tends to normal z, one as tau grows.&rdquo;</em></div><div class="eq-run" id="run-by1"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="by-cv" aria-label="Prior, posterior and parametric bootstrap distribution; drag the observation z"></canvas></div><figcaption><span style="color:var(--muted)">&#9644;</span> prior N(0, &tau;) &nbsp; <span style="color:var(--lda)">&#9644;</span> posterior &nbsp; <span style="color:var(--cB)">- -</span> parametric bootstrap N(z, 1) &nbsp; <span style="color:var(--ink)">&#9650;</span> the observation z (drag it)</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="by-tau">Prior variance &tau;</label><output id="by-tau-o"></output></div><input type="range" id="by-tau" min="-1" max="2" step="0.05" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="by-pm"></div><div class="k">posterior mean</div></div><div class="stat"><div class="v" id="by-psd"></div><div class="k">posterior sd</div></div><div class="stat"><div class="v" id="by-ov"></div><div class="k">overlap with the bootstrap</div></div></div>
+        <p class="note" id="by-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:22px"><p>The same is true of the plain, nonparametric bootstrap. Suppose the data can take only L distinct values, with unknown probabilities w = (w<sub>1</sub>, &hellip;, w<sub>L</sub>), and you observe proportions w&#770;. Give w a Dirichlet prior, the standard prior for a probability vector.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{prior:}\ & w \sim \mathrm{Di}_L(a\mathbf{1}) \\ \text{posterior:}\ & w \mid \hat w \sim \mathrm{Di}_L(a\mathbf{1} + N\hat w) \\ a\to 0\text{:}\ & w \mid \hat w \sim \mathrm{Di}_L(N\hat w) \\ \text{bootstrap:}\ & N\hat w^{*} \sim \mathrm{Mult}(N,\ \hat w) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the posterior adds the observed counts N&#373; to the prior&rsquo;s pseudo-counts a. As a &rarr; 0 the prior says nothing, and the posterior gives each observed value a random weight around its observed share. The bootstrap also gives each value a random weight, its share of a multinomial draw. The two are different distributions with almost the same shape.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Prior Dirichlet a-one; posterior Dirichlet a-one plus N w-hat, tending to Dirichlet N w-hat; the bootstrap counts are multinomial N, w-hat.&rdquo;</em></div><div class="eq-run" id="run-by2"></div></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathrm{E}_{\text{boot}}(w_j) &= \mathrm{E}_{\text{post}}(w_j) = \hat w_j \\ \mathrm{Var}_{\text{boot}}(w_j) &= \frac{\hat w_j(1-\hat w_j)}{N} \\ \mathrm{Var}_{\text{post}}(w_j) &= \frac{\hat w_j(1-\hat w_j)}{N+1} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the bootstrap and the flat-prior posterior agree on the centre and differ in spread only by the factor N/(N + 1). So the bootstrap distribution of a statistic is, to a close approximation, its posterior under a noninformative prior, obtained without writing a prior or a likelihood. Drawing the Dirichlet weights directly instead of resampling is Rubin&rsquo;s (1981) <em class="term">Bayesian bootstrap</em>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Both centre on w-hat-j; the bootstrap variance is w-hat-j times one minus w-hat-j over N, the posterior&rsquo;s over N plus one.&rdquo;</em></div><div class="eq-run" id="run-by3"></div></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Statistic"><button type="button" data-bb="mean" aria-pressed="true">Mean</button><button type="button" data-bb="median">Median</button></div></div>
+        <div class="plot ar-16x10"><canvas id="bb-cv" aria-label="The bootstrap distribution and the Bayesian bootstrap posterior of a statistic"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9632;</span> bootstrap: 4,000 multinomial resamples &nbsp; <span style="color:var(--cB)">&#9633;</span> Bayesian bootstrap: 4,000 Dirichlet(1, &hellip;, 1) weightings &nbsp; dots: the data</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="bb-n">Data points N</label><output id="bb-n-o"></output></div><input type="range" id="bb-n" min="3" max="60" step="1" value="8"></div>
+        <div class="btns"><button type="button" class="btn" id="bb-new">New data</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="bb-sd1"></div><div class="k">bootstrap sd</div></div><div class="stat"><div class="v" id="bb-sd2"></div><div class="k">Bayesian bootstrap sd</div></div><div class="stat"><div class="v" id="bb-ra"></div><div class="k">ratio of the two</div></div></div>
+        <p class="note" id="bb-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: how fast is London&rsquo;s NO&#8322; falling?</h2>
+    <div class="prose">
+      <p>Nitrogen dioxide comes mostly from road traffic, and London spent the 2010s fighting it: cleaner buses, the Ultra Low Emission Zone from April 2019. The Greater London Authority publishes the London-wide monthly mean NO&#8322; at roadside and at background monitoring sites from January 2008 (London Datastore, &ldquo;London Average Air Quality Levels&rdquo;, Open Government Licence v2; the readings come from the London Air Quality Network). We use all <strong>139</strong> months up to August 2019 (July 2019 is missing, and one row labelled &ldquo;Dec-12&rdquo; sits between November 2013 and January 2014, so we read it as December 2013).</p>
+      <p>The model is the smoothing example with one addition for the seasons: NO&#8322; = trend(t) + a&middot;cos(2&pi;m/12) + b&middot;sin(2&pi;m/12) + noise, where the trend is a cubic B-spline in time t with K basis functions (equally spaced knots) and m is the month of the year. That is K + 2 weights, fitted by least squares. Then we put four kinds of interval on it: the Fisher-information formula (with the <em>delta method</em> for curved functions of &beta;: se&sup2; &asymp; &nabla;g<sup>&#8868;</sup> I(&beta;&#770;)<sup>&minus;1</sup> &nabla;g), the nonparametric (pairs) bootstrap, the parametric bootstrap, and a moving-block bootstrap that resamples runs of 12 consecutive residuals, in case neighbouring months are related. <strong>Pick a band and a series</strong>.</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Series"><button type="button" data-ps="road" aria-pressed="true">Roadside</button><button type="button" data-ps="back">Background</button></div><div class="seg" role="group" aria-label="Band"><button type="button" data-pm="fisher" aria-pressed="true">Fisher</button><button type="button" data-pm="pairs">Pairs</button><button type="button" data-pm="param">Parametric</button><button type="button" data-pm="blocks">Blocks</button></div></div>
+        <div class="plot ar-16x10"><canvas id="pj-cv" aria-label="Monthly London NO2 with the fitted trend, the seasonal fit and a 95% band for the trend"></canvas></div>
+        <figcaption id="pj-cap"></figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-k">Trend basis functions K</label><output id="pj-k-o"></output></div><input type="range" id="pj-k" min="4" max="12" step="1" value="6"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-sig"></div><div class="k">&sigma;&#770; (&micro;g/m&sup3;)</div></div><div class="stat"><div class="v" id="pj-r1"></div><div class="k">lag-1 residual correlation</div></div><div class="stat"><div class="v" id="pj-ch"></div><div class="k">trend change, 2009 to 2019</div></div><div class="stat"><div class="v" id="pj-w"></div><div class="k">band width vs Fisher</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>Three questions, four kinds of interval</h3>
+    <div class="prose"><p>By how much did the de-seasonalised level change from January 2009 to January 2019? By what percentage did it fall? How big is the seasonal swing, A = &radic;(a&sup2; + b&sup2;), the gap between the average winter peak and the yearly mean? The first is linear in &beta;, so the formula is exact for it; the other two are curved, so the formula relies on the delta method. Every bootstrap uses B = 1,000 resamples with fixed seeds, the same ones the Python reference below uses.</p></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-tbl"></table></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><div class="seg" role="group" aria-label="Quantity"><button type="button" data-pq="0">Change (&micro;g/m&sup3;)</button><button type="button" data-pq="1" aria-pressed="true">Fall (%)</button><button type="button" data-pq="2">Seasonal swing</button></div></div>
+        <div class="plot ar-3x1" style="aspect-ratio:2.4/1"><canvas id="pj-hist" aria-label="Bootstrap distribution of the chosen quantity with the Fisher normal curve"></canvas></div>
+        <figcaption><span style="color:var(--lda)">&#9632;</span> pairs bootstrap &nbsp; <span style="color:var(--cB)">&#9633;</span> moving-block bootstrap &nbsp; <span style="color:var(--ink)">&#9644;</span> the normal curve from the Fisher information (delta method)</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="stats"><div class="stat"><div class="v" id="pj-skew"></div><div class="k">skewness of the pairs bootstrap</div></div><div class="stat"><div class="v" id="pj-ratio"></div><div class="k">pairs se / Fisher se</div></div></div>
+        <p class="note" id="pj-hsay"></p>
+      </div></div>
+    </div>
+
+    <h3>How many basis functions? The bootstrap&rsquo;s own answer</h3>
+    <div class="prose"><p>Section 7.11&rsquo;s estimators, run on the real data for every K: training error, 10-fold cross-validation, the leave-one-out bootstrap, .632 and .632+ (B = 200). Lower is better; the lowest in each column is highlighted.</p></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-err"></table></div>
+    <p class="note" id="pj-esay" style="max-width:72ch"></p>
+
+    <h3>The same project in Python</h3>
+<pre class="code"><code>import csv, sys, numpy as np
+from scipy.interpolate import BSpline
+from scipy.stats import norm
+
+rows = list(csv.DictReader(open(sys.argv[1], encoding="utf-8-sig")))   # air-quality-london-monthly-averages.csv
+y = np.array([float(r["London Mean Roadside:Nitrogen Dioxide (ug/m3)"]) for r in rows])   # ug/m3
+MON = "JanFebMarAprMayJunJulAugSepOctNovDec"
+m = np.array([(int(r["Month"][4:]) - 8) * 12 + MON.index(r["Month"][:3]) // 3 for r in rows])   # months since Jan 2008
+bad = np.flatnonzero(np.diff(m) &lt;= 0) + 1; m[bad] = m[bad - 1] + 1   # the row labelled Dec-12 between Nov-13 and Jan-14
+t = 2008 + m / 12; N = len(y)
+
+def mulberry32(a):                                # the page's random numbers, so both draw the same resamples
+    a &amp;= 0xFFFFFFFF
+    def r():
+        nonlocal a
+        a = (a + 0x6D2B79F5) &amp; 0xFFFFFFFF
+        z = (a ^ (a >> 15)) * (1 | a) &amp; 0xFFFFFFFF
+        z = ((z + ((z ^ (z >> 7)) * (61 | z) &amp; 0xFFFFFFFF)) &amp; 0xFFFFFFFF) ^ z
+        return ((z ^ (z >> 14)) &amp; 0xFFFFFFFF) / 2**32
+    return r
+def gauss(r):
+    u = 0.0
+    while u == 0: u = r()
+    return np.sqrt(-2 * np.log(u)) * np.cos(2 * np.pi * r())
+
+def basis(tt, K, a=2008.0, b=2008 + 140 / 12):    # K cubic B-splines (equal knots) + a yearly cosine and sine
+    kn = np.r_[[a] * 4, np.linspace(a, b, K - 2)[1:-1], [b] * 4]
+    B = BSpline.design_matrix(np.clip(tt, a, b - 1e-9), kn, 3).toarray()
+    mon = np.round((tt - 2008) * 12) % 12
+    return np.c_[B, np.cos(2 * np.pi * mon / 12), np.sin(2 * np.pi * mon / 12)]
+
+K = 6; H = basis(t, K); p = H.shape[1]
+beta = np.linalg.lstsq(H, y, rcond=None)[0]; e = y - H @ beta
+s2 = e @ e / N                                    # maximum-likelihood noise variance, RSS/N
+Cov = s2 * np.linalg.inv(H.T @ H)                 # inverse Fisher information for beta
+h1, h2 = basis(np.array([2009.0, 2019.0]), K)     # trend only: the season columns are zeroed below
+h1[-2:] = h2[-2:] = 0
+def stats(b):                                     # level change, % fall, seasonal amplitude
+    f1, f2 = h1 @ b, h2 @ b
+    return np.array([f2 - f1, 100 * (1 - f2 / f1), np.hypot(b[-2], b[-1])])
+f1, f2 = h1 @ beta, h2 @ beta
+G = np.array([h2 - h1, -100 * (h2 * f1 - f2 * h1) / f1**2,     # gradients for the delta method
+              np.r_[np.zeros(p - 2), beta[-2:] / np.hypot(*beta[-2:])]])
+est, se = stats(beta), np.sqrt(np.einsum("ij,jk,ik->i", G, Cov, G))
+A = np.linalg.inv(H.T @ H); Sw = A @ (H.T * e**2) @ H @ A   # the "sandwich": no constant-variance assumption
+se_sw = np.sqrt(np.einsum("ij,jk,ik->i", G, Sw, G))
+print(f"N = {N}, p = {p}, sigma_hat = {np.sqrt(s2):.4f}, lag-1 autocorrelation of residuals = {np.corrcoef(e[:-1], e[1:])[0, 1]:.4f}")
+
+B, P = 1000, np.linalg.inv(H.T @ H) @ H.T
+def boot(kind, seed):
+    r, out = mulberry32(seed), []
+    for _ in range(B):
+        if kind == "pairs":
+            i = [int(r() * N) for _ in range(N)]
+            b = np.linalg.lstsq(H[i], y[i], rcond=None)[0]
+        elif kind == "parametric":
+            b = P @ (H @ beta + np.sqrt(s2) * np.array([gauss(r) for _ in range(N)]))
+        else:                                     # moving blocks of 12 residuals, kept in time order
+            st = [int(r() * (N - 11)) for _ in range(-(-N // 12))]
+            b = P @ (H @ beta + np.concatenate([e[s:s + 12] for s in st])[:N])
+        out.append(stats(b))
+    return np.array(out)
+z = norm.ppf(0.975)
+rows = {k: boot(k, sd) for k, sd in [("pairs", 101), ("parametric", 202), ("blocks", 303)]}
+for j, name in enumerate(["change 2009->2019 (ug/m3)", "fall 2009->2019 (%)", "seasonal amplitude (ug/m3)"]):
+    print(f"\n{name}: estimate {est[j]:.3f}")
+    for k, sj in [("Fisher/delta", se[j]), ("sandwich", se_sw[j])]:
+        print(f"  {k:13s}  se {sj:.3f}   95% [{est[j] - z * sj:.3f}, {est[j] + z * sj:.3f}]")
+    for k, R in rows.items():
+        lo, hi = np.percentile(R[:, j], [2.5, 97.5])
+        print(f"  {k:13s}  se {R[:, j].std(ddof=1):.3f}   95% [{lo:.3f}, {hi:.3f}]")
+
+# prediction error of the trend size K: training, 10-fold CV, leave-one-out bootstrap, .632 and .632+
+r = mulberry32(404); perm = list(range(N))
+for i in range(N - 1, 0, -1):
+    j = int(r() * (i + 1)); perm[i], perm[j] = perm[j], perm[i]
+fold = np.empty(N, int); fold[perm] = np.arange(N) % 10
+r = mulberry32(505); idx = [[int(r() * N) for _ in range(N)] for _ in range(200)]
+print("\n K   train   10-fold CV   Err(1)    .632    .632+")
+for K in range(4, 13):
+    X = basis(t, K); fit = lambda i: np.linalg.lstsq(X[i], y[i], rcond=None)[0]
+    yh = X @ fit(np.arange(N)); err = np.mean((y - yh) ** 2)
+    cv = np.mean([(y[i] - X[i] @ fit(fold != fold[i])) ** 2 for i in range(N)])
+    L, n = np.zeros(N), np.zeros(N)
+    for i in idx:
+        out = np.setdiff1d(np.arange(N), i); L[out] += (y[out] - X[out] @ fit(i)) ** 2; n[out] += 1
+    e1 = np.mean(L[n > 0] / n[n > 0]); gam = np.mean((y[:, None] - yh[None, :]) ** 2)
+    e1p = min(e1, gam); R = (e1p - err) / (gam - err) if e1 > err and gam > err else 0.0
+    w = 0.632 / (1 - 0.368 * min(R, 1))
+    print(f"{K:2d}  {err:7.3f}  {cv:9.3f}  {e1:9.3f}  {0.368 * err + 0.632 * e1:7.3f}  {(1 - w) * err + w * e1p:7.3f}")</code></pre>
+<pre class="code out"><code id="pj-out">N = 139, p = 8, sigma_hat = 4.8926, lag-1 autocorrelation of residuals = 0.0635
+
+change 2009->2019 (ug/m3): estimate -12.650
+  Fisher/delta   se 1.564   95% [-15.716, -9.584]
+  sandwich       se 1.258   95% [-15.116, -10.184]
+  pairs          se 1.267   95% [-15.220, -10.185]
+  parametric     se 1.492   95% [-15.622, -9.780]
+  blocks         se 1.513   95% [-15.474, -9.765]
+
+fall 2009->2019 (%): estimate 21.948
+  Fisher/delta   se 2.492   95% [17.064, 26.833]
+  sandwich       se 1.890   95% [18.244, 25.653]
+  pairs          se 1.920   95% [18.221, 25.698]
+  parametric     se 2.388   95% [17.398, 26.598]
+  blocks         se 2.440   95% [17.210, 26.522]
+
+seasonal amplitude (ug/m3): estimate 7.112
+  Fisher/delta   se 0.587   95% [5.961, 8.263]
+  sandwich       se 0.613   95% [5.911, 8.313]
+  pairs          se 0.630   95% [5.966, 8.365]
+  parametric     se 0.624   95% [5.973, 8.365]
+  blocks         se 0.700   95% [5.837, 8.553]
+
+ K   train   10-fold CV   Err(1)    .632    .632+
+ 4   23.957     26.533     27.394   26.129   26.161
+ 5   23.945     27.077     28.029   26.526   26.571
+ 6   23.937     27.502     28.888   27.066   27.133
+ 7   23.927     28.356     29.761   27.614   27.707
+ 8   23.646     28.415     30.372   27.897   28.019
+ 9   23.789     29.060     31.321   28.549   28.704
+10   23.559     29.152     31.942   28.857   29.048
+11   23.293     30.169     32.950   29.396   29.650
+12   23.104     31.465     35.060   30.660   31.051</code></pre>
+    <p class="note" id="pj-match" style="max-width:72ch"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>The bootstrap treats the sample as the population: resample N points with replacement, recompute the statistic B times, and use the spread as its standard error or the middle 95% as its interval.</li>
+      <li>A bootstrap sample contains about 63.2% of the distinct points. Scoring models on points they trained on is optimistic; the leave-one-out bootstrap Err<sup>(1)</sup> is pessimistic; .632 blends them, and .632+ raises the weight on Err<sup>(1)</sup> when the model overfits.</li>
+      <li>Maximum likelihood gives standard errors from curvature: se(&theta;&#770;) &asymp; 1/&radic;I(&theta;&#770;). For Gaussian least squares this is the familiar &sigma;&#770;&sup2;(H<sup>&#8868;</sup>H)<sup>&minus;1</sup>.</li>
+      <li>The parametric bootstrap reproduces the likelihood answer; the bootstrap&rsquo;s real power is the cases with no formula, such as a fit whose complexity was itself chosen from the data.</li>
+      <li>The bootstrap distribution is approximately a Bayesian posterior under a noninformative prior: same centre, spread smaller by only a factor N/(N + 1) in variance.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A data set has N = 5 points. What is the chance that a given point is left out of a bootstrap sample?</summary><p>(1 &minus; 1/5)<sup>5</sup> = 0.8<sup>5</sup> = 0.328. So on average a resample contains 67.2% of the distinct points, a little more than the large-N limit of 63.2%.</p></details>
+      <details class="q"><summary>Why does the plain bootstrap error estimate, which scores each resampled model on the original training set, come out too low?</summary><p>About 63.2% of the points it is scored on were in that model&rsquo;s training sample, so much of the &ldquo;test&rdquo; is really training error. For a 1-nearest-neighbour model those points are predicted perfectly.</p></details>
+      <details class="q"><summary>The labels are pure noise and you use 1-NN. What do err-bar, Err<sup>(1)</sup>, .632 and .632+ report?</summary><p>err-bar = 0 and Err<sup>(1)</sup> &asymp; 0.5. The .632 rule gives about 0.316. The no-information rate &gamma;&#770; &asymp; 0.5, so R&#770; = 1, &wcirc; = 1, and .632+ gives about 0.5, the true error.</p></details>
+      <details class="q"><summary>The log-likelihood of a Poisson rate peaks at &lambda;&#770; = 4 from N = 25 counts. What is the Wald 95% interval?</summary><p>The information at the peak is I(&lambda;&#770;) = N/&lambda;&#770; = 6.25, so se = 1/&radic;6.25 = 0.4 and the interval is 4 &plusmn; 1.96 &times; 0.4 = [3.22, 4.78].</p></details>
+      <details class="q"><summary>You choose the number of spline knots by cross-validation and then report the least-squares band. What has the band left out, and how would you put it back?</summary><p>The uncertainty of the choice itself: another sample could have led to a different number of knots. Bootstrap the whole procedure, re-running the cross-validation inside every resample, and take the band from those fits.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../feature-engineering/">Next chapter: Feature Engineering &rarr;</a>
+      <a class="btn" href="../learning-theory/">&larr; Previous: Learning Theory: PAC, VC Dimension &amp; Sample Complexity</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Hastie, Tibshirani &amp; Friedman (2009). <em>The Elements of Statistical Learning</em>, 2nd ed., &sect;7.11 (bootstrap methods) and ch. 8, &sect;8.1&ndash;8.4 (the bootstrap, maximum likelihood and Bayesian inference).</li>
+      <li>Efron, B. (1979). Bootstrap methods: another look at the jackknife. <em>The Annals of Statistics</em> 7(1), 1&ndash;26.</li>
+      <li>Efron, B. (1983). Estimating the error rate of a prediction rule: improvement on cross-validation. <em>Journal of the American Statistical Association</em> 78(382), 316&ndash;331.</li>
+      <li>Efron, B. &amp; Tibshirani, R. (1997). Improvements on cross-validation: the .632+ bootstrap method. <em>Journal of the American Statistical Association</em> 92(438), 548&ndash;560.</li>
+      <li>Efron, B. &amp; Tibshirani, R. (1993). <em>An Introduction to the Bootstrap</em>. Chapman &amp; Hall.</li>
+      <li>Fisher, R. A. (1925). Theory of statistical estimation. <em>Proceedings of the Cambridge Philosophical Society</em> 22(5), 700&ndash;725.</li>
+      <li>Rubin, D. B. (1981). The Bayesian bootstrap. <em>The Annals of Statistics</em> 9(1), 130&ndash;134.</li>
+      <li>K&uuml;nsch, H. R. (1989). The jackknife and the bootstrap for general stationary observations. <em>The Annals of Statistics</em> 17(3), 1217&ndash;1241.</li>
+      <li>Greater London Authority. <em>London Average Air Quality Levels</em>, London Datastore, Open Government Licence v2; measurements from the London Air Quality Network.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- x033 core: B-splines, least squares, bootstrap helpers, k-NN ---------- */
+const sumA = a => { let s = 0; for (const v of a) s += v; return s; };
+const meanA = a => sumA(a) / a.length;
+const sdA = a => { const m = meanA(a); let s = 0; for (const v of a) s += (v - m) ** 2; return Math.sqrt(s / (a.length - 1)); };
+/* numpy's default (linear) quantile on an unsorted array */
+function quant(a, p) { const s = Float64Array.from(a).sort(), h = (s.length - 1) * p, lo = Math.floor(h), hi = Math.min(s.length - 1, lo + 1); return s[lo] + (h - lo) * (s[hi] - s[lo]); }
+function quantSorted(s, p) { const h = (s.length - 1) * p, lo = Math.floor(h), hi = Math.min(s.length - 1, lo + 1); return s[lo] + (h - lo) * (s[hi] - s[lo]); }
+const Z975 = 1.959963984540054;
+
+/* cubic B-spline basis: knot vector with 4-fold boundary knots */
+function knotVec(a, b, inner) { return [a, a, a, a, ...inner, b, b, b, b]; }
+function knotsEqual(a, b, K) { const m = K - 4, inner = []; for (let j = 1; j <= m; j++) inner.push(a + (b - a) * j / (m + 1)); return knotVec(a, b, inner); }
+function knotsQuantile(xs, a, b, K) { const m = K - 4, inner = []; for (let j = 1; j <= m; j++) inner.push(quant(xs, j / (m + 1))); return knotVec(a, b, inner); }
+function bsRow(x, T) { // all K = T.length - 4 cubic B-splines at x (Cox-de Boor)
+  const K = T.length - 4, a = T[3], b = T[K]; x = Math.min(Math.max(x, a), b - 1e-9);
+  let mu = 3; while (mu < K - 1 && x >= T[mu + 1]) mu++;
+  const N = [1, 0, 0, 0], left = [0, 0, 0, 0], right = [0, 0, 0, 0];
+  for (let j = 1; j <= 3; j++) {
+    left[j] = x - T[mu + 1 - j]; right[j] = T[mu + j] - x; let saved = 0;
+    for (let r = 0; r < j; r++) { const den = right[r + 1] + left[j - r], tmp = den > 0 ? N[r] / den : 0; N[r] = saved + right[r + 1] * tmp; saved = left[j - r] * tmp; }
+    N[j] = saved;
+  }
+  const row = new Float64Array(K); for (let j = 0; j <= 3; j++) row[mu - 3 + j] = N[j]; return row;
+}
+
+/* least squares through the normal equations (Cholesky) */
+function chol(A, p) { const L = new Float64Array(p * p); for (let i = 0; i < p; i++) for (let j = 0; j <= i; j++) { let s = A[i * p + j]; for (let k = 0; k < j; k++) s -= L[i * p + k] * L[j * p + k]; if (i === j) L[i * p + i] = Math.sqrt(Math.max(s, 1e-300)); else L[i * p + j] = s / L[j * p + j]; } return L; }
+function cholSolve(L, p, c) { const z = new Float64Array(p); for (let i = 0; i < p; i++) { let s = c[i]; for (let k = 0; k < i; k++) s -= L[i * p + k] * z[k]; z[i] = s / L[i * p + i]; } for (let i = p - 1; i >= 0; i--) { let s = z[i]; for (let k = i + 1; k < p; k++) s -= L[k * p + i] * z[k]; z[i] = s / L[i * p + i]; } return z; }
+function cholInv(L, p) { const Inv = new Float64Array(p * p); for (let j = 0; j < p; j++) { const e = new Float64Array(p); e[j] = 1; const c = cholSolve(L, p, e); for (let i = 0; i < p; i++) Inv[i * p + j] = c[i]; } return Inv; }
+/* rows: array of Float64Array (design rows), idx: which rows (with repeats) to use; returns beta (and the Cholesky factor) */
+function lsq(rows, y, idx) {
+  const p = rows[0].length, A = new Float64Array(p * p), c = new Float64Array(p);
+  for (const i of idx) { const h = rows[i], yi = y[i]; for (let a = 0; a < p; a++) { const ha = h[a]; if (ha === 0) continue; c[a] += ha * yi; for (let b = 0; b <= a; b++) A[a * p + b] += ha * h[b]; } }
+  for (let a = 0; a < p; a++) for (let b = a + 1; b < p; b++) A[a * p + b] = A[b * p + a];
+  for (let a = 0; a < p; a++) A[a * p + a] += 1e-12; // keeps a resample that misses a whole knot interval solvable
+  const L = chol(A, p); return { beta: cholSolve(L, p, c), L, A, p };
+}
+const dotR = (h, b) => { let s = 0; for (let j = 0; j < h.length; j++) s += h[j] * b[j]; return s; };
+const quadF = (h, M, p) => { let s = 0; for (let a = 0; a < p; a++) { if (!h[a]) continue; let t = 0; for (let b = 0; b < p; b++) t += M[a * p + b] * h[b]; s += h[a] * t; } return s; };
+const range = n => Array.from({ length: n }, (_, i) => i);
+function bootIdx(r, N) { const ix = new Int32Array(N); for (let i = 0; i < N; i++) ix[i] = Math.floor(r() * N); return ix; }
+function permute(r, N) { const p = range(N); for (let i = N - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = p[i]; p[i] = p[j]; p[j] = t; } return p; }
+
+/* .632 family from the training error, Err(1) and the no-information rate */
+function plus632(err, e1, gam) {
+  const e1p = Math.min(e1, gam), R = (e1 > err && gam > err) ? Math.min(1, (e1p - err) / (gam - err)) : 0, w = 0.632 / (1 - 0.368 * R);
+  return { e632: 0.368 * err + 0.632 * e1, e1p, R, w, ep: (1 - w) * err + w * e1p };
+}
+
+/* k-NN helpers: order[i] = all training indices sorted by distance from point i (itself first) */
+function nnOrder(dist, N) { const ord = []; for (let i = 0; i < N; i++) { const o = range(N); o.sort((a, b) => dist(i, a) - dist(i, b) || a - b); ord.push(Int32Array.from(o)); } return ord; }
+/* mean (regression) or majority (classification, labels 0/1) of the k nearest copies in a sample with multiplicities cnt; skip = exclude index */
+function knnPred(o, cnt, y, k, skip) { let got = 0, s = 0; for (let t = 0; t < o.length && got < k; t++) { const j = o[t]; if (j === skip) continue; const c = Math.min(cnt[j], k - got); if (c > 0) { got += c; s += c * y[j]; } } return got ? s / got : 0; }
+
+const AQ = {"m":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,139],"road":[55.5,75.9,55.6,61.8,62.9,49.2,48.4,41.1,54.1,56.7,57.9,65.1,68.5,71.9,65.2,63.2,48.6,56.1,44.4,48.7,51.6,62.9,53.7,65.2,65.7,63.9,59.8,60.2,53.2,53.9,46.5,46.6,57.2,59.6,65.7,71.3,61.8,60.4,69.0,63.4,49.4,50.1,51.5,42.2,55.6,60.1,48.8,58.1,62.3,69.9,72.8,59.0,57.5,47.0,52.8,52.1,57.4,58.7,69.6,63.9,67.6,63.6,65.6,56.1,57.1,49.3,54.8,52.3,59.1,52.6,62.3,57.9,56.3,48.5,66.2,59.3,56.9,54.6,49.9,45.5,63.0,55.5,64.7,59.7,62.7,64.7,55.8,56.2,48.6,50.5,49.5,49.0,57.0,58.5,53.9,47.2,60.0,58.7,57.6,58.8,50.9,48.7,45.4,47.6,54.7,58.3,66.1,69.7,71.7,54.7,52.9,51.1,47.4,45.6,42.0,44.3,47.8,47.4,57.0,52.9,47.3,51.5,51.1,46.8,49.3,39.4,45.5,39.2,44.3,47.6,48.1,48.5,54.5,57.0,42.6,46.2,39.7,34.9,36.2],"back":[42.3,60.2,39.8,44.0,44.1,31.2,31.2,27.9,41.2,43.8,42.3,47.5,52.0,52.7,45.3,40.1,28.1,33.1,24.9,29.2,32.7,44.3,36.6,50.0,51.9,47.7,40.8,41.9,33.1,33.7,25.1,26.1,35.4,38.5,46.9,53.9,44.4,41.2,49.7,40.4,26.2,25.5,25.9,21.2,31.4,37.3,42.6,36.0,40.6,45.6,47.6,31.9,29.6,24.3,26.8,28.1,33.5,35.1,45.0,42.8,45.9,40.0,40.9,30.6,29.3,24.0,28.1,27.3,35.5,32.3,42.8,41.7,38.4,29.5,43.5,35.2,31.7,28.9,27.5,26.0,40.1,34.0,43.4,37.9,38.6,40.5,35.1,33.9,24.6,26.1,23.9,26.3,32.6,35.6,29.5,24.2,38.2,36.5,34.3,30.3,26.1,24.9,21.3,23.6,28.2,33.7,41.4,49.6,50.7,33.9,31.9,28.7,26.8,22.7,21.2,24.4,27.7,28.5,38.6,36.1,32.1,35.2,34.4,28.7,28.3,20.1,23.3,20.6,26.4,30.7,34.1,33.1,39.5,39.5,25.7,31.5,22.4,19.4,18.4]};
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), lda: css('--lda'), bad: css('--qda'), ink: css('--ink'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sg = (v, d) => (v < 0 ? '&minus;' + fmt(-v, d) : fmt(v, d));
+const sgt = (v, d) => (v < 0 ? '−' + fmt(-v, d) : fmt(v, d));
+const ivl = (a, b, d) => `[${sg(a, d)}, ${sg(b, d)}]`;
+function polyline(v, pts, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); pts.forEach((p, i) => { const x = v.X(p[0]), y = clamp(v.Y(p[1]), -2000, 4000); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); }
+function bandFill(v, xs, lo, hi, col, alpha) { const c = v.ctx; c.save(); c.fillStyle = col; c.globalAlpha = alpha == null ? 0.2 : alpha; c.beginPath(); xs.forEach((x, i) => { const px = v.X(x), py = clamp(v.Y(hi[i]), -2000, 4000); i ? c.lineTo(px, py) : c.moveTo(px, py); }); for (let i = xs.length - 1; i >= 0; i--) c.lineTo(v.X(xs[i]), clamp(v.Y(lo[i]), -2000, 4000)); c.closePath(); c.fill(); c.restore(); }
+function rect(v, x0, x1, y0, y1, col, alpha) { const c = v.ctx; c.save(); c.fillStyle = col; c.globalAlpha = alpha == null ? 0.85 : alpha; const a = v.X(x0), b = v.X(x1), t = v.Y(Math.max(y0, y1)), u = v.Y(Math.min(y0, y1)); c.fillRect(Math.min(a, b), t, Math.abs(b - a), Math.max(0.5, u - t)); c.restore(); }
+function tri(v, x, y, col, up) { const c = v.ctx, px = v.X(x), py = v.Y(y); c.save(); c.fillStyle = col; c.beginPath(); if (up === false) { c.moveTo(px, py + 9); c.lineTo(px - 6, py - 2); c.lineTo(px + 6, py - 2); } else { c.moveTo(px, py - 9); c.lineTo(px - 6, py + 2); c.lineTo(px + 6, py + 2); } c.closePath(); c.fill(); c.restore(); }
+function label(v, x, y, text, col, align, base, px) { const c = v.ctx; c.save(); c.font = (px || 11) + 'px ' + css('--f-mono'); c.fillStyle = col; c.textAlign = align || 'center'; c.textBaseline = base || 'bottom'; c.fillText(text, v.X(x), v.Y(y)); c.restore(); }
+function binCounts(vals, lo, hi, nb) { const h = new Float64Array(nb), w = (hi - lo) / nb; for (const x of vals) { const k = Math.floor((x - lo) / w); if (k >= 0 && k < nb) h[k]++; else if (x === hi) h[nb - 1]++; } return h; }
+function histDraw(v, h, lo, w, col, fill, alpha) { const c = v.ctx; c.save(); if (fill) { c.fillStyle = col; c.globalAlpha = alpha == null ? 0.55 : alpha; h.forEach((n, k) => { if (n > 0) { const a = v.X(lo + k * w), b = v.X(lo + (k + 1) * w); c.fillRect(a + 0.5, v.Y(n), Math.max(0.5, b - a - 1), v.Y(0) - v.Y(n)); } }); } else { c.strokeStyle = col; c.lineWidth = 1.6; c.beginPath(); c.moveTo(v.X(lo), v.Y(0)); h.forEach((n, k) => { c.lineTo(v.X(lo + k * w), v.Y(n)); c.lineTo(v.X(lo + (k + 1) * w), v.Y(n)); }); c.lineTo(v.X(lo + h.length * w), v.Y(0)); c.stroke(); } c.restore(); }
+function sdP(a) { const m = meanA(a); let s = 0; for (const x of a) s += (x - m) ** 2; return Math.sqrt(s / a.length); }
+const statFn = { mean: a => meanA(a), median: a => quant(a, 0.5), p90: a => quant(a, 0.9), sd: a => sdA(a) };
+/* vertical-only dragging */
+function vdrag(cv, getV, getPts, onMove) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 22 * 22; getPts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e), i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'ns-resize' : 'default'; return; } getPts()[drag][1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onMove(drag); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+/* horizontal-only dragging of one marker */
+function hdrag(cv, getV, getPos, onMove) {
+  let on = false;
+  const near = (v, px, py) => { const p = getPos(); return Math.hypot(v.X(p[0]) - px, v.Y(p[1]) - py) < 24; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); if (near(v, px, py)) { on = true; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); if (!on) { cv.style.cursor = near(v, px, py) ? 'ew-resize' : 'default'; return; } onMove(clamp(v.iX(px), v.xl[0], v.xl[1])); });
+  const up = () => { on = false; cv.style.cursor = 'default'; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+
+/* =============== the toy smoothing data (hero, smoothing, versus) =============== */
+const TF = x => 1.6 * Math.sin(2.3 * x) + 0.6 * x, TSIG = 0.7, TN = 50, TG = range(121).map(i => 3 * i / 120);
+const TOY0 = (() => { const r = mulberry32(8); const xs = range(TN).map(() => 3 * r()).sort((a, b) => a - b); return xs.map(x => [x, TF(x) + TSIG * gaussOf(r)]); })();
+function splineFit(pts, K) {
+  const xs = pts.map(p => p[0]), y = pts.map(p => p[1]), T = knotsQuantile(xs, 0, 3, K), rows = xs.map(x => bsRow(x, T));
+  const f = lsq(rows, y, range(pts.length)), yh = rows.map(h => dotR(h, f.beta)); let rss = 0; y.forEach((v, i) => { rss += (v - yh[i]) ** 2; });
+  const Ainv = cholInv(f.L, K), G = TG.map(x => bsRow(x, T));
+  return { T, rows, y, xs, beta: f.beta, yh, rss, s2: rss / pts.length, Ainv, G, K, mu: G.map(h => dotR(h, f.beta)) };
+}
+function curveOf(F, idx, y) { const b = lsq(F.rows, y || F.y, idx).beta; return F.G.map(h => dotR(h, b)); }
+function bandOf(curves, p) { const n = curves[0].length, lo = [], hi = []; for (let g = 0; g < n; g++) { const col = Float64Array.from(curves, c => c[g]).sort(); lo.push(quantSorted(col, p)); hi.push(quantSorted(col, 1 - p)); } return { lo, hi }; }
+
+/* =============== HERO =============== */
+const HERO = { F: splineFit(TOY0, 7), curves: [], cnt: null, r: mulberry32(2024), v: null };
+function heroDraw(n) { const N = TN; for (let t = 0; t < n && HERO.curves.length < 1000; t++) { const ix = bootIdx(HERO.r, N), cnt = new Int32Array(N); ix.forEach(i => cnt[i]++); HERO.cnt = cnt; HERO.curves.push(curveOf(HERO.F, ix)); } drawHero(); }
+function drawHero() {
+  const C = C0(), F = HERO.F, v = HERO.v = frame($('#hero-cv'), [0, 3], [-2.6, 4.4], { l: 34, b: 26 });
+  axes(v, 'x', 'y', { sx: 0.5, sy: 1 }); clip(v);
+  const nC = HERO.curves.length, se = F.G.map(h => Math.sqrt(quadF(h, F.Ainv, F.K) * F.s2));
+  if (nC >= 20) { const b = bandOf(HERO.curves, 0.025); bandFill(v, TG, b.lo, b.hi, C.lda, 0.22); }
+  HERO.curves.slice(-60).forEach(cu => polyline(v, TG.map((x, i) => [x, cu[i]]), C.lda, 1, null, 0.22));
+  polyline(v, TG.map((x, i) => [x, F.mu[i] + Z975 * se[i]]), C.ink, 1.2, [5, 4]); polyline(v, TG.map((x, i) => [x, F.mu[i] - Z975 * se[i]]), C.ink, 1.2, [5, 4]);
+  polyline(v, TG.map((x, i) => [x, F.mu[i]]), C.ink, 2.4);
+  TOY0.forEach((p, i) => { const c = HERO.cnt ? HERO.cnt[i] : 1; if (c === 0) dot(v, p[0], p[1], C.bad, 4, true); else dot(v, p[0], p[1], C.lda, 3.4 + 1.9 * (c - 1)); });
+  if (HERO.cnt) TOY0.forEach((p, i) => { if (HERO.cnt[i] >= 3) label(v, p[0], p[1] + 0.32, '×' + HERO.cnt[i], C.ink, 'center', 'bottom', 10); });
+  v.ctx.restore();
+  let cap;
+  if (!nC) cap = `Fifty points and a cubic spline with 7 basis functions (<span style="color:var(--ink)">&#9644;</span>), with its 95% band from the least-squares formula (<span style="color:var(--ink)">- -</span>). Click the plot to draw your first bootstrap resample.`;
+  else {
+    const d = HERO.cnt.filter(c => c > 0).length, m = HERO.cnt.filter(c => c > 1).length;
+    cap = `${tip('<b>B = ' + nC + '</b>', 'resamples drawn so far; each one is 50 draws\nwith replacement from the 50 points, refitted')} resamples so far. The last one used ${tip(d + ' of the 50 points', `${d} distinct points (${pct(d / 50, 0)});\n${50 - d} were left out (hollow red),\n${m} were picked more than once`)}. ` +
+      (nC >= 20 ? `The shaded band holds the middle 95% of the ${nC} refitted curves at every x; the dashed lines are the formula&rsquo;s band. They agree closely: two routes to the same uncertainty.` : `After ${20 - nC} more, the middle 95% of the curves will be shaded as a band.`);
+  }
+  $('#hero-cap').innerHTML = cap;
+}
+$('#hero-cv').addEventListener('click', () => heroDraw(1));
+$('#hero-one').addEventListener('click', () => heroDraw(1));
+$('#hero-100').addEventListener('click', () => heroDraw(100));
+$('#hero-clear').addEventListener('click', () => { HERO.curves = []; HERO.cnt = null; drawHero(); });
+fig($('#hero-cv'), drawHero);
+
+/* =============== WHY: the bootstrap principle =============== */
+const LSIG = 0.75, TRUE_S = { mean: Math.exp(LSIG * LSIG / 2), median: 1, p90: Math.exp(LSIG * 1.2815515655446004), sd: Math.sqrt((Math.exp(LSIG * LSIG) - 1) * Math.exp(LSIG * LSIG)) };
+const BS = { n: 30, B: 1000, stat: 'mean', seed: 1, real: {} };
+const drawF = (r, n) => range(n).map(() => Math.exp(LSIG * gaussOf(r)));
+function bsData() { return drawF(mulberry32(BS.seed * 7919 + BS.n), BS.n); }
+function bsReal() { const key = BS.n + BS.stat; if (!BS.real[key]) { const r = mulberry32(99 + BS.n), f = statFn[BS.stat]; BS.real[key] = range(4000).map(() => f(drawF(r, BS.n))); } return BS.real[key]; }
+function bsCalc() {
+  const z = bsData(), f = statFn[BS.stat], S = f(z), r = mulberry32(BS.seed * 31 + BS.n * 7 + 3), N = z.length, reps = new Float64Array(BS.B), zb = new Float64Array(N);
+  for (let b = 0; b < BS.B; b++) { for (let i = 0; i < N; i++) zb[i] = z[Math.floor(r() * N)]; reps[b] = f(zb); }
+  return { z, S, reps, real: bsReal() };
+}
+const STATNAME = { mean: 'mean', median: 'median', p90: '90th percentile', sd: 'standard deviation' };
+function drawWhy() {
+  const C = C0(), R = bsCalc(), { z, S, reps, real } = R, B = BS.B, N = z.length;
+  const mb = meanA(reps), seB = sdA(reps), seT = sdA(real), lo = quant(reps, 0.025), hi = quant(reps, 0.975), tru = TRUE_S[BS.stat];
+  // strip
+  const xmax = Math.max(4.5, ...z) * 1.04, s = frame($('#bs-strip'), [0, xmax], [0, 1], { l: 34, b: 22, t: 4, r: 14 }); axes(s, 'data value z', '', { sx: 1, sy: 2, fy: () => '' });
+  z.forEach((x, i) => dot(s, x, 0.25 + 0.5 * ((i * 0.6180339887) % 1), C.ink, 3.4)); seg(s, S, 0, S, 1, C.lda, 2);
+  // histograms
+  const all = [...reps, ...real], a0 = quant(all, 0.002), a1 = quant(all, 0.998), padx = (a1 - a0) * 0.08, lo0 = Math.max(0, a0 - padx), hi0 = a1 + padx, nb = 44, w = (hi0 - lo0) / nb;
+  const hB = binCounts(reps, lo0, hi0, nb).map(c => c / B), hR = binCounts(real, lo0, hi0, nb).map(c => c / real.length), ym = Math.max(...hB, ...hR) * 1.15;
+  const v = frame($('#bs-cv'), [lo0, hi0], [0, ym], { l: 44, b: 26 }); axes(v, BS.stat === 'sd' ? 'std. deviation' : STATNAME[BS.stat], 'share', { ny: 4 }); clip(v);
+  histDraw(v, hB, lo0, w, C.lda, true, 0.5); histDraw(v, hR, lo0, w, C.muted, false);
+  seg(v, S, 0, S, ym, C.ink, 2); seg(v, lo, ym * 0.93, hi, ym * 0.93, C.lda, 3); v.ctx.restore(); tri(v, tru, 0, C.ink);
+  label(v, lo, ym * 0.95, 'bootstrap 95%', C.lda, 'left', 'bottom', 10);
+  $('#bs-n-o').textContent = BS.n; $('#bs-b-o').textContent = B;
+  $('#bs-s').innerHTML = tip(fmt(S, 3), `the ${STATNAME[BS.stat]} of this sample of ${N}\n(the true value for F is ${fmt(tru, 3)})`);
+  $('#bs-se').innerHTML = tip(fmt(seB, 3), `standard deviation of the ${B} values S(Z*)\nmean S̄* = ${fmt(mb, 3)}`);
+  $('#bs-true').innerHTML = tip(fmt(seT, 3), `standard deviation of S over 4,000 fresh samples\nof size ${N} from the true distribution F\n(only possible because F is known here)`);
+  const sN = sdA(z);
+  $('#bs-form').innerHTML = BS.stat === 'mean' ? tip(fmt(sN / Math.sqrt(N), 3), `s/√N = ${fmt(sN, 3)}/√${N}`) : tip('none', BS.stat === 'median' || BS.stat === 'p90' ? 'the large-sample formula needs the density of F\nat the quantile, which we do not know' : 'the formula for the se of a standard deviation\nneeds the fourth moment of F (the normal-theory\nformula is wrong for this skewed F)');
+  $('#run-bs1').innerHTML = `<b>Running example</b>: B = ${B}, S&#772;* = ${tip(fmt(mb, 3), 'average of the ' + B + ' bootstrap values')}; the variance of the ${B} values is ${tip(fmt(seB * seB, 5), 'Σ(S* − S̄*)² / (B − 1)')}, so the bootstrap se is &radic;${fmt(seB * seB, 5)} = ${tip('<b>' + fmt(seB, 3) + '</b>', 'square root of the bootstrap variance')}. Over real repeated samples it is ${fmt(seT, 3)}.`;
+  const hit = lo <= tru && tru <= hi;
+  $('#run-bs2').innerHTML = `<b>Running example</b>: the 2.5% and 97.5% points of the ${B} bootstrap ${STATNAME[BS.stat]}s give ${tip(ivl(lo, hi, 3), `sorted bootstrap values at positions\n0.025 × ${B - 1} and 0.975 × ${B - 1} (interpolated)`)}. It ${hit ? 'contains' : 'misses'} the true ${STATNAME[BS.stat]} of F, ${fmt(tru, 3)}${hit ? '' : ': with 95% intervals, about one sample in twenty does'}.`;
+  const ratio = seB / seT;
+  let say = `The bootstrap se is ${pct(ratio, 0)} of the real one. `;
+  if (BS.stat === 'median' && N <= 40) say += `Notice the spiky histogram: a resample&rsquo;s median can only be one of the ${N} data values${N % 2 ? '' : ' or the midpoint of two'}, so the bootstrap distribution is lumpy where the real one is smooth. Its spread is still a usable guide.`;
+  else if (ratio < 0.8) say += `It is too small here: this sample happens to be less spread out than the population${BS.stat === 'p90' || BS.stat === 'sd' ? ', and the statistic depends on the rare large values that a sample of ' + N + ' may simply lack' : ''}. The bootstrap can only reuse what the sample contains. Draw a new sample, or raise N.`;
+  else if (ratio > 1.25) say += `It is too large here: this sample happens to contain a few unusually large values, which the resamples keep reusing. The bootstrap can only know what the sample shows. Draw a new sample, or raise N.`;
+  else say += `Close: the one sample, resampled, reproduces the spread of the real-world histogram, without knowing F. ${BS.stat === 'mean' ? 'For the mean the textbook formula s/&radic;N does the same; for the median, the 90th percentile or the standard deviation, try finding a formula.' : 'There is no simple formula for this statistic; the bootstrap did not need one.'}`;
+  if (B < 200) say += ` With only B = ${B} resamples the se itself is noisy; a few hundred are enough for a standard error, a thousand or more for a percentile interval.`;
+  $('#bs-say').innerHTML = say;
+}
+seg1('[data-bs]', 'data-bs', k => { BS.stat = k; drawWhy(); });
+$('#bs-n').addEventListener('input', e => { BS.n = +e.target.value; drawWhy(); });
+$('#bs-b').addEventListener('input', e => { BS.B = +e.target.value; drawWhy(); });
+$('#bs-new').addEventListener('click', () => { BS.seed++; drawWhy(); });
+fig($('#bs-cv'), drawWhy);
+
+/* =============== OOB: the 63.2% rule =============== */
+const OF = x => Math.sin(5 * x) + 0.6 * Math.cos(11 * x), OSIG = 0.35;
+const OB = { n: 30, k: 1, seed: 1, D: null, cnt: null, B: 0, naive: 0, Lsum: null, nOut: null, fr: [], r: null };
+function obData() {
+  const r = mulberry32(OB.seed * 104729 + OB.n), xs = range(OB.n).map(() => r()).sort((a, b) => a - b), y = xs.map(x => OF(x) + OSIG * gaussOf(r));
+  const ord = nnOrder((i, j) => Math.abs(xs[i] - xs[j]), OB.n);
+  OB.D = { xs, y, ord }; obReset();
+}
+function obReset() { OB.cnt = null; OB.B = 0; OB.naive = 0; OB.Lsum = new Float64Array(OB.n); OB.nOut = new Int32Array(OB.n); OB.fr = []; OB.r = mulberry32(OB.seed * 17 + OB.n * 3 + OB.k); }
+function knnAt(x, xs, cnt, y, k) { const dd = xs.map(v => Math.abs(v - x)), o = range(xs.length).sort((a, b) => dd[a] - dd[b] || a - b); return knnPred(o, cnt, y, k, -1); }
+function obDraw(n) {
+  const { xs, y, ord } = OB.D, N = OB.n;
+  for (let t = 0; t < n && OB.B < 1000; t++) {
+    const ix = bootIdx(OB.r, N), cnt = new Int32Array(N); ix.forEach(i => cnt[i]++);
+    let d = 0; for (let i = 0; i < N; i++) { const p = knnPred(ord[i], cnt, y, OB.k, -1), L = (y[i] - p) ** 2; OB.naive += L; if (cnt[i] === 0) { OB.Lsum[i] += L; OB.nOut[i]++; } else d++; }
+    OB.B++; OB.fr.push(d / N); OB.cnt = cnt;
+  }
+  drawOob();
+}
+function obStatic() { // training error and true test error of the k-NN fitted to all N points
+  const { xs, y, ord } = OB.D, N = OB.n, one = new Int32Array(N).fill(1); let tr = 0; for (let i = 0; i < N; i++) tr += (y[i] - knnPred(ord[i], one, y, OB.k, -1)) ** 2;
+  let te = 0; const G = 400; for (let g = 0; g < G; g++) { const x = (g + 0.5) / G; te += (OF(x) - knnAt(x, xs, one, y, OB.k)) ** 2; }
+  return { tr: tr / N, te: OSIG * OSIG + te / G };
+}
+function drawOob() {
+  const C = C0(), { xs, y } = OB.D, N = OB.n, st = obStatic(), cnt = OB.cnt;
+  const v = frame($('#ob-cv'), [0, 1], [-2.3, 2.3], { l: 34, b: 26 }); axes(v, 'x', 'y', { sx: 0.2, sy: 1 }); clip(v);
+  curve(v, OF, C.muted, 1.3, [6, 5]);
+  if (cnt) {
+    const pts = range(241).map(g => { const x = g / 240; return [x, knnAt(x, xs, cnt, y, OB.k)]; }); polyline(v, pts, C.a, 2.2);
+    xs.forEach((x, i) => { if (!cnt[i]) { const p = knnAt(x, xs, cnt, y, OB.k); seg(v, x, y[i], x, p, C.bad, 2, null, 0.85); } });
+    xs.forEach((x, i) => { if (cnt[i]) dot(v, x, y[i], C.lda, 3.2 + 1.8 * (cnt[i] - 1)); else dot(v, x, y[i], C.bad, 4.2, true); });
+  } else xs.forEach((x, i) => dot(v, x, y[i], C.lda, 3.6));
+  v.ctx.restore();
+  const exact = 1 - Math.pow(1 - 1 / N, N), nb = Math.max(20, OB.fr.length), u = frame($('#ob-frac'), [0, nb + 1], [0.45, 0.85], { l: 40, b: 22, t: 8 });
+  axes(u, 'resample', '', { ny: 4, sy: 0.1 }); clip(u); seg(u, 0, 0.632, nb + 1, 0.632, C.muted, 1.2, [5, 4]); seg(u, 0, exact, nb + 1, exact, C.lda, 1.8);
+  OB.fr.forEach((f, i) => dot(u, i + 1, f, C.ink, OB.fr.length > 200 ? 1.6 : 2.8)); u.ctx.restore();
+  $('#ob-n-o').textContent = N; $('#ob-k-o').textContent = OB.k;
+  const B = OB.B, naive = B ? OB.naive / (B * N) : NaN; let e1 = 0, m = 0; for (let i = 0; i < N; i++) if (OB.nOut[i]) { e1 += OB.Lsum[i] / OB.nOut[i]; m++; } e1 = m ? e1 / m : NaN;
+  $('#ob-tr').innerHTML = tip(fmt(st.tr, 3), `k-NN with k = ${OB.k} fitted to all ${N} points,\nscored on the same points: mean squared error`);
+  $('#ob-true').innerHTML = tip(fmt(st.te, 3), `σ² + average over x of (f(x) − f̂(x))²\n= ${fmt(OSIG * OSIG, 4)} + ${fmt(st.te - OSIG * OSIG, 3)}, for the model fitted to all ${N} points`);
+  $('#ob-naive').innerHTML = B ? tip(fmt(naive, 3), `sum of ${B * N} squared misses / (B·N)\n= ${fmt(OB.naive, 2)} / (${B} × ${N})`) : '–';
+  $('#ob-e1').innerHTML = B ? tip(fmt(e1, 3), `average over the ${m} points that have been out of bag\nat least once of their mean out-of-bag squared miss`) : '–';
+  const cur = cnt ? cnt.filter(c => c > 0).length : 0, avg = B ? meanA(OB.fr) : 0;
+  $('#run-ob1').innerHTML = B ? `<b>Running example</b>: ${B} resample${B > 1 ? 's' : ''} &times; ${N} points: ${fmt(OB.naive, 2)} / (${B} &times; ${N}) = ${tip('<b>' + fmt(naive, 3) + '</b>', 'plain bootstrap estimate of prediction error')}, against a true test error of ${fmt(st.te, 3)}.` : `<b>Running example</b>: draw a resample to start the sum.`;
+  $('#run-ob2').innerHTML = `<b>Running example</b>: N = ${N}: 1 &minus; (1 &minus; 1/${N})<sup>${N}</sup> = 1 &minus; ${fmt(Math.pow(1 - 1 / N, N), 4)} = ${tip('<b>' + fmt(exact, 4) + '</b>', 'probability a given point is drawn at least once')}.` + (B ? ` The last resample held ${tip(cur + ' of ' + N, 'distinct points drawn at least once')} (${pct(cur / N, 1)}); the average over ${B} resamples is ${pct(avg, 1)}.` : '');
+  $('#run-ob3').innerHTML = B ? `<b>Running example</b>: ${m} of the ${N} points have been out of bag so far, each in about ${fmt(meanA(Array.from(OB.nOut)), 1)} resamples; averaging their out-of-bag squared misses gives ${tip('<b>' + fmt(e1, 3) + '</b>', 'leave-one-out bootstrap estimate')}.` : `<b>Running example</b>: draw a resample; its hollow points are the first out-of-bag scores.`;
+  let say;
+  if (!B) say = `Press <b>Draw a resample</b>. Filled dots are in the resample (bigger means drawn more often), hollow ones were left out.`;
+  else {
+    const parts = `training error ${fmt(st.tr, 3)}, plain bootstrap ${fmt(naive, 3)}, leave-one-out bootstrap ${fmt(e1, 3)}, truth ${fmt(st.te, 3)}`;
+    say = `So far: ${parts}. ` + (OB.k === 1 ? `With k = 1 an in-bag point is its own nearest neighbour, so its miss is exactly 0; the plain estimate is roughly ${pct(1 - avg, 0)} of an honest error, far too low. ` : naive < st.te ? `The plain estimate is low because about 63% of each score comes from points the model trained on. ` : `This time the plain estimate is not below the truth; with k = ${OB.k} the model leans less on any single point, so the in-bag advantage is small. `) +
+      (e1 > st.te ? `Err<sup>(1)</sup> overshoots: each bootstrap model learned from only about ${Math.round(avg * N)} distinct points, so it is worse than the model trained on all ${N}. The next section corrects for that.` : `Err<sup>(1)</sup> is close to the truth here${B < 30 ? ', but with only ' + B + ' resamples it is still noisy; draw more' : ''}.`);
+  }
+  $('#ob-say').innerHTML = say;
+}
+$('#ob-one').addEventListener('click', () => obDraw(1));
+$('#ob-100').addEventListener('click', () => obDraw(100));
+$('#ob-new').addEventListener('click', () => { OB.seed++; obData(); drawOob(); });
+$('#ob-n').addEventListener('input', e => { OB.n = +e.target.value; obData(); drawOob(); });
+$('#ob-k').addEventListener('input', e => { OB.k = +e.target.value; obReset(); drawOob(); });
+fig($('#ob-cv'), drawOob); fig($('#ob-frac'), drawOob);
+
+/* =============== PLUS: .632 and .632+ =============== */
+const pTrue = (s, x1, x2) => 1 / (1 + Math.exp(-4 * s * (x2 - 0.5 * Math.sin(2.5 * x1))));
+const PG = 48, PGX = range(PG).map(i => -1 + (2 * i + 1) / PG);
+function clsData(seed, N, s) { const r = mulberry32(seed), X = [], y = []; for (let i = 0; i < N; i++) { const x1 = 2 * r() - 1, x2 = 2 * r() - 1; X.push([x1, x2]); y.push(r() < pTrue(s, x1, x2) ? 1 : 0); } return { X, y }; }
+const d2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+function knnClsAt(q, X, y, k) { const dd = X.map(p => d2(p, q)), o = range(X.length).sort((a, b) => dd[a] - dd[b] || a - b), one = new Int32Array(X.length).fill(1); return knnPred(o, one, y, k, -1) > 0.5 ? 1 : 0; }
+/* all the estimators for one data set; grid = resolution for the true error */
+function clsEstimates(D, ks, B, rseed, s, grid) {
+  const N = D.y.length, ord = nnOrder((i, j) => d2(D.X[i], D.X[j]), N), r = mulberry32(rseed), one = new Int32Array(N).fill(1);
+  const out = ks.map(() => ({ L: new Float64Array(N), n: new Int32Array(N), naive: 0 }));
+  for (let b = 0; b < B; b++) { const ix = bootIdx(r, N), cnt = new Int32Array(N); ix.forEach(i => cnt[i]++); for (let i = 0; i < N; i++) ks.forEach((k, q) => { const L = (knnPred(ord[i], cnt, D.y, k, -1) > 0.5 ? 1 : 0) !== D.y[i] ? 1 : 0; out[q].naive += L; if (!cnt[i]) { out[q].L[i] += L; out[q].n[i]++; } }); }
+  const gx = range(grid).map(i => -1 + (2 * i + 1) / grid), p1 = meanA(D.y);
+  return ks.map((k, q) => {
+    let err = 0, q1 = 0; for (let i = 0; i < N; i++) { const yh = knnPred(ord[i], one, D.y, k, -1) > 0.5 ? 1 : 0; err += yh !== D.y[i] ? 1 : 0; q1 += yh; } err /= N; q1 /= N;
+    let e1 = 0, m = 0; for (let i = 0; i < N; i++) if (out[q].n[i]) { e1 += out[q].L[i] / out[q].n[i]; m++; } e1 /= m;
+    const gam = p1 * (1 - q1) + (1 - p1) * q1, P = plus632(err, e1, gam);
+    let te = 0; for (const a of gx) for (const c of gx) { const p = pTrue(s, a, c), yh = knnClsAt([a, c], D.X, D.y, k); te += yh ? 1 - p : p; } te /= grid * grid;
+    return { k, err, e1, gam, p1, q1, naive: out[q].naive / (B * N), ...P, te };
+  });
+}
+const PL = { k: 1, s: 0, n: 60, seed: 1, cache: null };
+function plCalc() { const key = [PL.k, PL.s, PL.n, PL.seed].join(); if (PL.cache && PL.cache.key === key) return PL.cache; const D = clsData(PL.seed * 7907 + PL.n, PL.n, PL.s), E = clsEstimates(D, [PL.k], 100, PL.seed * 13 + PL.n, PL.s, PG)[0]; const grid = PGX.map(a => PGX.map(b => knnClsAt([a, b], D.X, D.y, PL.k))); PL.cache = { key, D, E, grid }; return PL.cache; }
+function drawPlus() {
+  const C = C0(), { D, E, grid } = plCalc(), v = frame($('#pl-cv'), [-1, 1], [-1, 1], { l: 34, b: 26 }); axes(v, 'x₁', 'x₂', { sx: 0.5, sy: 0.5 }); clip(v);
+  const c = v.ctx, cw = (v.X(1) - v.X(-1)) / PG + 1, chh = (v.Y(-1) - v.Y(1)) / PG + 1; PGX.forEach((a, ia) => PGX.forEach((b, ib) => { const yh = grid[ia][ib]; c.fillStyle = yh ? C.b : C.a; c.globalAlpha = 0.13; c.fillRect(v.X(a - 1 / PG), v.Y(b + 1 / PG), cw, chh); }));
+  c.globalAlpha = 1; if (PL.s > 0) curve(v, x => 0.5 * Math.sin(2.5 * x), C.ink, 1.4, [6, 5]);
+  D.X.forEach((p, i) => dot(v, p[0], p[1], D.y[i] ? C.b : C.a, 4)); v.ctx.restore();
+  const bars = [['err-bar', E.err, C.muted], ['Err(1)', E.e1, C.c], ['.632', E.e632, C.b], ['.632+', E.ep, C.lda], ['γ̂', E.gam, C.line]];
+  const u = frame($('#pl-bars'), [0, 0.65], [0, bars.length], { l: 58, b: 22, t: 6, r: 14 }); axes(u, 'error rate', '', { sx: 0.1, sy: 10, fy: () => '' });
+  bars.forEach((b, i) => { const yy = bars.length - i - 0.5; rect(u, 0, b[1], yy - 0.32, yy + 0.32, b[2], 0.85); const cx = u.ctx; cx.save(); cx.font = '11px ' + css('--f-mono'); cx.fillStyle = C.ink; cx.textAlign = 'right'; cx.textBaseline = 'middle'; cx.fillText(b[0], u.pad.l - 6, u.Y(yy)); cx.textAlign = 'left'; cx.fillText(fmt(b[1], 3), u.X(b[1]) + 4, u.Y(yy)); cx.restore(); });
+  seg(u, E.te, 0, E.te, bars.length, C.ink, 2);
+  $('#pl-s-o').textContent = fmt(PL.s, 1); $('#pl-n-o').textContent = PL.n;
+  $('#pl-632').innerHTML = tip(fmt(E.e632, 3), `0.368 × ${fmt(E.err, 3)} + 0.632 × ${fmt(E.e1, 3)}`);
+  $('#pl-plus').innerHTML = tip(fmt(E.ep, 3), `(1 − ŵ)·err-bar + ŵ·min(Err(1), γ̂)\n= ${fmt(1 - E.w, 3)} × ${fmt(E.err, 3)} + ${fmt(E.w, 3)} × ${fmt(E.e1p, 3)}`);
+  $('#pl-true').innerHTML = tip(fmt(E.te, 3), `average over a ${PG}×${PG} grid of the square of\nP(the true label differs from the k-NN's call),\nusing the known class probabilities`);
+  $('#pl-R').innerHTML = tip(fmt(E.R, 3), E.e1 > E.err && E.gam > E.err ? `(min(Err(1), γ̂) − err-bar)/(γ̂ − err-bar)\n= (${fmt(E.e1p, 3)} − ${fmt(E.err, 3)}) / (${fmt(E.gam, 3)} − ${fmt(E.err, 3)})${E.R === 1 ? ', capped at 1' : ''}` : 'set to 0: Err(1) does not exceed err-bar');
+  $('#run-pl1').innerHTML = `<b>Running example</b>: 0.368 &times; ${tip(fmt(E.err, 3), 'training error of the ' + PL.k + '-NN classifier on all ' + PL.n + ' points')} + 0.632 &times; ${tip(fmt(E.e1, 3), 'leave-one-out bootstrap error over 100 resamples')} = ${tip('<b>' + fmt(E.e632, 3) + '</b>', '.632 estimate')}; the true error is ${fmt(E.te, 3)}.`;
+  $('#run-pl2').innerHTML = `<b>Running example</b>: ${pct(E.p1, 1)} of the labels are class 1 and the classifier calls ${pct(E.q1, 1)} of the training points class 1, so &gamma;&#770; = ${fmt(E.p1, 3)}&times;${fmt(1 - E.q1, 3)} + ${fmt(1 - E.p1, 3)}&times;${fmt(E.q1, 3)} = ${tip('<b>' + fmt(E.gam, 3) + '</b>', 'no-information error rate')}.`;
+  $('#run-pl3').innerHTML = `<b>Running example</b>: R&#770; = ${E.e1 > E.err && E.gam > E.err ? `(${fmt(E.e1p, 3)} &minus; ${fmt(E.err, 3)}) / (${fmt(E.gam, 3)} &minus; ${fmt(E.err, 3)}) = ` : ''}${tip('<b>' + fmt(E.R, 3) + '</b>', 'relative overfitting rate, kept in [0, 1]')}, &wcirc; = 0.632 / (1 &minus; 0.368 &times; ${fmt(E.R, 3)}) = ${tip(fmt(E.w, 3), 'weight on Err(1)')}, so .632+ = ${fmt(1 - E.w, 3)} &times; ${fmt(E.err, 3)} + ${fmt(E.w, 3)} &times; ${fmt(E.e1p, 3)} = ${tip('<b>' + fmt(E.ep, 3) + '</b>', '.632+ estimate')}.`;
+  const g1 = Math.abs(E.e632 - E.te), g2 = Math.abs(E.ep - E.te);
+  let say = `.632 is off by ${fmt(g1, 3)}, .632+ by ${fmt(g2, 3)}. `;
+  if (PL.s === 0) say += PL.k === 1 ? `This is Efron&rsquo;s worst case: labels are pure noise, the 1-NN fit memorises them (err-bar = ${fmt(E.err, 3)}), and the .632 rule promises ${fmt(E.e632, 3)} on a problem where nothing beats a coin. Err<sup>(1)</sup> ${E.R > 0.999 ? 'has reached' : 'is close to'} &gamma;&#770;, so R&#770; = ${fmt(E.R, 2)} and .632+ moves its weight onto Err<sup>(1)</sup>.` : `Labels are pure noise, so the true error is ${fmt(E.te, 3)} for any classifier; ${PL.k}-NN memorises less than 1-NN, so .632 is less wrong, but .632+ still does better because R&#770; = ${fmt(E.R, 2)} is large.`;
+  else if (E.R < 0.35) say += `With a clear signal (strength ${fmt(PL.s, 1)}) and k = ${PL.k}, the model overfits only mildly (R&#770; = ${fmt(E.R, 2)}), so the two estimators nearly agree; .632+ only departs from .632 when R&#770; is large.`;
+  else say += `R&#770; = ${fmt(E.R, 2)}: ${PL.k === 1 ? '1-NN memorises the training set, so' : 'the model overfits enough that'} .632+ puts ${pct(E.w, 0)} of its weight on Err<sup>(1)</sup> instead of 63.2%. ` + (g2 < g1 ? 'Here that brings it closer to the truth.' : 'Here that overshoots a little: no estimator wins on every data set. Try New data.');
+  $('#pl-say').innerHTML = say;
+}
+seg1('[data-pk]', 'data-pk', k => { PL.k = +k; drawPlus(); });
+$('#pl-s').addEventListener('input', e => { PL.s = +e.target.value; drawPlus(); });
+$('#pl-n').addEventListener('input', e => { PL.n = +e.target.value; drawPlus(); });
+$('#pl-new').addEventListener('click', () => { PL.seed++; drawPlus(); });
+fig($('#pl-cv'), drawPlus); fig($('#pl-bars'), drawPlus);
+
+/* =============== SELECT: CV against the bootstrap, choosing k =============== */
+const SF = x => Math.sin(2 * Math.PI * x) + 0.5 * Math.cos(6 * Math.PI * x), SSIG = 0.5, SN = 80, SB = 50;
+const SK = { reg: [1, 2, 3, 5, 7, 10, 15, 20, 30, 40], cls: [1, 3, 5, 7, 9, 15, 21, 31, 45] };
+const METH = [['cv', '10-fold CV', '--cA'], ['naive', 'plain Err_boot', '--muted'], ['e1', 'Err(1)', '--cC'], ['e632', '.632', '--cB'], ['ep', '.632+', '--lda']];
+const SE = { prob: 'reg', runs: { reg: [], cls: [] }, last: { reg: null, cls: null }, busy: false };
+function regReplicate(rep) {
+  const r = mulberry32(5000 + rep), xs = range(SN).map(() => r()), y = xs.map(x => SF(x) + SSIG * gaussOf(r)), ks = SK.reg, N = SN;
+  const ord = nnOrder((i, j) => Math.abs(xs[i] - xs[j]), N), one = new Int32Array(N).fill(1), rb = mulberry32(9000 + rep);
+  const acc = ks.map(() => ({ L: new Float64Array(N), n: new Int32Array(N), naive: 0 }));
+  for (let b = 0; b < SB; b++) { const ix = bootIdx(rb, N), cnt = new Int32Array(N); ix.forEach(i => cnt[i]++); for (let i = 0; i < N; i++) ks.forEach((k, q) => { const L = (y[i] - knnPred(ord[i], cnt, y, k, -1)) ** 2; acc[q].naive += L; if (!cnt[i]) { acc[q].L[i] += L; acc[q].n[i]++; } }); }
+  const perm = permute(mulberry32(7000 + rep), N), fold = new Int32Array(N); perm.forEach((p, t) => { fold[p] = t % 10; });
+  const cv = ks.map(() => 0); for (let f = 0; f < 10; f++) { const cnt = Int32Array.from(fold, v => v === f ? 0 : 1); for (let i = 0; i < N; i++) if (fold[i] === f) ks.forEach((k, q) => { cv[q] += (y[i] - knnPred(ord[i], cnt, y, k, -1)) ** 2; }); }
+  const G = 200, gord = range(G).map(g => { const x = (g + 0.5) / G; return range(N).sort((a, b) => Math.abs(xs[a] - x) - Math.abs(xs[b] - x) || a - b); });
+  const ym = meanA(y);
+  return ks.map((k, q) => {
+    let err = 0; const yh = []; for (let i = 0; i < N; i++) { const p = knnPred(ord[i], one, y, k, -1); yh.push(p); err += (y[i] - p) ** 2; } err /= N;
+    let e1 = 0, m = 0; for (let i = 0; i < N; i++) if (acc[q].n[i]) { e1 += acc[q].L[i] / acc[q].n[i]; m++; } e1 /= m;
+    let y2 = 0, h2 = 0; for (let i = 0; i < N; i++) { y2 += y[i] * y[i]; h2 += yh[i] * yh[i]; } const gam = y2 / N - 2 * ym * meanA(yh) + h2 / N;
+    let te = 0; for (let g = 0; g < G; g++) te += (SF((g + 0.5) / G) - knnPred(gord[g], one, y, k, -1)) ** 2;
+    return { k, err, cv: cv[q] / N, naive: acc[q].naive / (SB * N), e1, ...plus632(err, e1, gam), te: SSIG * SSIG + te / G };
+  });
+}
+function clsReplicate(rep) {
+  const D = clsData(6000 + rep, SN, 1.5), ks = SK.cls, N = SN, E = clsEstimates(D, ks, SB, 9500 + rep, 1.5, 30);
+  const ord = nnOrder((i, j) => d2(D.X[i], D.X[j]), N), perm = permute(mulberry32(7500 + rep), N), fold = new Int32Array(N); perm.forEach((p, t) => { fold[p] = t % 10; });
+  const cv = ks.map(() => 0); for (let f = 0; f < 10; f++) { const cnt = Int32Array.from(fold, v => v === f ? 0 : 1); for (let i = 0; i < N; i++) if (fold[i] === f) ks.forEach((k, q) => { cv[q] += ((knnPred(ord[i], cnt, D.y, k, -1) > 0.5 ? 1 : 0) !== D.y[i]) ? 1 : 0; }); }
+  return E.map((e, q) => ({ ...e, cv: cv[q] / N }));
+}
+function seScore(rows) {
+  const te = rows.map(r => r.te), lo = Math.min(...te), hi = Math.max(...te), best = te.indexOf(lo);
+  const res = {}; METH.forEach(([m]) => { const est = rows.map(r => r[m]); const j = est.indexOf(Math.min(...est)); res[m] = { j, rel: (te[j] - lo) / (hi - lo), bias: rows[best][m] - lo }; });
+  return { rows, best, res };
+}
+function seRun(n) {
+  if (SE.busy) return; SE.busy = true; const prob = SE.prob, target = Math.min(400, SE.runs[prob].length + n);
+  const step = () => { const t0 = performance.now(); while (SE.runs[prob].length < target && performance.now() - t0 < 30) { const rep = SE.runs[prob].length, rows = prob === 'reg' ? regReplicate(rep) : clsReplicate(rep); const sc = seScore(rows); SE.runs[prob].push(sc); SE.last[prob] = sc; } drawSelect(); if (SE.runs[prob].length < target && SE.prob === prob) requestAnimationFrame(step); else SE.busy = false; };
+  step();
+}
+function drawSelect() {
+  const C = C0(), prob = SE.prob, runs = SE.runs[prob], last = SE.last[prob], ks = SK[prob];
+  const v = frame($('#se-curve'), [Math.log(0.8), Math.log(ks[ks.length - 1] * 1.25)], prob === 'reg' ? [0, 1.2] : [0, 0.6], { l: 44, b: 26 });
+  axes(v, 'neighbours k (log scale)', prob === 'reg' ? 'squared error' : 'error rate', { sx: 1e9, ny: 4, fx: () => '' });
+  const c = v.ctx; c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'center'; c.textBaseline = 'top'; ks.forEach(k => c.fillText(k, v.X(Math.log(k)), v.h - v.pad.b + 5)); c.restore();
+  clip(v);
+  if (last) {
+    polyline(v, last.rows.map(r => [Math.log(r.k), r.te]), C.ink, 3);
+    METH.forEach(([m, , col]) => { const cc = css(col); polyline(v, last.rows.map(r => [Math.log(r.k), r[m]]), cc, 1.8, m === 'naive' ? [5, 4] : null); const j = last.res[m].j; dot(v, Math.log(last.rows[j].k), last.rows[j][m], cc, 5); });
+    star(v, Math.log(last.rows[last.best].k), last.rows[last.best].te, C.ink, 8);
+  }
+  v.ctx.restore();
+  $('#se-cap').innerHTML = `<span style="color:var(--ink)">&#9644;</span> true error (&#9733; its minimum) &nbsp; ` + METH.map(([m, name, col]) => `<span style="color:var(${col})">&#9644;</span> ${name}`).join(' &nbsp; ') + ` &nbsp; dots: each method&rsquo;s pick. ${prob === 'reg' ? 'Regression: y = sin(2&pi;x) + &frac12;cos(6&pi;x) + noise (&sigma; = 0.5), N = 80.' : 'Classification: the wavy two-class problem above at signal strength 1.5, N = 80.'} B = ${SB} resamples per training set.`;
+  const u = frame($('#se-rel'), [-0.5, METH.length - 0.5], [-0.04, 1.04], { l: 40, b: 24, t: 8 }); axes(u, '', 'relative error', { sx: 1e9, sy: 0.25, fx: () => '' });
+  const cu = u.ctx; cu.save(); cu.font = '11px ' + css('--f-mono'); cu.fillStyle = C.muted; cu.textAlign = 'center'; cu.textBaseline = 'top'; METH.forEach(([, name], i) => cu.fillText(name.replace('plain Err_boot', 'plain'), u.X(i), u.h - u.pad.b + 5)); cu.restore();
+  clip(u);
+  METH.forEach(([m, , col], i) => { const cc = css(col); runs.forEach((s, t) => { const jit = (((t * 0.6180339887) % 1) - 0.5) * 0.5; dot(u, i + jit, s.res[m].rel, cc, 2.6); }); if (runs.length) { const mu = meanA(runs.map(s => s.res[m].rel)); const px = u.X(i), py = u.Y(mu), cx = u.ctx; cx.save(); cx.fillStyle = C.ink; cx.beginPath(); cx.moveTo(px, py - 7); cx.lineTo(px + 7, py); cx.lineTo(px, py + 7); cx.lineTo(px - 7, py); cx.closePath(); cx.fill(); cx.restore(); } });
+  u.ctx.restore();
+  const n = runs.length;
+  const stats = METH.map(([m, name, col]) => { const rel = runs.map(s => s.res[m].rel), hit = runs.filter(s => s.res[m].j === s.best).length, bias = runs.map(s => s.res[m].bias); return { m, name, col, mr: n ? meanA(rel) : NaN, hit: n ? hit / n : NaN, bias: n ? meanA(bias) : NaN }; });
+  const bestM = n ? stats.reduce((a, b) => (b.mr < a.mr ? b : a)) : null;
+  $('#se-tbl').innerHTML = `<thead><tr><th>Method</th><th>rel. err.</th><th>best k</th><th>bias</th></tr></thead><tbody>` + stats.map(s => `<tr${bestM && s.m === bestM.m ? ' class="win"' : ''}><td><span style="color:var(${s.col})">&#9679;</span> ${s.name.replace('Err_boot', 'Err<sub>boot</sub>').replace('Err(1)', 'Err<sup>(1)</sup>')}</td><td>${n ? tip(fmt(s.mr, 3), `mean over ${n} training sets of\n(Err(chosen k) − min Err) / (max Err − min Err)`) : '–'}</td><td>${n ? tip(pct(s.hit, 0), `share of the ${n} training sets where it chose\nexactly the k with the smallest true error`) : '–'}</td><td>${n ? tip(sg(s.bias, 3), `mean of (estimate − true error) at the best k:\nhow far the estimate is off in level`) : '–'}</td></tr>`).join('') + `</tbody>`;
+  $('#run-se1').innerHTML = last ? (() => { const m = last.res.ep, te = last.rows.map(r => r.te), lo = Math.min(...te), hi = Math.max(...te), tk = te[m.j]; return `<b>Running example</b>: latest training set: .632+ picked k = ${last.rows[m.j].k}, whose true error is ${fmt(tk, 4)}; the best k (${last.rows[last.best].k}) has ${fmt(lo, 4)} and the worst ${fmt(hi, 4)}, so its relative error is (${fmt(tk, 4)} &minus; ${fmt(lo, 4)}) / (${fmt(hi, 4)} &minus; ${fmt(lo, 4)}) = ${tip('<b>' + fmt(m.rel, 3) + '</b>', 'relative error of the .632+ choice')}.`; })() : '';
+  let say;
+  if (!n) say = 'Press <b>Run 50 training sets</b>.';
+  else {
+    const g = k => stats.find(s => s.m === k);
+    say = `After ${n} training sets, ${bestM.name.replace('Err_boot', 'Err<sub>boot</sub>').replace('Err(1)', 'Err<sup>(1)</sup>')} has the lowest average relative error (${fmt(bestM.mr, 3)}). ` +
+      `10-fold CV averages ${fmt(g('cv').mr, 3)} and .632+ ${fmt(g('ep').mr, 3)}${Math.abs(g('cv').mr - g('ep').mr) < 0.05 ? ': about the same, as Hastie, Tibshirani and Friedman found' : ''}. ` +
+      `The plain bootstrap ${g('naive').mr > Math.max(g('cv').mr, g('ep').mr) ? 'does worst: it scores models largely on their own training points, so it favours small k, which memorise' : 'is not the worst this time, but its level is badly biased'} (level bias ${sg(g('naive').bias, 3)}). ` +
+      `Look at the last column: Err<sup>(1)</sup> is too high in level by ${sg(g('e1').bias, 3)}, yet it still ranks the candidates reasonably. For choosing a model, the ranking is what counts.` + (n < 30 ? ' Run more training sets: with few, the averages are noisy.' : '');
+  }
+  $('#se-say').innerHTML = say;
+  $('#se-run').textContent = runs.length >= 400 ? 'Done: 400 training sets' : 'Run 50 training sets';
+}
+seg1('[data-sp]', 'data-sp', k => { SE.prob = k; drawSelect(); if (!SE.runs[k].length) seRun(10); });
+$('#se-run').addEventListener('click', () => seRun(50));
+$('#se-reset').addEventListener('click', () => { if (SE.busy) return; SE.runs[SE.prob] = []; SE.last[SE.prob] = null; drawSelect(); });
+fig($('#se-curve'), drawSelect); fig($('#se-rel'), drawSelect);
+
+/* =============== SMOOTH: three bands =============== */
+const SM = { K: 7, B: 200, x0: 1.5, mode: 'formula', pts: TOY0.map(p => p.slice()), v: null, cache: null };
+function smCalc() {
+  const key = [SM.K, SM.B, SM.pts.map(p => p[1].toFixed(5)).join()].join('|'); if (SM.cache && SM.cache.key === key) return SM.cache;
+  const F = splineFit(SM.pts, SM.K), N = TN, se = F.G.map(h => Math.sqrt(quadF(h, F.Ainv, F.K) * F.s2));
+  const rp = mulberry32(11), pairs = range(SM.B).map(() => curveOf(F, bootIdx(rp, N)));
+  const rm = mulberry32(12), sd = Math.sqrt(F.s2), all = range(N), param = range(SM.B).map(() => curveOf(F, all, F.yh.map(m => m + sd * gaussOf(rm))));
+  SM.cache = { key, F, se, pairs, param, bp: bandOf(pairs, 0.025), bm: bandOf(param, 0.025) }; return SM.cache;
+}
+function seAt(curves, g) { return sdA(curves.map(c => c[g])); }
+function drawSmooth() {
+  const C = C0(), R = smCalc(), F = R.F, g0 = Math.round(SM.x0 / 3 * 120), x0 = TG[g0];
+  const v = SM.v = frame($('#sm-cv'), [0, 3], [-2.6, 4.4], { l: 34, b: 26 }); axes(v, 'x', 'y', { sx: 0.5, sy: 1 }); clip(v);
+  const flo = F.mu.map((m, i) => m - Z975 * R.se[i]), fhi = F.mu.map((m, i) => m + Z975 * R.se[i]);
+  const band = SM.mode === 'formula' ? { lo: flo, hi: fhi } : SM.mode === 'pairs' ? R.bp : R.bm;
+  bandFill(v, TG, band.lo, band.hi, C.lda, 0.22);
+  if (SM.mode !== 'formula') { (SM.mode === 'pairs' ? R.pairs : R.param).slice(0, 12).forEach(cu => polyline(v, TG.map((x, i) => [x, cu[i]]), C.lda, 1, null, 0.35)); polyline(v, TG.map((x, i) => [x, flo[i]]), C.ink, 1.2, [5, 4]); polyline(v, TG.map((x, i) => [x, fhi[i]]), C.ink, 1.2, [5, 4]); }
+  polyline(v, TG.map((x, i) => [x, F.mu[i]]), C.lda, 2.6);
+  seg(v, x0, -2.6, x0, 4.4, C.muted, 1.2, [3, 3]);
+  SM.pts.forEach(p => dot(v, p[0], p[1], C.ink, 3.6)); v.ctx.restore();
+  // basis panel
+  const u = frame($('#sm-basis'), [0, 3], [0, 1.05], { l: 34, b: 20, t: 6 }); axes(u, '', '', { sx: 0.5, sy: 0.5 }); clip(u);
+  const cols = [C.a, C.b, C.c, C.lda, C.bad];
+  for (let j = 0; j < F.K; j++) polyline(u, TG.map((x, i) => [x, F.G[i][j]]), cols[j % cols.length], 1.8, null, 0.9);
+  F.T.slice(4, F.T.length - 4).forEach(t => seg(u, t, 0, t, 1.05, C.ink, 1, [2, 3])); u.ctx.restore();
+  $('#sm-cap').innerHTML = `<span style="color:var(--lda)">&#9644;</span> least-squares fit, shaded: the ${SM.mode === 'formula' ? 'formula' : SM.mode === 'pairs' ? 'nonparametric bootstrap' : 'parametric bootstrap'} 95% band${SM.mode !== 'formula' ? `, thin: 12 of the ${SM.B} refits, <span style="color:var(--ink)">- -</span> the formula band for comparison` : ''}. Below: the ${F.K} cubic B-spline basis functions h<sub>j</sub>(x); dotted lines mark the ${F.K - 4} interior knot${F.K - 4 === 1 ? '' : 's'}, at quantiles of x.`;
+  const sef = R.se[g0], sep = seAt(R.pairs, g0), sem = seAt(R.param, g0), q = quadF(F.G[g0], F.Ainv, F.K);
+  $('#sm-k-o').textContent = SM.K; $('#sm-b-o').textContent = SM.B; $('#sm-x-o').textContent = fmt(x0, 2);
+  $('#sm-sef').innerHTML = tip(fmt(sef, 3), `√(h(x)ᵀ(HᵀH)⁻¹h(x)) · σ̂ = √${fmt(q, 4)} × ${fmt(Math.sqrt(F.s2), 3)}`);
+  $('#sm-sep').innerHTML = tip(fmt(sep, 3), `standard deviation of μ̂*(${fmt(x0, 2)}) over ${SM.B}\nrefits to resampled (x, y) pairs`);
+  $('#sm-sem').innerHTML = tip(fmt(sem, 3), `standard deviation of μ̂*(${fmt(x0, 2)}) over ${SM.B}\nrefits to y* = μ̂(x) + N(0, σ̂²) noise`);
+  $('#sm-sig').innerHTML = tip(fmt(Math.sqrt(F.s2), 3), `√(RSS/N) = √(${fmt(F.rss, 3)}/${TN}); the data were made with σ = ${TSIG}`);
+  const j4 = Math.min(3, F.K - 1);
+  $('#run-sm1').innerHTML = `<b>Running example</b>: RSS = ${fmt(F.rss, 3)}, so &sigma;&#770;&sup2; = ${fmt(F.rss, 3)}/50 = ${tip(fmt(F.s2, 4), 'maximum-likelihood noise variance')}. For the weight on h<sub>${j4 + 1}</sub>: [(H<sup>&#8868;</sup>H)<sup>&minus;1</sup>]<sub>${j4 + 1}${j4 + 1}</sub> = ${fmt(F.Ainv[j4 * F.K + j4], 4)}, so se(&beta;&#770;<sub>${j4 + 1}</sub>) = &radic;(${fmt(F.Ainv[j4 * F.K + j4], 4)} &times; ${fmt(F.s2, 4)}) = ${tip('<b>' + fmt(Math.sqrt(F.Ainv[j4 * F.K + j4] * F.s2), 3) + '</b>', `β̂${j4 + 1} = ${fmt(F.beta[j4], 3)}`)}.`;
+  $('#run-sm2').innerHTML = `<b>Running example</b>: at x = ${fmt(x0, 2)}: h(x)<sup>&#8868;</sup>(H<sup>&#8868;</sup>H)<sup>&minus;1</sup>h(x) = ${fmt(q, 4)}, se = &radic;${fmt(q, 4)} &times; ${fmt(Math.sqrt(F.s2), 3)} = ${tip('<b>' + fmt(sef, 3) + '</b>', 'formula standard error of the fitted value')}; band ${fmt(F.mu[g0], 3)} &plusmn; 1.96 &times; ${fmt(sef, 3)} = ${tip(ivl(flo[g0], fhi[g0], 3), 'pointwise 95% band at the probe')}.`;
+  $('#run-sm3').innerHTML = `<b>Running example</b>: B = ${SM.B} at x = ${fmt(x0, 2)}: nonparametric band ${tip(ivl(R.bp.lo[g0], R.bp.hi[g0], 3), '2.5% and 97.5% points of the ' + SM.B + ' refits to resampled pairs')} (se ${fmt(sep, 3)}); parametric ${tip(ivl(R.bm.lo[g0], R.bm.hi[g0], 3), '2.5% and 97.5% points of the ' + SM.B + ' refits to model-generated data')} (se ${fmt(sem, 3)}); formula ${ivl(flo[g0], fhi[g0], 3)}.`;
+  const wf = meanA(fhi.map((h, i) => h - flo[i])), wp = meanA(R.bp.hi.map((h, i) => h - R.bp.lo[i])), wm = meanA(R.bm.hi.map((h, i) => h - R.bm.lo[i]));
+  let say = `Averaged over x, the band is ${fmt(wf, 3)} wide by the formula, ${fmt(wp, 3)} by resampling pairs and ${fmt(wm, 3)} by the parametric bootstrap. `;
+  say += Math.abs(wm / wf - 1) < 0.06 ? `The parametric bootstrap all but reproduces the formula (it must, as B grows: next section). ` : `The parametric bootstrap is ${pct(Math.abs(wm / wf - 1), 0)} ${wm > wf ? 'wider' : 'narrower'} than the formula: with B = ${SM.B} it is still noisy; raise B. `;
+  say += Math.abs(wp / wf - 1) < 0.12 ? `Resampling pairs, which assumes neither Gaussian noise nor a correct curve, lands close too.` : `Resampling pairs differs by ${pct(Math.abs(wp / wf - 1), 0)}: it trusts only the data, so ${wp > wf ? 'points the curve cannot follow (or a too-stiff K) widen it' : 'it reflects where the residuals happen to be small'}.`;
+  if (SM.x0 < 0.25 || SM.x0 > 2.75) say += ` At the probe, near the edge, every band is wide: few points pin the curve down there.`;
+  if (SM.K >= 11) say += ` With K = ${SM.K} the curve has freedom to chase noise, and all the bands widen to match.`;
+  $('#sm-say').innerHTML = say;
+  drawMl5();
+}
+seg1('[data-sm]', 'data-sm', k => { SM.mode = k; drawSmooth(); });
+$('#sm-k').addEventListener('input', e => { SM.K = +e.target.value; drawSmooth(); });
+$('#sm-b').addEventListener('input', e => { SM.B = +e.target.value; drawSmooth(); });
+$('#sm-x').addEventListener('input', e => { SM.x0 = +e.target.value; drawSmooth(); });
+$('#sm-reset').addEventListener('click', () => { SM.pts = TOY0.map(p => p.slice()); drawSmooth(); });
+vdrag($('#sm-cv'), () => SM.v, () => SM.pts, () => drawSmooth());
+fig($('#sm-cv'), drawSmooth); fig($('#sm-basis'), drawSmooth);
+
+/* =============== MLE: Fisher information =============== */
+const MODELS = {
+  bern: { name: 'p', th0: 0.3, lo: 0, hi: 1, draw: (r, t) => (r() < t ? 1 : 0), hat: (S, N) => S / N,
+    ll: (t, S, N) => (S ? S * Math.log(t) : 0) + (N - S ? (N - S) * Math.log(1 - t) : 0), sc: (t, S, N) => S / t - (N - S) / (1 - t), Io: (t, S, N) => S / (t * t) + (N - S) / ((1 - t) ** 2), If: (t, N) => N / (t * (1 - t)),
+    stat: 'heads', llTxt: 'S log p + (N &minus; S) log(1 &minus; p)', ioTxt: 'S/p&sup2; + (N &minus; S)/(1 &minus; p)&sup2;', ifTxt: 'N/(p(1 &minus; p))' },
+  pois: { name: 'λ', th0: 3, lo: 0, hi: Infinity, draw: (r, t) => { const L = Math.exp(-t); let k = 0, p = 1; do { k++; p *= r(); } while (p > L); return k - 1; }, hat: (S, N) => S / N,
+    ll: (t, S, N) => (S ? S * Math.log(t) : 0) - N * t, sc: (t, S, N) => S / t - N, Io: (t, S) => S / (t * t), If: (t, N) => N / t,
+    stat: 'total count', llTxt: 'S log &lambda; &minus; N&lambda; (+ a constant)', ioTxt: 'S/&lambda;&sup2;', ifTxt: 'N/&lambda;' },
+  expo: { name: 'λ', th0: 0.5, lo: 0, hi: Infinity, draw: (r, t) => { let u = 0; while (u === 0) u = r(); return -Math.log(u) / t; }, hat: (S, N) => N / S,
+    ll: (t, S, N) => N * Math.log(t) - t * S, sc: (t, S, N) => N / t - S, Io: (t, S, N) => N / (t * t), If: (t, N) => N / (t * t),
+    stat: 'total waiting time', llTxt: 'N log &lambda; &minus; &lambda;S', ioTxt: 'N/&lambda;&sup2;', ifTxt: 'N/&lambda;&sup2;' }
+};
+const ML = { m: 'bern', n: 20, seed: 1, cseed: 1, th: null, v: null, cov: null };
+function mlData() { const M = MODELS[ML.m], r = mulberry32(ML.seed * 4241 + ML.n); let S = 0; for (let i = 0; i < ML.n; i++) S += M.draw(r, M.th0); return S; }
+function lrInt(M, S, N, th) {
+  const lmax = M.ll(th, S, N), f = t => lmax - M.ll(t, S, N) - 1.920729;
+  const root = (a, b) => { for (let i = 0; i < 80; i++) { const m = (a + b) / 2; if ((f(a) > 0) === (f(m) > 0)) a = m; else b = m; } return (a + b) / 2; };
+  const lo0 = M.lo + 1e-12; let L; if (th <= lo0 || f(lo0) <= 0) L = M.lo; else L = root(lo0, th);
+  let hiB = M.hi === Infinity ? Math.max(th, 1e-6) * 2 + 1 : M.hi - 1e-12; if (M.hi === Infinity) while (f(hiB) < 0) hiB *= 2;
+  const U = th >= hiB || f(hiB) <= 0 ? M.hi : root(th, hiB); return [L, U];
+}
+function mlCoverage() {
+  const M = MODELS[ML.m], r = mulberry32(ML.cseed * 977 + ML.n * 3 + ML.m.length), N = ML.n, t0 = M.th0; let w = 0, l = 0;
+  for (let rep = 0; rep < 2000; rep++) { let S = 0; for (let i = 0; i < N; i++) S += M.draw(r, t0); const th = M.hat(S, N); let se = 1 / Math.sqrt(M.Io(th, S, N)); if (!isFinite(se)) se = 0; if (Math.abs(th - t0) <= Z975 * se) w++; const [a, b] = lrInt(M, S, N, th); if (a <= t0 && t0 <= b) l++; }
+  return { w: w / 2000, l: l / 2000 };
+}
+function drawMle() {
+  const C = C0(), M = MODELS[ML.m], N = ML.n, S = mlData(), th = M.hat(S, N), Ih = M.Io(th, S, N), se = 1 / Math.sqrt(Ih), edge = !isFinite(Ih);
+  const [L, U] = lrInt(M, S, N, th), wl = th - Z975 * (edge ? 0 : se), wu = th + Z975 * (edge ? 0 : se);
+  const span = Math.max(U - L, 4 * (edge ? 0.05 : se), M.th0 * 0.2);
+  let x0 = Math.min(L, wl, M.th0) - span * 0.35, x1 = Math.max(U, wu, M.th0) + span * 0.35; x0 = Math.max(x0, M.lo + 1e-4); if (M.hi < Infinity) x1 = Math.min(x1, M.hi - 1e-4);
+  if (ML.th == null || ML.th <= x0 || ML.th >= x1) ML.th = clamp(th + (edge ? span * 0.2 : se), x0 + (x1 - x0) * 0.05, x1 - (x1 - x0) * 0.05);
+  const lmax = M.ll(th, S, N), rel = t => M.ll(t, S, N) - lmax, v = ML.v = frame($('#ml-cv'), [x0, x1], [-6.4, 0.9], { l: 40, b: 26 });
+  axes(v, M.name, 'ℓ(θ) − ℓ(θ̂)', { ny: 5, sy: 1 }); clip(v);
+  seg(v, x0, -1.920729, x1, -1.920729, C.muted, 1.2, [5, 4]); label(v, x1, -1.82, 'drop of 1.92', C.muted, 'right', 'bottom', 10);
+  if (!edge) curve(v, t => -0.5 * Ih * (t - th) ** 2, C.b, 1.8, [6, 5]);
+  curve(v, rel, C.lda, 2.6);
+  const tm = ML.th, ym = rel(tm), sc = M.sc(tm, S, N), dx = (x1 - x0) * 0.12; seg(v, tm - dx, ym - sc * dx, tm + dx, ym + sc * dx, C.a, 2.2);
+  dot(v, tm, ym, C.a, 6.5);
+  const yW = -5.2, yL = -5.75; seg(v, Math.max(wl, x0), yW, Math.min(wu, x1), yW, C.b, 4); seg(v, L, yL, U, yL, C.lda, 4);
+  dot(v, th, yW, C.b, 3.5); dot(v, th, yL, C.lda, 3.5); v.ctx.restore(); tri(v, M.th0, -6.4, C.ink);
+  const Io = M.Io(tm, S, N), If = M.If(tm, N);
+  $('#ml-n-o').textContent = N;
+  $('#ml-hat').innerHTML = edge ? tip(fmt(th, 3) + ' ± ?', 'every toss came up the same: the peak sits on the\nboundary, the curvature is infinite and the Wald\nstandard error collapses to 0') : tip(fmt(th, 3) + ' ± ' + fmt(se, 3), `θ̂ = ${ML.m === 'expo' ? 'N/S' : 'S/N'} with S = ${fmt(S, ML.m === 'expo' ? 2 : 0)} (${M.stat}), N = ${N}\nse = 1/√I(θ̂) = 1/√${fmt(Ih, 2)}`);
+  $('#ml-sc').innerHTML = tip(sg(sc, 2), `ℓ'(θ) at θ = ${fmt(tm, 3)}: the slope of the green tangent`);
+  $('#ml-io').innerHTML = tip(fmt(Io, 2), `observed: ${M.ioTxt.replace(/&[a-z]+;/g, m => ({ '&sup2;': '²', '&minus;': '−', '&lambda;': 'λ' })[m] || m)} at θ = ${fmt(tm, 3)}`);
+  $('#ml-ie').innerHTML = tip(fmt(If, 2), `expected: ${M.ifTxt.replace(/&[a-z]+;/g, m => ({ '&sup2;': '²', '&minus;': '−', '&lambda;': 'λ' })[m] || m)} at θ = ${fmt(tm, 3)}`);
+  if (!ML.cov || ML.cov.key !== ML.m + N + ':' + ML.cseed) ML.cov = { key: ML.m + N + ':' + ML.cseed, ...mlCoverage() };
+  $('#ml-cw').innerHTML = tip(pct(ML.cov.w, 1), `share of 2,000 fresh data sets of size ${N} from θ₀ = ${M.th0}\nwhose Wald interval θ̂ ± 1.96·se contains θ₀`);
+  $('#ml-cl').innerHTML = tip(pct(ML.cov.l, 1), `share of the same 2,000 data sets whose\nlikelihood-ratio interval contains θ₀`);
+  $('#run-ml1').innerHTML = `<b>Running example</b>: ${N} observations with ${M.stat} S = ${fmt(S, ML.m === 'expo' ? 3 : 0)}; &ell;(${M.name}) = ${M.llTxt}. It peaks at ${M.name}&#770; = ${tip('<b>' + fmt(th, 3) + '</b>', ML.m === 'expo' ? 'N/S' : 'S/N')}, where &ell; = ${fmt(lmax, 3)}; at the true ${M.name}<sub>0</sub> = ${M.th0} it is ${fmt(M.ll(M.th0, S, N), 3)}.`;
+  $('#run-ml2').innerHTML = `<b>Running example</b>: at the marker, ${M.name} = ${fmt(tm, 3)}: score ${tip(sg(sc, 3), 'slope of the log-likelihood')}, observed information ${M.ioTxt} = ${tip(fmt(Io, 3), 'minus the second derivative, from this data')}, Fisher information ${M.ifTxt} = ${tip(fmt(If, 3), 'the average of that over data sets drawn at this θ')}.` + (ML.m === 'expo' ? ' For the exponential they are equal everywhere: the second derivative does not involve the data.' : edge ? '' : ` At ${M.name}&#770; = ${fmt(th, 3)} both equal ${fmt(Ih, 3)}.`);
+  $('#run-ml3').innerHTML = edge ? `<b>Running example</b>: every observation was the same, so &theta;&#770; sits on the boundary and I(&theta;&#770;) is infinite: the Wald interval collapses to a single point. This is where the large-sample theory gives up.` : `<b>Running example</b>: se = 1/&radic;I(&theta;&#770;) = 1/&radic;${fmt(Ih, 3)} = ${tip('<b>' + fmt(se, 4) + '</b>', 'inverse root of the observed information at the peak')}; Wald interval ${fmt(th, 3)} &plusmn; 1.96 &times; ${fmt(se, 4)} = ${tip(ivl(wl, wu, 3), 'blue bar')}.`;
+  $('#run-ml4').innerHTML = `<b>Running example</b>: &ell; drops by 1.92 at ${tip(ivl(L, U, 3), 'found by bisection on each side of the peak; green bar')}, which reaches ${fmt(th - L, 3)} below the peak and ${fmt(U - th, 3)} above${Math.abs((U - th) / Math.max(th - L, 1e-9) - 1) > 0.1 ? ': lopsided, because the curve is' : ': nearly symmetric, like the parabola'}.`;
+  const cw = ML.cov.w, cl = ML.cov.l;
+  let say = `Over 2,000 data sets of ${N}, the Wald interval caught the truth ${pct(cw, 1)} of the time and the likelihood-ratio interval ${pct(cl, 1)}, against the promised 95%. `;
+  if (cw < 0.93 && cl > cw + 0.01) say += `With so few observations the log-likelihood is far from a parabola, and the Wald interval, which assumes one, pays for it. The likelihood-ratio interval uses the curve itself. Raise N and watch the two coverages and the two curves converge.`;
+  else if (cw >= 0.93 && Math.abs(cw - cl) < 0.015) say += `At N = ${N} the curve is close to its parabola, so both intervals work. Lower N to break the Wald interval.`;
+  else say += `Coverage is never exactly 95%: ${ML.m === 'bern' ? 'with a coin, the number of heads is a whole number, so the coverage jumps as N changes.' : 'the theory is only large-sample, and 2,000 runs carry about &plusmn;1% of simulation noise.'}`;
+  say += ` Drag the green marker: the steeper the tangent, the further you are from the peak.`;
+  $('#ml-say').innerHTML = say;
+}
+function drawMl5() { const F = SM.cache ? SM.cache.F : splineFit(SM.pts, SM.K), K = F.K, A = new Float64Array(K * K); F.rows.forEach(h => { for (let a = 0; a < K; a++) for (let b = 0; b < K; b++) A[a * K + b] += h[a] * h[b]; }); const j = Math.min(3, K - 1); $('#run-ml5').innerHTML = `<b>Running example</b>: for the smoothing fit above (K = ${K}), [H<sup>&#8868;</sup>H]<sub>${j + 1}${j + 1}</sub> = ${fmt(A[j * K + j], 3)} and &sigma;&#770;&sup2; = ${fmt(F.s2, 4)}, so the information on &beta;<sub>${j + 1}</sub> alone would be ${fmt(A[j * K + j] / F.s2, 2)}; but the weights share information, so we invert the whole matrix: [I(&beta;&#770;)<sup>&minus;1</sup>]<sub>${j + 1}${j + 1}</sub> = ${fmt(F.Ainv[j * K + j] * F.s2, 4)}, se = ${tip('<b>' + fmt(Math.sqrt(F.Ainv[j * K + j] * F.s2), 3) + '</b>', 'same as the least-squares formula above')}.`; }
+seg1('[data-mm]', 'data-mm', k => { ML.m = k; ML.th = null; drawMle(); });
+$('#ml-n').addEventListener('input', e => { ML.n = +e.target.value; ML.th = null; drawMle(); });
+$('#ml-new').addEventListener('click', () => { ML.seed++; ML.th = null; drawMle(); });
+$('#ml-cov').addEventListener('click', () => { ML.cseed++; drawMle(); });
+hdrag($('#ml-cv'), () => ML.v, () => { const M = MODELS[ML.m], S = mlData(), th = M.hat(S, ML.n); return [ML.th, M.ll(ML.th, S, ML.n) - M.ll(th, S, ML.n)]; }, x => { ML.th = x; drawMle(); });
+fig($('#ml-cv'), drawMle);
+
+/* =============== VERSUS: bootstrap = ML by computer =============== */
+const VS = { seed: 1, conv: null, mode: 'fixed', aseed: 1, ad: null };
+const VBS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+function vsConv() {
+  if (VS.conv && VS.conv.seed === VS.seed) return VS.conv;
+  const F = splineFit(TOY0, 7), K = 7, N = TN, sd = Math.sqrt(F.s2), G = TG.filter((_, i) => i % 2 === 0).map(x => bsRow(x, F.T)), seF = G.map(h => Math.sqrt(quadF(h, F.Ainv, K) * F.s2));
+  // P = (H'H)^-1 H'
+  const P = range(K).map(a => F.rows.map(h => { let s = 0; for (let b = 0; b < K; b++) s += F.Ainv[a * K + b] * h[b]; return s; }));
+  const r = mulberry32(31 + VS.seed * 101), out = []; let keep = null;
+  for (const B of VBS) {
+    const s1 = new Float64Array(G.length), s2 = new Float64Array(G.length), bs1 = new Float64Array(K), bs2 = new Float64Array(K);
+    for (let b = 0; b < B; b++) { const ys = F.yh.map(m => m + sd * gaussOf(r)), be = P.map(row => { let s = 0; for (let i = 0; i < N; i++) s += row[i] * ys[i]; return s; }); G.forEach((h, g) => { const m = dotR(h, be); s1[g] += m; s2[g] += m * m; }); be.forEach((x, j) => { bs1[j] += x; bs2[j] += x * x; }); }
+    const seB = G.map((_, g) => Math.sqrt(Math.max(0, (s2[g] - s1[g] * s1[g] / B) / (B - 1))));
+    out.push({ B, gap: meanA(seB.map((s, g) => Math.abs(s / seF[g] - 1))) });
+    if (B === 5000) keep = { m: Array.from(bs1, x => x / B), s: range(K).map(j => Math.sqrt((bs2[j] - bs1[j] * bs1[j] / B) / (B - 1))) };
+  }
+  VS.conv = { seed: VS.seed, out, keep, F }; return VS.conv;
+}
+function drawConv() {
+  const C = C0(), R = vsConv(), v = frame($('#vs-conv'), [Math.log10(7), Math.log10(7000)], [-3.2, 0], { l: 46, b: 26 });
+  axes(v, 'resamples B', 'gap', { sx: 1, sy: 1, fx: x => (Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(10 ** x)) : ''), fy: y => (Math.abs(y - Math.round(y)) < 1e-9 ? (10 ** y >= 1 ? '100%' : pct(10 ** y, Math.max(0, -Math.round(y) - 2))) : '') });
+  clip(v); curve(v, x => Math.log10(1 / Math.sqrt(Math.PI * 10 ** x)), C.ink, 1.8); R.out.forEach(o => dot(v, Math.log10(o.B), Math.log10(o.gap), C.lda, 5)); v.ctx.restore();
+  const g10 = R.out[0].gap, g5 = R.out[R.out.length - 1].gap;
+  $('#vs-g10').innerHTML = tip(pct(g10, 1), 'mean over x of |bootstrap se / formula se − 1|\nwith B = 10 parametric resamples');
+  $('#vs-g5k').innerHTML = tip(pct(g5, 2), 'the same with B = 5,000');
+  const j = 3, F = R.F, sF = Math.sqrt(F.Ainv[j * 7 + j] * F.s2);
+  $('#run-vs1').innerHTML = `<b>Running example</b>: B = 5,000 parametric resamples of the 50-point data (K = 7): the resampled &beta;&#770;<sub>4</sub>* average ${tip(fmt(R.keep.m[j], 3), 'mean of 5,000 resampled weights')} against &beta;&#770;<sub>4</sub> = ${fmt(F.beta[j], 3)}, with standard deviation ${tip(fmt(R.keep.s[j], 4), 'sd of 5,000 resampled weights')} against the formula&rsquo;s &radic;(&sigma;&#770;&sup2;[(H<sup>&#8868;</sup>H)<sup>&minus;1</sup>]<sub>44</sub>) = ${tip(fmt(sF, 4), 'inverse Fisher information')}.`;
+  $('#vs-csay').innerHTML = `The gap falls from ${pct(g10, 0)} at B = 10 to ${pct(g5, 1)} at B = 5,000, tracking the line: halve the gap by quadrupling B. Nothing systematic is left, because there is nothing to find: the parametric bootstrap is sampling from exactly the normal distribution the formula describes.`;
+}
+$('#vs-again').addEventListener('click', () => { VS.seed++; drawConv(); });
+fig($('#vs-conv'), drawConv);
+/* adaptive K by 5-fold CV inside each resample (copies of a point share a fold) */
+const VKS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
+function cvChooseK(idx, foldOf, T, Y) { // idx: resample (original indices), foldOf: fold per original index
+  let best = VKS[0], bestE = Infinity;
+  for (const K of VKS) {
+    const rows = T[K]; let e = 0;
+    for (let f = 0; f < 5; f++) { const tr = idx.filter(i => foldOf[i] !== f), te = idx.filter(i => foldOf[i] === f); if (!te.length) continue; const b = lsq(rows, Y, tr).beta; te.forEach(i => { e += (Y[i] - dotR(rows[i], b)) ** 2; }); }
+    if (e < bestE - 1e-12) { bestE = e; best = K; }
+  }
+  return best;
+}
+function vsAdapt() {
+  if (VS.ad && VS.ad.seed === VS.aseed) return VS.ad;
+  const N = TN, xs = TOY0.map(p => p[0]), y = TOY0.map(p => p[1]), T = {}, Gs = {}; VKS.forEach(K => { const kn = knotsQuantile(xs, 0, 3, K); T[K] = xs.map(x => bsRow(x, kn)); Gs[K] = TG.map(x => bsRow(x, kn)); });
+  const all = range(N), f0 = new Int32Array(N); permute(mulberry32(77), N).forEach((p, t) => { f0[p] = t % 5; });
+  const K0 = cvChooseK(all, f0, T, y), r = mulberry32(400 + VS.aseed * 37), fixed = [], adapt = [], ks = [];
+  for (let b = 0; b < 200; b++) {
+    const ix = Array.from(bootIdx(r, N)), fo = new Int32Array(N); permute(r, N).forEach((p, t) => { fo[p] = t % 5; });
+    const Kb = cvChooseK(ix, fo, T, y); ks.push(Kb);
+    const b0 = lsq(T[K0], y, ix).beta, b1 = Kb === K0 ? b0 : lsq(T[Kb], y, ix).beta;
+    fixed.push(Gs[K0].map(h => dotR(h, b0))); adapt.push(Gs[Kb].map(h => dotR(h, b1)));
+  }
+  const fit = lsq(T[K0], y, all).beta;
+  VS.ad = { seed: VS.aseed, K0, ks, bf: bandOf(fixed, 0.025), ba: bandOf(adapt, 0.025), mu: Gs[K0].map(h => dotR(h, fit)) }; return VS.ad;
+}
+function drawAdapt() {
+  const C = C0(), R = vsAdapt(), v = frame($('#vs-cv'), [0, 3], [-2.6, 4.4], { l: 34, b: 26 }); axes(v, 'x', 'y', { sx: 0.5, sy: 1 }); clip(v);
+  const on = VS.mode === 'fixed' ? R.bf : R.ba, off = VS.mode === 'fixed' ? R.ba : R.bf;
+  bandFill(v, TG, on.lo, on.hi, C.lda, 0.24); polyline(v, TG.map((x, i) => [x, off.lo[i]]), C.ink, 1.2, [5, 4]); polyline(v, TG.map((x, i) => [x, off.hi[i]]), C.ink, 1.2, [5, 4]);
+  polyline(v, TG.map((x, i) => [x, R.mu[i]]), C.lda, 2.6); TOY0.forEach(p => dot(v, p[0], p[1], C.ink, 3.4)); v.ctx.restore();
+  const cnt = VKS.map(K => R.ks.filter(k => k === K).length), u = frame($('#vs-k'), [3.4, 12.6], [0, Math.max(...cnt) * 1.18], { l: 40, b: 22, t: 8 });
+  axes(u, 'K', 'resamples', { sx: 1, ny: 3 }); clip(u); VKS.forEach((K, i) => rect(u, K - 0.35, K + 0.35, 0, cnt[i], K === R.K0 ? C.lda : C.b, 0.8)); u.ctx.restore(); tri(u, R.K0, 0, C.ink);
+  const wf = meanA(R.bf.hi.map((h, i) => h - R.bf.lo[i])), wa = meanA(R.ba.hi.map((h, i) => h - R.ba.lo[i])), sw = R.ks.filter(k => k !== R.K0).length / 200;
+  $('#vs-cap').innerHTML = `Shaded: the 95% band from 200 pairs resamples with ${VS.mode === 'fixed' ? `K fixed at ${R.K0}` : 'K re-chosen by 5-fold CV in each resample'}; <span style="color:var(--ink)">- -</span> the other band. <span style="color:var(--lda)">&#9644;</span> the fit with K = ${R.K0}, the cross-validated choice on the original 50 points. In each resample, copies of a point are kept in the same fold, so a point is never tested on a fit that contains it.`;
+  $('#vs-k0').innerHTML = tip(String(R.K0), '5-fold CV on the original 50 points,\nK from 4 to 12');
+  $('#vs-wf').innerHTML = tip(fmt(wf, 3), 'average over x of the band width, K fixed');
+  $('#vs-wa').innerHTML = tip(fmt(wa, 3), 'average over x of the band width, K re-chosen');
+  $('#vs-sw').innerHTML = tip(pct(sw, 0), `${Math.round(sw * 200)} of the 200 resamples chose a K other than ${R.K0}`);
+  $('#vs-say').innerHTML = `Cross-validation picked K = ${R.K0} on the data, but ${pct(sw, 0)} of resamples pick a different K. Letting the choice vary makes the band ${wa > wf ? pct(wa / wf - 1, 0) + ' wider on average' : 'no wider on average here'}${wa > wf ? ', most where the candidate curves disagree' : ''}. ${wa > wf * 1.03 ? 'That extra width is real uncertainty that a formula for a fixed K cannot see; the bootstrap measures it simply by repeating the whole procedure.' : 'Here the choice is stable, so the extra uncertainty is small; draw new resamples to see how much it varies.'}`;
+}
+seg1('[data-va]', 'data-va', k => { VS.mode = k; drawAdapt(); });
+$('#vs-run').addEventListener('click', () => { VS.aseed++; drawAdapt(); });
+fig($('#vs-cv'), drawAdapt); fig($('#vs-k'), drawAdapt);
+
+/* =============== BAYES =============== */
+const BY = { z: 1.5, lt: 0, v: null };
+const npdf = (x, m, s2) => Math.exp(-((x - m) ** 2) / (2 * s2)) / Math.sqrt(2 * Math.PI * s2);
+function drawBayes() {
+  const C = C0(), tau = 10 ** BY.lt, z = BY.z, pm = z / (1 + 1 / tau), pv = 1 / (1 + 1 / tau), top = Math.max(npdf(0, 0, pv), 0.42) * 1.12;
+  const v = BY.v = frame($('#by-cv'), [-5, 5], [0, top], { l: 40, b: 26 }); axes(v, 'θ', 'density', { sx: 1, ny: 4 }); clip(v);
+  const xs = range(401).map(i => -5 + i / 40), post = xs.map(x => npdf(x, pm, pv)), boot = xs.map(x => npdf(x, z, 1)), prior = xs.map(x => npdf(x, 0, tau));
+  bandFill(v, xs, xs.map(() => 0), post, C.lda, 0.25); polyline(v, xs.map((x, i) => [x, prior[i]]), C.muted, 2); polyline(v, xs.map((x, i) => [x, post[i]]), C.lda, 2.6); polyline(v, xs.map((x, i) => [x, boot[i]]), C.b, 2.2, [6, 5]);
+  v.ctx.restore(); tri(v, z, 0, C.ink);
+  let ov = 0; for (let i = 0; i < xs.length - 1; i++) ov += Math.min(post[i], boot[i]) * 0.025;
+  $('#by-tau-o').textContent = tau < 1 ? fmt(tau, 2) : tau < 10 ? fmt(tau, 1) : fmt(tau, 0);
+  $('#by-pm').innerHTML = tip(fmt(pm, 3), `z / (1 + 1/τ) = ${fmt(z, 2)} / ${fmt(1 + 1 / tau, 3)}`);
+  $('#by-psd').innerHTML = tip(fmt(Math.sqrt(pv), 3), `√(1/(1 + 1/τ)) = √${fmt(pv, 4)}`);
+  $('#by-ov').innerHTML = tip(pct(ov, 1), 'area under both curves at once:\n∫ min(posterior, bootstrap) dθ; 100% = identical');
+  $('#run-by1').innerHTML = `<b>Running example</b>: z = ${fmt(z, 2)}, &tau; = ${$('#by-tau-o').textContent}: mean ${fmt(z, 2)}/(1 + 1/${$('#by-tau-o').textContent}) = ${tip('<b>' + fmt(pm, 3) + '</b>', 'posterior mean')}, variance 1/(1 + 1/${$('#by-tau-o').textContent}) = ${tip('<b>' + fmt(pv, 3) + '</b>', 'posterior variance')}. The bootstrap distribution is N(${fmt(z, 2)}, 1).`;
+  $('#by-say').innerHTML = tau < 1 ? `With &tau; = ${$('#by-tau-o').textContent} the prior is confident that &theta; is near 0, and it drags the posterior ${pct(1 - 1 / (1 + 1 / tau), 0)} of the way from z back towards 0. The posterior and the bootstrap disagree (overlap ${pct(ov, 0)}): the bootstrap knows nothing about the prior. Widen the prior.` : tau < 20 ? `The prior still pulls a little: the posterior mean is ${fmt(pm, 3)} rather than ${fmt(z, 2)}, and its sd ${fmt(Math.sqrt(pv), 3)} rather than 1. Overlap with the bootstrap: ${pct(ov, 0)}.` : `With &tau; = ${$('#by-tau-o').textContent} the prior is nearly flat over the range that matters, and the posterior is almost exactly the bootstrap&rsquo;s N(z, 1) (overlap ${pct(ov, 1)}). Drag z anywhere: the two move together.`;
+}
+(function () { const cv = $('#by-cv'); let on = false; const near = (px, py) => { const v = BY.v; return v && Math.abs(v.X(BY.z) - px) < 22 && py > v.Y(0) - 40; };
+  cv.addEventListener('pointerdown', e => { const [px, py] = evPos(cv, e); if (near(px, py)) { on = true; cv.setPointerCapture(e.pointerId); e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const [px, py] = evPos(cv, e); if (!on) { cv.style.cursor = near(px, py) ? 'ew-resize' : 'default'; return; } BY.z = clamp(BY.v.iX(px), -3.5, 3.5); drawBayes(); });
+  const up = () => { on = false; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); })();
+$('#by-tau').addEventListener('input', e => { BY.lt = +e.target.value; drawBayes(); });
+fig($('#by-cv'), drawBayes);
+
+const BB = { n: 8, seed: 1, stat: 'mean' };
+function wMedian(z, w) { const o = range(z.length).sort((a, b) => z[a] - z[b]); let c = 0; for (const i of o) { c += w[i]; if (c >= 0.5) return z[i]; } return z[o[o.length - 1]]; }
+function drawBB() {
+  const C = C0(), r = mulberry32(BB.seed * 3301 + BB.n), N = BB.n, z = range(N).map(() => 10 + 4 * gaussOf(r) + (r() < 0.2 ? 6 * r() : 0));
+  const rb = mulberry32(BB.seed * 7 + N), B = 4000, s1 = [], s2 = [], zb = new Float64Array(N); let c1 = null, w1 = null;
+  for (let b = 0; b < B; b++) {
+    const cnt = new Int32Array(N); for (let i = 0; i < N; i++) { const j = Math.floor(rb() * N); zb[i] = z[j]; cnt[j]++; }
+    s1.push(BB.stat === 'mean' ? meanA(zb) : quant(zb, 0.5));
+    const g = range(N).map(() => { let u = 0; while (u === 0) u = rb(); return -Math.log(u); }), G = sumA(g), w = g.map(x => x / G);
+    s2.push(BB.stat === 'mean' ? sumA(w.map((x, i) => x * z[i])) : wMedian(z, w)); if (!b) { c1 = cnt; w1 = w; }
+  }
+  const lo = Math.min(...z) - 1, hi = Math.max(...z) + 1, nb = 50, wd = (hi - lo) / nb, h1 = binCounts(s1, lo, hi, nb).map(c => c / B), h2 = binCounts(s2, lo, hi, nb).map(c => c / B), ym = Math.max(...h1, ...h2) * 1.15;
+  const v = frame($('#bb-cv'), [lo, hi], [-ym * 0.08, ym], { l: 44, b: 26 }); axes(v, BB.stat === 'mean' ? 'resampled mean' : 'resampled median', 'share', { ny: 4 }); clip(v);
+  histDraw(v, h1, lo, wd, C.lda, true, 0.5); histDraw(v, h2, lo, wd, C.b, false); z.forEach(x => dot(v, x, -ym * 0.04, C.ink, 3.4)); v.ctx.restore();
+  const sd1 = sdA(s1), sd2 = sdA(s2), th = Math.sqrt(N / (N + 1)), sp = sdP(z);
+  $('#bb-n-o').textContent = N;
+  $('#bb-sd1').innerHTML = tip(fmt(sd1, 3), `sd of ${B} bootstrap ${BB.stat}s` + (BB.stat === 'mean' ? `\ntheory: σ̂/√N = ${fmt(sp, 3)}/√${N} = ${fmt(sp / Math.sqrt(N), 3)}` : ''));
+  $('#bb-sd2').innerHTML = tip(fmt(sd2, 3), `sd of ${B} Dirichlet-weighted ${BB.stat}s` + (BB.stat === 'mean' ? `\ntheory: σ̂/√(N+1) = ${fmt(sp / Math.sqrt(N + 1), 3)}` : ''));
+  $('#bb-ra').innerHTML = tip(fmt(sd2 / sd1, 3), BB.stat === 'mean' ? `Bayesian / plain; theory √(N/(N+1)) = ${fmt(th, 3)}` : 'Bayesian / plain');
+  const show = a => a.slice(0, Math.min(N, 6)).map(x => fmt(x, x % 1 ? 3 : 0)).join(', ') + (N > 6 ? ', &hellip;' : '');
+  $('#run-by2').innerHTML = `<b>Running example</b>: the ${N} data values are distinct, so L = ${N} and N&#373; = (1, &hellip;, 1): the posterior is Di(1, &hellip;, 1). One bootstrap resample&rsquo;s counts: (${show(Array.from(c1))}), shares (${show(Array.from(c1, c => c / N))}); one Dirichlet draw: (${show(w1)}). Both average 1/${N} = ${fmt(1 / N, 3)} per point.`;
+  $('#run-by3').innerHTML = `<b>Running example</b>: each share has ${tip('Var<sub>boot</sub> = ' + fmt((1 / N) * (1 - 1 / N) / N, 5), `(1/${N})(1 − 1/${N})/${N}`)} and ${tip('Var<sub>post</sub> = ' + fmt((1 / N) * (1 - 1 / N) / (N + 1), 5), `(1/${N})(1 − 1/${N})/${N + 1}`)}. For the mean that gives sds &sigma;&#770;/&radic;N = ${fmt(sp / Math.sqrt(N), 3)} and &sigma;&#770;/&radic;(N + 1) = ${fmt(sp / Math.sqrt(N + 1), 3)}; the simulation shows ${fmt(sd1, 3)} and ${fmt(sd2, 3)}.`;
+  $('#bb-say').innerHTML = BB.stat === 'mean' ? `The two histograms nearly coincide; the Bayesian one is a touch narrower (ratio ${fmt(sd2 / sd1, 3)}, theory ${fmt(th, 3)}) and smoother. ${N <= 10 ? 'With N = ' + N + ' the bootstrap histogram is visibly jagged: a resample can only produce a limited set of means, while Dirichlet weights vary continuously.' : 'As N grows, the factor N/(N + 1) goes to 1 and the two become indistinguishable.'}` : `For the median the bootstrap can only return data values${N % 2 ? '' : ' (or midpoints of two)'}, so its histogram is a set of spikes; the weighted median of the Bayesian bootstrap is always a data value, giving spikes too, in nearly the same places and proportions. Ratio of sds: ${fmt(sd2 / sd1, 3)}.`;
+}
+seg1('[data-bb]', 'data-bb', k => { BB.stat = k; drawBB(); });
+$('#bb-n').addEventListener('input', e => { BB.n = +e.target.value; drawBB(); });
+$('#bb-new').addEventListener('click', () => { BB.seed++; drawBB(); });
+fig($('#bb-cv'), drawBB);
+
+/* =============== PROJECT: London NO2 =============== */
+const PA = 2008, PB = 2008 + 140 / 12, PBOOT = 1000;
+const PJ = { ser: 'road', K: 6, mode: 'fisher', q: 1, cache: {}, ecache: {} };
+function pjRow(t, mon, T, season) { const b = bsRow(t, T), row = new Float64Array(b.length + 2); row.set(b); if (season) { row[b.length] = Math.cos(2 * Math.PI * mon / 12); row[b.length + 1] = Math.sin(2 * Math.PI * mon / 12); } return row; }
+function pjCompute(ser, K) {
+  const key = ser + K; if (PJ.cache[key]) return PJ.cache[key];
+  const y = AQ[ser], N = y.length, m = AQ.m, T = knotsEqual(PA, PB, K), rows = m.map(mm => pjRow(PA + mm / 12, mm % 12, T, true)), p = K + 2, all = range(N);
+  const f = lsq(rows, y, all), beta = f.beta, yh = rows.map(h => dotR(h, beta)), e = y.map((v, i) => v - yh[i]), rss = sumA(e.map(x => x * x)), s2 = rss / N, Ainv = cholInv(f.L, p);
+  const Cov = Ainv.map(x => x * s2);
+  const h1 = pjRow(2009, 0, T, false), h2 = pjRow(2019, 0, T, false);
+  const stats = b => { const f1 = dotR(h1, b), f2 = dotR(h2, b); return [f2 - f1, 100 * (1 - f2 / f1), Math.hypot(b[p - 2], b[p - 1])]; };
+  const f1 = dotR(h1, beta), f2 = dotR(h2, beta), est = stats(beta), A = Math.hypot(beta[p - 2], beta[p - 1]);
+  const Gr = [Float64Array.from(h2, (v, j) => v - h1[j]), Float64Array.from(h2, (v, j) => -100 * (v * f1 - f2 * h1[j]) / (f1 * f1)), Float64Array.from({ length: p }, (_, j) => j === p - 2 ? beta[p - 2] / A : j === p - 1 ? beta[p - 1] / A : 0)];
+  const se = Gr.map(g => Math.sqrt(quadF(g, Cov, p)));
+  // sandwich: A^-1 (sum e_i^2 h_i h_i') A^-1
+  const Mid = new Float64Array(p * p); rows.forEach((h, i) => { const w = e[i] * e[i]; for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) Mid[a * p + b] += w * h[a] * h[b]; });
+  const mul = (X, Y) => { const Z = new Float64Array(p * p); for (let a = 0; a < p; a++) for (let c = 0; c < p; c++) { let s = 0; for (let b = 0; b < p; b++) s += X[a * p + b] * Y[b * p + c]; Z[a * p + c] = s; } return Z; };
+  const Sw = mul(mul(Ainv, Mid), Ainv), seSw = Gr.map(g => Math.sqrt(quadF(g, Sw, p)));
+  const e0 = e.slice(0, -1), e1 = e.slice(1), m0 = meanA(e0), m1 = meanA(e1); let sxy = 0, sxx = 0, syy = 0; for (let i = 0; i < N - 1; i++) { sxy += (e0[i] - m0) * (e1[i] - m1); sxx += (e0[i] - m0) ** 2; syy += (e1[i] - m1) ** 2; } const r1 = sxy / Math.sqrt(sxx * syy);
+  const P = range(p).map(a => rows.map(h => { let s = 0; for (let b = 0; b < p; b++) s += Ainv[a * p + b] * h[b]; return s; }));
+  const applyP = ys => P.map(row => { let s = 0; for (let i = 0; i < N; i++) s += row[i] * ys[i]; return s; });
+  const grid = range(140).map(i => PA + (i + 0.5) / 12), Gt = grid.map(t => pjRow(t, 0, T, false));
+  const trend = Gt.map(h => dotR(h, beta)), seT = Gt.map(h => Math.sqrt(quadF(h, Cov, p)));
+  const boots = {};
+  for (const [kind, seed] of [['pairs', 101], ['param', 202], ['blocks', 303]]) {
+    const r = mulberry32(seed), st = [], cur = [];
+    for (let b = 0; b < PBOOT; b++) {
+      let be;
+      if (kind === 'pairs') { const ix = bootIdx(r, N); be = lsq(rows, y, ix).beta; }
+      else if (kind === 'param') { const sd = Math.sqrt(s2); be = applyP(yh.map(v => v + sd * gaussOf(r))); }
+      else { const nbk = Math.ceil(N / 12), es = []; for (let k = 0; k < nbk; k++) { const s = Math.floor(r() * (N - 11)); for (let j = 0; j < 12; j++) es.push(e[s + j]); } be = applyP(yh.map((v, i) => v + es[i])); }
+      st.push(stats(be)); cur.push(Gt.map(h => dotR(h, be)));
+    }
+    boots[kind] = { st, band: bandOf(cur, 0.025) };
+  }
+  return (PJ.cache[key] = { y, N, K, p, beta, yh, e, s2, r1, est, se, seSw, boots, grid, trend, seT, rows, T });
+}
+function pjErrTable(ser) {
+  if (PJ.ecache[ser]) return PJ.ecache[ser];
+  const y = AQ[ser], N = y.length, m = AQ.m, all = range(N);
+  let r = mulberry32(404); const perm = permute(r, N), fold = new Int32Array(N); perm.forEach((pp, t) => { fold[pp] = t % 10; });
+  r = mulberry32(505); const idx = range(200).map(() => bootIdx(r, N));
+  const out = [];
+  for (let K = 4; K <= 12; K++) {
+    const T = knotsEqual(PA, PB, K), rows = m.map(mm => pjRow(PA + mm / 12, mm % 12, T, true)), b = lsq(rows, y, all).beta, yh = rows.map(h => dotR(h, b));
+    const err = meanA(y.map((v, i) => (v - yh[i]) ** 2));
+    let cv = 0; for (let f = 0; f < 10; f++) { const bf = lsq(rows, y, all.filter(i => fold[i] !== f)).beta; all.forEach(i => { if (fold[i] === f) cv += (y[i] - dotR(rows[i], bf)) ** 2; }); } cv /= N;
+    const L = new Float64Array(N), n = new Int32Array(N);
+    for (const ix of idx) { const inb = new Uint8Array(N); ix.forEach(i => { inb[i] = 1; }); const bb = lsq(rows, y, ix).beta; for (let i = 0; i < N; i++) if (!inb[i]) { L[i] += (y[i] - dotR(rows[i], bb)) ** 2; n[i]++; } }
+    let e1 = 0, c = 0; for (let i = 0; i < N; i++) if (n[i]) { e1 += L[i] / n[i]; c++; } e1 /= c;
+    const my = meanA(y), mh = meanA(yh), gam = meanA(y.map(v => v * v)) - 2 * my * mh + meanA(yh.map(v => v * v));
+    out.push({ K, err, cv, e1, ...plus632(err, e1, gam) });
+  }
+  return (PJ.ecache[ser] = out);
+}
+const QN = ['change 2009&rarr;2019 (&micro;g/m&sup3;)', 'fall 2009&rarr;2019 (%)', 'seasonal swing A (&micro;g/m&sup3;)'];
+const MN = { fisher: 'Fisher / delta method', sandwich: 'Sandwich (robust) formula', pairs: 'Pairs bootstrap', param: 'Parametric bootstrap', blocks: 'Moving-block bootstrap' };
+function pjInt(R, kind, j) {
+  if (kind === 'fisher' || kind === 'sandwich') { const s = kind === 'fisher' ? R.se[j] : R.seSw[j]; return { se: s, lo: R.est[j] - Z975 * s, hi: R.est[j] + Z975 * s }; }
+  const v = R.boots[kind].st.map(x => x[j]); return { se: sdA(v), lo: quant(v, 0.025), hi: quant(v, 0.975) };
+}
+function drawProject() {
+  const C = C0(), R = pjCompute(PJ.ser, PJ.K), yrs = AQ.m.map(mm => PA + mm / 12);
+  const ymin = Math.min(...R.y) - 4, ymax = Math.max(...R.y) + 4, v = frame($('#pj-cv'), [PA, PB], [Math.max(0, ymin), ymax], { l: 40, b: 26 });
+  axes(v, '', 'NO₂ µg/m³', { sx: 2, ny: 5, fx: x => String(Math.round(x)) }); clip(v);
+  const flo = R.trend.map((t, i) => t - Z975 * R.seT[i]), fhi = R.trend.map((t, i) => t + Z975 * R.seT[i]);
+  const band = PJ.mode === 'fisher' ? { lo: flo, hi: fhi } : R.boots[PJ.mode].band;
+  bandFill(v, R.grid, band.lo, band.hi, C.lda, 0.28);
+  if (PJ.mode !== 'fisher') { polyline(v, R.grid.map((x, i) => [x, flo[i]]), C.ink, 1.1, [5, 4]); polyline(v, R.grid.map((x, i) => [x, fhi[i]]), C.ink, 1.1, [5, 4]); }
+  polyline(v, yrs.map((x, i) => [x, R.yh[i]]), C.b, 1.3, null, 0.8);
+  yrs.forEach((x, i) => dot(v, x, R.y[i], C.ink, 2.6));
+  polyline(v, R.grid.map((x, i) => [x, R.trend[i]]), C.lda, 3);
+  seg(v, 2009, ymin, 2009, ymax, C.muted, 1, [3, 3]); seg(v, 2019, ymin, 2019, ymax, C.muted, 1, [3, 3]); v.ctx.restore();
+  const mn = PJ.mode === 'fisher' ? 'Fisher-information' : PJ.mode === 'pairs' ? 'pairs-bootstrap' : PJ.mode === 'param' ? 'parametric-bootstrap' : 'moving-block-bootstrap';
+  $('#pj-cap').innerHTML = `<span style="color:var(--ink)">&#9679;</span> monthly London-mean ${PJ.ser === 'road' ? 'roadside' : 'background'} NO&#8322; &nbsp; <span style="color:var(--cB)">&#9644;</span> fitted trend + season &nbsp; <span style="color:var(--lda)">&#9644;</span> trend alone, with its ${mn} 95% band${PJ.mode !== 'fisher' ? ' (<span style="color:var(--ink)">- -</span> Fisher band)' : ''}. Dotted lines: January 2009 and January 2019.`;
+  const I = pjInt(R, PJ.mode === 'fisher' ? 'fisher' : PJ.mode, 0);
+  const wF = meanA(fhi.map((h, i) => h - flo[i])), wM = meanA(band.hi.map((h, i) => h - band.lo[i]));
+  $('#pj-k-o').textContent = PJ.K;
+  $('#pj-sig').innerHTML = tip(fmt(Math.sqrt(R.s2), 3), `√(RSS/N) with N = ${R.N} months and ${R.p} weights`);
+  $('#pj-r1').innerHTML = tip(fmt(R.r1, 3), 'correlation of each month’s residual with the next month’s');
+  $('#pj-ch').innerHTML = tip(sg(R.est[0], 2), `trend(Jan 2019) − trend(Jan 2009)\n95%: ${ivl(I.lo, I.hi, 2).replace(/&minus;/g, '−')} (${MN[PJ.mode === 'fisher' ? 'fisher' : PJ.mode].toLowerCase()})`);
+  $('#pj-w').innerHTML = tip(fmt(wM / wF, 3), `mean width of this band / mean width of the Fisher band\n= ${fmt(wM, 2)} / ${fmt(wF, 2)} µg/m³`);
+  const say = { fisher: `The Fisher band is the formula from the smoothing section with &sigma;&#770; = ${fmt(Math.sqrt(R.s2), 2)}: it assumes the same Gaussian noise every month. It flares at both ends, where fewer months pin the spline down.`,
+    pairs: `Resampling whole months makes no assumption about the noise. Its band is ${wM < wF ? pct(1 - wM / wF, 0) + ' narrower' : pct(wM / wF - 1, 0) + ' wider'} than Fisher&rsquo;s on average. The residuals are not equally noisy: winter months scatter far more than summer ones, and the pairs bootstrap, like the sandwich formula in the table, sees that.`,
+    param: `The parametric bootstrap redraws Gaussian noise of size &sigma;&#770; around the fit. It is the Fisher band computed by simulation, and with B = 1,000 it matches it to within ${pct(Math.abs(wM / wF - 1), 1)}.`,
+    blocks: `Residuals come back in runs of 12 consecutive months, so any correlation between neighbouring months survives the resampling. With a lag-1 correlation of only ${fmt(R.r1, 3)}, the band is close to Fisher&rsquo;s (ratio ${fmt(wM / wF, 3)}): the months behave almost independently once the trend and the season are removed.` }[PJ.mode];
+  $('#pj-say').innerHTML = say + (PJ.K >= 10 ? ` With K = ${PJ.K} the trend wiggles with short-lived episodes, and every band widens.` : '');
+  // table
+  const kinds = ['fisher', 'sandwich', 'pairs', 'param', 'blocks'], dp = [2, 2, 2];
+  $('#pj-tbl').innerHTML = `<thead><tr><th>Method</th>${QN.map(q => `<th>${q}</th>`).join('')}</tr></thead><tbody><tr><td><b>Estimate</b></td>${R.est.map((x, j) => `<td><b>${tip(sg(x, dp[j]), j === 0 ? 'trend(Jan 2019) − trend(Jan 2009)' : j === 1 ? '100 × (1 − trend(2019)/trend(2009))' : '√(a² + b²) from the cosine and sine weights')}</b></td>`).join('')}</tr>` +
+    kinds.map(k => `<tr><td>${MN[k]}</td>${[0, 1, 2].map(j => { const I = pjInt(R, k, j); return `<td>${tip(ivl(I.lo, I.hi, dp[j]), (k === 'fisher' || k === 'sandwich' ? `estimate ± 1.96 × se, se = ${fmt(I.se, 3)}` : `2.5% and 97.5% points of ${PBOOT} resamples\nbootstrap se = ${fmt(I.se, 3)}`))}</td>`; }).join('')}</tr>`).join('') + `</tbody>`;
+  drawPjHist();
+}
+function drawPjHist() {
+  const C = C0(), R = pjCompute(PJ.ser, PJ.K), j = PJ.q, a = R.boots.pairs.st.map(x => x[j]), b = R.boots.blocks.st.map(x => x[j]);
+  const lo0 = Math.min(quant(a, 0.001), quant(b, 0.001), R.est[j] - 4 * R.se[j]), hi0 = Math.max(quant(a, 0.999), quant(b, 0.999), R.est[j] + 4 * R.se[j]), nb = 46, w = (hi0 - lo0) / nb;
+  const ha = binCounts(a, lo0, hi0, nb), hb = binCounts(b, lo0, hi0, nb), ym = Math.max(...ha, ...hb, PBOOT * w * npdf(0, 0, R.se[j] ** 2)) * 1.12;
+  const v = frame($('#pj-hist'), [lo0, hi0], [0, ym], { l: 40, b: 26 }); axes(v, ['change, µg/m³', 'fall, %', 'swing A, µg/m³'][j], 'resamples', { ny: 3 }); clip(v);
+  histDraw(v, ha, lo0, w, C.lda, true, 0.5); histDraw(v, hb, lo0, w, C.b, false); curve(v, x => PBOOT * w * npdf(x, R.est[j], R.se[j] ** 2), C.ink, 2); v.ctx.restore(); tri(v, R.est[j], 0, C.ink);
+  const m = meanA(a), m2 = meanA(a.map(x => (x - m) ** 2)), m3 = meanA(a.map(x => (x - m) ** 3)), sk = m3 / m2 ** 1.5, ra = sdA(a) / R.se[j];
+  $('#pj-skew').innerHTML = tip(sg(sk, 3), 'mean cubed deviation / sd³ of the 1,000 pairs-bootstrap values\n(0 for a symmetric distribution)');
+  $('#pj-ratio').innerHTML = tip(fmt(ra, 3), `${fmt(sdA(a), 3)} / ${fmt(R.se[j], 3)}`);
+  const qn = ['the change', 'the percentage fall', 'the seasonal swing'][j];
+  $('#pj-hsay').innerHTML = `For ${qn}, the pairs bootstrap is ${Math.abs(sk) < 0.2 ? 'close to symmetric' : sk > 0 ? 'skewed to the right' : 'skewed to the left'} (skewness ${sg(sk, 2)}), so ${Math.abs(sk) < 0.2 ? 'a normal curve is a fair summary' : 'the percentile interval leans the same way, which &plusmn; 1.96 se cannot'}. Its spread is ${pct(ra, 0)} of the Fisher value${Math.abs(ra - 1) > 0.1 ? `: not a failure of the bootstrap but of the constant-variance assumption behind the formula; the sandwich row in the table agrees with the pairs bootstrap` : ''}. ${j === 2 ? 'A swing is a length, √(a² + b²), which can never be negative; with this much signal, though, the curvature hardly shows.' : j === 1 ? 'A percentage fall divides by the 2009 level, a curved function of &beta;: the delta method straightens it out at the estimate.' : 'The change is linear in &beta;, so for it the Fisher interval is exact under the Gaussian model.'}`;
+}
+function drawErr() {
+  const E = pjErrTable(PJ.ser), cols = [['err', 'training err-bar'], ['cv', '10-fold CV'], ['e1', 'Err<sup>(1)</sup>'], ['e632', '.632'], ['ep', '.632+']];
+  const mins = {}; cols.forEach(([c]) => { mins[c] = Math.min(...E.map(r => r[c])); });
+  $('#pj-err').innerHTML = `<thead><tr><th>K</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>` + E.map(r => `<tr${r.K === PJ.K ? ' class="win"' : ''}><td>${r.K}</td>${cols.map(([c]) => `<td${c !== 'err' && r[c] === mins[c] ? ' style="font-weight:700;color:var(--lda)"' : ''}>${c === 'ep' ? tip(fmt(r[c], 3), `R̂ = ${fmt(r.R, 3)}, ŵ = ${fmt(r.w, 3)}`) : fmt(r[c], 3)}</td>`).join('')}</tr>`).join('') + `</tbody>`;
+  const pick = c => E.reduce((a, b) => (b[c] < a[c] ? b : a)).K;
+  $('#pj-esay').innerHTML = `On the ${PJ.ser === 'road' ? 'roadside' : 'background'} series, 10-fold CV picks K = ${pick('cv')}, Err<sup>(1)</sup> K = ${pick('e1')}, .632 K = ${pick('e632')} and .632+ K = ${pick('ep')}. The training error keeps falling as K grows, as it must. The level of Err<sup>(1)</sup> sits above CV (each resample sees only about 63% of the months), and .632+ lands close to CV. All agree that the smooth trends win: the data do not support more than a gentle bend. The row of the K you are using is shaded. (Random folds and resamples ignore time order; with a lag-1 residual correlation near ${fmt(pjCompute(PJ.ser, PJ.K).r1, 2)} that matters little here.)`;
+}
+/* compare the browser's numbers with the Python output printed on the page */
+function pjMatch() {
+  const R = pjCompute('road', 6), E = pjErrTable('road'), f3 = x => x.toFixed(3), lines = [];
+  lines.push(`N = ${R.N}, p = ${R.p}, sigma_hat = ${Math.sqrt(R.s2).toFixed(4)}, lag-1 autocorrelation of residuals = ${R.r1.toFixed(4)}`);
+  ['change 2009->2019 (ug/m3)', 'fall 2009->2019 (%)', 'seasonal amplitude (ug/m3)'].forEach((nm, j) => { lines.push(`${nm}: estimate ${f3(R.est[j])}`); ['fisher', 'sandwich', 'pairs', 'param', 'blocks'].forEach(k => { const I = pjInt(R, k, j); lines.push(`${f3(I.se)} ${f3(I.lo)} ${f3(I.hi)}`); }); });
+  E.forEach(r => lines.push([r.err, r.cv, r.e1, r.e632, r.ep].map(f3).join(' ')));
+  const out = $('#pj-out').textContent.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('K '));
+  const py = out.map(s => (s.match(/-?\d+\.\d+/g) || []).join(' ')), js = lines.map(s => (s.match(/-?\d+\.\d+/g) || []).join(' '));
+  let tot = 0, ok = 0; js.forEach(l => { l.split(' ').forEach(x => { tot++; if (py.some(p => p.split(' ').includes(x))) ok++; }); });
+  const nums = py.join(' ').split(' ').filter(Boolean).length, same = js.join('|') === py.join('|');
+  $('#pj-match').innerHTML = `The browser reproduces ${same ? `<b>all ${nums}</b> numbers in this output, to the last printed digit` : `${ok} of the ${tot} numbers in this output to the last printed digit`} (roadside, K = 6). The two draw identical resamples because the Python code ports the page&rsquo;s random-number generator (mulberry32); they solve the least-squares problems by different routes (Cholesky in the browser, LAPACK in numpy), which differ around the tenth significant digit. Python&rsquo;s numbers are fixed in the output above; the browser&rsquo;s are recomputed every time the page loads and compared here.`;
+  return { same, ok, tot };
+}
+seg1('[data-ps]', 'data-ps', k => { PJ.ser = k; drawProject(); drawErr(); });
+seg1('[data-pm]', 'data-pm', k => { PJ.mode = k; drawProject(); });
+seg1('[data-pq]', 'data-pq', k => { PJ.q = +k; drawPjHist(); });
+$('#pj-k').addEventListener('input', e => { PJ.K = +e.target.value; drawProject(); drawErr(); });
+fig($('#pj-cv'), drawProject); fig($('#pj-hist'), drawPjHist);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+obData(); obDraw(1); seRun(10);
+drawHero(); drawWhy(); drawOob(); drawPlus(); drawSelect(); drawSmooth(); drawMle(); drawConv(); drawAdapt(); drawBayes(); drawBB(); drawProject(); drawErr(); pjMatch();
+window.__x033 = { pjCompute, pjErrTable, pjMatch, PJ, SM, smCalc, ML, MODELS, lrInt, plCalc, PL, SE, vsAdapt, vsConv, TOY0, bsRow, knotsQuantile, splineFit, mulberry32, clsEstimates, clsData, OB, obStatic };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
