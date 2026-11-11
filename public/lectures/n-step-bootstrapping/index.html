@@ -1,0 +1,1531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on n-step bootstrapping (Sutton &amp; Barto chapter 7): the n-step return, n-step TD prediction and its error-reduction property, the 19-state random walk experiment, n-step Sarsa and Expected Sarsa, off-policy learning with importance sampling, per-decision control variates, the tree-backup algorithm and n-step Q(sigma), with a project that tunes n for n-step Sarsa on a windy gridworld built from real NOAA satellite winds over the Gulf of Tehuantepec, verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>n-step Bootstrapping</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: -4px; }
+.hero-map canvas, #tb-cv { cursor: pointer; touch-action: manipulation; }
+.pjmap { aspect-ratio: 14 / 9.6; }
+.boardplot { aspect-ratio: 2.4 / 1; }
+table.race td.mine { font-weight: 700; }
+table.race td:first-child { white-space: nowrap; }
+table.fam td, table.fam th { font-size: 0.86rem; white-space: normal; vertical-align: top; }
+table.fam td:first-child { white-space: nowrap; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+@media (max-width: 560px) { .boardplot { aspect-ratio: 1.4 / 1; } .plot.tall { aspect-ratio: 0.85 / 1; } }
+@media (max-width: 560px) { .eq .m { font-size: 0.84rem; } }
+@media (max-width: 560px) { .plot.mob { aspect-ratio: 1.1 / 1; } .plot.ar-3x1 { aspect-ratio: 2 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">n-step Bootstrapping <span>&middot; between TD and Monte Carlo</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">n steps ahead</a>
+      <a href="#pred">n-step TD</a>
+      <a href="#sarsa">n-step Sarsa</a>
+      <a href="#off">Off-policy</a>
+      <a href="#cv">Control variates</a>
+      <a href="#tree">Tree backup</a>
+      <a href="#qsigma">Q(&sigma;)</a>
+      <a href="#project">Wind-jet project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Reinforcement learning &amp; decision making &middot; chapter 3.1e &middot; n-step bootstrapping</div>
+      <h1>n-step Bootstrapping</h1>
+      <div class="sub">Look a few rewards ahead, then trust your estimate</div>
+      <p class="lead">One-step TD learns from a single reward and then leans on its own guess. Monte Carlo waits for the whole episode and leans on nothing. Neither extreme is usually best. An <em class="term">n-step method</em> adds up the next n rewards and only then bootstraps, so n becomes a dial between the two, and a dial you can tune. On the right a boat is learning, by n-step Sarsa, to cross a real wind field: the January winds off the Pacific coast of southern Mexico, measured by satellite, where a jet of wind pours south through a gap in the mountains. Each voyage costs one point per step. <strong>Pick n, or tap the sea to move the start</strong>, and watch how quickly the voyages get shorter.</p>
+      <dl class="facts">
+        <div><dt>The idea</dt><dd>Sum n real rewards, then add the discounted estimate of where you landed</dd></div>
+        <div><dt>The dial</dt><dd>n = 1 is one-step TD; n &ge; the episode length is Monte Carlo</dd></div>
+        <div><dt>Off-policy</dt><dd>Importance sampling, control variates, tree backup, and Q(&sigma;), which contains them all</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10 hero-map"><canvas id="hero-cv" aria-label="A wind map of the gulf; a boat learns by n-step Sarsa to sail from the start to the goal. Tap the sea to move the start."></canvas></div>
+      <div class="fig-head" style="margin-top:10px">
+        <div class="seg" role="group" aria-label="Number of steps n"><button type="button" data-hn="1">n = 1</button><button type="button" data-hn="4">n = 4</button><button type="button" data-hn="8" aria-pressed="true">n = 8</button><button type="button" data-hn="16">n = 16</button></div>
+        <div class="btns"><button type="button" class="btn" id="hero-reset">Start again</button></div>
+      </div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>9 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Between TD and Monte Carlo</a></li>
+    <li><a href="#pred"><i>02</i>n-step TD prediction</a></li>
+    <li><a href="#sarsa"><i>03</i>n-step Sarsa</a></li>
+    <li><a href="#off"><i>04</i>Off-policy: importance sampling</a></li>
+    <li><a href="#cv"><i>05</i>Control variates</a></li>
+    <li><a href="#tree"><i>06</i>Tree backup</a></li>
+    <li><a href="#qsigma"><i>07</i>n-step Q(σ)</a></li>
+    <li><a href="#project"><i>08</i>Tuning n on a real wind jet</a></li>
+    <li><a href="#summary"><i>09</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Between one step and the whole episode</h2>
+    <div class="prose">
+      <p>Every value-learning method answers one question: after visiting a state, what number do we nudge its value towards? Monte Carlo waits for the end of the episode and uses the actual return, every reward that followed. One-step TD uses one reward plus the discounted value of the next state, a guess standing in for everything after it. That is <em class="term">bootstrapping</em>: updating an estimate from another estimate.</p>
+      <p>There is a whole family in between. Take two real rewards and then bootstrap; or three; or n. The target is the <em class="term">n-step return</em>, and its diagram is a chain n transitions long that ends in a state whose value we look up. A second benefit hides here: with one-step TD, the same time step decides both how often we act and how far ahead we look. n-step methods let the look-ahead span several actions, so we can bootstrap over a stretch of time in which something meaningful has happened.</p>
+      <p>Below is one recorded episode of a random walk along 19 states (it starts in the middle, steps left or right with equal chance, and pays +1 for leaving on the right, &minus;1 on the left, 0 otherwise). The value estimate V is what one-step TD had learned after 30 episodes (&alpha; = 0.3): roughly right, but not exactly. <strong>Pick a time t and slide n</strong> to see which rewards and which estimate make up the target.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} G_{t:t+n} &= R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} \\ &\quad + \gamma^{n}\, V_{t+n-1}(S_{t+n}) \\ G_{t:t+n} &= G_t \quad \text{if } t+n \ge T \end{aligned} \]</div><div class="read"><b>Read it as:</b> the target for the state visited at time t is the next n rewards, each discounted by &gamma; per step, plus the discounted estimate of the state reached n steps later. V<sub>t+n&minus;1</sub> is the estimate as it stands when that state is reached. If the episode ends (at time T) before n steps are up, there is nothing left to bootstrap from and the target is just the full return G<sub>t</sub>, as in Monte Carlo. n = 1 gives the one-step TD target R<sub>t+1</sub> + &gamma;V(S<sub>t+1</sub>).</div><div class="eq-say"><b>Say it</b><em>&ldquo;The n-step return from t is the sum of the next n discounted rewards, plus gamma to the n times the value of the state n steps on.&rdquo;</em></div><div class="eq-run" id="run-wy"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10 mob"><canvas id="wy-cv" aria-label="One random-walk episode over time, with the n-step window highlighted"></canvas></div><figcaption>The episode, step by step: time runs left to right, the state is the height. <span style="color:var(--cA)">&#9644;</span> the window of n rewards that are summed &nbsp; <span style="color:var(--cB)">&#9679;</span> the state whose estimate is borrowed. The bars on the right are that V, state by state, against the true values (the thin line).</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="wy-bk" aria-label="Backup diagrams from one-step TD to Monte Carlo"></canvas></div><figcaption>The backup diagrams of the family: one-step TD on the left, Monte Carlo (&infin;-step) on the right. &#9675; state &nbsp; &#9632; terminal state. Yours is highlighted.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="wy-t">Time of the update, t</label><output id="wy-t-o"></output></div><input type="range" id="wy-t" min="0" max="27" step="1" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="wy-n">Steps n</label><output id="wy-n-o"></output></div><input type="range" id="wy-n" min="1" max="30" step="1" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="wy-g">Discount &gamma;</label><output id="wy-g-o"></output></div><input type="range" id="wy-g" min="0.5" max="1" step="0.01" value="0.9"></div>
+        <div class="stats"><div class="stat"><div class="v" id="wy-G"></div><div class="k">n-step return G<sub>t:t+n</sub></div></div><div class="stat"><div class="v" id="wy-V"></div><div class="k">current V(S<sub>t</sub>)</div></div><div class="stat"><div class="v" id="wy-rw"></div><div class="k">rewards in the window</div></div><div class="stat"><div class="v" id="wy-bw"></div><div class="k">weight on the estimate</div></div></div>
+        <p class="note" id="wy-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRED -->
+<section class="chap" id="pred">
+  <div class="wrap">
+    <div class="tag">Prediction</div>
+    <h2>n-step TD prediction</h2>
+    <div class="prose">
+      <p>The learning rule is the familiar one with the new target. There is one practical wrinkle: the n-step return for time t needs the reward at time t + n, so the update for the state visited at t can only be made n steps later. The algorithm therefore keeps the last n + 1 states and rewards in a small rolling buffer; at time t it updates the state from time &tau; = t &minus; n + 1. Nothing is updated during the first n &minus; 1 steps of an episode, and once the episode ends the remaining n &minus; 1 states are updated in a burst, each with whatever rewards are left.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} V_{t+n}(S_t) &= V_{t+n-1}(S_t) \\ &\quad + \alpha\,\big[\,G_{t:t+n} - V_{t+n-1}(S_t)\,\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> for each time 0 &le; t &lt; T, move the estimate for S<sub>t</sub> a fraction &alpha; of the way towards its n-step return. Every other state&rsquo;s value stays as it was. The subscript t + n says when the update happens, n steps after the visit.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The new V of S-t is the old V plus alpha times the n-step return minus the old V.&rdquo;</em></div><div class="eq-run" id="run-pr"></div></div>
+    <div class="prose"><p>Why should this work? Because the expected n-step return is a better estimate of v<sub>&pi;</sub> than V itself, and provably so in the worst state: its error is at most &gamma;<sup>n</sup> times V&rsquo;s worst error. This <em class="term">error-reduction property</em> is what lets every n-step TD method converge to the right values under the usual conditions.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\max_s \Big|\, \mathbb{E}_\pi\big[G_{t:t+n} \mid S_t = s\big] - v_\pi(s) \Big| \\ &\qquad \le\; \gamma^{n} \max_s \big| V_{t+n-1}(s) - v_\pi(s) \big| \end{aligned} \]</div><div class="read"><b>Read it as:</b> take the n-step return&rsquo;s average from each state, under the policy being evaluated. Its largest error over all states is no more than &gamma;<sup>n</sup> times the largest error of V. The n real rewards carry no error at all; only the bootstrapped tail does, and it is discounted n times. With &gamma; = 1 the bound alone promises only &ldquo;no worse&rdquo;, but episodes that end inside the window remove error too.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The worst error of the expected n-step return is at most gamma to the n times the worst error of V.&rdquo;</em></div><div class="eq-run" id="run-er"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 mob"><canvas id="er-cv" aria-label="Error of V and of the expected n-step return in each of the 19 states"></canvas></div><figcaption>Computed exactly, not sampled. <span style="color:var(--muted)">&#9644;</span> |V(s) &minus; v<sub>&pi;</sub>(s)| in each state &nbsp; <span style="color:var(--cA)">&#9644;</span> |E[G<sub>t:t+n</sub> | S<sub>t</sub> = s] &minus; v<sub>&pi;</sub>(s)| &nbsp; <span style="color:var(--qda)">- -</span> the bound &gamma;<sup>n</sup> &middot; max |V &minus; v<sub>&pi;</sub>|.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Starting estimate V"><button type="button" data-erv="zero" aria-pressed="true">V = 0</button><button type="button" data-erv="noisy">Noisy guess</button><button type="button" data-erv="flip">Wrong way round</button></div>
+        <div class="ctrl"><div class="top"><label for="er-n">Steps n</label><output id="er-n-o"></output></div><input type="range" id="er-n" min="1" max="30" step="1" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="er-g">Discount &gamma;</label><output id="er-g-o"></output></div><input type="range" id="er-g" min="0.5" max="1" step="0.01" value="0.9"></div>
+        <div class="stats"><div class="stat"><div class="v" id="er-a"></div><div class="k">worst error of V</div></div><div class="stat"><div class="v" id="er-b"></div><div class="k">worst error of E[G<sub>t:t+n</sub>]</div></div><div class="stat"><div class="v" id="er-c"></div><div class="k">the bound &gamma;<sup>n</sup> &times; worst</div></div></div>
+        <p class="note" id="er-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:28px"><p>Now the classic experiment. Run n-step TD on the 19-state walk for 10 episodes from V = 0, measure the root-mean-square error over the 19 states after each episode, average those 10 numbers, and repeat over 100 independent runs. Do it for every n and every step size &alpha;. All 21,000 runs below were computed in your browser when the page loaded (on the same 1,000 recorded episodes for every setting, so the curves differ only because of n and &alpha;). <strong>Slide n</strong> to pick out one curve.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{RMS}_e &= \sqrt{\tfrac{1}{19}\textstyle\sum_{s=1}^{19}\big(V_e(s) - v_\pi(s)\big)^2} \\ v_\pi(s) &= \tfrac{s-10}{10} \end{aligned} \]</div><div class="read"><b>Read it as:</b> after episode e, compare every estimate with the true value; the true values of this walk are a straight line from &minus;0.9 (state 1) to +0.9 (state 19). Each curve point is the average of RMS<sub>1</sub>, &hellip;, RMS<sub>10</sub> over 100 runs, so low means &ldquo;learned fast and accurately&rdquo;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The RMS error is the square root of the mean squared gap between estimate and truth, over the nineteen states.&rdquo;</em></div><div class="eq-run" id="run-72"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 mob"><canvas id="f72-cv" aria-label="Average RMS error against step size for n from 1 to 512"></canvas></div><figcaption>Average RMS error over the 19 states and the first 10 episodes, against &alpha;, one curve per n (1, 2, 4, &hellip;, 512; amber for small n, through teal, to blue for large n). Your n is drawn bold, with its best &alpha; ringed. Errors above 0.55 are clipped.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="f72-n">n (powers of 2)</label><output id="f72-n-o"></output></div><input type="range" id="f72-n" min="0" max="9" step="1" value="2"></div>
+        <div class="ctrl"><div class="top"><label for="f72-a">Step size &alpha;</label><output id="f72-a-o"></output></div><input type="range" id="f72-a" min="0" max="1" step="0.05" value="0.4"></div>
+        <div class="stats"><div class="stat"><div class="v" id="f72-e"></div><div class="k">error at your n and &alpha;</div></div><div class="stat"><div class="v" id="f72-b"></div><div class="k">best &alpha; for your n</div></div><div class="stat"><div class="v" id="f72-w"></div><div class="k">best n overall</div></div></div>
+        <p class="note" id="f72-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SARSA -->
+<section class="chap" id="sarsa">
+  <div class="wrap">
+    <div class="tag">Control</div>
+    <h2>n-step Sarsa: credit flows back n steps at once</h2>
+    <div class="prose">
+      <p>For control we learn action values instead, and switch the states in the n-step return for state&ndash;action pairs. The return ends with the estimated value of the pair n steps on; the policy is &epsilon;-greedy with respect to the current Q, so improving Q improves the policy. One-step Sarsa is the case n = 1.</p>
+      <p>The payoff shows up when rewards are rare. In the grid below the only reward is +1 for reaching the goal &#9733;, and all values start at zero. After the first episode, one-step Sarsa has learned something about a single action, the last one; n-step Sarsa has strengthened the last n actions of the path at once. A variant, <em class="term">n-step Expected Sarsa</em>, replaces the last sampled action by the policy&rsquo;s average over all actions, which removes one source of noise. <strong>Play a few episodes with n = 1, then reset and do it again with n = 8</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} G_{t:t+n} &= \textstyle\sum_{k=1}^{n} \gamma^{k-1} R_{t+k} \\ &\quad + \gamma^n\, Q_{t+n-1}(S_{t+n}, A_{t+n}) \\ Q_{t+n}(S_t,A_t) &= Q_{t+n-1}(S_t,A_t) \\ &\quad + \alpha\big[G_{t:t+n} - Q_{t+n-1}(S_t,A_t)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> n discounted rewards plus the discounted value of the action actually taken n steps later; the pair (S<sub>t</sub>, A<sub>t</sub>) moves towards it. As before the update happens n steps late, and past the end of the episode the return is the plain return G<sub>t</sub>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The Sarsa n-step return is n discounted rewards plus gamma to the n times Q of the state and action n steps on.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} G_{t:t+n} &= \textstyle\sum_{k=1}^{n} \gamma^{k-1} R_{t+k} \\ &\quad + \gamma^n\, \bar V_{t+n-1}(S_{t+n}) \\ \bar V_t(s) &= \textstyle\sum_a \pi(a \mid s)\, Q_t(s,a) \end{aligned} \]</div><div class="read"><b>Read it as:</b> Expected Sarsa keeps the n sampled rewards and actions but ends with V&#772;, the policy-weighted average of the action values in the last state (zero if that state is terminal). Here &pi; is the &epsilon;-greedy policy itself.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Expected Sarsa ends with V-bar, the policy-weighted average of Q over all actions in the last state.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-sa" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 mob"><canvas id="sa-cv" aria-label="A gridworld with the last episode's path and arrows showing which action values were raised"></canvas></div><figcaption id="sa-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Algorithm"><button type="button" data-sam="0" aria-pressed="true">n-step Sarsa</button><button type="button" data-sam="1">Expected Sarsa</button></div>
+        <div class="ctrl"><div class="top"><label for="sa-n">Steps n</label><output id="sa-n-o"></output></div><input type="range" id="sa-n" min="1" max="16" step="1" value="1"></div>
+        <div class="ctrl"><div class="top"><label for="sa-a">Step size &alpha;</label><output id="sa-a-o"></output></div><input type="range" id="sa-a" min="0.05" max="1" step="0.05" value="0.5"></div>
+        <div class="btns"><button type="button" class="btn primary" id="sa-go">Play one episode</button><button type="button" class="btn" id="sa-go10">Play 10</button><button type="button" class="btn" id="sa-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="sa-ep"></div><div class="k">episodes played</div></div><div class="stat"><div class="v" id="sa-T"></div><div class="k">steps in the last episode</div></div><div class="stat"><div class="v" id="sa-k"></div><div class="k">actions raised by the last episode</div></div><div class="stat"><div class="v" id="sa-q"></div><div class="k">best Q at the start</div></div></div>
+        <p class="note" id="sa-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- OFF-POLICY -->
+<section class="chap" id="off">
+  <div class="wrap">
+    <div class="tag">Learning about one policy while following another</div>
+    <h2>n-step off-policy learning: importance sampling</h2>
+    <div class="prose">
+      <p>Off-policy learning evaluates a <b>target policy</b> &pi; from data gathered by a different <b>behaviour policy</b> b, for example learning the greedy policy while still exploring. An n-step return built from b&rsquo;s actions describes b, not &pi;. The standard fix is <em class="term">importance sampling</em>: weight the whole update by how much more (or less) likely &pi; was to take the actions in the window than b was. Actions that &pi; would never take give weight 0; actions &pi; likes more than b give weight above 1.</p>
+      <p>The catch is that the weight is a <i>product</i> of n ratios, so its variance can grow exponentially in n. Below, the 19-state walk is followed by a coin-flip behaviour policy (right with probability &frac12;) while we evaluate a target policy that goes right more often. <strong>Raise the target&rsquo;s preference for &ldquo;right&rdquo; and lengthen n</strong>, and watch the weights spread out and the learning curves break apart.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \rho_{t:h} &= \prod_{k=t}^{\min(h,\,T-1)} \frac{\pi(A_k \mid S_k)}{b(A_k \mid S_k)} \\ V_{t+n}(S_t) &= V_{t+n-1}(S_t) \\ &\quad + \alpha\,\rho_{t:t+n-1}\big[G_{t:t+n} - V_{t+n-1}(S_t)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> &rho;<sub>t:h</sub> is the importance-sampling ratio, the relative probability of the actions A<sub>t</sub> &hellip; A<sub>h</sub> under the two policies. For state values the n rewards in G<sub>t:t+n</sub> depend on the n actions A<sub>t</sub> &hellip; A<sub>t+n&minus;1</sub>, so the update is weighted by &rho;<sub>t:t+n&minus;1</sub>. If b = &pi;, every ratio is 1 and this is ordinary n-step TD.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Rho from t to h is the product of pi over b for each action in the window; the update is scaled by rho from t to t plus n minus one.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} Q_{t+n}(S_t,A_t) &= Q_{t+n-1}(S_t,A_t) \\ &\quad + \alpha\,\rho_{t+1:t+n}\big[G_{t:t+n} \\ &\qquad\quad - Q_{t+n-1}(S_t,A_t)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> off-policy n-step Sarsa. A<sub>t</sub> is already given (we are learning its value), so its ratio is left out and the product starts one step later; it runs to A<sub>t+n</sub> because the return bootstraps from Q(S<sub>t+n</sub>, A<sub>t+n</sub>). The Expected Sarsa version ends with V&#772; and uses &rho;<sub>t+1:t+n&minus;1</sub>, one ratio fewer.</div><div class="eq-say"><b>Say it</b><em>&ldquo;For Sarsa, scale the update by rho from t plus one to t plus n.&rdquo;</em></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbb{E}_b\big[\rho_{t:t+n-1}\big] &= 1 \\ \operatorname{Var}_b\big[\rho_{t:t+n-1}\big] &= \Big(\textstyle\sum_a \frac{\pi(a)^2}{b(a)}\Big)^{n} - 1 \end{aligned} \]</div><div class="read"><b>Read it as:</b> on average the weight is exactly 1, which is why the method is unbiased. But for a window of n independent steps (as in this walk, where both policies ignore the state) the second moment multiplies up, so the variance grows like a power of n. Windows cut short by the end of the episode have fewer factors, so the weights actually seen spread a little less.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected weight is one; its variance is the sum of pi squared over b, to the power n, minus one.&rdquo;</em></div><div class="eq-run" id="run-of"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10 mob"><canvas id="of-cv" aria-label="Learning curves of off-policy n-step TD for several n"></canvas></div><figcaption>RMS error of V against v<sub>&pi;</sub> after each episode, averaged over 50 runs of 30 episodes, for n = 1, 2, 4, 8 and 16 (amber n = 1, through teal, to blue n = 16; yours is bold). All five learn from the same behaviour episodes. Errors above 0.8 are clipped at the top.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="of-h" aria-label="Histogram of the importance-sampling weights for your n"></canvas></div><figcaption>The weights &rho;<sub>t:t+n&minus;1</sub> of every update in those runs, for your n, on a log scale. The line marks their mean.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="of-p">Target &pi;(right)</label><output id="of-p-o"></output></div><input type="range" id="of-p" min="0.5" max="0.95" step="0.05" value="0.75"></div>
+        <div class="ctrl"><div class="top"><label for="of-n">Steps n</label><output id="of-n-o"></output></div><input type="range" id="of-n" min="0" max="4" step="1" value="2"></div>
+        <div class="ctrl"><div class="top"><label for="of-a">Step size &alpha;</label><output id="of-a-o"></output></div><input type="range" id="of-a" min="0.01" max="0.5" step="0.01" value="0.1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="of-m"></div><div class="k">mean weight seen</div></div><div class="stat"><div class="v" id="of-x"></div><div class="k">largest weight seen</div></div><div class="stat"><div class="v" id="of-v"></div><div class="k">variance, exact for full windows</div></div><div class="stat"><div class="v" id="of-e"></div><div class="k">RMS after 30 episodes, your n</div></div></div>
+        <p class="note" id="of-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTROL VARIATES -->
+<section class="chap" id="cv">
+  <div class="wrap">
+    <div class="tag">Taming the weights</div>
+    <h2>Per-decision importance sampling with control variates</h2>
+    <div class="prose">
+      <p>Plain importance sampling has a wasteful habit. When a ratio is 0 (the target would never have taken that action) the whole update is thrown away, and the estimate stays put. That is right on average, but it adds variance for nothing. A smarter return applies each ratio only to the part of the return that follows its own action, one decision at a time, and when an action is unlikely under &pi; it falls back on the current estimate instead of on zero.</p>
+      <p>The fallback term (1 &minus; &rho;<sub>t</sub>)V(S<sub>t</sub>) is a <em class="term">control variate</em>: a quantity whose expected value is exactly zero, added because it is correlated with the noise and cancels much of it. It changes nothing on average and a great deal in any single update. <strong>Compare the two returns across step sizes</strong>: the control-variate curve stays low over a far wider range of &alpha;.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} G_{t:h} &= \rho_t\big(R_{t+1} + \gamma\, G_{t+1:h}\big) \\ &\quad + (1 - \rho_t)\, V_{h-1}(S_t) \\ G_{h:h} &= V_{h-1}(S_h), \qquad h = t + n \end{aligned} \]</div><div class="read"><b>Read it as:</b> build the return backwards from the horizon h. At each step, with ratio &rho;<sub>t</sub> = &pi;(A<sub>t</sub>|S<sub>t</sub>)/b(A<sub>t</sub>|S<sub>t</sub>), take &rho;<sub>t</sub> of &ldquo;the reward plus the rest&rdquo; and top it up with (1 &minus; &rho;<sub>t</sub>) of the current estimate. If &rho;<sub>t</sub> = 0 the target is just V(S<sub>t</sub>), so the update does no harm. If h &ge; T the recursion starts from G = 0 at the end. The update then uses this G with no extra weight.</div><div class="eq-say"><b>Say it</b><em>&ldquo;G from t to h is rho-t times the reward plus gamma G from t plus one, plus one minus rho-t times V of S-t.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} G_{t:h} &= R_{t+1} + \gamma\,\bar V_{h-1}(S_{t+1}) \\ &\quad + \gamma\,\rho_{t+1}\big(G_{t+1:h} \\ &\qquad\quad - Q_{h-1}(S_{t+1},A_{t+1})\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the action-value version. The first action is given, so the first reward is not weighted. From the next state on, take the expected value V&#772; and correct it by &rho; times how much the sampled continuation beat the taken action&rsquo;s estimate. The recursion ends with G<sub>h:h</sub> = Q(S<sub>h</sub>, A<sub>h</sub>) if h &lt; T, or with R<sub>T</sub> at the end; at its last step the correction vanishes, which makes it a relative of Expected Sarsa.</div><div class="eq-say"><b>Say it</b><em>&ldquo;G is the reward plus gamma times V-bar of the next state, plus rho times the next return minus the next Q.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-cv" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10 mob"><canvas id="cv-cv" aria-label="Average RMS error against step size for plain importance sampling and control variates"></canvas></div><figcaption>Average RMS error over the first 30 episodes (50 runs, the same episodes as above) against &alpha;. <span style="color:var(--qda)">&#9644;</span> plain importance sampling (weight &rho;<sub>t:t+n&minus;1</sub> on the update) &nbsp; <span style="color:var(--cA)">&#9644;</span> per-decision with control variates. Errors above 0.8 are clipped. The ring is your &alpha;.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="cv-lc" aria-label="Learning curves of the two methods at your step size"></canvas></div><figcaption>The two learning curves at your &alpha;: RMS error after each episode.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="cv-p">Target &pi;(right)</label><output id="cv-p-o"></output></div><input type="range" id="cv-p" min="0.5" max="0.95" step="0.05" value="0.8"></div>
+        <div class="ctrl"><div class="top"><label for="cv-n">Steps n</label><output id="cv-n-o"></output></div><input type="range" id="cv-n" min="1" max="16" step="1" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="cv-a">Step size &alpha;</label><output id="cv-a-o"></output></div><input type="range" id="cv-a" min="0.05" max="1" step="0.05" value="0.3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="cv-pl"></div><div class="k">plain IS, best &alpha; &rarr; error</div></div><div class="stat"><div class="v" id="cv-cvb"></div><div class="k">control variates, best &alpha; &rarr; error</div></div><div class="stat"><div class="v" id="cv-at"></div><div class="k">at your &alpha;: plain vs CV</div></div></div>
+        <p class="note" id="cv-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- TREE BACKUP -->
+<section class="chap" id="tree">
+  <div class="wrap">
+    <div class="tag">Off-policy without ratios</div>
+    <h2>Tree backup: weigh what you didn&rsquo;t do</h2>
+    <div class="prose">
+      <p>Is there a way to learn off-policy with no importance sampling at all? For one step, Q-learning and Expected Sarsa already do it: they never ask how likely the next action was, because they average over all next actions with the target&rsquo;s probabilities. The <em class="term">tree-backup algorithm</em> extends that idea to n steps. Along the sampled path, at every state, the actions that were <i>not</i> taken contribute their estimated values, weighted by &pi;; the action that <i>was</i> taken contributes the rest of the sampled return, weighted by its own &pi;-probability. The return never needs b, so the behaviour policy can be anything.</p>
+      <p>The diagram is a spine of sampled actions with leaves hanging off it. Each leaf&rsquo;s weight is the product of the target probabilities on the way down, so if the behaviour takes an action &pi; would rarely take, everything below it is weighted down. The weights of all leaves always add to 1. <strong>Click the actions on the spine to change what the behaviour did, and move the target from greedy to random</strong>.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} G_{t:t+n} &= R_{t+1} \\ &\quad + \gamma\, \pi(A_{t+1} \mid S_{t+1})\, G_{t+1:t+n} \\ &\; + \gamma \textstyle\sum_{a \ne A_{t+1}} \pi(a \mid S_{t+1})\, Q(S_{t+1}, a) \\ G_{t+n-1:t+n} &= R_{t+n} \\ &\quad + \gamma \textstyle\sum_a \pi(a \mid S_{t+n})\, Q(S_{t+n}, a) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the return from t is the first reward, plus the discounted &pi;-weighted values of the actions not taken in the next state, plus the discounted &pi;-probability of the action taken times the return from there. Q here is Q<sub>t+n&minus;1</sub>, the estimate when the update is made. The recursion ends at the last level with a full expectation, Expected-Sarsa style (or with R<sub>T</sub> if the episode ends). The update is the usual Q<sub>t+n</sub>(S<sub>t</sub>, A<sub>t</sub>) &larr; Q + &alpha;[G<sub>t:t+n</sub> &minus; Q], with no ratio. One-step tree backup is exactly Expected Sarsa.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Tree backup: the reward, plus gamma times pi-weighted values of the untaken actions, plus gamma times pi of the taken action times the rest of the return.&rdquo;</em></div><div class="eq-run" id="run-tb"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="tb-cv" aria-label="The tree-backup diagram; click an action to make it the one the behaviour took"></canvas></div><figcaption>&#9675; state &nbsp; &#9679; action &nbsp; <span style="color:var(--cA)">&#9644;</span> the sampled spine. Each leaf shows its weight w in the return (before the &gamma; factors) and its Q-value; at every level the leaf weights plus the weight passed down the spine equal the weight from above, so all the leaves together add up to 1. Rewards sit on the spine edges.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Number of steps n"><button type="button" data-tbn="1">n = 1</button><button type="button" data-tbn="2">n = 2</button><button type="button" data-tbn="3" aria-pressed="true">n = 3</button></div>
+        <div class="ctrl"><div class="top"><label for="tb-e">Target &pi;: greedy (0) to uniform (1)</label><output id="tb-e-o"></output></div><input type="range" id="tb-e" min="0" max="1" step="0.05" value="0.3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="tb-G"></div><div class="k">tree-backup return G<sub>t:t+n</sub></div></div><div class="stat"><div class="v" id="tb-sp"></div><div class="k">weight left on the deepest level</div></div><div class="stat"><div class="v" id="tb-sum"></div><div class="k">sum of all leaf weights</div></div><div class="stat"><div class="v" id="tb-is"></div><div class="k">IS weight Expected Sarsa would need</div></div></div>
+        <p class="note" id="tb-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- Q(SIGMA) -->
+<section class="chap" id="qsigma">
+  <div class="wrap">
+    <div class="tag">One algorithm for all of them</div>
+    <h2>n-step Q(&sigma;): sample or expect, step by step</h2>
+    <div class="prose">
+      <p>Look at the two off-policy action-value returns side by side. The control-variate return <i>samples</i> the next action and corrects with &rho;; tree backup <i>expects</i> over all actions and weights the taken one by &pi;. Both have exactly the same shape: reward, plus the expected value of the next state, plus a weight times &ldquo;the rest of the return minus the taken action&rsquo;s estimate&rdquo;. Only the weight differs. So mix them. Choose a degree of sampling &sigma; &isin; [0, 1] at every step: &sigma; = 1 samples (weight &rho;), &sigma; = 0 expects (weight &pi;), and anything between blends the two. That is <em class="term">n-step Q(&sigma;)</em> (De Asis et al., 2018).</p>
+      <p>Below, Q(&sigma;) learns the action values of a target policy on the walk, from coin-flip behaviour. The four curves run on the same random numbers: &sigma; = 1, &sigma; = 0.5, &sigma; = 0, and a <b>dynamic</b> &sigma; that starts at 1 and shrinks by 5% after every episode. <strong>Lengthen n and push the target away from the behaviour</strong>: the more the two policies disagree, the more the sampling end suffers from its ratios.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} G_{t:h} &= R_{t+1} + \gamma\, \bar V_{h-1}(S_{t+1}) \\ &\quad + \gamma\, w_{t+1}\big(G_{t+1:h} \\ &\qquad\quad - Q_{h-1}(S_{t+1},A_{t+1})\big) \\ w_k &= \sigma_k\rho_k + (1-\sigma_k)\,\pi(A_k \mid S_k) \\ G_{h:h} &= Q_{h-1}(S_h, A_h) \quad (h < T) \\ G_{T-1:T} &= R_T \end{aligned} \]</div><div class="read"><b>Read it as:</b> at each step the weight w on &ldquo;sampled continuation minus estimate&rdquo; is a blend: &sigma; of the importance ratio &rho; and 1 &minus; &sigma; of the target probability &pi;(A). With &sigma; = 1 everywhere this is the control-variate return of the last section; with &sigma; = 0 everywhere, expanding V&#772; shows it is exactly tree backup. The update has no extra ratio: Q(S<sub>t</sub>, A<sub>t</sub>) &larr; Q + &alpha;[G<sub>t:t+n</sub> &minus; Q]. Here &gamma; = 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The Q-sigma return is the reward, plus gamma V-bar of the next state, plus gamma times sigma-rho plus one-minus-sigma pi, times the next return minus the next Q.&rdquo;</em></div><div class="eq-run" id="run-qs"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 mob"><canvas id="qs-cv" aria-label="Learning curves of Q(sigma) for four choices of sigma"></canvas></div><figcaption>RMS error of Q against q<sub>&pi;</sub> over the 38 state&ndash;action pairs, after each episode (30 runs of 50 episodes). <span style="color:var(--qda)">&#9644;</span> &sigma; = 1 (sample) &nbsp; <span style="color:var(--cB)">&#9644;</span> &sigma; = 0.5 &nbsp; <span style="color:var(--lda)">&#9644;</span> &sigma; = 0 (expect: tree backup) &nbsp; <span style="color:var(--cA)">&#9644;</span> dynamic &sigma; = 0.95<sup>episode</sup>.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="qs-p">Target &pi;(right)</label><output id="qs-p-o"></output></div><input type="range" id="qs-p" min="0.5" max="0.95" step="0.05" value="0.8"></div>
+        <div class="ctrl"><div class="top"><label for="qs-n">Steps n</label><output id="qs-n-o"></output></div><input type="range" id="qs-n" min="1" max="8" step="1" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="qs-a">Step size &alpha;</label><output id="qs-a-o"></output></div><input type="range" id="qs-a" min="0.05" max="1" step="0.05" value="0.4"></div>
+        <div class="stats"><div class="stat"><div class="v" id="qs-1"></div><div class="k">&sigma; = 1, mean over episodes</div></div><div class="stat"><div class="v" id="qs-h"></div><div class="k">&sigma; = 0.5</div></div><div class="stat"><div class="v" id="qs-0"></div><div class="k">&sigma; = 0</div></div><div class="stat"><div class="v" id="qs-d"></div><div class="k">dynamic &sigma;</div></div></div>
+        <p class="note" id="qs-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: tuning n on a real wind jet</h2>
+    <div class="prose">
+      <p>Sutton and Barto&rsquo;s windy gridworld pushes the agent upward in a few middle columns. This one takes its wind from measurements. The field is the <strong>January mean of the 10-metre ocean winds</strong> from NOAA CoastWatch&rsquo;s gridded product of the ASCAT scatterometers on the MetOp satellites (dataset <span class="mono">erdQMwindmday</span>, monthly composites at 0.25&deg;), averaged over the nine Januaries 2014&ndash;2022, for the box 12&ndash;16.5&deg; N, 98.5&ndash;91.5&deg; W. That is the Gulf of Tehuantepec, where in winter cold air from the Gulf of Mexico squeezes through a gap in the mountains and blows out over the Pacific as a narrow jet (Steenburgh, Schultz &amp; Colle, 1998; Chelton, Freilich &amp; Esbensen, 2000). The extract was downloaded through NOAA&rsquo;s ERDDAP server on 11 November 2026; NOAA&rsquo;s licence statement says the data &ldquo;may be used and redistributed for free&rdquo;, with no warranty.</p>
+      <p>The rules: 0.5&deg; cells (each the mean of four 0.25&deg; points; a cell with fewer than two ocean readings is land), four moves (N, E, S, W), and after every move the wind of the cell you left pushes you by its speed divided by 12 m/s, in cells, in each direction. A push of 0.83 cells means one cell with probability 0.83 and none otherwise, so the expected drift equals the real wind. Land and the edge of the box stop you. Every step costs &minus;1 (&gamma; = 1), so the return is minus the length of the voyage. The agent is n-step Sarsa with &epsilon; = 0.1 and all Q-values starting at 0.</p>
+    </div>
+
+    <h3>1 &middot; The world</h3>
+    <div class="lab">
+      <figure><div class="plot pjmap"><canvas id="pj-map" aria-label="The wind field on the grid, with the learned greedy policy"></canvas></div><figcaption id="pj-mapcap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <span class="mini-h">Policy drawn on the map</span>
+        <div class="seg" role="group" aria-label="Policy shown"><button type="button" data-pjp="opt" aria-pressed="true">Optimal (value iteration)</button><button type="button" data-pjp="1">Learned, n = 1</button><button type="button" data-pjp="8">Learned, n = 8</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-w"></div><div class="k">sea cells</div></div><div class="stat"><div class="v" id="pj-mx"></div><div class="k">strongest push</div></div><div class="stat"><div class="v" id="pj-opt"></div><div class="k">best possible voyage, expected steps</div></div><div class="stat"><div class="v" id="pj-eg"></div><div class="k">best with &epsilon; = 0.1 exploration</div></div></div>
+        <p class="note" id="pj-mapsay"></p>
+      </div></div>
+    </div>
+
+    <h3>2 &middot; Tune n and &alpha; together</h3>
+    <div class="prose"><p>For each n in {1, 2, 4, 8, 16} and each &alpha; in {0.1, 0.2, 0.3, 0.4, 0.6, 0.8}: 10 independent runs of 100 voyages (300 runs, about six million steps). The score is the average voyage length over voyages 11&ndash;100; the first voyage, which is mostly exploration, is reported separately. A voyage still at sea after 10,000 steps is cut off (it still bootstraps from where it stopped). <strong>Run the sweep</strong>, then hover a cell for the first-voyage length.</p></div>
+    <div class="btns block"><button type="button" class="btn primary" id="pj-run">Run the sweep</button><span class="note" id="pj-prog" style="align-self:center"></span></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-tab"></table></div>
+    <figure class="block" style="max-width:860px"><div class="plot boardplot"><canvas id="pj-cv" aria-label="Learning curves for each n at its best step size"></canvas></div><figcaption>Voyage length against voyage number (mean of the 10 runs, log scale), each n at its own best &alpha; (amber n = 1, through teal, to blue n = 16). The dashed line is the best an &epsilon;-greedy sailor could average.</figcaption></figure>
+    <p class="note block" style="max-width:72ch" id="pj-say"></p>
+
+    <h3>The same experiment in Python</h3>
+<pre class="code"><code>import json, math, os, time
+G = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "x071-gulf.json")))["grid"]
+R, C, L, SC = G["R"], G["C"], G["L"], G["scale"]
+START, GOAL = G["start"][0] * C + G["start"][1], G["goal"][0] * C + G["goal"][1]
+
+def mulberry32(a):                          # the page's random numbers, bit for bit
+    s = [a &amp; 0xFFFFFFFF]
+    def r():
+        s[0] = (s[0] + 0x6D2B79F5) &amp; 0xFFFFFFFF; a = s[0]
+        t = ((a ^ (a &gt;&gt; 15)) * (1 | a)) &amp; 0xFFFFFFFF
+        t = ((t + (((t ^ (t &gt;&gt; 7)) * (61 | t)) &amp; 0xFFFFFFFF)) &amp; 0xFFFFFFFF) ^ t
+        return ((t ^ (t &gt;&gt; 14)) &amp; 0xFFFFFFFF) / 4294967296
+    return r
+
+MV = [(1, 0), (0, 1), (-1, 0), (0, -1)]     # N E S W; row 0 is the southern edge
+def move(i, j, a, wy, wx):                  # one cell for the action, then the wind, stopping at land
+    ni, nj = i + MV[a][0], j + MV[a][1]
+    if 0 &lt;= ni &lt; R and 0 &lt;= nj &lt; C and not L[ni * C + nj]: i, j = ni, nj
+    for _ in range(abs(wy)):
+        ti = i + (1 if wy &gt; 0 else -1)
+        if 0 &lt;= ti &lt; R and not L[ti * C + j]: i = ti
+        else: break
+    for _ in range(abs(wx)):
+        tj = j + (1 if wx &gt; 0 else -1)
+        if 0 &lt;= tj &lt; C and not L[i * C + tj]: j = tj
+        else: break
+    return i * C + j
+
+def step(s, a, r):                          # wind push = wind / 12 m/s, rounded up or down at random
+    wy, wx = G["V"][s] / SC, G["U"][s] / SC
+    fy, fx = math.floor(wy), math.floor(wx)
+    wy = fy + (1 if r() &lt; wy - fy else 0); wx = fx + (1 if r() &lt; wx - fx else 0)
+    return move(s // C, s % C, a, wy, wx)
+
+def outcomes(s, a):                         # the same step as an exact distribution (for value iteration)
+    wy, wx = G["V"][s] / SC, G["U"][s] / SC; fy, fx = math.floor(wy), math.floor(wx); py, px = wy - fy, wx - fx
+    return [(pa * pb, move(s // C, s % C, a, y, x)) for y, pa in ((fy + 1, py), (fy, 1 - py)) for x, pb in ((fx + 1, px), (fx, 1 - px)) if pa * pb &gt; 0]
+
+def solve(eps):                             # expected steps to the goal: optimal (eps 0) or best eps-greedy
+    OUT = {s: [outcomes(s, a) for a in range(4)] for s in range(R * C) if not L[s]}; v = [0.0] * (R * C)
+    for _ in range(5000):
+        for s in OUT:
+            if s == GOAL: continue
+            q = [1 + sum(p * v[t] for p, t in o) for o in OUT[s]]
+            v[s] = (1 - eps) * min(q) + eps * sum(q) / 4
+    return v[START]
+
+def egreedy(q, r, eps):
+    if r() &lt; eps: return int(r() * 4)
+    m = max(q); ties = [a for a in range(4) if q[a] == m]
+    return ties[0] if len(ties) == 1 else ties[int(r() * len(ties))]
+
+def sarsa_episode(Q, r, n, alpha, eps=0.1, cap=10000):   # n-step Sarsa, reward -1 per step, gamma = 1
+    S, A, T, t, cut = [START], [egreedy(Q[START], r, eps)], math.inf, 0, False
+    while True:
+        if t &lt; T:
+            s2 = step(S[t], A[t], r); S.append(s2)
+            if s2 == GOAL: T = t + 1
+            else:
+                A.append(egreedy(Q[s2], r, eps))
+                if t + 1 &gt;= cap: T, cut = t + 1, True          # a cut-off episode still bootstraps
+        tau = t - n + 1
+        if tau &gt;= 0:
+            h = min(tau + n, T); Gr = 0.0
+            for k in range(tau + 1, h + 1): Gr += -1
+            if tau + n &lt; T or cut: Gr += Q[S[h]][A[h]]
+            q = Q[S[tau]]; q[A[tau]] = q[A[tau]] + alpha * (Gr - q[A[tau]])
+        if tau == T - 1: return T
+        t += 1
+
+t0 = time.time()
+print(f"water cells {R * C - sum(L)}; optimal expected steps {solve(0):.4f}; best epsilon-greedy (0.1) {solve(0.1):.4f}")
+NS_, ALPHAS, RUNS, EPS = [1, 2, 4, 8, 16], [0.1, 0.2, 0.3, 0.4, 0.6, 0.8], 10, 100
+best = {}
+print("n   alpha:" + "".join(f"{a:&gt;9}" for a in ALPHAS) + "   (mean steps, episodes 11-100 | episode 1)")
+for n in NS_:
+    late, first = [], []
+    for alpha in ALPHAS:
+        lt = fs = 0.0
+        for run in range(1, RUNS + 1):
+            r, Q = mulberry32(run), [[0.0] * 4 for _ in range(R * C)]
+            lens = [sarsa_episode(Q, r, n, alpha) for _ in range(EPS)]
+            lt += sum(lens[10:]) / (EPS - 10); fs += lens[0]
+        late.append(lt / RUNS); first.append(fs / RUNS)
+    k = min(range(len(ALPHAS)), key=lambda i: late[i]); best[n] = (ALPHAS[k], late[k])
+    print(f"{n:&lt;3} late    " + "".join(f"{x:9.2f}" for x in late))
+    print(f"{'':3} first   " + "".join(f"{x:9.1f}" for x in first))
+for n, (a, v) in best.items(): print(f"n = {n:2d}: best alpha {a}, {v:.2f} steps per episode")
+print(f"done in {time.time() - t0:.1f} s")</code></pre>
+<pre class="code out"><code>water cells 101; optimal expected steps 15.7713; best epsilon-greedy (0.1) 18.7896
+n   alpha:      0.1      0.2      0.3      0.4      0.6      0.8   (mean steps, episodes 11-100 | episode 1)
+1   late       146.48   106.22    88.75    75.69    64.02    64.32
+    first      5284.9   2916.3   2615.4   2350.5   1578.2   1396.7
+2   late       113.06    85.56    65.55    60.82    61.13    74.52
+    first      5128.1   3315.9   3055.9   2246.3   1912.2   1735.4
+4   late        78.44    54.22    50.95    51.86    72.03   124.60
+    first      5606.7   3558.3   3420.2   2794.7   2600.2   3423.8
+8   late        47.45    46.81    55.73    73.17   125.86   356.27
+    first      8941.1   6188.3   5984.0   6713.0   6180.8   7894.8
+16  late        50.10    47.88    74.16   115.77   256.86   584.21
+    first      9860.7  10000.0   9309.4   9299.1   7934.5   8117.8
+n =  1: best alpha 0.6, 64.02 steps per episode
+n =  2: best alpha 0.4, 60.82 steps per episode
+n =  4: best alpha 0.3, 50.95 steps per episode
+n =  8: best alpha 0.2, 46.81 steps per episode
+n = 16: best alpha 0.2, 47.88 steps per episode
+done in 31.6 s</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>The n-step return sums n real rewards and then bootstraps from the estimate n steps on; n = 1 is TD, n &ge; T is Monte Carlo, and an intermediate n usually learns fastest.</li>
+      <li>Updates arrive n steps late, from a buffer of the last n transitions; the expected n-step return is at least &gamma;<sup>n</sup> times closer to the truth in the worst state than V is.</li>
+      <li>n-step Sarsa pushes credit back along the last n actions at once, which matters most when rewards are sparse; larger n wants a smaller &alpha;.</li>
+      <li>Off-policy, importance-sampling ratios multiply over the window and their variance can explode with n; per-decision control variates keep the mean and remove much of the noise.</li>
+      <li>Tree backup needs no ratios at all, weighting untaken actions by &pi;; Q(&sigma;) blends sampling (&sigma; = 1) and expectation (&sigma; = 0) step by step and contains them all.</li>
+    </ul>
+    <h3>The family at a glance</h3>
+    <div class="tbl-wrap" style="margin-top:10px; max-width:980px"><table class="hand fam">
+      <thead><tr><th>method</th><th>target</th><th>off-policy by</th><th>strengths</th><th>costs</th></tr></thead>
+      <tbody>
+        <tr><td><b>n-step TD</b></td><td>n rewards + &gamma;<sup>n</sup>V(S<sub>t+n</sub>)</td><td>&rho;<sub>t:t+n&minus;1</sub> on the update</td><td>simple; tunable between TD and MC</td><td>n steps of delay; a buffer of n transitions</td></tr>
+        <tr><td><b>n-step Sarsa</b></td><td>n rewards + &gamma;<sup>n</sup>Q(S<sub>t+n</sub>, A<sub>t+n</sub>)</td><td>&rho;<sub>t+1:t+n</sub> on the update</td><td>fast credit assignment for control</td><td>ratio variance grows with n</td></tr>
+        <tr><td><b>n-step Expected Sarsa</b></td><td>n rewards + &gamma;<sup>n</sup>V&#772;(S<sub>t+n</sub>)</td><td>&rho;<sub>t+1:t+n&minus;1</sub></td><td>one fewer sampled action, one fewer ratio</td><td>a sum over actions per update</td></tr>
+        <tr><td><b>control variates</b></td><td>per-decision recursion</td><td>each &rho; inside the return</td><td>same mean, much lower variance</td><td>a backward pass over the window</td></tr>
+        <tr><td><b>tree backup</b></td><td>spine + &pi;-weighted leaves</td><td>no ratios at all</td><td>any behaviour policy works</td><td>short effective horizon when b and &pi; disagree</td></tr>
+        <tr><td><b>Q(&sigma;)</b></td><td>blend per step</td><td>&sigma;&rho; + (1&minus;&sigma;)&pi; weights</td><td>contains all of the above; &sigma; tunable</td><td>one more parameter to set</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note" style="max-width:72ch; margin-top:10px">All of them pay for their reach with delay and memory: an update for time t waits until t + n, and the last n transitions must be stored. Eligibility traces (chapter 3.2c, and chapter 12 of Sutton and Barto) get much of the same benefit with no delay and a fixed memory per state.</p>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>In an episode of length T = 5, which states does 3-step TD update, and when?</summary><p>None during steps t = 0 and 1. At t = 2 it updates S<sub>0</sub> (&tau; = 0) using R<sub>1</sub>, R<sub>2</sub>, R<sub>3</sub> and V(S<sub>3</sub>); at t = 3 it updates S<sub>1</sub>; at t = 4 it updates S<sub>2</sub> using R<sub>3</sub>, R<sub>4</sub>, R<sub>5</sub> (the episode ended, so no bootstrap); after the end it updates S<sub>3</sub> and S<sub>4</sub> with the rewards that remain. Every state gets exactly one update.</p></details>
+      <details class="q"><summary>Why does a larger n usually need a smaller &alpha;?</summary><p>A longer return contains more random rewards (and, off-policy, more ratios), so each target is noisier. A large step size follows that noise; a smaller one averages it out. On the random walk, n = 1 does best at &alpha; = 0.8, n = 4 at 0.4, and n = 64 needs &alpha; = 0.05 or less.</p></details>
+      <details class="q"><summary>The target policy is greedy and the behaviour is &epsilon;-greedy. What happens to n-step Sarsa with importance sampling whenever the behaviour explores?</summary><p>The ratio for the exploratory action is 0, so every update whose window contains it is multiplied by 0 and learns nothing. With long windows most updates contain an exploratory step, so learning nearly stops. Control variates replace those zeros with the current estimate; tree backup simply cuts the spine there and keeps the leaves above it.</p></details>
+      <details class="q"><summary>Why is the control-variate term (1 &minus; &rho;<sub>t</sub>)V(S<sub>t</sub>) harmless on average?</summary><p>Because the expected ratio under the behaviour policy is 1: E<sub>b</sub>[&rho;<sub>t</sub>] = &sum;<sub>a</sub> b(a) &pi;(a)/b(a) = &sum;<sub>a</sub> &pi;(a) = 1, so E<sub>b</sub>[1 &minus; &rho;<sub>t</sub>] = 0 and the term adds nothing to the expected target. It is correlated with the noise in the return, so it cancels much of it.</p></details>
+      <details class="q"><summary>Which settings of &sigma; turn n-step Q(&sigma;) into tree backup, and into the per-decision importance-sampling return?</summary><p>&sigma; = 0 at every step gives tree backup (the weight on the sampled continuation is &pi;(A)); &sigma; = 1 at every step gives the control-variate return of equation 7.14 (the weight is &rho;). With n = 1, any &sigma; gives Expected Sarsa, because the correction term vanishes at the last step.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../dyna-model-based/">Next chapter: Models &amp; Dyna: Planning While Learning &rarr;</a>
+      <a class="btn" href="../td-learning/">&larr; Previous: Temporal-Difference Learning in Depth</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Sutton, R. S. &amp; Barto, A. G. (2018). <em>Reinforcement Learning: An Introduction</em>, 2nd ed. MIT Press, chapter 7 (n-step bootstrapping) and chapter 12 (eligibility traces).</li>
+      <li>De Asis, K., Hernandez-Garcia, J. F., Holland, G. Z. &amp; Sutton, R. S. (2018). Multi-step reinforcement learning: a unifying algorithm. <em>Proc. AAAI Conference on Artificial Intelligence</em> 32.</li>
+      <li>Precup, D., Sutton, R. S. &amp; Singh, S. (2000). Eligibility traces for off-policy policy evaluation. <em>Proc. ICML 2000</em>: per-decision importance sampling and the tree-backup algorithm.</li>
+      <li>Watkins, C. J. C. H. (1989). <em>Learning from Delayed Rewards</em>. PhD thesis, University of Cambridge: n-step returns and their error-reduction property.</li>
+      <li>Steenburgh, W. J., Schultz, D. M. &amp; Colle, B. A. (1998). The structure and evolution of gap outflow over the Gulf of Tehuantepec, Mexico. <em>Monthly Weather Review</em> 126(10).</li>
+      <li>Chelton, D. B., Freilich, M. H. &amp; Esbensen, S. K. (2000). Satellite observations of the wind jets off the Pacific coast of Central America. <em>Monthly Weather Review</em> 128(7).</li>
+      <li>NOAA CoastWatch West Coast Node / NOAA NMFS SWFSC ERD. Wind, All Metop ASCAT, 0.25&deg;, Global, Near Real Time, 2013&ndash;present (Monthly), dataset <span class="mono">erdQMwindmday</span>, ERDDAP, coastwatch.pfeg.noaa.gov; source data NOAA/NESDIS from EUMETSAT&rsquo;s MetOp ASCAT. Free to use and redistribute.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated. Wind data: NOAA CoastWatch (ASCAT, erdQMwindmday), free to use and redistribute.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- n-step core: environments and algorithms (mirrored line by line in x071_lib.py) ---------- */
+const NS = (function () {
+  /* ===== the 19-state random walk: states 1..19, terminals 0 and 20, start 10 ===== */
+  const NW = 19, WS = 10;
+  // one episode under a policy that steps right with probability p; returns states S[0..T] and actions (1 = right)
+  function walkEp(r, p) {
+    const S = [WS], A = []; let s = WS;
+    while (s > 0 && s < NW + 1) { const a = r() < p ? 1 : 0; A.push(a); s += a ? 1 : -1; S.push(s); }
+    return { S, A };
+  }
+  const walkR = s2 => (s2 === 0 ? -1 : s2 === NW + 1 ? 1 : 0);
+  // value of the walk under "right with probability p" (gambler's ruin), states 0..20 (terminals 0)
+  function walkV(p) {
+    const v = new Float64Array(NW + 2);
+    if (Math.abs(p - 0.5) < 1e-12) { for (let s = 1; s <= NW; s++) v[s] = (s - 10) / 10; return v; }
+    const q = (1 - p) / p; let qs = 1, q20 = 1; for (let k = 0; k < NW + 1; k++) q20 *= q;
+    for (let s = 1; s <= NW; s++) { qs *= q; v[s] = 2 * (1 - qs) / (1 - q20) - 1; }
+    return v;
+  }
+  function rmsV(V, v) { let e = 0; for (let s = 1; s <= NW; s++) { const d = V[s] - v[s]; e += d * d; } return Math.sqrt(e / NW); }
+  function makeEps(seed, runs, eps, p) {
+    const out = []; for (let k = 0; k < runs; k++) { const r = mulberry32(seed + k); const E = []; for (let e = 0; e < eps; e++) E.push(walkEp(r, p)); out.push(E); }
+    return out;
+  }
+
+  /* n-step TD on one recorded episode (on-policy), updates V in place */
+  function tdEp(V, ep, n, alpha, gamma) {
+    const S = ep.S, T = S.length - 1;
+    for (let tau = 0; tau < T; tau++) {
+      const h = Math.min(tau + n, T); let G = 0, g = 1;
+      if (gamma === 1) G = h === T ? walkR(S[T]) : V[S[h]];   // same numbers as the loop: only the last step can pay
+      else {
+        for (let i = tau + 1; i <= h; i++) { G += g * walkR(S[i]); g *= gamma; }
+        if (tau + n < T) G += g * V[S[tau + n]];
+      }
+      V[S[tau]] += alpha * (G - V[S[tau]]);
+    }
+  }
+  /* Figure 7.2: average RMS over the first E episodes and over runs */
+  function fig72(EPS, n, alpha) {
+    const v = walkV(0.5); let tot = 0, cnt = 0;
+    for (const run of EPS) { const V = new Float64Array(NW + 2); for (const ep of run) { tdEp(V, ep, n, alpha, 1); tot += rmsV(V, v); cnt++; } }
+    return tot / cnt;
+  }
+
+  /* expected n-step returns for the walk, exactly (dynamic programming): E[G_{t:t+n} | S_t = s] */
+  function expectedNStep(V, n, gamma, p) {
+    let Rk = Float64Array.from(V); Rk[0] = 0; Rk[NW + 1] = 0;
+    for (let k = 0; k < n; k++) {
+      const N = new Float64Array(NW + 2);
+      for (let s = 1; s <= NW; s++) N[s] = p * (walkR(s + 1) + gamma * Rk[s + 1]) + (1 - p) * (walkR(s - 1) + gamma * Rk[s - 1]);
+      Rk = N;
+    }
+    return Rk;
+  }
+  function trueVg(gamma, p) { let V = new Float64Array(NW + 2); for (let k = 0; k < 4000; k++) V = expectedNStep(V, 1, gamma, p); return V; }
+
+  /* off-policy n-step TD with plain importance sampling (7.9) or per-decision control variates (7.13).
+     behaviour: right w.p. 0.5; target: right w.p. p */
+  function offEp(V, ep, n, alpha, p, cv) {
+    const S = ep.S, A = ep.A, T = S.length - 1, rho = k => (A[k] ? p : 1 - p) / 0.5;
+    for (let tau = 0; tau < T; tau++) {
+      const h = Math.min(tau + n, T);
+      if (!cv) {
+        let G = 0, w = 1;
+        for (let i = tau + 1; i <= h; i++) G += walkR(S[i]);
+        if (tau + n < T) G += V[S[tau + n]];
+        for (let k = tau; k < h; k++) w *= rho(k);
+        V[S[tau]] += alpha * w * (G - V[S[tau]]);
+      } else {
+        let G = h < T ? V[S[h]] : 0;
+        for (let k = h - 1; k >= tau; k--) { const rk = rho(k); G = rk * (walkR(S[k + 1]) + G) + (1 - rk) * V[S[k]]; }
+        V[S[tau]] += alpha * (G - V[S[tau]]);
+      }
+    }
+  }
+  function offCurve(EPS, n, alpha, p, cv) {
+    const v = walkV(p), E = EPS[0].length, c = new Float64Array(E);
+    for (const run of EPS) { const V = new Float64Array(NW + 2); run.forEach((ep, e) => { offEp(V, ep, n, alpha, p, cv); const x = rmsV(V, v); c[e] += isFinite(x) ? x : 1e9; }); }
+    for (let e = 0; e < E; e++) c[e] /= EPS.length;
+    return c;
+  }
+  // the importance-sampling weights rho_{tau:h-1} seen while learning (for the histogram)
+  function rhoSample(EPS, n, p) {
+    const out = [];
+    for (const run of EPS) for (const ep of run) { const T = ep.S.length - 1; for (let tau = 0; tau < T; tau++) { let w = 1; for (let k = tau; k < Math.min(tau + n, T); k++) w *= (ep.A[k] ? p : 1 - p) / 0.5; out.push(w); } }
+    return out;
+  }
+
+  /* n-step Q(sigma) on the walk with two actions (0 left, 1 right); behaviour right w.p. b, target right w.p. p */
+  function qsigRun(r, n, alpha, p, b, sigmaOf, E, qTrue) {
+    const Q = []; for (let s = 0; s <= NW + 1; s++) Q.push([0, 0]);
+    const pi = a => (a ? p : 1 - p), bb = a => (a ? b : 1 - b), curve = new Float64Array(E);
+    for (let e = 0; e < E; e++) {
+      const sig = sigmaOf(e), S = [WS], A = [r() < b ? 1 : 0], Rw = [0], Sg = [sig], Rho = [pi(A[0]) / bb(A[0])];
+      let T = Infinity, t = 0;
+      for (;;) {
+        if (t < T) {
+          const s2 = S[t] + (A[t] ? 1 : -1); S.push(s2); Rw.push(walkR(s2));
+          if (s2 === 0 || s2 === NW + 1) T = t + 1;
+          else { const a2 = r() < b ? 1 : 0; A.push(a2); Sg.push(sig); Rho.push(pi(a2) / bb(a2)); }
+        }
+        const tau = t - n + 1;
+        if (tau >= 0) {
+          let G = 0;
+          if (t + 1 < T) G = Q[S[t + 1]][A[t + 1]];
+          for (let k = Math.min(t + 1, T); k >= tau + 1; k--) {
+            if (k === T) G = Rw[T];
+            else { const q = Q[S[k]], Vb = pi(0) * q[0] + pi(1) * q[1]; G = Rw[k] + (Sg[k] * Rho[k] + (1 - Sg[k]) * pi(A[k])) * (G - q[A[k]]) + Vb; }
+          }
+          const q = Q[S[tau]]; q[A[tau]] += alpha * (G - q[A[tau]]);
+        }
+        if (tau === T - 1) break;
+        t++;
+      }
+      let err = 0; for (let s = 1; s <= NW; s++) for (let a = 0; a < 2; a++) { const d = Q[s][a] - qTrue[s][a]; err += d * d; }
+      curve[e] = Math.sqrt(err / (2 * NW));
+    }
+    return curve;
+  }
+  function qTrueOf(p) { const v = walkV(p), q = []; for (let s = 0; s <= NW + 1; s++) q.push(s < 1 || s > NW ? [0, 0] : [walkR(s - 1) + v[s - 1], walkR(s + 1) + v[s + 1]]); return q; }
+  function qsigCurve(seed, runs, n, alpha, p, b, sigmaOf, E) {
+    const qT = qTrueOf(p), c = new Float64Array(E);
+    for (let k = 0; k < runs; k++) { const cu = qsigRun(mulberry32(seed + k), n, alpha, p, b, sigmaOf, E, qT); for (let e = 0; e < E; e++) c[e] += isFinite(cu[e]) ? cu[e] : 1e9; }
+    for (let e = 0; e < E; e++) c[e] /= runs;
+    return c;
+  }
+
+  /* ===== gridworlds: cells (i, j), row 0 at the bottom (south); actions N E S W ===== */
+  const MV = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  function sround(w, r) { const f = Math.floor(w); return f + (r() < w - f ? 1 : 0); }
+  // one step of a (possibly windy) grid: the action moves one cell, then the wind of the cell you left pushes you
+  function gstep(G, i, j, a, r) {
+    let wy = 0, wx = 0;
+    if (G.U) { const c = i * G.C + j; wy = sround(G.V[c] / G.scale, r); wx = sround(G.U[c] / G.scale, r); }
+    const ni = i + MV[a][0], nj = j + MV[a][1];
+    if (ni >= 0 && ni < G.R && nj >= 0 && nj < G.C && !G.L[ni * G.C + nj]) { i = ni; j = nj; }
+    for (let k = 0; k < Math.abs(wy); k++) { const ti = i + (wy > 0 ? 1 : -1); if (ti >= 0 && ti < G.R && !G.L[ti * G.C + j]) i = ti; else break; }
+    for (let k = 0; k < Math.abs(wx); k++) { const tj = j + (wx > 0 ? 1 : -1); if (tj >= 0 && tj < G.C && !G.L[i * G.C + tj]) j = tj; else break; }
+    return [i, j];
+  }
+  function egreedy(q, r, eps) {
+    if (r() < eps) return Math.floor(r() * 4);
+    let m = q[0]; for (let a = 1; a < 4; a++) if (q[a] > m) m = q[a];
+    const ties = []; for (let a = 0; a < 4; a++) if (q[a] === m) ties.push(a);
+    return ties.length === 1 ? ties[0] : ties[Math.floor(r() * ties.length)];
+  }
+  // expected value of Q under the epsilon-greedy policy (ties share the greedy mass)
+  function vbarEg(q, eps) {
+    let m = q[0]; for (let a = 1; a < 4; a++) if (q[a] > m) m = q[a];
+    let nt = 0; for (let a = 0; a < 4; a++) if (q[a] === m) nt++;
+    let v = 0; for (let a = 0; a < 4; a++) v += (eps / 4 + (q[a] === m ? (1 - eps) / nt : 0)) * q[a];
+    return v;
+  }
+  function newQ(G) { const Q = []; for (let c = 0; c < G.R * G.C; c++) Q.push([0, 0, 0, 0]); return Q; }
+  /* one episode of n-step Sarsa (or n-step Expected Sarsa); returns the trajectory and the updates made */
+  function sarsaEp(G, Q, r, n, alpha, eps, gamma, rewardOf, expected, cap, rec) {
+    const c0 = G.start[0] * G.C + G.start[1], S = [c0], A = [egreedy(Q[c0], r, eps)], Rw = [0], ups = [];
+    let T = Infinity, t = 0, cut = false;
+    for (;;) {
+      if (t < T) {
+        const s = S[t], [i2, j2] = gstep(G, Math.floor(s / G.C), s % G.C, A[t], r), s2 = i2 * G.C + j2, goal = i2 === G.goal[0] && j2 === G.goal[1];
+        S.push(s2); Rw.push(rewardOf(goal));
+        if (goal) T = t + 1; else { A.push(egreedy(Q[s2], r, eps)); if (t + 1 >= cap) { T = t + 1; cut = true; } }
+      }
+      const tau = t - n + 1;
+      if (tau >= 0) {
+        let Gr = 0, g = 1; const h = Math.min(tau + n, T);
+        for (let k = tau + 1; k <= h; k++) { Gr += g * Rw[k]; g *= gamma; }
+        if (tau + n < T || cut) Gr += g * (expected ? vbarEg(Q[S[h]], eps) : Q[S[h]][A[h]]);   // a cut-off episode still bootstraps
+        const q = Q[S[tau]], old = q[A[tau]]; q[A[tau]] = old + alpha * (Gr - old);
+        if (rec) ups.push([tau, S[tau], A[tau], old, Gr, q[A[tau]]]);
+      }
+      if (tau === T - 1) break;
+      t++;
+    }
+    return { S, A, T, ups, cut };
+  }
+  return { NW, WS, walkEp, walkR, walkV, rmsV, makeEps, tdEp, fig72, expectedNStep, trueVg, offEp, offCurve, rhoSample, qsigRun, qsigCurve, qTrueOf, MV, sround, gstep, egreedy, vbarEg, newQ, sarsaEp };
+})();
+
+
+const GULF = {"grid": {"R": 9, "C": 14, "U": [-6.21, -6.04, -5.85, -5.53, -4.92, -4.21, -3.38, -2.64, -2.0, -1.76, -1.74, -2.12, -2.75, -3.13, -5.71, -5.83, -5.84, -5.8, -5.22, -4.4, -3.41, -2.34, -1.45, -0.7, -0.34, -0.85, -1.67, -2.48, -4.9, -5.44, -5.83, -6.07, -5.66, -4.73, -3.45, -2.1, -0.85, 0.3, 0.92, 0.79, 0.26, -1.07, -3.64, -4.28, -5.28, -5.96, -5.84, -5.02, -3.59, -1.79, -0.07, 1.4, 2.14, 2.11, 1.73, 0.99, -2.29, -2.7, -3.88, -5.42, -6.08, -5.42, -3.58, -1.33, 0.76, 2.36, 2.99, 2.86, 2.48, 0.0, -0.38, -0.78, -1.75, -3.54, -5.26, -5.66, -3.8, -0.81, 1.76, 3.1, 3.13, 2.91, 0.0, 0.0, 1.27, 1.1, 0.71, -0.5, -2.88, -4.91, -3.81, -0.05, 2.66, 3.18, 2.65, 0.0, 0.0, 0.0, 1.7, 1.41, 1.28, 0.0, 0.0, -4.0, -3.55, 1.18, 3.55, 2.6, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "V": [-2.97, -3.5, -4.15, -4.8, -5.34, -5.66, -5.85, -5.74, -5.24, -4.26, -3.13, -2.35, -1.82, -1.52, -2.18, -2.83, -3.64, -4.8, -5.65, -6.19, -6.54, -6.51, -6.11, -5.24, -3.69, -2.51, -1.84, -1.45, -1.58, -2.32, -3.34, -4.76, -5.92, -6.93, -7.43, -7.25, -6.66, -5.82, -4.22, -2.54, -1.41, -1.0, -0.95, -1.52, -2.6, -4.33, -5.98, -7.59, -8.56, -8.44, -7.66, -6.31, -3.99, -2.17, -0.79, -0.55, -0.34, -0.51, -1.51, -3.33, -5.54, -7.93, -9.5, -9.83, -8.58, -6.7, -3.74, -1.6, -0.69, 0.0, -0.27, -0.13, -0.57, -1.57, -3.97, -7.4, -10.14, -10.82, -9.38, -6.83, -3.41, -1.52, 0.0, 0.0, -0.54, -0.43, -0.28, -0.44, -1.74, -5.53, -9.81, -11.59, -9.82, -6.97, -3.67, 0.0, 0.0, 0.0, -0.87, -0.77, -0.84, 0.0, 0.0, -4.02, -9.2, -11.69, -9.53, -8.42, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -12.34, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "L": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1], "lat0": 12.0, "lon0": -98.5, "d": 0.5, "scale": 12, "start": [6, 1], "goal": [3, 13]}, "months": ["2014-01", "2015-01", "2016-01", "2017-01", "2018-01", "2019-01", "2020-01", "2021-01", "2022-01"], "n_points": 504, "land_points": 105};
+const PY = {"opt": 15.7713, "eg": 18.7896, "late": [[146.48, 106.22, 88.75, 75.69, 64.02, 64.32], [113.06, 85.56, 65.55, 60.82, 61.13, 74.52], [78.44, 54.22, 50.95, 51.86, 72.03, 124.6], [47.45, 46.81, 55.73, 73.17, 125.86, 356.27], [50.1, 47.88, 74.16, 115.77, 256.86, 584.21]], "first": [[5284.9, 2916.3, 2615.4, 2350.5, 1578.2, 1396.7], [5128.1, 3315.9, 3055.9, 2246.3, 1912.2, 1735.4], [5606.7, 3558.3, 3420.2, 2794.7, 2600.2, 3423.8], [8941.1, 6188.3, 5984.0, 6713.0, 6180.8, 7894.8], [9860.7, 10000.0, 9309.4, 9299.1, 7934.5, 8117.8]]};
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const sum = a => { let s = 0; for (const x of a) s += x; return s; };
+const mean = a => sum(a) / a.length;
+const nf = n => Math.round(n).toLocaleString('en-GB');
+const f2 = v => fmt(v, 2), f3 = v => fmt(v, 3), f4 = v => fmt(v, 4);
+const sub = (s) => `<sub>${s}</sub>`;
+function hexRGB(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
+function mix(c1, c2, t) { const a = hexRGB(c1), b = hexRGB(c2); return `rgb(${a.map((x, i) => Math.round(x + (b[i] - x) * t)).join(',')})`; }
+const ramp = (t) => { const C = C0(); return t < 0.5 ? mix(C.b, C.a, 2 * t) : mix(C.a, C.lda, 2 * t - 1); };   // amber (small n) -> teal -> blue (large n)
+function alphaCol(col, al) { if (col[0] === '#') { const [r, g, b] = hexRGB(col); return `rgba(${r},${g},${b},${al})`; } return col.replace('rgb(', 'rgba(').replace(')', `,${al})`); }
+function polyline(v, pts, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); pts.forEach((p, i) => { const x = v.X(p[0]), y = clamp(v.Y(p[1]), -2000, 4000); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); }
+function label(v, x, y, s, o) { o = o || {}; const c = v.ctx; c.save(); c.font = (o.font || '11px ') + css('--f-mono'); c.fillStyle = o.col || css('--muted'); c.textAlign = o.align || 'left'; c.textBaseline = o.base || 'middle'; c.fillText(s, typeof x === 'number' && o.px ? x : v.X(x), o.px ? y : v.Y(y)); c.restore(); }
+const visible = el => { const r = el.getBoundingClientRect(); return r.bottom > -50 && r.top < innerHeight + 50 && r.width > 0; };
+function slider(id, f) { const el = $('#' + id), o = $('#' + id + '-o'); const show = () => { if (o) o.textContent = f ? f(+el.value) : el.value; }; show(); return { el, get v() { return +el.value; }, show }; }
+function debounce(fn, ms) { let t = 0; return () => { clearTimeout(t); t = setTimeout(fn, ms); }; }
+const W_ = NS.walkV(0.5);
+
+/* =================================================================== the gulf */
+const GR = GULF.grid;
+const GW = { R: GR.R, C: GR.C, U: GR.U, V: GR.V, L: GR.L, scale: GR.scale, start: GR.start.slice(), goal: GR.goal.slice() };
+const lonOf = j => GR.lon0 + GR.d * j, latOf = i => GR.lat0 + GR.d * i;
+const ARROW = ['N', 'E', 'S', 'W'];
+function gulfFrame(cv, pad) { return frame(cv, [0, GR.C], [0, GR.R], Object.assign({ l: 34, r: 8, t: 8, b: 22 }, pad || {}), true); }
+function drawGulf(v, o) {
+  o = o || {}; const C = C0(), c = v.ctx, cw = v.X(1) - v.X(0);
+  for (let i = 0; i < GR.R; i++) for (let j = 0; j < GR.C; j++) {
+    const k = i * GR.C + j, x0 = v.X(j), y0 = v.Y(i + 1);
+    if (GR.L[k]) { c.fillStyle = C.soft; c.fillRect(x0, y0, cw + 0.5, cw + 0.5); continue; }
+    const sp = Math.hypot(GR.U[k], GR.V[k]); c.fillStyle = alphaCol(C.b, 0.05 + 0.5 * Math.min(1, sp / 12)); c.fillRect(x0, y0, cw + 0.5, cw + 0.5);
+  }
+  c.save(); c.strokeStyle = C.line; c.lineWidth = 0.6; c.globalAlpha = 0.7;
+  for (let j = 0; j <= GR.C; j++) { c.beginPath(); c.moveTo(v.X(j), v.Y(0)); c.lineTo(v.X(j), v.Y(GR.R)); c.stroke(); }
+  for (let i = 0; i <= GR.R; i++) { c.beginPath(); c.moveTo(v.X(0), v.Y(i)); c.lineTo(v.X(GR.C), v.Y(i)); c.stroke(); } c.restore();
+  if (o.wind !== false) { c.save(); c.strokeStyle = C.muted; c.fillStyle = C.muted; c.lineWidth = 0.9; c.globalAlpha = 0.45;
+    for (let i = 0; i < GR.R; i++) for (let j = 0; j < GR.C; j++) { const k = i * GR.C + j; if (GR.L[k]) continue; const sp = Math.hypot(GR.U[k], GR.V[k]); if (sp < 0.4) continue;
+      const L = 0.42 * Math.min(1, sp / 12), dx = GR.U[k] / sp * L, dy = GR.V[k] / sp * L, x0 = j + 0.5 - dx / 2, y0 = i + 0.5 - dy / 2, x1 = j + 0.5 + dx / 2, y1 = i + 0.5 + dy / 2;
+      c.beginPath(); c.moveTo(v.X(x0), v.Y(y0)); c.lineTo(v.X(x1), v.Y(y1)); c.stroke();
+      const ang = Math.atan2(-(dy), dx), hx = v.X(x1), hy = v.Y(y1), hs = Math.max(3, cw * 0.12);
+      c.beginPath(); c.moveTo(hx, hy); c.lineTo(hx - hs * Math.cos(ang - 0.5), hy + hs * Math.sin(ang - 0.5)); c.lineTo(hx - hs * Math.cos(ang + 0.5), hy + hs * Math.sin(ang + 0.5)); c.closePath(); c.fill(); }
+    c.restore(); }
+  // coordinates
+  c.save(); c.font = '10px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let j = 0; j <= GR.C; j += (cw < 22 ? 4 : 2)) c.fillText(fmt(-lonOf(j), 0) + '°W', v.X(j), v.Y(0) + 4);
+  c.textAlign = 'right'; c.textBaseline = 'middle'; for (let i = 0; i <= GR.R; i += 2) c.fillText(fmt(latOf(i), 0) + '°N', v.X(0) - 3, v.Y(i));
+  c.restore();
+}
+function drawPolicy(v, pol, col) { // pol[k] = action or -1
+  const c = v.ctx, cw = v.X(1) - v.X(0); c.save(); c.strokeStyle = col; c.fillStyle = col; c.lineWidth = Math.max(1.4, cw * 0.06);
+  for (let k = 0; k < pol.length; k++) { const a = pol[k]; if (a < 0 || GR.L[k]) continue; const i = Math.floor(k / GR.C), j = k % GR.C, [di, dj] = NS.MV[a];
+    const cx = v.X(j + 0.5), cy = v.Y(i + 0.5), L = cw * 0.3, ex = cx + dj * L, ey = cy - di * L; c.beginPath(); c.moveTo(cx - dj * L * 0.6, cy + di * L * 0.6); c.lineTo(ex, ey); c.stroke();
+    const hs = cw * 0.14; c.beginPath(); c.moveTo(ex + dj * hs * 0.3, ey - di * hs * 0.3); c.lineTo(ex - dj * hs - di * hs * 0.8, ey + di * hs - dj * hs * 0.8); c.lineTo(ex - dj * hs + di * hs * 0.8, ey + di * hs + dj * hs * 0.8); c.closePath(); c.fill(); }
+  c.restore();
+}
+function drawEnds(v, st, gl) { const C = C0(), cw = v.X(1) - v.X(0); dot(v, st[1] + 0.5, st[0] + 0.5, C.lda, Math.max(5, cw * 0.22)); star(v, gl[1] + 0.5, gl[0] + 0.5, C.a, Math.max(7, cw * 0.32)); }
+const greedyOf = Q => Q.map((q, k) => { if (GR.L[k] || (q[0] === 0 && q[1] === 0 && q[2] === 0 && q[3] === 0)) return -1; let b = 0; for (let a = 1; a < 4; a++) if (q[a] > q[b]) b = a; return b; });
+
+/* a stepping version of NS.sarsaEp for animation (same logic) */
+function makeLearner(G, n, alpha, eps, seed, cap) {
+  const L = { G, n, alpha, eps, r: mulberry32(seed), Q: NS.newQ(G), ep: 0, lens: [], e: null, cap: cap || 10000 };
+  L.begin = () => { const c0 = G.start[0] * G.C + G.start[1]; L.e = { S: [c0], A: [NS.egreedy(L.Q[c0], L.r, eps)], T: Infinity, t: 0, cut: false }; };
+  L.tick = () => {
+    const e = L.e, S = e.S, A = e.A, Q = L.Q;
+    if (e.t < e.T) { const s = S[e.t], [i2, j2] = NS.gstep(G, Math.floor(s / G.C), s % G.C, A[e.t], L.r), s2 = i2 * G.C + j2; S.push(s2);
+      if (i2 === G.goal[0] && j2 === G.goal[1]) e.T = e.t + 1; else { A.push(NS.egreedy(Q[s2], L.r, eps)); if (e.t + 1 >= L.cap) { e.T = e.t + 1; e.cut = true; } } }
+    const tau = e.t - n + 1;
+    if (tau >= 0) { const h = Math.min(tau + n, e.T); let Gr = 0; for (let k = tau + 1; k <= h; k++) Gr += -1; if (tau + n < e.T || e.cut) Gr += Q[S[h]][A[h]]; const q = Q[S[tau]]; q[A[tau]] = q[A[tau]] + alpha * (Gr - q[A[tau]]); }
+    if (tau === e.T - 1) { L.lens.push(e.T); L.ep++; L.begin(); return true; }
+    e.t++; return false;
+  };
+  L.begin(); return L;
+}
+
+/* ---------- hero ---------- */
+const HALPHA = { 1: 0.6, 4: 0.3, 8: 0.2, 16: 0.2 };   // each n's best alpha in the project's sweep
+const HERO = { n: 8, L: null, acc: 0, start: GR.start.slice(), v: null };
+function heroReset() { const G = Object.assign({}, GW, { start: HERO.start.slice() }); HERO.L = makeLearner(G, HERO.n, HALPHA[HERO.n], 0.1, 1); HERO.acc = 0; drawHero(); }
+function drawHero() {
+  const cv = $('#hero-cv'), v = gulfFrame(cv), C = C0(), L = HERO.L; HERO.v = v; if (!L) return;
+  drawGulf(v);
+  drawPolicy(v, greedyOf(L.Q), alphaCol(C.q, 0.62));
+  const S = L.e.S, k0 = Math.max(0, S.length - 40), c = v.ctx;
+  c.save(); c.lineCap = 'round';
+  for (let k = k0 + 1; k < S.length; k++) { const a = S[k - 1], b = S[k]; c.strokeStyle = C.lda; c.globalAlpha = 0.15 + 0.75 * (k - k0) / (S.length - k0); c.lineWidth = 2.4; c.beginPath(); c.moveTo(v.X(a % GR.C + 0.5), v.Y(Math.floor(a / GR.C) + 0.5)); c.lineTo(v.X(b % GR.C + 0.5), v.Y(Math.floor(b / GR.C) + 0.5)); c.stroke(); }
+  c.restore();
+  drawEnds(v, L.G.start, L.G.goal);
+  const b = S[S.length - 1]; dot(v, b % GR.C + 0.5, Math.floor(b / GR.C) + 0.5, C.q, 5.5);
+  const last = L.lens.length ? L.lens[L.lens.length - 1] : null, l10 = L.lens.slice(-10);
+  $('#hero-cap').innerHTML = `n-step Sarsa, n = ${HERO.n}, &alpha; = ${HALPHA[HERO.n]}, &epsilon; = 0.1. Voyage ${L.ep + 1}: ${nf(L.e.t)} steps so far${last != null ? ` &middot; last voyage ${tip(nf(last) + ' steps', 'steps from the start (blue dot) to the goal (star) in the previous voyage; every step earned −1')}` : ''}${l10.length >= 3 ? ` &middot; mean of the last ${l10.length}: ${tip(fmt(mean(l10), 1), l10.join(', ') + '\nmean = ' + fmt(mean(l10), 2))}` : ''}. Shading is wind speed; small arrows show the wind (Jan mean) and, darker, the greedy action learned so far.`;
+}
+function heroLoop() {
+  requestAnimationFrame(heroLoop);
+  if (!HERO.L || !visible($('#hero-cv'))) return;
+  const e = HERO.L.e, spf = HERO.L.ep === 0 ? 40 : e.t > 200 ? 30 : e.t > 60 ? 3 : 0.5;
+  HERO.acc += spf; let k = 0; while (HERO.acc >= 1 && k < 200) { HERO.L.tick(); HERO.acc -= 1; k++; }
+  if (k) drawHero();
+}
+seg1('[data-hn]', 'data-hn', v => { HERO.n = +v; heroReset(); });
+$('#hero-reset').addEventListener('click', () => { HERO.start = GR.start.slice(); heroReset(); });
+$('#hero-cv').addEventListener('click', ev => { const v = HERO.v; if (!v) return; const [px, py] = evPos($('#hero-cv'), ev), j = Math.floor(v.iX(px)), i = Math.floor(v.iY(py));
+  if (i < 0 || j < 0 || i >= GR.R || j >= GR.C || GR.L[i * GR.C + j] || (i === GR.goal[0] && j === GR.goal[1])) return; HERO.start = [i, j]; heroReset(); });
+fig($('#hero-cv'), drawHero);
+
+/* =================================================================== WHY: the n-step return on one episode */
+const WY_EP = NS.walkEp(mulberry32(7134), 0.5), WY_T = WY_EP.S.length - 1;
+const WY_V = (() => { const V = new Float64Array(NS.NW + 2); NS.makeEps(7000, 1, 30, 0.5)[0].forEach(ep => NS.tdEp(V, ep, 1, 0.3, 1)); return V; })();
+const sWt = slider('wy-t'), sWn = slider('wy-n'), sWg = slider('wy-g', x => fmt(x, 2));
+$('#wy-t').max = WY_T - 1;
+function wyCalc(t, n, g) {
+  const S = WY_EP.S, T = WY_T, h = Math.min(t + n, T); let G = 0, w = 1; const terms = [];
+  for (let i = t + 1; i <= h; i++) { const r = NS.walkR(S[i]); terms.push([w, r]); G += w * r; w *= g; }
+  const boot = t + n < T; let bv = 0; if (boot) { bv = WY_V[S[t + n]]; G += w * bv; }
+  return { G, h, boot, w, bv, terms, sBoot: boot ? S[t + n] : null };
+}
+function drawWy() {
+  const C = C0(), cv = $('#wy-cv'), t = sWt.v, n = sWn.v, g = sWg.v, o = wyCalc(t, n, g), S = WY_EP.S, T = WY_T;
+  const r = cv.getBoundingClientRect(), barW = Math.max(70, r.width * 0.22);
+  const v = frame(cv, [-0.5, T + 0.5], [-0.5, 20.5], { l: 34, r: barW + 10, t: 12, b: 30 }); axes(v, 'time t', 'state', { sx: r.width < 500 ? 10 : 5, sy: 5 });
+  const c = v.ctx; clip(v);
+  c.fillStyle = alphaCol(C.a, 0.13); c.fillRect(v.X(t), v.pad.t, v.X(o.h) - v.X(t), v.ph);
+  polyline(v, S.map((s, i) => [i, s]), C.muted, 1.6);
+  S.forEach((s, i) => { if (i > t && i <= o.h) dot(v, i, s, C.a, i === T ? 5.5 : 3.6); else dot(v, i, s, C.muted, 2.4); });
+  dot(v, t, S[t], C.q, 6.5, true);
+  if (o.boot) { dot(v, t + n, S[t + n], C.b, 7); }
+  v.ctx.restore();
+  label(v, t, S[t] + 1.3, 'S' + t, { align: 'center', col: C.q });
+  if (o.boot) label(v, t + n, S[t + n] + 1.4, 'V(S' + (t + n) + ')', { align: 'center', col: C.b });
+  // V bars on the right, sharing the state axis
+  const x0 = v.w - barW - 4, x1 = v.w - 6, xm = (x0 + x1) / 2, sc = (x1 - x0) / 2 / 1;
+  c.save(); c.strokeStyle = C.line; c.beginPath(); c.moveTo(xm, v.pad.t); c.lineTo(xm, v.h - v.pad.b); c.stroke();
+  for (let s = 1; s <= 19; s++) { const y = v.Y(s), bh = Math.max(2, (v.Y(0) - v.Y(1)) * 0.6); c.fillStyle = s === S[t] ? C.q : (o.boot && s === o.sBoot) ? C.b : alphaCol(C.lda, 0.55); c.fillRect(Math.min(xm, xm + WY_V[s] * sc), y - bh / 2, Math.abs(WY_V[s] * sc), bh); }
+  c.strokeStyle = C.q; c.lineWidth = 1.2; c.beginPath(); for (let s = 1; s <= 19; s++) { const x = xm + W_[s] * sc, y = v.Y(s); s === 1 ? c.moveTo(x, y) : c.lineTo(x, y); } c.stroke();
+  c.font = '10px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText('V(s)  −1 … +1', xm, v.h - v.pad.b + 6); c.restore();
+  // stats
+  const rw = o.h - t, tw = o.terms.map(([w, r]) => `${fmt(w, 3)}×${fmt(r, 0)}`).join(' + ');
+  $('#wy-G').innerHTML = tip(f3(o.G), `${o.terms.length} reward terms: ${tw || '—'}${o.boot ? `\n+ γ^${n} × V(S${t + n}) = ${fmt(o.w, 4)} × ${f3(o.bv)}` : '\nepisode ended inside the window: no bootstrap'}\n= ${f4(o.G)}`);
+  $('#wy-V').innerHTML = tip(f3(WY_V[S[t]]), `S${t} = state ${S[t]}; learned value after 30 episodes of one-step TD (α = 0.3)\ntrue value v(${S[t]}) = ${fmt(W_[S[t]], 1)}`);
+  $('#wy-rw').innerHTML = tip(String(rw), `rewards R${t + 1} … R${o.h}` + (o.h === T ? ' (the last one is the terminal reward)' : ''));
+  $('#wy-bw').innerHTML = o.boot ? tip(fmt(o.w, 3), `γ^n = ${fmt(g, 2)}^${n}`) : tip('0', 'the window reaches the end of the episode, so nothing is borrowed: this is the Monte Carlo return');
+  const vb = o.boot ? WY_V[S[t + n]] : 0;
+  $('#wy-say').innerHTML = o.boot
+    ? `The window covers ${rw} step${rw > 1 ? 's' : ''}, all paying 0, so the target is pure borrowing: &gamma;<sup>${n}</sup> &times; V(S${sub(t + n)}) = ${fmt(o.w, 3)} &times; ${f3(vb)}. That estimate is for state ${S[t + n]}, whose true (undiscounted) value is ${fmt(W_[S[t + n]], 1)}; whatever V gets wrong there, the target inherits, shrunk by &gamma;<sup>${n}</sup>. ${t + n + 1 <= T ? `Lengthen n past ${T - t} and the window reaches the end of the episode.` : ''}`
+    : `The window reaches the end of the episode (T = ${T}), so nothing is borrowed: G${sub(t + ':' + (t + n))} is the full Monte Carlo return, &gamma;<sup>${T - t - 1}</sup> &times; ${fmt(NS.walkR(S[T]), 0)} = ${f3(o.G)}. Any n &ge; ${T - t} gives the same target for this t.`;
+  $('#run-wy').innerHTML = `<b>Running example:</b> G${sub(`${t}:${t + n}`)} = ${o.terms.slice(0, 6).map(([w, r]) => `${fmt(w, 3)}&middot;${fmt(r, 0)}`).join(' + ')}${o.terms.length > 6 ? ' + &hellip;' : ''}${o.boot ? ` + ${fmt(o.w, 3)} &times; V(S${sub(t + n)}) [= ${f3(o.bv)}]` : ''} = <b>${tip(f4(o.G), 'the sum of the discounted rewards in the window' + (o.boot ? ' plus the discounted borrowed estimate' : ''))}</b>, against the current V(S${sub(t)}) = ${f3(WY_V[S[t]])}.`;
+  drawBk(); runPr();
+}
+function drawBk() {
+  const C = C0(), cv = $('#wy-bk'), r = cv.getBoundingClientRect(), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, t = sWt.v, n = sWn.v, mc = t + n >= WY_T;
+  const cols = [['1-step TD', 1], ['2-step', 2], ['3-step', 3], [n > 3 && !mc ? `${n}-step` : 'n-step', Math.max(4, n)], ['∞ (MC)', Infinity]], W = r.width, H = r.height, cwid = W / cols.length;
+  const lv = Math.min(5, Math.max(3, Math.floor((H - 34) / 22)));
+  cols.forEach(([nm, k], ci) => {
+    const on = mc ? k === Infinity : (k === n || (ci === 3 && n > 3)), x = cwid * (ci + 0.5), col = on ? C.a : C.muted, dy = (H - 36) / (lv * 2);
+    c.save(); c.globalAlpha = on ? 1 : 0.55; c.strokeStyle = col; c.fillStyle = col; c.lineWidth = on ? 2 : 1.2;
+    let y = 10; const steps = k === Infinity ? lv : Math.min(k, lv), dots = k !== Infinity && k > lv;
+    const circ = (yy, filled) => { c.beginPath(); c.arc(x, yy, 5, 0, 7); if (filled) c.fill(); else { c.fillStyle = C.surf; c.fill(); c.fillStyle = col; c.stroke(); } };
+    for (let s = 0; s < steps; s++) { circ(y, false); c.beginPath(); c.moveTo(x, y + 5); c.lineTo(x, y + dy * 2 - 5); c.stroke(); c.beginPath(); c.arc(x, y + dy, 3, 0, 7); c.fill(); y += dy * 2; }
+    if (k === Infinity) { c.fillRect(x - 5, y - 5, 10, 10); } else if (dots) { c.font = '13px ' + css('--f-mono'); c.textAlign = 'center'; c.fillText('⋮', x, y - 2); } else circ(y, false);
+    c.font = (on ? '600 ' : '') + '10.5px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillText(nm, x, H - 3); c.restore();
+  });
+}
+[sWt, sWn, sWg].forEach(s => s.el.addEventListener('input', () => { s.show(); drawWy(); }));
+fig($('#wy-cv'), drawWy); fig($('#wy-bk'), drawBk);
+
+/* =================================================================== PRED: update, error reduction, Figure 7.2 */
+function runPr() {
+  const t = sWt.v, n = sWn.v, g = sWg.v, o = wyCalc(t, n, g), a = sF72a ? sF72a.v : 0.4, V0 = WY_V[WY_EP.S[t]], nv = V0 + a * (o.G - V0);
+  $('#run-pr').innerHTML = `<b>Running example</b> (the window from the first lab, &alpha; from the experiment below): V(S${sub(t)}) &larr; ${f3(V0)} + ${fmt(a, 2)} &times; (${f3(o.G)} &minus; ${f3(V0)}) = <b>${tip(f4(nv), `old value ${f4(V0)}\nn-step return ${f4(o.G)}\nstep size α = ${fmt(a, 2)}`)}</b>. The update is made at time ${Math.min(t + n, WY_T)}${t + n >= WY_T ? ', after the episode ended (one of the final catch-up updates)' : ''}, ${Math.min(n, WY_T - t)} step${Math.min(n, WY_T - t) > 1 ? 's' : ''} after the visit.`;
+}
+const ER = { mode: 'zero' };
+const sEn = slider('er-n'), sEg = slider('er-g', x => fmt(x, 2));
+const ER_NOISE = (() => { const r = mulberry32(77), z = new Float64Array(NS.NW + 2); for (let s = 1; s <= NS.NW; s++) z[s] = 0.3 * gaussOf(r); return z; })();
+let ER_cache = {};
+function erTrue(g) { const k = fmt(g, 2); return ER_cache[k] || (ER_cache[k] = NS.trueVg(g, 0.5)); }
+function erCalc() {
+  const n = sEn.v, g = sEg.v, v = erTrue(g), V = new Float64Array(NS.NW + 2);
+  for (let s = 1; s <= NS.NW; s++) V[s] = ER.mode === 'zero' ? 0 : ER.mode === 'noisy' ? v[s] + ER_NOISE[s] : -v[s];
+  const E = NS.expectedNStep(V, n, g, 0.5); let a = 0, b = 0, sa = 1, sb = 1;
+  for (let s = 1; s <= NS.NW; s++) { const da = Math.abs(V[s] - v[s]), db = Math.abs(E[s] - v[s]); if (da > a) { a = da; sa = s; } if (db > b) { b = db; sb = s; } }
+  let gn = 1; for (let k = 0; k < n; k++) gn *= g;
+  return { n, g, v, V, E, a, b, sa, sb, gn, bound: gn * a };
+}
+function drawEr() {
+  const C = C0(), o = erCalc(), top = Math.max(0.2, o.a * 1.12), v = frame($('#er-cv'), [0.3, 19.7], [0, top], { l: 42, b: 30 });
+  axes(v, 'state s', 'absolute error', { sx: 2, fx: x => (x >= 1 && x <= 19 ? fmt(x, 0) : '') }); clip(v);
+  const c = v.ctx, bw = (v.X(1) - v.X(0)) * 0.36;
+  for (let s = 1; s <= 19; s++) { const ea = Math.abs(o.V[s] - o.v[s]), eb = Math.abs(o.E[s] - o.v[s]); c.fillStyle = alphaCol(C.muted, 0.45); c.fillRect(v.X(s) - bw - 1, v.Y(ea), bw, v.Y(0) - v.Y(ea)); c.fillStyle = C.a; c.fillRect(v.X(s) + 1, v.Y(eb), bw, v.Y(0) - v.Y(eb)); }
+  seg(v, 0.3, o.bound, 19.7, o.bound, C.bad, 1.8, [6, 4]); v.ctx.restore();
+  $('#er-a').innerHTML = tip(f3(o.a), `largest |V(s) − v(s)|, at state ${o.sa}`);
+  $('#er-b').innerHTML = tip(f3(o.b), `largest |E[G] − v(s)|, at state ${o.sb}\nE[G] computed exactly by ${o.n} rounds of dynamic programming`);
+  $('#er-c').innerHTML = tip(f3(o.bound), `γ^n × worst error of V = ${fmt(o.g, 2)}^${o.n} × ${f3(o.a)}\n= ${fmt(o.gn, 4)} × ${f3(o.a)}`);
+  const ratio = o.bound > 0 ? o.b / o.bound : 0;
+  $('#er-say').innerHTML = `The worst error drops from ${f3(o.a)} to ${f3(o.b)}, ${o.b <= o.bound + 1e-12 ? 'inside' : 'outside'} the bound ${f3(o.bound)} (${pctS(ratio)} of it). ` +
+    (o.g === 1 ? `With &gamma; = 1 the bound promises no improvement at all; the actual gain comes from walks that end inside the n steps, which is why the error shrinks most near the two ends (state ${o.sb} is now the worst).` :
+      ratio > 0.9 ? `The bound is nearly tight here: the worst state rarely finishes within ${o.n} steps, so the shrinkage is almost all from discounting.` :
+        `The bound is loose: discounting alone would leave ${f3(o.bound)}, but walks that finish within ${o.n} steps replace guesses with real rewards, which removes more.`) +
+    (ER.mode === 'noisy' ? ' Random errors also average out over the many states the walk can reach.' : ER.mode === 'flip' ? ' Even a badly wrong V is corrected step by step: every real reward in the window is free of error.' : '');
+  $('#run-er').innerHTML = `<b>Running example:</b> max<sub>s</sub> |E[G${sub(`t:t+${o.n}`)}] &minus; v(s)| = ${tip(f4(o.b), 'state ' + o.sb)} &le; ${fmt(o.g, 2)}<sup>${o.n}</sup> &times; ${f4(o.a)} = ${tip(f4(o.bound), 'γ^n = ' + fmt(o.gn, 5))} ${o.b <= o.bound + 1e-12 ? '&check;' : '&times;'}`;
+}
+const pctS = p => fmt(p * 100, 0) + '%';
+seg1('[data-erv]', 'data-erv', m => { ER.mode = m; drawEr(); });
+[sEn, sEg].forEach(s => s.el.addEventListener('input', () => { s.show(); drawEr(); }));
+fig($('#er-cv'), drawEr);
+
+// Figure 7.2
+const NL72 = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512], AL72 = Array.from({ length: 21 }, (_, i) => i / 20);
+let F72 = null, EPS72 = null;
+function computeF72() { if (F72) return; const t0 = performance.now(); EPS72 = NS.makeEps(7200, 100, 10, 0.5); F72 = NL72.map(n => AL72.map(a => NS.fig72(EPS72, n, a))); F72.ms = performance.now() - t0; }
+const sF72n = slider('f72-n', i => String(NL72[i])), sF72a = slider('f72-a', x => fmt(x, 2));
+function drawF72() {
+  const C = C0(), cv = $('#f72-cv'); if (!F72) { const v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }); v.ctx.font = '13px ' + css('--f-body'); v.ctx.fillStyle = C.muted; v.ctx.textAlign = 'center'; v.ctx.fillText('Running 21,000 runs…', v.w / 2, v.h / 2); return; }
+  const v = frame(cv, [0, 1], [0.25, 0.55], { l: 44, b: 30 }); axes(v, 'step size α', 'average RMS error', { sx: 0.2, sy: 0.05 }); clip(v);
+  const ni = sF72n.v, ai = Math.round(sF72a.v * 20);
+  NL72.forEach((n, k) => { if (k !== ni) polyline(v, AL72.map((a, j) => [a, Math.min(0.6, F72[k][j])]), ramp(k / 9), 1.4, null, 0.75); });
+  polyline(v, AL72.map((a, j) => [a, Math.min(0.6, F72[ni][j])]), ramp(ni / 9), 3.4);
+  const row = F72[ni], bj = row.indexOf(Math.min(...row));
+  dot(v, AL72[bj], row[bj], ramp(ni / 9), 7, true); dot(v, AL72[ai], Math.min(0.6, row[ai]), C.q, 4.5);
+  v.ctx.restore();
+  NL72.forEach((n, k) => { const row = F72[k], jm = row.indexOf(Math.min(...row)); let j = row.findIndex((x, i) => i > jm && x > 0.53); if (j < 0) j = 21; if (j > 0 && (k % 3 === 0 || k === ni)) label(v, AL72[Math.max(0, j - 1)], Math.min(0.545, row[Math.max(0, j - 1)]), 'n=' + n, { col: ramp(k / 9), align: 'left', font: k === ni ? '600 11px ' : '10px ', base: 'bottom' }); });
+  let best = [0, 0]; F72.forEach((r, k) => r.forEach((x, j) => { if (x < F72[best[0]][best[1]]) best = [k, j]; }));
+  const n = NL72[ni], e = row[ai];
+  $('#f72-e').innerHTML = tip(f3(e), `n = ${n}, α = ${fmt(AL72[ai], 2)}\nmean of 1,000 RMS values (100 runs × 10 episodes)`);
+  $('#f72-b').innerHTML = tip(`${fmt(AL72[bj], 2)} &rarr; ${f3(row[bj])}`, 'lowest point of the bold curve, on a grid of α in steps of 0.05');
+  $('#f72-w').innerHTML = tip(`n = ${NL72[best[0]]}`, `lowest error anywhere: n = ${NL72[best[0]]}, α = ${fmt(AL72[best[1]], 2)}, error ${f4(F72[best[0]][best[1]])}\ncomputed in ${fmt(F72.ms, 0)} ms`);
+  const b1 = Math.min(...F72[0]), bL = Math.min(...F72[9]);
+  $('#f72-say').innerHTML = (ni === 0 ? `n = 1 is one-step TD. It is safe at large step sizes but slow: its best error is ${f3(b1)}.` :
+    ni >= 7 ? `n = ${n} is longer than almost every episode, so this is essentially Monte Carlo: it is only usable at tiny step sizes, and even its best (${f3(row[bj])} at &alpha; = ${fmt(AL72[bj], 2)}) is worse than one-step TD&rsquo;s best (${f3(b1)}).` :
+      `With n = ${n} the best error is ${f3(row[bj])} at &alpha; = ${fmt(AL72[bj], 2)}, ${row[bj] < b1 ? 'better than' : 'no better than'} one-step TD (${f3(b1)}) and ${row[bj] < bL ? 'far better than' : 'no better than'} Monte Carlo-like n = 512 (${f3(bL)}).`) +
+    ` The overall winner is an intermediate n = ${NL72[best[0]]}. Notice how each longer n wants a smaller &alpha;: its target is noisier, so it must average more.`;
+  $('#run-72').innerHTML = `<b>Running example:</b> n = ${n}, &alpha; = ${fmt(AL72[ai], 2)}: the mean of RMS${sub(1)}, &hellip;, RMS${sub(10)} over 100 runs is ${tip(f4(e), 'each run starts from V = 0 and sees the same 10 recorded episodes for every setting')}. Before any learning (V = 0) the RMS error is &radic;(&sum;v(s)&sup2;/19) = ${tip(f4(NS.rmsV(new Float64Array(21), W_)), 'the error at α = 0, where nothing is learned')}.`;
+}
+[sF72n, sF72a].forEach(s => s.el.addEventListener('input', () => { s.show(); drawF72(); runPr(); }));
+fig($('#f72-cv'), drawF72);
+
+/* =================================================================== SARSA on a sparse-reward grid */
+const SG = { R: 6, C: 10, L: new Array(60).fill(0), start: [1, 1], goal: [3, 8] };
+const SA = { m: 0, Q: null, r: null, ep: 0, last: null, raised: [] };
+const sSn = slider('sa-n'), sSa = slider('sa-a', x => fmt(x, 2));
+const SG_G = 0.9, SG_E = 0.1;
+function saReset() { SA.Q = NS.newQ(SG); SA.r = mulberry32(4242); SA.ep = 0; SA.last = null; SA.raised = []; drawSa(); }
+function saPlay(k) {
+  for (let i = 0; i < k; i++) { const o = NS.sarsaEp(SG, SA.Q, SA.r, sSn.v, sSa.v, SG_E, SG_G, gl => (gl ? 1 : 0), SA.m === 1, 2000, true); SA.ep++; SA.last = o; }
+  const seen = new Set(); SA.raised = []; SA.last.ups.forEach(u => { if (u[5] > u[3] + 1e-12) { const key = u[1] * 4 + u[2]; if (!seen.has(key)) { seen.add(key); SA.raised.push([u[1], u[2]]); } } });
+  drawSa();
+}
+function drawSa() {
+  const C = C0(), v = frame($('#sa-cv'), [0, SG.C], [0, SG.R], { l: 8, r: 8, t: 8, b: 8 }, true), c = v.ctx, cw = v.X(1) - v.X(0);
+  c.save(); c.strokeStyle = C.line; c.lineWidth = 1; for (let j = 0; j <= SG.C; j++) { c.beginPath(); c.moveTo(v.X(j), v.Y(0)); c.lineTo(v.X(j), v.Y(SG.R)); c.stroke(); } for (let i = 0; i <= SG.R; i++) { c.beginPath(); c.moveTo(v.X(0), v.Y(i)); c.lineTo(v.X(SG.C), v.Y(i)); c.stroke(); } c.restore();
+  if (SA.last) { const S = SA.last.S; polyline(v, S.map(s => [s % SG.C + 0.5 + 0.12 * Math.sin(s * 1.7), Math.floor(s / SG.C) + 0.5 + 0.12 * Math.cos(s * 2.3)]), C.lda, 1.3, null, Math.max(0.18, Math.min(0.6, 40 / S.length))); }
+  let mx = 0; SA.Q.forEach(q => q.forEach(x => { if (x > mx) mx = x; }));
+  const raisedSet = new Set(SA.raised.map(([s, a]) => s * 4 + a));
+  c.save(); c.lineCap = 'round';
+  SA.Q.forEach((q, s) => q.forEach((x, a) => { if (x <= 0 || mx <= 0) return; const i = Math.floor(s / SG.C), j = s % SG.C, [di, dj] = NS.MV[a], L = 0.46 * Math.sqrt(x / mx), cx = v.X(j + 0.5), cy = v.Y(i + 0.5);
+    const hot = raisedSet.has(s * 4 + a); c.strokeStyle = hot ? C.b : C.a; c.lineWidth = hot ? Math.max(2.4, cw * 0.09) : Math.max(1.6, cw * 0.06); c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + dj * L * cw, cy - di * L * cw); c.stroke(); }));
+  c.restore();
+  drawEnds(v, SG.start, SG.goal);
+  const nr = SA.raised.length, qs = SA.Q[SG.start[0] * SG.C + SG.start[1]], qb = Math.max(...qs);
+  $('#sa-cap').innerHTML = `A 10 &times; 6 grid, &gamma; = ${SG_G}, &epsilon; = ${SG_E}; the only reward is +1 on reaching &#9733;. <span style="color:var(--lda)">&#9644;</span> the last episode&rsquo;s path &nbsp; <span style="color:var(--cA)">&#9644;</span> actions with Q &gt; 0 (length &prop; &radic;Q) &nbsp; <span style="color:var(--cB)">&#9644;</span> the ones the last episode raised.`;
+  $('#sa-ep').textContent = String(SA.ep);
+  $('#sa-T').innerHTML = SA.last ? tip(nf(SA.last.T), SA.last.cut ? 'cut off at 2,000 steps' : 'steps from start to goal') : '&ndash;';
+  $('#sa-k').innerHTML = SA.last ? tip(String(nr), `state–action pairs whose Q went up during the last episode\n(one-step Sarsa can raise at most the pairs next to already-valued ones)`) : '&ndash;';
+  $('#sa-q').innerHTML = tip(f3(qb), `max over the 4 actions of Q(start, a)\nthe best path has ${Math.abs(SG.goal[0] - SG.start[0]) + Math.abs(SG.goal[1] - SG.start[1])} steps, so the best possible value is about γ^${Math.abs(SG.goal[0] - SG.start[0]) + Math.abs(SG.goal[1] - SG.start[1]) - 1} = ${f3(Math.pow(SG_G, Math.abs(SG.goal[0] - SG.start[0]) + Math.abs(SG.goal[1] - SG.start[1]) - 1))} (less, under ε-exploration)`);
+  const n = sSn.v, nm = SA.m ? 'Expected Sarsa' : 'Sarsa';
+  $('#sa-say').innerHTML = !SA.last ? `All values are 0, so the first episode is a random walk until it stumbles on the goal. Press <b>Play one episode</b>.` :
+    SA.ep === 1 ? `The first episode took ${nf(SA.last.T)} steps and raised ${nr} action value${nr === 1 ? '' : 's'}: ${n === 1 ? 'only the very last action before the goal. One-step ' + nm + ' passes the reward back one step per episode.' : `the last ${Math.min(n, SA.last.T)} actions of the path (fewer if the path revisited a pair). ${n}-step ${nm} passes the reward back ${n} steps at once.`}` :
+      `After ${SA.ep} episodes, ${SA.Q.reduce((s, q) => s + q.filter(x => x > 0).length, 0)} action values are positive and the start&rsquo;s best value is ${f3(qb)}. ${qb === 0 ? 'The reward has not reached the start yet.' : n === 1 ? 'With n = 1 the reward creeps back one cell per episode along well-trodden paths.' : `With n = ${n} each new reward reaches ${n} pairs back, so the value spreads quickly, though along whatever wandering path the episode took.`}`;
+  const u = SA.last ? SA.last.ups : null;
+  if (u && u.length) { const T = SA.last.T, tf = Math.max(0, T - n), uf = u.find(x => x[0] === tf), u0 = u[0];
+    $('#run-sa').innerHTML = `<b>Running example</b> (last episode, ${nm}, n = ${n}, &alpha; = ${fmt(sSa.v, 2)}): the first update, &tau; = 0, ` + (T > n ? `had no reward in its window, so G${sub('0:' + n)} = &gamma;<sup>${n}</sup> &times; ${SA.m ? 'V&#772;' : 'Q'}(S${sub(n)}${SA.m ? '' : ', A' + sub(n)}) = ${tip(f4(u0[4]), 'the bootstrapped value, discounted n times')}; ` : `already reached the goal: G = &gamma;<sup>${T - 1}</sup> = ${f4(u0[4])}; `) +
+      (uf ? `the update for &tau; = ${tf} is the first to see the goal: G = &gamma;<sup>${T - tf - 1}</sup> &times; 1 = ${tip(f4(uf[4]), 'no bootstrap: the episode ended inside the window')}, so Q &larr; ${f3(uf[3])} + ${fmt(sSa.v, 2)} &times; (${f3(uf[4])} &minus; ${f3(uf[3])}) = <b>${f4(uf[5])}</b>.` : '');
+  } else $('#run-sa').innerHTML = `<b>Running example:</b> play an episode to see its updates written out.`;
+}
+seg1('[data-sam]', 'data-sam', m => { SA.m = +m; saReset(); });
+[sSn, sSa].forEach(s => s.el.addEventListener('input', () => { s.show(); saReset(); }));
+$('#sa-go').addEventListener('click', () => saPlay(1)); $('#sa-go10').addEventListener('click', () => saPlay(10)); $('#sa-reset').addEventListener('click', saReset);
+fig($('#sa-cv'), drawSa);
+
+/* =================================================================== OFF-POLICY: importance sampling */
+const EPS_OFF = NS.makeEps(7300, 50, 30, 0.5), NOFF = [1, 2, 4, 8, 16];
+const sOp = slider('of-p', x => fmt(x, 2)), sOn = slider('of-n', i => String(NOFF[i])), sOa = slider('of-a', x => fmt(x, 2));
+let OF = null;
+function ofCalc() { const p = sOp.v, a = sOa.v; OF = { p, a, curves: NOFF.map(n => NS.offCurve(EPS_OFF, n, a, p, false)), rho: NS.rhoSample(EPS_OFF, NOFF[sOn.v], p) }; }
+function drawOf() {
+  if (!OF) ofCalc(); const C = C0(), ni = sOn.v, n = NOFF[ni], p = OF.p;
+  const v = frame($('#of-cv'), [1, 30], [0, 0.8], { l: 44, b: 30 }); axes(v, 'episode', 'RMS error', { sx: 5, sy: 0.2, fx: x => fmt(x, 0) }); clip(v);
+  OF.curves.forEach((cu, k) => { if (k !== ni) polyline(v, Array.from(cu, (y, e) => [e + 1, Math.min(0.85, y)]), ramp(k / 4), 1.5, null, 0.7); });
+  polyline(v, Array.from(OF.curves[ni], (y, e) => [e + 1, Math.min(0.85, y)]), ramp(ni / 4), 3.4); v.ctx.restore();
+  OF.curves.forEach((cu, k) => { const y = Math.min(0.78, cu[29]); label(v, 30, y, 'n=' + NOFF[k], { align: 'right', base: 'bottom', col: ramp(k / 4), font: k === ni ? '600 11px ' : '10px ' }); });
+  // histogram
+  const R = OF.rho, lo = -6, hi = 3, nb = 36, bins = new Array(nb).fill(0); let mx = 0, sm = 0;
+  let mn = Infinity; R.forEach(w => { sm += w; if (w > mx) mx = w; if (w < mn) mn = w; const l = w > 0 ? Math.log10(w) : lo; bins[clamp(Math.floor((l - lo) / (hi - lo) * nb), 0, nb - 1)]++; });
+  const hv = frame($('#of-h'), [lo, hi], [0, Math.max(...bins) / R.length * 1.15], { l: 44, b: 26 }); axes(hv, 'log₁₀ ρ', 'share', { sx: 1, fy: y => fmt(y * 100, 0) + '%', ny: 3, fx: x => (x === lo ? '≤−6' : fmt(x, 0)) });
+  const c = hv.ctx, bw = (hi - lo) / nb; bins.forEach((b, k) => { const x0 = lo + k * bw, y = b / R.length; c.fillStyle = ramp(ni / 4); c.globalAlpha = 0.8; c.fillRect(hv.X(x0) + 0.5, hv.Y(y), hv.X(x0 + bw) - hv.X(x0) - 1, hv.Y(0) - hv.Y(y)); c.globalAlpha = 1; });
+  const mu = sm / R.length; seg(hv, Math.log10(mu), 0, Math.log10(mu), hv.yl[1], C.q, 1.6, [4, 3]);
+  let m2 = 0; for (const w of R) m2 += (w - mu) * (w - mu); const vs = m2 / R.length;
+  const e2 = 2 * p * p + 2 * (1 - p) * (1 - p); let ex = 1; for (let k = 0; k < n; k++) ex *= e2; ex -= 1;
+  $('#of-m').innerHTML = tip(f3(mu), `mean of ${nf(R.length)} weights ρ_{t:t+n−1} (one per update)\nsample variance ${fmt(vs, 3)}`);
+  $('#of-x').innerHTML = tip(mx >= 1000 ? nf(mx) : f2(mx), `the largest single weight; ${R.filter(w => w > 10).length} of ${nf(R.length)} updates had ρ > 10`);
+  $('#of-v').innerHTML = tip(ex >= 1000 ? nf(ex) : f3(ex), `(Σ π²/b)^n − 1 = (${fmt(p, 2)}²/0.5 + ${fmt(1 - p, 2)}²/0.5)^${n} − 1 = ${fmt(e2, 3)}^${n} − 1`);
+  const fin = OF.curves[ni][29];
+  $('#of-e').innerHTML = tip(fin > 5 ? '&gt; 5' : f3(fin), `RMS error after episode 30, mean of 50 runs; n = 1 reaches ${f3(OF.curves[0][29])}`);
+  const best = OF.curves.reduce((b, cu, k) => (cu[29] < OF.curves[b][29] ? k : b), 0);
+  $('#of-say').innerHTML = (p === 0.5 ? `With &pi; = b every ratio is exactly 1: this is ordinary on-policy n-step TD, and the weights pile up in one bar at &rho; = 1.` :
+    `Each right step multiplies the weight by ${fmt(2 * p, 2)}, each left step by ${fmt(2 * (1 - p), 2)}. Over ${n} step${n > 1 ? 's' : ''} the weights spread over ${fmt(Math.log10(Math.max(mx, 1e-300)) - Math.log10(Math.max(mn, 1e-6)), 0)} powers of ten; their mean stays near 1 (${f3(mu)}), but ${pctS(R.filter(w => w < 0.5).length / R.length)} of the updates are shrunk below half and a few are hugely inflated.`) +
+    ` After 30 episodes the lowest error is n = ${NOFF[best]}${fin > 2 * OF.curves[best][29] && best !== ni ? `; n = ${n} is ${fin > 5 ? 'diverging' : 'far behind'} at this &alpha;` : ''}.${n >= 8 && p >= 0.75 ? ' Long windows and a demanding target: the variance makes the large-n curves jump about from episode to episode.' : ''}`;
+  const w1 = EPS_OFF[0][0], hw = Math.min(n, w1.A.length); let rr = 1; const fs = [];
+  for (let k = 0; k < hw; k++) { const x = (w1.A[k] ? p : 1 - p) / 0.5; rr *= x; fs.push(fmt(x, 2)); }
+  $('#run-of').innerHTML = `<b>Running example:</b> with &pi;(right) = ${fmt(p, 2)} and b(right) = 0.5, a right step has &rho; = ${fmt(p, 2)}/0.5 = ${fmt(2 * p, 2)} and a left step ${fmt(1 - p, 2)}/0.5 = ${fmt(2 * (1 - p), 2)}; E<sub>b</sub>[&rho;] = 0.5 &times; ${fmt(2 * p, 2)} + 0.5 &times; ${fmt(2 * (1 - p), 2)} = 1. The first window of the first recorded episode has &rho;${sub('0:' + (n - 1))} = ${fs.join(' &times; ')} = ${tip(fmt(rr, 4), 'its actions: ' + w1.A.slice(0, hw).map(a => (a ? 'R' : 'L')).join(' '))}. Var = (${fmt(e2, 3)})<sup>${n}</sup> &minus; 1 = ${tip(ex >= 1000 ? nf(ex) : f3(ex), 'exact for a window of n independent steps')}.`;
+}
+const ofRedo = debounce(() => { ofCalc(); drawOf(); }, 60);
+[sOp, sOn, sOa].forEach(s => s.el.addEventListener('input', () => { s.show(); ofRedo(); }));
+fig($('#of-cv'), drawOf); fig($('#of-h'), () => OF && drawOf());
+
+/* =================================================================== CONTROL VARIATES */
+const ALCV = Array.from({ length: 20 }, (_, i) => (i + 1) / 20);
+const sCp = slider('cv-p', x => fmt(x, 2)), sCn = slider('cv-n'), sCa = slider('cv-a', x => fmt(x, 2));
+let CV = null;
+function cvCalc() {
+  const p = sCp.v, n = sCn.v, key = p + '|' + n;
+  if (!CV || CV.key !== key) { CV = { key, p, n, pl: ALCV.map(a => mean(NS.offCurve(EPS_OFF, n, a, p, false))), cv: ALCV.map(a => mean(NS.offCurve(EPS_OFF, n, a, p, true))) }; }
+  const a = sCa.v; CV.a = a; CV.lpl = NS.offCurve(EPS_OFF, n, a, p, false); CV.lcv = NS.offCurve(EPS_OFF, n, a, p, true);
+}
+function drawCv() {
+  if (!CV) cvCalc(); const C = C0(), v = frame($('#cv-cv'), [0, 1], [0, 0.8], { l: 44, b: 30 }); axes(v, 'step size α', 'average RMS error', { sx: 0.2, sy: 0.2 }); clip(v);
+  const ai = Math.round(CV.a * 20) - 1;
+  polyline(v, ALCV.map((a, i) => [a, Math.min(0.85, CV.pl[i])]), C.bad, 2.6); polyline(v, ALCV.map((a, i) => [a, Math.min(0.85, CV.cv[i])]), C.a, 2.6);
+  ALCV.forEach((a, i) => { dot(v, a, Math.min(0.85, CV.pl[i]), C.bad, 2.8); dot(v, a, Math.min(0.85, CV.cv[i]), C.a, 2.8); });
+  dot(v, CV.a, Math.min(0.85, CV.pl[ai]), C.bad, 7, true); dot(v, CV.a, Math.min(0.85, CV.cv[ai]), C.a, 7, true); v.ctx.restore();
+  const lv = frame($('#cv-lc'), [1, 30], [0, Math.min(0.8, Math.max(0.2, Math.max(...CV.lpl, ...CV.lcv) * 1.1))], { l: 44, b: 26 }); axes(lv, 'episode', 'RMS', { sx: 5, ny: 3, fx: x => fmt(x, 0) }); clip(lv);
+  polyline(lv, Array.from(CV.lpl, (y, e) => [e + 1, Math.min(0.85, y)]), C.bad, 2.2); polyline(lv, Array.from(CV.lcv, (y, e) => [e + 1, Math.min(0.85, y)]), C.a, 2.2); lv.ctx.restore();
+  const bp = CV.pl.indexOf(Math.min(...CV.pl)), bc = CV.cv.indexOf(Math.min(...CV.cv));
+  $('#cv-pl').innerHTML = tip(`${fmt(ALCV[bp], 2)} &rarr; ${f3(CV.pl[bp])}`, 'best point of the red curve (average RMS over 30 episodes × 50 runs)');
+  $('#cv-cvb').innerHTML = tip(`${fmt(ALCV[bc], 2)} &rarr; ${f3(CV.cv[bc])}`, 'best point of the teal curve');
+  $('#cv-at').innerHTML = tip(`${CV.pl[ai] > 5 ? '&gt;5' : f3(CV.pl[ai])} vs ${f3(CV.cv[ai])}`, `α = ${fmt(CV.a, 2)}, n = ${CV.n}, π(right) = ${fmt(CV.p, 2)}`);
+  const good = a => a.filter(x => x < 0.3).length;
+  $('#cv-say').innerHTML = CV.p === 0.5 ? `With &pi; = b every &rho; is 1, the control variate (1 &minus; &rho;)V vanishes, and the two methods are identical: the curves coincide.` :
+    `The control-variate return is ${CV.cv[bc] < CV.pl[bp] - 0.002 ? 'better at its best' : 'about as good at its best'} (${f3(CV.cv[bc])} vs ${f3(CV.pl[bp])}), and it stays below 0.3 for ${good(CV.cv)} of the 20 step sizes against ${good(CV.pl)} for plain importance sampling. ${CV.pl[ai] > CV.cv[ai] ? `At &alpha; = ${fmt(CV.a, 2)} plain IS is ${CV.pl[ai] > 2 * CV.cv[ai] ? 'more than twice as bad' : 'worse'}` : `At &alpha; = ${fmt(CV.a, 2)} the two are close`}. The difference grows with n and with how far &pi; is from b, because that is where the products of ratios get wild.`;
+  // running example: hold V fixed at the truth and look at the targets each method would use
+  const ex = cvExample(CV.p, CV.n), p = CV.p;
+  $('#run-cv').innerHTML = `<b>Running example:</b> E<sub>b</sub>[1 &minus; &rho;] = 0.5(1 &minus; ${fmt(2 * p, 2)}) + 0.5(1 &minus; ${fmt(2 * (1 - p), 2)}) = 0. Now suppose V were already exactly v<sub>&pi;</sub> and look at the ${nf(ex.N)} updates of all 50 runs with V held there. A perfect estimate should not be pushed around. Plain IS moves each V(S<sub>t</sub>) towards V + &rho;(G &minus; V): those targets miss the truth by ${tip(f4(ex.mp), 'mean of (target − v(S_t)) over all updates: close to 0, since the method is unbiased')} on average but by ${tip(f3(ex.rp), 'root-mean-square of (target − v(S_t))')} typically. The control-variate targets miss by ${tip(f4(ex.mc), 'mean of (target − v(S_t))')} on average and ${tip(f3(ex.rc), 'root-mean-square of (target − v(S_t))')} typically: ${ex.rc < ex.rp ? `${fmt(ex.rp / Math.max(ex.rc, 1e-12), 1)} times less noise for the same mean` : 'no less noise here'}.`;
+}
+function cvExample(p, n) {
+  const vt = NS.walkV(p); let N = 0, sp = 0, sp2 = 0, sc = 0, sc2 = 0;
+  for (const run of EPS_OFF) for (const ep of run) { const S = ep.S, A = ep.A, T = S.length - 1, rho = k => (A[k] ? p : 1 - p) / 0.5;
+    for (let tau = 0; tau < T; tau++) { const h = Math.min(tau + n, T); let G = 0, w = 1; for (let i = tau + 1; i <= h; i++) G += NS.walkR(S[i]); if (tau + n < T) G += vt[S[tau + n]]; for (let k = tau; k < h; k++) w *= rho(k);
+      let Gc = h < T ? vt[S[h]] : 0; for (let k = h - 1; k >= tau; k--) Gc = rho(k) * (NS.walkR(S[k + 1]) + Gc) + (1 - rho(k)) * vt[S[k]];
+      const dp = w * (G - vt[S[tau]]), dc = Gc - vt[S[tau]]; sp += dp; sp2 += dp * dp; sc += dc; sc2 += dc * dc; N++; } }
+  return { N, mp: sp / N, rp: Math.sqrt(sp2 / N), mc: sc / N, rc: Math.sqrt(sc2 / N) };
+}
+const cvRedo = debounce(() => { cvCalc(); drawCv(); }, 120);
+[sCp, sCn, sCa].forEach(s => s.el.addEventListener('input', () => { s.show(); cvRedo(); }));
+fig($('#cv-cv'), () => CV && drawCv()); fig($('#cv-lc'), () => CV && drawCv());
+
+/* =================================================================== TREE BACKUP diagram */
+const TB = { n: 3, R: [0.5, -1, 2], Q: [[1.0, 2.0, 0.0], [0.5, -0.5, 3.0], [1.5, 0.0, -1.0]], A: [1, 0], g: 0.9, nodes: [] };
+const sTe = slider('tb-e', x => fmt(x, 2));
+const piOf = (k, eps) => { const q = TB.Q[k]; let b = 0; for (let a = 1; a < 3; a++) if (q[a] > q[b]) b = a; return q.map((_, a) => eps / 3 + (a === b ? 1 - eps : 0)); };
+function tbCalc() {
+  const eps = sTe.v, n = TB.n, g = TB.g, P = [0, 1, 2].map(k => piOf(k, eps));
+  let G = TB.R[n - 1] + g * (P[n - 1][0] * TB.Q[n - 1][0] + P[n - 1][1] * TB.Q[n - 1][1] + P[n - 1][2] * TB.Q[n - 1][2]); const steps = [G];
+  for (let k = n - 2; k >= 0; k--) { const Ak = TB.A[k]; let side = 0; for (let a = 0; a < 3; a++) if (a !== Ak) side += P[k][a] * TB.Q[k][a]; G = TB.R[k] + g * side + g * P[k][Ak] * G; steps.unshift(G); }
+  const leaves = []; let carry = 1;
+  for (let k = 0; k < n; k++) { for (let a = 0; a < 3; a++) if (k === n - 1 || a !== TB.A[k]) leaves.push({ k, a, w: carry * P[k][a] }); if (k < n - 1) carry *= P[k][TB.A[k]]; }
+  let isw = 1; for (let k = 0; k < n - 1; k++) isw *= P[k][TB.A[k]] / (1 / 3);
+  return { eps, n, P, G, steps, leaves, deep: carry, isw, wsum: sum(leaves.map(l => l.w)) };
+}
+function drawTb() {
+  const C = C0(), cv = $('#tb-cv'), r = cv.getBoundingClientRect(), v = frame(cv, [0, r.width], [r.height, 0], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, o = tbCalc(), W = r.width, H = r.height;
+  const lev = o.n, dy = (H - 60) / (lev + 0.6), d = Math.min(W / 7, 130), small = W < 480; TB.nodes = [];
+  const fs = small ? 10 : 11.5;
+  c.font = fs + 'px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'middle';
+  let x = W / 2, y = 22;
+  const stateC = (xx, yy) => { c.beginPath(); c.arc(xx, yy, 8, 0, 7); c.fillStyle = C.surf; c.fill(); c.strokeStyle = C.q; c.lineWidth = 1.6; c.stroke(); };
+  // root: S_t and its action A_t
+  stateC(x, y); c.fillStyle = C.muted; c.textAlign = 'left'; c.fillText('Sₜ', x + 13, y); c.textAlign = 'center';
+  c.strokeStyle = C.a; c.lineWidth = 3; c.beginPath(); c.moveTo(x, y + 8); c.lineTo(x, y + dy * 0.45); c.stroke();
+  c.beginPath(); c.arc(x, y + dy * 0.45, 5.5, 0, 7); c.fillStyle = C.a; c.fill(); c.fillStyle = C.muted; c.textAlign = 'left'; c.fillText('Aₜ', x + 10, y + dy * 0.45); c.textAlign = 'center';
+  let ya = y + dy * 0.45;
+  for (let k = 0; k < lev; k++) {
+    const ys = ya + dy * 0.55, yact = ys + dy * 0.42;
+    c.strokeStyle = C.a; c.lineWidth = 3; c.beginPath(); c.moveTo(x, ya + 5); c.lineTo(x, ys - 8); c.stroke();
+    c.fillStyle = C.q; c.textAlign = 'right'; c.fillText('R=' + fmt(TB.R[k], 1), x - 8, k === 0 ? (ya + ys) / 2 : ys - 13); c.textAlign = 'center';
+    stateC(x, ys); c.fillStyle = C.muted; c.textAlign = 'left'; c.fillText('Sₜ₊' + '₁₂₃'[k], x + 12, ys - 6); c.textAlign = 'center';
+    for (let a = 0; a < 3; a++) {
+      const ax = x + (a - 1) * d, spine = k < lev - 1 && a === TB.A[k], leaf = !spine;
+      c.strokeStyle = spine ? C.a : C.muted; c.lineWidth = spine ? 3 : 1.3; c.beginPath(); c.moveTo(x, ys + 8); c.lineTo(ax, yact - 5); c.stroke();
+      c.beginPath(); c.arc(ax, yact, spine ? 6 : 5.5, 0, 7); c.fillStyle = spine ? C.a : leaf ? C.b : C.muted; c.fill();
+      TB.nodes.push({ x: ax, y: yact, k, a });
+      c.fillStyle = C.q; const lf = o.leaves.find(l => l.k === k && l.a === a);
+      if (leaf && lf) { c.font = '600 ' + fs + 'px ' + css('--f-mono'); c.fillText('w ' + fmt(lf.w, 2), ax, yact + 15); c.font = fs + 'px ' + css('--f-mono'); c.fillStyle = C.muted; c.fillText('Q ' + fmt(TB.Q[k][a], 1), ax, yact + 28); }
+      else if (spine) { c.fillStyle = C.a; c.textAlign = 'left'; c.fillText('π ' + fmt(o.P[k][a], 2), ax + 9, yact + 1); c.textAlign = 'center'; }
+    }
+    if (k < lev - 1) { x = x + (TB.A[k] - 1) * d; ya = yact; }
+  }
+  $('#tb-G').innerHTML = tip(f3(o.G), o.steps.map((g, k) => `G(t+${k}:t+${o.n}) = ${f4(g)}`).reverse().join('\n'));
+  $('#tb-sp').innerHTML = tip(f3(o.deep), o.n === 1 ? 'n = 1: the only level is a full expectation' : `π(A_t+1)${o.n > 2 ? ' × π(A_t+2)' : ''} = ${TB.A.slice(0, o.n - 1).map((a, k) => fmt(o.P[k][a], 2)).join(' × ')}`);
+  $('#tb-sum').innerHTML = tip(f3(o.wsum), o.leaves.map(l => `level ${l.k + 1}, action ${'abc'[l.a]}: ${fmt(l.w, 3)}`).join('\n'));
+  $('#tb-is').innerHTML = o.n === 1 ? tip('1', 'n = 1: Expected Sarsa needs no ratio') : tip(f3(o.isw), `ρ_{t+1:t+n−1} with b uniform (1/3 each):\n${TB.A.slice(0, o.n - 1).map((a, k) => fmt(o.P[k][a], 2) + '/0.333').join(' × ')}`);
+  const lowSpine = TB.A.slice(0, o.n - 1).some((a, k) => o.P[k][a] < 0.2);
+  $('#tb-say').innerHTML = (o.n === 1 ? `With n = 1 there is no spine: the return is R + &gamma;&sum;<sub>a</sub>&pi;(a)Q(S<sub>t+1</sub>, a), which is Expected Sarsa.` :
+    lowSpine ? `The behaviour took an action the target rarely takes (&pi; below 0.2 on the spine), so only ${f3(o.deep)} of the weight reaches the deepest level: tree backup effectively stops looking there and trusts the leaves above. Importance sampling would instead multiply the update by ${f3(o.isw)}.` :
+      `The spine follows actions the target likes, so ${f3(o.deep)} of the weight flows to the deepest level and the return looks a full ${o.n} steps ahead. Expected Sarsa with importance sampling would scale its update by ${f3(o.isw)}${o.isw > 1.5 ? ', a large weight that adds variance' : ''}; tree backup needs no ratio.`) +
+    (o.eps === 1 ? ' With a uniform target every action counts a third, whatever the Q-values.' : o.eps === 0 ? ' With a greedy target, any non-greedy spine action cuts the tree off completely.' : '') + ` <b>Click a coloured action dot</b> at a non-final level to make the behaviour take it.`;
+  const P = o.P, A = TB.A, g = TB.g, pq = x => (x < 0 ? `(${fmt(x, 1)})` : fmt(x, 1)), qs = k => TB.Q[k].map((q, a) => `${fmt(P[k][a], 2)}&middot;${pq(q)}`);
+  let txt = `G${sub(`t+${o.n - 1}:t+${o.n}`)} = ${pq(TB.R[o.n - 1])} + ${g}(${qs(o.n - 1).join(' + ')}) = ${f3(o.steps[o.n - 1])}`;
+  for (let k = o.n - 2; k >= 0; k--) { const side = [0, 1, 2].filter(a => a !== A[k]).map(a => `${fmt(P[k][a], 2)}&middot;${pq(TB.Q[k][a])}`); txt += `; G${sub(`t+${k}:t+${o.n}`)} = ${pq(TB.R[k])} + ${g}(${side.join(' + ')}) + ${g}&middot;${fmt(P[k][A[k]], 2)}&middot;${f3(o.steps[k + 1])} = ${f3(o.steps[k])}`; }
+  $('#run-tb').innerHTML = `<b>Running example</b> (&gamma; = ${g}, built from the bottom up): ${txt}. So the target is <b>${tip(f4(o.G), 'the tree-backup return for the diagram')}</b>.`;
+}
+seg1('[data-tbn]', 'data-tbn', v => { TB.n = +v; drawTb(); });
+sTe.el.addEventListener('input', () => { sTe.show(); drawTb(); });
+$('#tb-cv').addEventListener('click', ev => { const [px, py] = evPos($('#tb-cv'), ev); let best = null, bd = 26 * 26; TB.nodes.forEach(nd => { const d = (nd.x - px) ** 2 + (nd.y - py) ** 2; if (d < bd && nd.k < TB.n - 1) { bd = d; best = nd; } }); if (best) { TB.A[best.k] = best.a; drawTb(); } });
+fig($('#tb-cv'), drawTb);
+
+/* =================================================================== Q(SIGMA) */
+const sQp = slider('qs-p', x => fmt(x, 2)), sQn = slider('qs-n'), sQa = slider('qs-a', x => fmt(x, 2));
+const DYN = (() => { const s = [1]; for (let e = 1; e < 50; e++) s.push(s[e - 1] * 0.95); return s; })();
+const SIGS = [['σ = 1', () => 1, '--qda'], ['σ = 0.5', () => 0.5, '--cB'], ['σ = 0', () => 0, '--lda'], ['dynamic σ', e => DYN[e], '--cA']];
+let QS = null;
+function qsCalc() { const p = sQp.v, n = sQn.v, a = sQa.v; QS = { p, n, a, cu: SIGS.map(([, f]) => NS.qsigCurve(7400, 30, n, a, p, 0.5, f, 50)) }; }
+function drawQs() {
+  if (!QS) qsCalc(); const C = C0(), top = Math.min(1.2, Math.max(0.4, Math.max(...QS.cu.map(c => c[0])) * 1.1));
+  const v = frame($('#qs-cv'), [1, 50], [0, top], { l: 44, b: 30 }); axes(v, 'episode', 'RMS error of Q', { sx: 10, ny: 4, fx: x => fmt(x, 0) }); clip(v);
+  QS.cu.forEach((cu, k) => polyline(v, Array.from(cu, (y, e) => [e + 1, Math.min(top * 1.05, y)]), css(SIGS[k][2]), k === 3 ? 3.2 : 2.2)); v.ctx.restore();
+  const ms = QS.cu.map(c => mean(c)), ids = ['qs-1', 'qs-h', 'qs-0', 'qs-d'], bi = ms.indexOf(Math.min(...ms));
+  ids.forEach((id, k) => { $('#' + id).innerHTML = tip(ms[k] > 5 ? '&gt; 5' : f3(ms[k]), `${SIGS[k][0]}: mean RMS over 50 episodes × 30 runs\nafter episode 50: ${f3(QS.cu[k][49])}`); });
+  const p = QS.p, n = QS.n;
+  $('#qs-say').innerHTML = (p === 0.5 ? `On-policy (&pi; = b) every ratio is 1, so &sigma; only trades a weight of 1 (sampling) against &pi;(A) = 0.5 (expectation). ` :
+    `The target goes right ${fmt(p * 100, 0)}% of the time, the behaviour only half the time, so a right step has &rho; = ${fmt(2 * p, 2)} and a left step &rho; = ${fmt(2 - 2 * p, 2)}. `) +
+    `Lowest average error: <b>${SIGS[bi][0]}</b> (${f3(ms[bi])}); &sigma; = 1 averages ${f3(ms[0])} and &sigma; = 0 ${f3(ms[2])}. ` +
+    (n === 1 ? 'With n = 1 all four are the same algorithm (Expected Sarsa), so the curves coincide.' : ms[0] > ms[2] ? 'Pure sampling pays for its ratios; full expectation is steadier but its look-ahead is cut short whenever the behaviour takes an action the target dislikes.' : 'Here sampling does well: its look-ahead is never cut short, and the ratios are mild enough not to hurt.') +
+    ' The dynamic &sigma; starts as the sampler and ends near tree backup, and De Asis et al. (2018) found that kind of schedule worked well in their tests.';
+  const s5 = 0.5;
+  $('#run-qs').innerHTML = `<b>Running example:</b> the weight on (G &minus; Q) at a step is &sigma;&rho; + (1 &minus; &sigma;)&pi;(A). With &pi;(right) = ${fmt(p, 2)}: a right step gives ${fmt(2 * p, 2)} for &sigma; = 1, ${fmt(p, 2)} for &sigma; = 0, and ${s5}&times;${fmt(2 * p, 2)} + ${s5}&times;${fmt(p, 2)} = ${tip(f3(s5 * 2 * p + s5 * p), 'σ = 0.5 blends the two weights equally')} for &sigma; = 0.5; a left step gives ${fmt(2 - 2 * p, 2)}, ${fmt(1 - p, 2)} and ${f3(s5 * (2 - 2 * p) + s5 * (1 - p))}. Expectation always uses the smaller weight, so it damps the sampled continuation more.`;
+}
+const qsRedo = debounce(() => { qsCalc(); drawQs(); }, 100);
+[sQp, sQn, sQa].forEach(s => s.el.addEventListener('input', () => { s.show(); qsRedo(); }));
+fig($('#qs-cv'), () => QS && drawQs());
+
+/* =================================================================== PROJECT */
+const PJ = { pol: 'opt', sweep: null, busy: false, vi: null };
+function viSolve(eps) {
+  const C = GR.C, NC = GR.R * GR.C, OUT = [], goal = GR.goal[0] * C + GR.goal[1], start = GR.start[0] * C + GR.start[1];
+  const move = (i, j, a, wy, wx) => { const ni = i + NS.MV[a][0], nj = j + NS.MV[a][1]; if (ni >= 0 && ni < GR.R && nj >= 0 && nj < C && !GR.L[ni * C + nj]) { i = ni; j = nj; }
+    for (let k = 0; k < Math.abs(wy); k++) { const ti = i + (wy > 0 ? 1 : -1); if (ti >= 0 && ti < GR.R && !GR.L[ti * C + j]) i = ti; else break; }
+    for (let k = 0; k < Math.abs(wx); k++) { const tj = j + (wx > 0 ? 1 : -1); if (tj >= 0 && tj < C && !GR.L[i * C + tj]) j = tj; else break; } return i * C + j; };
+  for (let s = 0; s < NC; s++) { if (GR.L[s]) { OUT.push(null); continue; } const wy = GR.V[s] / GR.scale, wx = GR.U[s] / GR.scale, fy = Math.floor(wy), fx = Math.floor(wx), py = wy - fy, px = wx - fx;
+    OUT.push([0, 1, 2, 3].map(a => { const o = []; for (const [y, pa] of [[fy + 1, py], [fy, 1 - py]]) for (const [x, pb] of [[fx + 1, px], [fx, 1 - px]]) if (pa * pb > 0) o.push([pa * pb, move(Math.floor(s / C), s % C, a, y, x)]); return o; })); }
+  const v = new Float64Array(NC), pol = new Array(NC).fill(-1);
+  for (let it = 0; it < 5000; it++) for (let s = 0; s < NC; s++) { if (!OUT[s] || s === goal) continue; const q = OUT[s].map(o => { let t = 0; for (const [p, s2] of o) t += p * v[s2]; return 1 + t; }); let m = q[0], sm = 0; for (const x of q) { if (x < m) m = x; sm += x; } v[s] = (1 - eps) * m + eps * sm / 4; }
+  for (let s = 0; s < NC; s++) { if (!OUT[s] || s === goal) continue; const q = OUT[s].map(o => { let t = 0; for (const [p, s2] of o) t += p * v[s2]; return 1 + t; }); pol[s] = q.indexOf(Math.min(...q)); }
+  return { v, pol, start: v[start] };
+}
+const PN = [1, 2, 4, 8, 16], PA = [0.1, 0.2, 0.3, 0.4, 0.6, 0.8], PRUNS = 10, PEPS = 100;
+function pjRunConfig(n, a) {
+  let late = 0, first = 0, cuts = 0, steps = 0; const curve = new Float64Array(PEPS); let Q1 = null;
+  for (let run = 1; run <= PRUNS; run++) { const r = mulberry32(run), Q = NS.newQ(GW), lens = [];
+    for (let e = 0; e < PEPS; e++) { const o = NS.sarsaEp(GW, Q, r, n, a, 0.1, 1, () => -1, false, 10000, false); lens.push(o.T); cuts += o.cut ? 1 : 0; steps += o.T; curve[e] += o.T / PRUNS; }
+    let s = 0; for (let e = 10; e < PEPS; e++) s += lens[e]; late += s / (PEPS - 10); first += lens[0]; if (run === 1) Q1 = Q; }
+  return { n, a, late: late / PRUNS, first: first / PRUNS, cuts, steps, curve, Q1 };
+}
+function pjSweep() {
+  if (PJ.busy) return; PJ.busy = true; $('#pj-run').disabled = true; const out = [], jobs = []; PN.forEach(n => PA.forEach(a => jobs.push([n, a]))); const t0 = performance.now();
+  const next = () => { if (!jobs.length) { PJ.sweep = { res: out, ms: performance.now() - t0 }; PJ.busy = false; $('#pj-run').disabled = false; drawPj(); drawMap(); return; }
+    const [n, a] = jobs.shift(); out.push(pjRunConfig(n, a)); $('#pj-prog').textContent = `Running… ${out.length} of 30 settings`; setTimeout(next, 0); };
+  setTimeout(next, 10);
+}
+function bestOf(n) { const rs = PJ.sweep.res.filter(r => r.n === n); return rs.reduce((b, r) => (r.late < b.late ? r : b), rs[0]); }
+function drawMap() {
+  const C = C0(), v = gulfFrame($('#pj-map')); drawGulf(v);
+  if (!PJ.vi) { PJ.vi = viSolve(0); PJ.vie = viSolve(0.1); }
+  let pol = PJ.vi.pol, cap = '';
+  if (PJ.pol !== 'opt') { if (!PJ.sweep) cap = 'Run the sweep to see the learned policy. '; else { const b = bestOf(+PJ.pol); pol = greedyOf(b.Q1); cap = `Greedy policy after 100 voyages of run 1, n = ${PJ.pol}, &alpha; = ${b.a}. Cells it never valued have no arrow. `; } }
+  else cap = 'The optimal policy from value iteration on the exact transition probabilities. ';
+  drawPolicy(v, pol, PJ.pol === 'opt' ? C.q : C.lda); drawEnds(v, GR.start, GR.goal);
+  $('#pj-mapcap').innerHTML = cap + 'Shading and the thin arrows are the January-mean wind; grey cells are land (or too close to the coast for the scatterometer).';
+  let mxp = 0; for (let k = 0; k < GR.U.length; k++) if (!GR.L[k]) mxp = Math.max(mxp, Math.abs(GR.V[k]) / GR.scale, Math.abs(GR.U[k]) / GR.scale);
+  const nw = GR.L.filter(x => !x).length;
+  $('#pj-w').innerHTML = tip(String(nw), `${GR.R} × ${GR.C} cells of 0.5°, ${GR.R * GR.C - nw} land`);
+  $('#pj-mx').innerHTML = tip(fmt(mxp, 2) + ' cells', `the strongest wind component is ${fmt(mxp * GR.scale, 2)} m/s; divided by 12 m/s per cell`);
+  $('#pj-opt').innerHTML = tip(f2(PJ.vi.start), `value iteration on the exact model (Python: ${PY.opt})`);
+  $('#pj-eg').innerHTML = tip(f2(PJ.vie.start), `the best policy that still explores with ε = 0.1 (Python: ${PY.eg})`);
+  $('#pj-mapsay').innerHTML = PJ.pol === 'opt' ? `From the start (blue) the optimal sailor heads east and lets the jet carry it south while crossing, then works back north in the calmer water east of the jet: ${f2(PJ.vi.start)} steps on average, for a goal ${GR.goal[1] - GR.start[1]} cells east and ${GR.start[0] - GR.goal[0]} south of the start. The wind both hinders and helps: on a lucky voyage the eastward push near the goal saves a move or two.` :
+    !PJ.sweep ? 'The sweep has not run yet.' : `After 100 voyages the learner has arrows mostly along the routes it actually sails; cells it rarely visits still have arbitrary or no preferences. Compare with the optimal policy: ${pol.filter((a, k) => a >= 0 && a === PJ.vi.pol[k]).length} of the ${pol.filter(a => a >= 0).length} cells it has an opinion on agree.`;
+}
+function drawPj() {
+  if (!PJ.sweep) return; const C = C0(), res = PJ.sweep.res, all = res.reduce((b, r) => (r.late < b.late ? r : b), res[0]);
+  let ok = 0;
+  const rows = PN.map((n, ni) => { const rs = PA.map(a => res.find(r => r.n === n && r.a === a)), b = bestOf(n);
+    return `<tr><td><b>n = ${n}</b></td>${rs.map((r, ai) => { const py = PY.late[ni][ai], pyf = PY.first[ni][ai], same = Math.abs(fmt(r.late, 2) - py) < 1e-9 && Math.abs(fmt(r.first, 1) - pyf) < 1e-9; ok += same ? 1 : 0;
+      return `<td class="num${r === b ? ' mine' : ''}"${r === all ? ' style="background:color-mix(in srgb, var(--cA) 14%, transparent)"' : ''}>${tip(f2(r.late), `n = ${n}, α = ${r.a}: mean voyage length over voyages 11–100, 10 runs\nfirst voyage: ${fmt(r.first, 1)} steps on average${r.cuts ? `\n${r.cuts} voyage(s) cut off at 10,000 steps` : ''}\nPython: ${fmt(py, 2)} | ${fmt(pyf, 1)}`)}</td>`; }).join('')}<td class="num">${tip(fmt(b.first, 0), 'first voyage at this n’s best α')}</td></tr>`; }).join('');
+  $('#pj-tab').innerHTML = `<thead><tr><th>steps n</th>${PA.map(a => `<th>&alpha; = ${a}</th>`).join('')}<th>1st voyage, best &alpha;</th></tr></thead><tbody>${rows}</tbody>`;
+  const lv = frame($('#pj-cv'), [1, 100], [Math.log10(10), Math.log10(12000)], { l: 48, b: 28 }); axes(lv, 'voyage', 'steps (log)', { sx: 10, sy: 1, fx: x => fmt(x, 0), fy: y => nf(Math.pow(10, y)) }); clip(lv);
+  PN.forEach((n, k) => { const b = bestOf(n); polyline(lv, Array.from(b.curve, (y, e) => [e + 1, Math.log10(y)]), ramp(k / 4), n === all.n ? 3.2 : 1.8); });
+  seg(lv, 1, Math.log10(PJ.vie ? PJ.vie.start : 18.79), 100, Math.log10(PJ.vie ? PJ.vie.start : 18.79), C.q, 1.4, [5, 4]); lv.ctx.restore();
+  PN.forEach((n, k) => { const b = bestOf(n); label(lv, 100, Math.log10(b.curve[99]) + 0.02 + (k - 2) * 0.09, 'n=' + n, { align: 'right', base: 'bottom', col: ramp(k / 4), font: n === all.n ? '600 11px ' : '10px ' }); });
+  const steps = sum(res.map(r => r.steps)), b1 = bestOf(1), cutsN16 = res.filter(r => r.n === 16).reduce((s, r) => s + r.cuts, 0);
+  $('#pj-prog').innerHTML = `${tip('Done', `30 settings × 10 runs × 100 voyages = ${nf(steps)} steps`)} in ${fmt(PJ.sweep.ms / 1000, 1)} s. ${ok} of 30 cells match the Python run exactly (to the printed decimals).`;
+  $('#pj-say').innerHTML = `Tuned jointly, the best setting is <b>n = ${all.n} with &alpha; = ${all.a}</b>: ${f2(all.late)} steps per voyage over voyages 11&ndash;100, against ${f2(b1.late)} for the best one-step Sarsa (&alpha; = ${b1.a}), ${fmt((1 - all.late / b1.late) * 100, 0)}% shorter. The pattern is the random walk&rsquo;s: every longer n wants a smaller &alpha; (best &alpha; falls from ${b1.a} at n = 1 to ${bestOf(16).a} at n = 16), and a too-large n with a large &alpha; is disastrous. The first voyage tells the other side of the story: it gets <i>longer</i> as n grows (${nf(b1.first)} steps at n = 1, ${nf(bestOf(8).first)} at n = 8; ${cutsN16} of the 60 first voyages with n = 16 were cut off at 10,000 steps). While every value is still 0, one-step Sarsa marks each move as tried the moment it makes it, which pushes the boat towards untried moves; an n-step learner makes that mark n steps late, so it keeps repeating moves it has already tried and wanders for longer. Once the goal has been found, the long returns carry its news back quickly. Even the best learner is still well above the ${f2(PJ.vie.start)} steps an ideal &epsilon;-greedy sailor would average: 100 voyages is early days.`;
+  $('#pj-honest').innerHTML = `The browser runs its own JavaScript implementation of the same rules with the same random-number generator, and every one of the 30 scores and 30 first-voyage averages ${ok === 30 ? 'is identical' : `matches in ${ok} of 30 cells`} to the Python run above, as are the two value-iteration numbers (${f2(PJ.vi.start)} and ${f2(PJ.vie.start)}). Honest caveats. Ten runs per setting is few: differences of a few steps between neighbouring cells are noise, and first-voyage lengths are heavy-tailed. The conversion of 12 m/s of wind into one cell per step is our choice, made so that no single push exceeds about one cell and every cell can be escaped; a stronger push makes parts of the gulf traps. A monthly mean is a smooth, steady stand-in for a jet that in reality switches on and off as cold surges arrive. And the agent is a toy sailor: no tacking, no currents, no waves.`;
+}
+seg1('[data-pjp]', 'data-pjp', p => { PJ.pol = p; drawMap(); });
+$('#pj-run').addEventListener('click', pjSweep);
+fig($('#pj-map'), drawMap); fig($('#pj-cv'), drawPj);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+saReset(); saPlay(1); heroReset();
+redrawAll();
+requestAnimationFrame(heroLoop);
+setTimeout(() => { computeF72(); drawF72(); runPr(); cvCalc(); drawCv(); qsCalc(); drawQs(); setTimeout(pjSweep, 30); }, 60);
+window.__x071 = { NS, get F72() { return F72; }, get PJ() { return PJ; }, get OF() { return OF; }, get CV() { return CV; }, get QS() { return QS; }, tbCalc, erCalc, wyCalc, WY_V, WY_EP, SA, viSolve, TB };
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

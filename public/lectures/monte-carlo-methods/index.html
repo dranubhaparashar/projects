@@ -1,0 +1,1595 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on Monte Carlo reinforcement learning: average the returns of whole blackjack hands, compare first-visit and every-visit estimates, estimate action values with exploring starts, learn basic strategy by Monte Carlo ES and with epsilon-soft policies, evaluate a policy off-policy with ordinary and weighted importance sampling (and watch infinite variance), step through incremental updates, run off-policy Monte Carlo control, and cut variance with discounting-aware and per-decision importance sampling, all checked against exact dynamic programming and Gymnasium's Blackjack-v1 in Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Monte Carlo Methods &amp; Importance Sampling</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.qsel { width: 100%; max-width: 100%; font: inherit; font-size: 0.86rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.qsel:focus-visible { outline: 2px solid var(--lda); outline-offset: 1px; }
+.sel3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.key { display: inline-block; padding: 0 7px; border-radius: 4px; font-weight: 600; font-size: 0.92em; color: #fff; }
+.key.stick { background: var(--cA); }
+.key.hit { background: var(--cB); }
+.gridp { aspect-ratio: 2.1 / 1; }
+.herop { aspect-ratio: 16 / 10; }
+.pjgrids .gridp { aspect-ratio: 1.9 / 1; }
+.pjrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.pjrow .seg { margin: 0; }
+table.inc td, table.inc th { font-size: 0.84rem; padding: 5px 8px; }
+table.inc td.play { white-space: normal; min-width: 210px; font-family: var(--f-body); }
+table.inc tr.z td { color: var(--muted); }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+table.race td.wrap2 { white-space: normal; min-width: 180px; font-size: 0.84rem; }
+#hero-cap { min-height: 4.6em; }
+@media (max-width: 560px) {
+  .gridp, .pjgrids .gridp { aspect-ratio: 0.66 / 1; }
+  .herop { aspect-ratio: 0.72 / 1; }
+  .sel3 { grid-template-columns: 1fr; }
+  .pdp { aspect-ratio: 0.9 / 1; }
+}
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Monte Carlo RL <span>&middot; learn from whole episodes</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Averaging returns</a>
+      <a href="#predict">Prediction</a>
+      <a href="#action">Action values</a>
+      <a href="#es">Exploring starts</a>
+      <a href="#soft">&epsilon;-soft control</a>
+      <a href="#offpolicy">Importance sampling</a>
+      <a href="#incremental">Incremental</a>
+      <a href="#offcontrol">Off-policy control</a>
+      <a href="#perdecision">Per-decision IS</a>
+      <a href="#project">Blackjack project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Reinforcement learning &amp; decision making &middot; chapter 3.1c &middot; Monte Carlo methods</div>
+      <h1>Monte Carlo Methods &amp; Importance Sampling</h1>
+      <div class="sub">No model of the world: play to the end, then average what happened</div>
+      <p class="lead">Dynamic programming needs the rulebook of the world: every transition probability, written down. Monte Carlo methods need only experience. Play an episode to the end, see what it was worth, and average over many episodes. Each cell of the figure is one blackjack situation, your total against the dealer&rsquo;s face-up card, and its colour is what an agent that has only ever <em>played</em> would do there: <span class="key stick">stick</span> or <span class="key hit">hit</span>. Nobody told it the probabilities. <strong>Press Learn and watch basic strategy appear, then click any cell</strong> to see the two averages behind its colour.</p>
+      <dl class="facts">
+        <div><dt>The idea</dt><dd>Estimate values by averaging the returns of complete episodes</dd></div>
+        <div><dt>What it needs</dt><dd>Episodes that end, from real play or a simulator; no model</dd></div>
+        <div><dt>The catch</dt><dd>Keep exploring, or learn from another policy&rsquo;s play by importance sampling</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10 herop"><canvas id="hero-cv" aria-label="Blackjack policy learnt by Monte Carlo with exploring starts; click a cell for its action values"></canvas></div>
+      <div class="btns" style="margin-top:10px"><button type="button" class="btn primary" id="hero-go">Learn</button><button type="button" class="btn" id="hero-reset">Start again</button><span class="note" id="hero-n" style="align-self:center"></span></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>11 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Averaging returns</a></li>
+    <li><a href="#predict"><i>02</i>First-visit and every-visit prediction</a></li>
+    <li><a href="#action"><i>03</i>Action values</a></li>
+    <li><a href="#es"><i>04</i>Control with exploring starts</a></li>
+    <li><a href="#soft"><i>05</i>ε-soft on-policy control</a></li>
+    <li><a href="#offpolicy"><i>06</i>Importance sampling</a></li>
+    <li><a href="#incremental"><i>07</i>Incremental updates</a></li>
+    <li><a href="#offcontrol"><i>08</i>Off-policy control</a></li>
+    <li><a href="#perdecision"><i>09</i>Discounting-aware &amp; per-decision IS</a></li>
+    <li><a href="#project"><i>10</i>Blackjack vs basic strategy</a></li>
+    <li><a href="#summary"><i>11</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Averaging what actually happened</h2>
+    <div class="prose">
+      <p>In chapter 3.1b, dynamic programming computed values from a model, the probabilities p(s&prime;, r | s, a). For blackjack, writing those down is genuinely awkward: the chance that the dealer finishes on 19 with a 6 showing needs a recursion over every card the dealer might draw. Dealing a hand, on the other hand, is trivial. <em class="term">Monte Carlo methods</em> exploit that asymmetry. The value of a state is an expected return, v<sub>&pi;</sub>(s) = E<sub>&pi;</sub>[G<sub>t</sub> | S<sub>t</sub> = s], and an expectation can be estimated by an average of samples. So: start in s, follow &pi; to the end of the episode, note the return, repeat, average.</p>
+      <p>Two things follow. Monte Carlo works only for <b>episodic</b> tasks, because a return is known only when the episode ends; and it updates <b>episode by episode</b>, not step by step. The game here is the blackjack of Sutton and Barto (Example 5.1), also implemented as Gymnasium&rsquo;s Blackjack-v1: cards come from an infinite deck, an ace counts 1 or 11, the dealer draws until reaching 17, and the hand ends +1 (win), 0 (draw) or &minus;1 (loss), with &gamma; = 1. A state is your sum (12&ndash;21), the dealer&rsquo;s face-up card (ace&ndash;10) and whether you hold a <em class="term">usable ace</em> (one counted as 11 without busting): 200 states. Below 12 you always hit, because no card can bust you. <strong>Pick a situation and deal hands</strong>: the average settles on the exact value, and its error shrinks like 1/&radic;n.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} V_n(s) &= \frac{1}{n}\sum_{i=1}^{n} G^{(i)} \;\longrightarrow\; v_\pi(s) \\ \operatorname{SE}\big(V_n(s)\big) &= \frac{\sigma}{\sqrt n} \end{aligned} \]</div><div class="read"><b>Read it as:</b> G<sup>(i)</sup> is the return of the i-th episode that started in s. By the law of large numbers the average V<sub>n</sub>(s) converges to the true value v<sub>&pi;</sub>(s). &sigma; is the standard deviation of a single return (at most 1 here, since every return is &minus;1, 0 or +1), so the standard error falls as 1/&radic;n: a hundred times more hands buys one more correct decimal place. The &ldquo;exact&rdquo; line comes from a dynamic-programming calculation over the dealer&rsquo;s draws, used on this page only as a referee.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The estimate after n episodes is the average of their returns; it converges to v-pi of s, with standard error sigma over root n.&rdquo;</em></div><div class="eq-run" id="run-wy"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="wy-cv" aria-label="Running average of returns against the number of hands, with a band of two standard errors"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> running average of the returns &nbsp; <span style="color:var(--cA);opacity:.45">&#9646;</span> &plusmn; 2 standard errors &nbsp; <span style="color:var(--ink)">- -</span> exact v<sub>&pi;</sub>(s). The horizontal axis is logarithmic.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <label class="mini-h">Starting situation</label>
+        <div class="sel3"><select id="wy-s" class="qsel" aria-label="Your sum"></select><select id="wy-d" class="qsel" aria-label="Dealer's card"></select></div>
+        <div class="seg" role="group" aria-label="Usable ace"><button type="button" data-wyu="0" aria-pressed="true">No usable ace</button><button type="button" data-wyu="1">Usable ace</button></div>
+        <label class="mini-h">Policy &pi; you follow</label>
+        <div class="seg" role="group" aria-label="Policy"><button type="button" data-wyp="20" aria-pressed="true">Stick on 20+</button><button type="button" data-wyp="17">Stick on 17+</button><button type="button" data-wyp="opt">Optimal</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="wy-1">Deal 1</button><button type="button" class="btn" id="wy-100">+100</button><button type="button" class="btn" id="wy-10k">+10,000</button><button type="button" class="btn" id="wy-0">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="wy-n"></div><div class="k">hands dealt</div></div><div class="stat"><div class="v" id="wy-v"></div><div class="k">average return V<sub>n</sub>(s)</div></div><div class="stat"><div class="v" id="wy-x"></div><div class="k">exact v<sub>&pi;</sub>(s)</div></div><div class="stat"><div class="v" id="wy-wdl"></div><div class="k">won &middot; drawn &middot; lost</div></div></div>
+        <p class="note" id="wy-hand"></p>
+        <p class="note" id="wy-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PREDICT -->
+<section class="chap" id="predict">
+  <div class="wrap">
+    <div class="tag">Prediction &middot; rl 5.1</div>
+    <h2>Monte Carlo prediction: first visits and every visit</h2>
+    <div class="prose">
+      <p>To estimate all 200 values at once, deal ordinary hands and credit every state a hand passes through with the return that followed it. The return is computed backwards from the end of the episode. If a state occurs more than once in an episode there is a choice: <em class="term">first-visit MC</em> averages only the return after its first occurrence, <em class="term">every-visit MC</em> averages them all. First-visit averages are averages of independent samples, so they are unbiased; every-visit averages are slightly biased for small n, but both converge to v<sub>&pi;</sub>(s) (Singh &amp; Sutton, 1996). In blackjack the question never arises, because no state can repeat: your sum only rises, or your ace stops being usable. The second figure therefore uses a tiny task built to repeat.</p>
+      <p>Notice what the estimates do <em>not</em> do. The value of one cell is never computed from the values of its neighbours; each is its own average. Monte Carlo methods do not <b>bootstrap</b>. One consequence: the cost of estimating a single state does not depend on how many states there are, so you can estimate only the states you care about. <strong>Deal 10,000 hands, then a few hundred thousand more, and compare with the exact values</strong>; then step the looping task one episode at a time.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} G_t &= R_{t+1} + \gamma R_{t+2} + \dots \\ &\quad + \gamma^{T-t-1} R_T \\ &= R_{t+1} + \gamma\, G_{t+1} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the return from time t is the discounted sum of the rewards still to come; T is the final step. Computed backwards, start with G = 0 at the end and, at each step back, multiply by &gamma; and add the reward. In blackjack &gamma; = 1 and only the last reward is nonzero, so every state in a hand gets the same return: the hand&rsquo;s result.</div><div class="eq-say"><b>Say it</b><em>&ldquo;G-t is R-t-plus-one plus gamma times G-t-plus-one.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ V(s) = \frac{1}{|\mathcal T(s)|}\sum_{t\,\in\,\mathcal T(s)} G_t \]</div><div class="read"><b>Read it as:</b> &#119983;(s) is the set of time steps, across all episodes so far, at which s was visited: only the first visit of each episode for first-visit MC, every visit for every-visit MC. V(s) is the average return that followed those visits.</div><div class="eq-say"><b>Say it</b><em>&ldquo;V of s is the average of the returns G-t over the visits to s.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-pr" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot gridp"><canvas id="pr-cv" aria-label="Estimated state values of the stick-on-20 policy for every blackjack state"></canvas></div><figcaption id="pr-cap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1 loopp"><canvas id="lp-cv" aria-label="First-visit and every-visit estimates for a state that repeats"></canvas></div><figcaption><b>The looping task.</b> One state; every step pays +1; with probability p you stay, otherwise the episode ends, so v(s) = 1/(1 &minus; p). <span style="color:var(--cA)">&#9644;</span> first-visit &nbsp; <span style="color:var(--cB)">&#9644;</span> every-visit &nbsp; <span style="color:var(--ink)">- -</span> true value. Episodes on the horizontal axis.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <label class="mini-h">Blackjack, policy &ldquo;stick on 20+&rdquo;</label>
+        <div class="btns"><button type="button" class="btn primary" id="pr-10k">+10,000 hands</button><button type="button" class="btn" id="pr-100k">+100,000</button><button type="button" class="btn" id="pr-0">Reset</button></div>
+        <div class="seg" role="group" aria-label="What the cells show"><button type="button" data-prv="est" aria-pressed="true">Estimate</button><button type="button" data-prv="ex">Exact</button><button type="button" data-prv="err">Error</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pr-n"></div><div class="k">hands dealt</div></div><div class="stat"><div class="v" id="pr-rms"></div><div class="k">RMS error, 200 cells</div></div></div>
+        <p class="note" id="pr-say"></p>
+        <label class="mini-h" style="margin-top:14px">The looping task</label>
+        <div class="ctrl"><div class="top"><label for="lp-p">Chance of staying, p</label><output id="lp-p-o"></output></div><input type="range" id="lp-p" min="0.5" max="0.95" step="0.05" value="0.9"></div>
+        <div class="btns"><button type="button" class="btn primary" id="lp-1">+1 episode</button><button type="button" class="btn" id="lp-100">+100</button><button type="button" class="btn" id="lp-0">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="lp-f"></div><div class="k">first-visit</div></div><div class="stat"><div class="v" id="lp-e"></div><div class="k">every-visit</div></div></div>
+        <p class="note" id="lp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ACTION VALUES -->
+<section class="chap" id="action">
+  <div class="wrap">
+    <div class="tag">Without a model &middot; rl 5.2</div>
+    <h2>Estimating action values</h2>
+    <div class="prose"><p>With a model, state values are enough to act: look one step ahead, weigh each action&rsquo;s outcomes by their probabilities, pick the best. Without a model there is nothing to look ahead with, so we estimate the value of each <b>action</b> directly: q<sub>&pi;</sub>(s, a), the expected return if you take a in s and follow &pi; afterwards. Monte Carlo handles this exactly as before, averaging over visits to the pair (s, a) instead of the state. The trouble is that a deterministic policy takes only one action in each state, so the other action&rsquo;s average never receives a single return, and you cannot compare what you never try. Estimating action values therefore needs continual <b>exploration</b>. The simplest fix is <em class="term">exploring starts</em>: begin each episode with a randomly chosen state <i>and action</i>, so that every pair has a chance of being tried. <strong>Switch exploring starts off</strong> and watch one estimate starve.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} q_\pi(s,a) &= \mathbb E_\pi\big[\,G_t \mid S_t = s,\; A_t = a\,\big] \\ \pi'(s) &= \arg\max_a\, q_\pi(s,a) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the action value is the expected return when you are in s, take a now, and follow &pi; from the next step on. A policy that is greedy with respect to q, &pi;&prime;, picks the action with the larger value; no model is needed to make that choice, which is the whole point of estimating q rather than v.</div><div class="eq-say"><b>Say it</b><em>&ldquo;q-pi of s, a is the expected return given state s and action a; the greedy policy takes the arg-max over a.&rdquo;</em></div><div class="eq-run" id="run-av"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="av-cv" aria-label="Running estimates of the values of hitting and sticking in one state"></canvas></div><figcaption><span style="color:var(--cB)">&#9644;</span> q(s, hit) &nbsp; <span style="color:var(--cA)">&#9644;</span> q(s, stick), each with a &plusmn; 2 standard-error band &nbsp; <span style="color:var(--ink)">- -</span> exact values. Episodes on a logarithmic axis.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <label class="mini-h">State</label>
+        <div class="sel3"><select id="av-s" class="qsel" aria-label="Your sum"></select><select id="av-d" class="qsel" aria-label="Dealer's card"></select></div>
+        <div class="seg" role="group" aria-label="Usable ace"><button type="button" data-avu="0" aria-pressed="true">No usable ace</button><button type="button" data-avu="1">Usable ace</button></div>
+        <label class="mini-h">Policy &pi; after the first action</label>
+        <div class="seg" role="group" aria-label="Policy"><button type="button" data-avp="20">Stick on 20+</button><button type="button" data-avp="17" aria-pressed="true">Stick on 17+</button></div>
+        <div class="seg" role="group" aria-label="Exploration"><button type="button" data-ave="1" aria-pressed="true">Exploring starts</button><button type="button" data-ave="0">Follow &pi; only</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="av-100">+100 episodes</button><button type="button" class="btn" id="av-10k">+10,000</button><button type="button" class="btn" id="av-0">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="av-h"></div><div class="k">q&#770;(s, hit)</div></div><div class="stat"><div class="v" id="av-st"></div><div class="k">q&#770;(s, stick)</div></div><div class="stat"><div class="v" id="av-ex"></div><div class="k">exact: hit &middot; stick</div></div><div class="stat"><div class="v" id="av-vd"></div><div class="k">greedy choice so far</div></div></div>
+        <p class="note" id="av-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- EXPLORING STARTS -->
+<section class="chap" id="es">
+  <div class="wrap">
+    <div class="tag">Control &middot; rl 5.3</div>
+    <h2>Monte Carlo control with exploring starts</h2>
+    <div class="prose"><p>Control means finding a good policy, and the recipe is the <em class="term">generalised policy iteration</em> of chapter 3.1b: evaluate the current policy, make it greedy with respect to the evaluation, repeat. Done literally, each evaluation would need infinitely many episodes. Instead, as value iteration truncates evaluation to a single sweep, Monte Carlo truncates it to a single episode: after every episode, update the averages Q(s, a) for the pairs it visited and make the policy greedy in those states. With exploring starts this is <em class="term">Monte Carlo ES</em>. The algorithm cannot settle on a suboptimal policy (that policy&rsquo;s values would eventually show it how to improve), and it is widely believed to converge to the optimum, but a general proof is still open; Sutton and Barto list it as an unsolved question, and Tsitsiklis (2002) settled some special cases. <strong>Run a million episodes</strong>, starting from &ldquo;stick on 20+&rdquo;, and watch the policy settle into basic strategy. Outlined cells still disagree with the exact optimum; <b>click a cell</b> to read its two averages.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\pi_0 \xrightarrow{\;E\;} q_{\pi_0} \xrightarrow{\;I\;} \pi_1 \xrightarrow{\;E\;} q_{\pi_1} \\ &\qquad \xrightarrow{\;I\;} \cdots \xrightarrow{\;I\;} \pi_* \\ &q_{\pi_k}\big(s, \pi_{k+1}(s)\big) = \max_a q_{\pi_k}(s,a) \\ &\qquad \ge v_{\pi_k}(s) \end{aligned} \]</div><div class="read"><b>Read it as:</b> E is an evaluation step (here, Monte Carlo averaging of returns), I an improvement step (make &pi; greedy). The second line is the policy improvement theorem from chapter 3.1b: taking the greedy action once and then following &pi;<sub>k</sub> is at least as good as following &pi;<sub>k</sub> throughout, so the greedy policy &pi;<sub>k+1</sub> is at least as good as &pi;<sub>k</sub> in every state. When no state changes, &pi; is optimal. Monte Carlo ES interleaves E and I after every episode, using averages that mix returns from many past policies.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Evaluate, improve, evaluate, improve, until pi star; q of s and the new greedy action equals the max over a, which is at least v-pi-k of s.&rdquo;</em></div><div class="eq-run" id="run-es"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot gridp"><canvas id="es-cv" aria-label="The policy learnt by Monte Carlo ES; click a cell"></canvas></div><figcaption id="es-cap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="es-curve" aria-label="Cells matching the optimal policy and value of the greedy policy against episodes"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> cells that match the exact optimum (left axis, of 200) &nbsp; <span style="color:var(--lda)">&#9644;</span> exact expected return of the current greedy policy (right axis) &nbsp; <span style="color:var(--ink)">- -</span> optimum, &minus;0.0431. Episodes on a logarithmic axis.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="es-1m">+1,000,000 episodes</button><button type="button" class="btn" id="es-10k">+10,000</button><button type="button" class="btn" id="es-0">Reset</button></div>
+        <div class="seg" role="group" aria-label="What the cells show"><button type="button" data-esv="pol" aria-pressed="true">Policy</button><button type="button" data-esv="val">Value max<sub>a</sub> Q</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="es-n"></div><div class="k">episodes</div></div><div class="stat"><div class="v" id="es-m"></div><div class="k">cells matching the optimum</div></div><div class="stat"><div class="v" id="es-v"></div><div class="k">expected return of greedy &pi;</div></div><div class="stat"><div class="v" id="es-q"></div><div class="k">selected cell: Q(hit) &middot; Q(stick)</div></div></div>
+        <p class="note" id="es-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- EPSILON-SOFT -->
+<section class="chap" id="soft">
+  <div class="wrap">
+    <div class="tag">No exploring starts &middot; rl 5.4</div>
+    <h2>On-policy control with &epsilon;-soft policies</h2>
+    <div class="prose"><p>Exploring starts are fine in a simulator, but you cannot start a real game, or a real patient&rsquo;s treatment, in a state of your choosing. The alternative is never to stop exploring. A policy is <em class="term">&epsilon;-soft</em> if every action has probability at least &epsilon;/|&#119964;(s)| in every state; the usual choice is <em class="term">&epsilon;-greedy</em>, which takes the greedy action except, with probability &epsilon;, an action chosen uniformly at random. This is an <b>on-policy</b> method: the policy being improved is the one generating the data. Generalised policy iteration still works, with one change: making the policy fully greedy would end exploration, so the improvement step moves it only to the &epsilon;-greedy policy. The price is that it converges to the best <em>&epsilon;-soft</em> policy, which still makes random moves, not to the optimal one. <strong>Change &epsilon;, then run</strong>, and compare the expected return of the &epsilon;-soft policy that is learning with that of its greedy part.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \pi(A^*\mid s) &= 1-\varepsilon+\varepsilon/|\mathcal A(s)| \\ \pi(a\mid s) &= \varepsilon/|\mathcal A(s)|, \quad a \ne A^* \end{aligned} \]</div><div class="read"><b>Read it as:</b> A* = argmax<sub>a</sub> Q(s, a) is the greedy action. With two actions (hit, stick), |&#119964;(s)| = 2, so the greedy action gets 1 &minus; &epsilon;/2 and the other &epsilon;/2. Every action keeps being tried, so every Q(s, a) keeps receiving returns.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The greedy action gets one minus epsilon plus epsilon over the number of actions; every other action gets epsilon over the number of actions.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\sum_a \pi'(a\mid s)\, q_\pi(s,a) \\ &\quad = \frac{\varepsilon}{|\mathcal A|}\sum_a q_\pi(s,a) \\ &\qquad + (1-\varepsilon)\max_a q_\pi(s,a) \\ &\quad \ge v_\pi(s) \end{aligned} \]</div><div class="read"><b>Read it as:</b> &pi;&prime; is &epsilon;-greedy with respect to q<sub>&pi;</sub>, and &pi; is any &epsilon;-soft policy. The inequality holds because a maximum is at least any weighted average, here with weights (&pi;(a|s) &minus; &epsilon;/|&#119964;|)/(1 &minus; &epsilon;), which are nonnegative and sum to 1. So &pi;&prime; is at least as good as &pi;, with equality everywhere only when &pi; is already the best &epsilon;-soft policy.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Following pi-prime for one step is worth epsilon over A times the sum of the q's plus one minus epsilon times the max, and that is at least v-pi of s.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-so" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot gridp"><canvas id="so-cv" aria-label="Greedy part of the policy learnt by on-policy Monte Carlo control"></canvas></div><figcaption id="so-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="so-e">Exploration &epsilon; (changing it starts again)</label><output id="so-e-o"></output></div><input type="range" id="so-e" min="0.02" max="0.5" step="0.02" value="0.1"></div>
+        <div class="btns"><button type="button" class="btn primary" id="so-1m">+1,000,000 episodes</button><button type="button" class="btn" id="so-10k">+10,000</button><button type="button" class="btn" id="so-0">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="so-n"></div><div class="k">episodes</div></div><div class="stat"><div class="v" id="so-vs"></div><div class="k">expected return, the &epsilon;-greedy policy</div></div><div class="stat"><div class="v" id="so-vb"></div><div class="k">best possible &epsilon;-soft policy</div></div><div class="stat"><div class="v" id="so-vg"></div><div class="k">its greedy part (exploration off)</div></div></div>
+        <p class="note" id="so-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- OFF-POLICY PREDICTION -->
+<section class="chap" id="offpolicy">
+  <div class="wrap">
+    <div class="tag">Learning from another policy &middot; rl 5.5</div>
+    <h2>Off-policy prediction by importance sampling</h2>
+    <div class="prose">
+      <p>Every control method faces a dilemma: we want the values of the best policy, which never explores, but we must behave in an exploratory way to find out what is best. The on-policy answer was a compromise. The <b>off-policy</b> answer uses two policies: a <em class="term">target policy</em> &pi; that we want to learn about, and a <em class="term">behaviour policy</em> b that generates the episodes. It needs <em class="term">coverage</em>: every action &pi; might take must have some probability under b. The returns from b have the wrong expectation, v<sub>b</sub>, so each is reweighted by the <em class="term">importance-sampling ratio</em>, the relative probability of its trajectory under the two policies. The environment&rsquo;s transition probabilities appear in both and cancel, so the ratio needs no model.</p>
+      <p>There are two ways to average the reweighted returns. <b>Ordinary</b> importance sampling divides by the number of returns: unbiased, but its variance can be huge, even infinite. <b>Weighted</b> importance sampling divides by the sum of the weights: biased, but the bias vanishes as data accumulates and its variance stays bounded when returns are bounded, so it is usually preferred. Here, as in Sutton and Barto&rsquo;s Example 5.4, the target policy is &ldquo;stick on 20+&rdquo;, the behaviour policy tosses a coin at every decision, and every episode starts from sum 13 with a usable ace against a dealer&rsquo;s 2. <strong>Compare the two error curves, then switch to the looping task</strong>, where ordinary importance sampling never settles.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \rho_{t:T-1} &= \prod_{k=t}^{T-1} \frac{\pi(A_k\mid S_k)\;p_k}{b(A_k\mid S_k)\;p_k} \\ &= \prod_{k=t}^{T-1} \frac{\pi(A_k\mid S_k)}{b(A_k\mid S_k)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the probability of the rest of the episode under &pi;, divided by its probability under b. Each step also carries the environment&rsquo;s factor p<sub>k</sub> = p(S<sub>k+1</sub> | S<sub>k</sub>, A<sub>k</sub>), the same under both policies, so the unknown dynamics cancel. Here &pi; is deterministic and b tosses a coin, so each step contributes 1/0.5 = 2 when b happened to do what &pi; would do, and 0 the moment it did not: &rho; is 2<sup>(number of decisions)</sup> or 0. The key fact is E<sub>b</sub>[&rho;<sub>t:T&minus;1</sub> G<sub>t</sub> | S<sub>t</sub> = s] = v<sub>&pi;</sub>(s).</div><div class="eq-say"><b>Say it</b><em>&ldquo;Rho from t to T minus one is the product over the remaining steps of pi of the action over b of the action.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} V_{\text{ord}}(s) &= \frac{\sum_{t\in\mathcal T(s)} \rho_{t:T(t)-1}\,G_t}{|\mathcal T(s)|} \\ V_{\text{wtd}}(s) &= \frac{\sum_{t\in\mathcal T(s)} \rho_{t:T(t)-1}\,G_t}{\sum_{t\in\mathcal T(s)} \rho_{t:T(t)-1}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> T(t) is the end of the episode containing step t. Ordinary IS scales each return by its ratio and takes a plain average. Weighted IS takes a weighted average with the ratios as weights; with a single return its estimate is just that return (the ratio cancels), which is why it is never wildly off. Before any return has a nonzero weight, the weighted estimate is undefined; this page reports 0 then.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Ordinary: the sum of rho times G over the number of visits. Weighted: the same sum over the sum of the rhos.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-is" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="is-cv" aria-label="Mean squared error of ordinary and weighted importance sampling against episodes"></canvas></div><figcaption id="is-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Task"><button type="button" data-ism="bj" aria-pressed="true">Blackjack state</button><button type="button" data-ism="loop">Looping task</button></div>
+        <div class="ctrl"><div class="top"><label for="is-r">Independent runs</label><output id="is-r-o"></output></div><input type="range" id="is-r" min="10" max="200" step="10" value="100"></div>
+        <div class="ctrl"><div class="top"><label for="is-n">Episodes per run</label><output id="is-n-o"></output></div><input type="range" id="is-n" min="2" max="4" step="1" value="3"></div>
+        <div class="btns"><button type="button" class="btn primary" id="is-go">Run again (new seed)</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="is-o"></div><div class="k" id="is-ok">ordinary IS: MSE at the end</div></div><div class="stat"><div class="v" id="is-w"></div><div class="k" id="is-wk">weighted IS: MSE at the end</div></div></div>
+        <p class="note" id="is-say"></p>
+      </div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\mathbb E_b\big[(\rho\,G)^2\big] \\ &\quad = \sum_{L=1}^{\infty} 0.5^{L}\,0.9^{\,L-1}\,0.1\cdot 2^{2L} \\ &\quad = 0.2\sum_{L=1}^{\infty} 1.8^{\,L-1} = \infty \end{aligned} \]</div><div class="read"><b>Read it as:</b> the looping task (Sutton and Barto&rsquo;s Example 5.5): one state, two actions. <i>Right</i> ends the episode with reward 0; <i>left</i> stays with probability 0.9 and ends with reward +1 with probability 0.1. The target policy always goes left, so v<sub>&pi;</sub>(s) = 1; b picks each action half the time. A return counts only if every action was left, say L of them; that episode has probability 0.5<sup>L</sup>&middot;0.9<sup>L&minus;1</sup>&middot;0.1 under b, and its ratio is 2<sup>L</sup>. Squaring it gives 4<sup>L</sup>, which grows faster than the probability 0.5<sup>L</sup>&middot;0.9<sup>L&minus;1</sup>&middot;0.1 shrinks, so the second moment, and hence the variance, is infinite. The mean is still 1; the average just never settles.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected square of rho G is the sum over L of the probability of the episode times two to the two L, which diverges.&rdquo;</em></div></div>
+  </div>
+</section>
+
+<!-- INCREMENTAL -->
+<section class="chap" id="incremental">
+  <div class="wrap">
+    <div class="tag">Bookkeeping &middot; rl 5.6</div>
+    <h2>Incremental implementation</h2>
+    <div class="prose"><p>Keeping every return just to average them would waste memory. On-policy, the familiar running-mean trick from the bandits chapter does it in constant memory: V &larr; V + (1/n)(G &minus; V). Ordinary importance sampling is the same with &rho;G in place of G. Weighted importance sampling needs one more number per state, the running total of the weights, C; each new return then moves the estimate towards itself by its share of the total weight. A return with weight zero changes nothing, and a heavy return moves the estimate a long way. <strong>Step through episodes one at a time</strong> and check that the incremental value always equals the batch formula of the previous section.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} C_n &= C_{n-1} + W_n, \qquad C_0 = 0 \\ V_{n+1} &= V_n + \frac{W_n}{C_n}\big(G_n - V_n\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> G<sub>n</sub> is the n-th return from the state and W<sub>n</sub> = &rho; its weight. C<sub>n</sub> is the total weight so far, and W<sub>n</sub>/C<sub>n</sub> is the step size. If every W were 1, C<sub>n</sub> would be n and this would be the plain running mean. The result after n returns equals &Sigma; W<sub>k</sub>G<sub>k</sub> / &Sigma; W<sub>k</sub> exactly, without storing any of them.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Add the new weight to C; move V towards G by W over C of the gap.&rdquo;</em></div><div class="eq-run" id="run-in"></div></div>
+    <div class="lab">
+      <div>
+        <div class="tbl-wrap"><table class="hand inc" id="in-tbl"></table></div>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="in-cv" aria-label="Incremental weighted and ordinary estimates against episodes"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> weighted IS, incremental &nbsp; <span style="color:var(--cB)">&#9644;</span> ordinary IS &nbsp; <span style="color:var(--ink)">- -</span> v<sub>&pi;</sub>(13, usable ace, dealer 2) = &minus;0.2772. Same task as above: target &ldquo;stick on 20+&rdquo;, behaviour a coin toss.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="in-1">Next episode</button><button type="button" class="btn" id="in-10">+10</button><button type="button" class="btn" id="in-100">+100</button><button type="button" class="btn" id="in-0">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="in-n"></div><div class="k">episodes</div></div><div class="stat"><div class="v" id="in-c"></div><div class="k">total weight C</div></div><div class="stat"><div class="v" id="in-v"></div><div class="k">V, incremental</div></div><div class="stat"><div class="v" id="in-b"></div><div class="k">&Sigma;WG / &Sigma;W, batch</div></div></div>
+        <p class="note" id="in-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- OFF-POLICY CONTROL -->
+<section class="chap" id="offcontrol">
+  <div class="wrap">
+    <div class="tag">Control, off-policy &middot; rl 5.7</div>
+    <h2>Off-policy Monte Carlo control</h2>
+    <div class="prose"><p>Put the pieces together. The target policy &pi; is greedy with respect to Q, so it is deterministic and can become optimal; the behaviour policy b is any soft policy, here &epsilon;-greedy with respect to the same Q. Because &pi;(a|s) is 1 for the greedy action and 0 otherwise, the ratio is simple: walking backwards from the end of an episode, each step multiplies the weight by 1/b(A<sub>t</sub>|S<sub>t</sub>) as long as b took the greedy action, and the first non-greedy action makes every earlier ratio zero, so the update loop stops there. The method therefore learns only from the <b>tails</b> of episodes, the part after the last exploratory move. When episodes are long and exploration is frequent, most of the experience is thrown away, which is one motivation for the temporal-difference and tree-backup methods of later chapters. A blackjack hand involves only one or two decisions, so here the tails are most of the data. <strong>Raise &epsilon; all the way to 1</strong>, a behaviour policy that plays completely at random, and the greedy target still learns basic strategy.</p></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} C &\leftarrow C + W \\ Q &\leftarrow Q + \frac{W}{C}\,\big(G - Q\big) \\ \pi(S_t) &\leftarrow \arg\max_a Q(S_t,a) \\ &\quad \text{stop if } A_t \ne \pi(S_t) \\ W &\leftarrow W \,/\, b(A_t\mid S_t) \end{aligned} \]</div><div class="read"><b>Read it as:</b> C and Q in the first two lines mean C(S<sub>t</sub>, A<sub>t</sub>) and Q(S<sub>t</sub>, A<sub>t</sub>). This is one pass backwards through an episode, t = T&minus;1 down to 0, with W = 1 at the start and G accumulated as G &larr; &gamma;G + R<sub>t+1</sub>. Each pair is updated by the weighted incremental rule of the previous section. The weight for step t covers only the actions after t; the action at t itself needs no correction, because Q(S<sub>t</sub>, A<sub>t</sub>) already conditions on it. That is why W is updated last.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Add W to C, move Q by W over C of the error, make pi greedy, stop if the action wasn't greedy, otherwise divide W by b.&rdquo;</em></div><div class="eq-run" id="run-oc"></div></div>
+    <div class="lab">
+      <figure><div class="plot gridp"><canvas id="oc-cv" aria-label="Target policy learnt by off-policy Monte Carlo control"></canvas></div><figcaption id="oc-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="oc-e">Behaviour &epsilon; (changing it starts again)</label><output id="oc-e-o"></output></div><input type="range" id="oc-e" min="0.05" max="1" step="0.05" value="0.3"></div>
+        <div class="btns"><button type="button" class="btn primary" id="oc-1m">+1,000,000 episodes</button><button type="button" class="btn" id="oc-10k">+10,000</button><button type="button" class="btn" id="oc-0">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="oc-n"></div><div class="k">episodes</div></div><div class="stat"><div class="v" id="oc-m"></div><div class="k">cells matching the optimum</div></div><div class="stat"><div class="v" id="oc-v"></div><div class="k">expected return of target &pi;</div></div><div class="stat"><div class="v" id="oc-u"></div><div class="k">decisions that fed an update</div></div></div>
+        <p class="note" id="oc-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PER-DECISION -->
+<section class="chap" id="perdecision">
+  <div class="wrap">
+    <div class="tag">Cutting the variance &middot; rl 5.8&ndash;5.9 (optional sections)</div>
+    <h2>Discounting-aware and per-decision importance sampling</h2>
+    <div class="prose">
+      <p>Ordinary importance sampling multiplies the <em>whole</em> return by the product of <em>all</em> the ratios. That wastes information. Suppose episodes last 100 steps and &gamma; = 0: the return is just the first reward, which depends only on the first action, yet its weight is a product of 100 ratios, 99 of which only add noise. Two refinements use the structure of the return. <em class="term">Discounting-aware</em> importance sampling reads &gamma; as a probability of the episode ending at each step: the return becomes a mixture of <em class="term">flat partial returns</em>, undiscounted sums up to a horizon h, and each one needs only the ratios up to h. <em class="term">Per-decision</em> importance sampling notices that each reward needs only the ratios of the actions taken before it; the later ratios have expectation 1 and can be dropped.</p>
+      <p>The test bed is a corridor of T steps. At each step the target policy always takes <i>forward</i>, which pays +1; the behaviour policy takes forward with probability &beta; and <i>back</i>, which pays 0, otherwise. So v<sub>&pi;</sub> = 1 + &gamma; + &hellip; + &gamma;<sup>T&minus;1</sup>. All three estimators below are unbiased; they differ only in variance. Each bar is the exact standard deviation of one episode&rsquo;s estimate, computed by summing over the possible episodes; the dot is the spread measured over 20,000 simulated episodes. <strong>Lengthen the corridor and lower &gamma;</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \bar G_{t:h} &= R_{t+1} + R_{t+2} + \dots + R_h \\ G_t &= (1-\gamma)\sum_{h=t+1}^{T-1}\gamma^{h-t-1}\,\bar G_{t:h} \\ &\quad + \gamma^{T-t-1}\,\bar G_{t:T} \end{aligned} \]</div><div class="read"><b>Read it as:</b> treat &gamma; as the chance of carrying on at each step. With probability (1 &minus; &gamma;)&gamma;<sup>h&minus;t&minus;1</sup> the episode &ldquo;ends&rdquo; after horizon h and you collect the flat (undiscounted) partial return up to h; with the remaining probability &gamma;<sup>T&minus;t&minus;1</sup> it runs to the true end T. The weighted mixture equals the ordinary discounted return exactly.</div><div class="eq-say"><b>Say it</b><em>&ldquo;G-t is one minus gamma times the gamma-weighted sum of flat partial returns, plus gamma to the T minus t minus one times the full flat return.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \tilde G^{\,\gamma}_t &= (1-\gamma)\sum_{h=t+1}^{T-1}\gamma^{h-t-1} \\ &\qquad \times \rho_{t:h-1}\,\bar G_{t:h} \\ &\quad + \gamma^{T-t-1}\rho_{t:T-1}\,\bar G_{t:T} \\ V(s) &= \frac{1}{|\mathcal T(s)|}\sum_{t\in\mathcal T(s)} \tilde G^{\,\gamma}_t \end{aligned} \]</div><div class="read"><b>Read it as:</b> the discounting-aware ordinary estimator. Each flat partial return up to h is weighted only by the ratios &rho;<sub>t:h&minus;1</sub> of the actions that produced it, not by ratios for steps beyond its horizon. With &gamma; = 0 it uses just &rho;<sub>t</sub>R<sub>t+1</sub>; with &gamma; = 1 it is ordinary importance sampling again.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Weight each flat partial return by the ratios up to its own horizon, mix them with the gamma weights, and average.&rdquo;</em></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\mathbb E_b\big[\rho_{t:T-1}\,R_{t+k}\big] \\ &\qquad = \mathbb E_b\big[\rho_{t:t+k-1}\,R_{t+k}\big] \\ &\tilde G_t = \rho_{t}R_{t+1} + \gamma\rho_{t:t+1}R_{t+2} + \dots \\ &\qquad + \gamma^{T-t-1}\rho_{t:T-1}R_T \\ &\phantom{\tilde G_t} = \rho_t\big(R_{t+1} + \gamma\,\tilde G_{t+1}\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> a ratio for a step after the reward has expectation &Sigma;<sub>a</sub> b(a|s)&middot;&pi;(a|s)/b(a|s) = 1 and, given everything before it, is independent of that reward, so it can be dropped without changing the expectation. The per-decision return G&#771;<sub>t</sub> keeps, for each reward, only the ratios up to the action just before it, and averaging it over visits, V(s) = &Sigma; G&#771;<sub>t</sub> / |&#119983;(s)|, is still unbiased. The last line is the same thing computed backwards, one ratio per step.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Each reward only needs the ratios up to its own action; the per-decision return is rho-t times R plus gamma times the next per-decision return.&rdquo;</em></div><div class="eq-run" id="run-pd"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 pdp"><canvas id="pd-cv" aria-label="Standard deviation of three importance-sampling estimators on a logarithmic axis"></canvas></div><figcaption>Bars: exact standard deviation of a single episode&rsquo;s estimate (logarithmic axis). &#9679; spread over 20,000 simulated episodes. The text on each row is the simulated mean &plusmn; 2 standard errors, to compare with v<sub>&pi;</sub>.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pd-t">Corridor length T</label><output id="pd-t-o"></output></div><input type="range" id="pd-t" min="1" max="30" step="1" value="10"></div>
+        <div class="ctrl"><div class="top"><label for="pd-g">Discount &gamma;</label><output id="pd-g-o"></output></div><input type="range" id="pd-g" min="0" max="1" step="0.05" value="0.9"></div>
+        <div class="ctrl"><div class="top"><label for="pd-b">Behaviour: P(forward) = &beta;</label><output id="pd-b-o"></output></div><input type="range" id="pd-b" min="0.3" max="0.95" step="0.05" value="0.5"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pd-v"></div><div class="k">true value v<sub>&pi;</sub></div></div><div class="stat"><div class="v" id="pd-so"></div><div class="k">s.d., ordinary IS</div></div><div class="stat"><div class="v" id="pd-sd"></div><div class="k">s.d., discounting-aware</div></div><div class="stat"><div class="v" id="pd-sp"></div><div class="k">s.d., per-decision</div></div></div>
+        <p class="note" id="pd-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: learn blackjack from millions of hands, then check it against basic strategy</h2>
+    <div class="prose">
+      <p>The environment is <strong>Gymnasium&rsquo;s Blackjack-v1</strong> (Farama Foundation, version 1.0.0, MIT licence), registered with <code>sab=True</code> so that it follows Sutton and Barto&rsquo;s rules exactly: infinite deck, the dealer draws to 17 and stands on every 17, a natural (ace + ten-card) beats anything but a dealer natural, no doubling, splitting or insurance. This page re-implements those rules in JavaScript (read from the environment&rsquo;s source) so that millions of hands can be played in your browser, and checks the re-implementation two ways: against the exact dynamic-programming values, and against 50,000 hands per policy played by Gymnasium itself in Python.</p>
+      <p>The yardstick is the <strong>basic-strategy table in Wikipedia&rsquo;s &ldquo;Blackjack&rdquo; article</strong> (revision 1382551223, 29 October 2026, citing the Wizard of Odds), licensed <b>CC BY-SA 4.0</b>; the hit/stand extract embedded in this page is shared under the same licence. That table is for a casino game with 4&ndash;8 decks in which the dealer hits soft 17 and players may double, split and surrender. Blackjack-v1 allows none of those, so each cell is read by its fallback: &ldquo;double, else hit&rdquo; counts as hit, &ldquo;double, else stand&rdquo; as stand, &ldquo;surrender, else hit/stand&rdquo; as hit/stand, and pairs by their total. The article lists six cells that change when the dealer stands on soft 17; none of them changes a hit/stand fallback among our 200 states. The deck size is not adjusted for, and the question is whether the strategy survives anyway.</p>
+    </div>
+
+    <h3>1 &middot; Is the simulator the real game?</h3>
+    <div class="btns block"><button type="button" class="btn primary" id="pj-sim">Play 1,000,000 hands per policy in the browser</button><span class="note" id="pj-simp" style="align-self:center"></span></div>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-check"></table></div>
+
+    <h3>2 &middot; Learn a strategy</h3>
+    <div class="pjrow block">
+      <div class="seg" role="group" aria-label="Method"><button type="button" data-pjm="es" aria-pressed="true">Monte Carlo ES</button><button type="button" data-pjm="on">On-policy, &epsilon; = 0.1</button><button type="button" data-pjm="off">Off-policy, random b</button></div>
+      <div class="seg" role="group" aria-label="Episodes"><button type="button" data-pjn="300000" aria-pressed="true">300k episodes</button><button type="button" data-pjn="1000000">1M</button><button type="button" data-pjn="5000000">5M</button></div>
+      <button type="button" class="btn primary" id="pj-go">Learn</button><span class="note" id="pj-prog" style="align-self:center"></span>
+    </div>
+    <div class="two block pjgrids">
+      <figure><div class="plot gridp"><canvas id="pj-cv" aria-label="The learnt policy, with cells that disagree with published basic strategy outlined"></canvas></div><figcaption id="pj-cap"></figcaption></figure>
+      <figure><div class="plot gridp"><canvas id="pj-bs" aria-label="Published basic strategy, hit or stand only"></canvas></div><figcaption>Published basic strategy, hit/stand fallbacks (Wikipedia, CC BY-SA 4.0). Every cell also agrees with the exact optimum for Blackjack-v1&rsquo;s rules, computed by dynamic programming.</figcaption></figure>
+    </div>
+
+    <h3>3 &middot; The scoreboard</h3>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-board"></table></div>
+    <p class="note block" style="max-width:72ch" id="pj-say"></p>
+
+    <h3>The same experiment in Python, on Gymnasium itself</h3>
+<pre class="code"><code>import sys, json, time, numpy as np
+sys.path.insert(0, "x069_py")                     # gymnasium 1.0.0 (MIT licence), installed with pip --target
+import gymnasium as gym
+
+# ---- the exact model of Blackjack-v1: infinite deck, dealer draws to 17 and stands on all 17s ----
+P = {c: (4 if c == 10 else 1) / 13 for c in range(1, 11)}          # ace = 1; 10, J, Q, K all count 10
+def dealer(up):                                    # distribution of the dealer's final total; 22 = bust
+    out = dict.fromkeys(range(17, 23), 0.0)
+    def go(h, ace, p):
+        t = h + 10 if ace and h + 10 &lt;= 21 else h
+        if t &gt;= 17: out[min(t, 22)] += p; return
+        for c, q in P.items(): go(h + c, ace or c == 1, p * q)
+    go(up, up == 1, 1.0); return out
+D = {d: dealer(d) for d in range(1, 11)}
+PNAT = {d: P[10] if d == 1 else P[1] if d == 10 else 0.0 for d in range(1, 11)}   # dealer natural, given the up card
+def stick(s, d): return sum(p * ((t == 22 or t &lt; s) - (t != 22 and t &gt; s)) for t, p in D[d].items())
+def nxt(s, u, c):                                  # (sum, usable ace) after drawing card c; None = bust
+    if u: return (s + c, 1) if s + c &lt;= 21 else (s + c - 10, 0)
+    if c == 1 and s + 11 &lt;= 21: return (s + 11, 1)
+    return (s + c, 0) if s + c &lt;= 21 else None
+ORDER = [(s, u) for u in (0, 1) for s in range(21, 11, -1)]       # every successor of a state comes before it
+def solve(hitp=None, eps=0.0):                     # evaluate policy hitp(s,u,d) = P(hit); None = best eps-soft policy
+    V, Q = {}, {}
+    for d in range(1, 11):
+        for s, u in ORDER:
+            qs = stick(s, d); qh = sum(p * (-1 if nxt(s, u, c) is None else V[nxt(s, u, c) + (d,)]) for c, p in P.items())
+            Q[s, u, d] = (qs, qh)
+            h = hitp(s, u, d) if hitp else (1 - eps / 2 if qh &gt; qs else eps / 2)
+            V[s, u, d] = h * qh + (1 - h) * qs
+    return V, Q
+def start(V, Q, hitp=None, eps=0.0):               # expected return of a fresh deal; below 12 the player always hits
+    tot = 0.0
+    for d in range(1, 11):
+        def low(h): return sum(p * (V[s, u, d] if s &gt;= 12 else low(s)) for c, p in P.items()
+                               for s, u in [(h + 11, 1) if c == 1 and h + 11 &lt;= 21 else (h + c, 0)])
+        for c1, p1 in P.items():
+            for c2, p2 in P.items():
+                if {c1, c2} == {1, 10}:            # a natural: +1 unless the dealer has one too
+                    qs, qh = 1 - PNAT[d], Q[21, 1, d][1]
+                    h = hitp(21, 1, d) if hitp else (1 - eps / 2 if qh &gt; qs else eps / 2)
+                    v = h * qh + (1 - h) * qs
+                else:
+                    t, ace = c1 + c2, 1 in (c1, c2); s, u = (t + 10, 1) if ace and t + 10 &lt;= 21 else (t, 0)
+                    v = V[s, u, d] if s &gt;= 12 else low(s)
+                tot += P[d] * p1 * p2 * v
+    return tot
+
+B = json.load(open("x069-basic.json", encoding="utf8"))           # Wikipedia's basic-strategy table, hit/stand only
+basic = lambda s, u, d: B["soft" if u else "hard"][str(s)][d - 1] == "H"
+Vo, Qo = solve(); best = {k: int(q[1] &gt; q[0]) for k, q in Qo.items()}
+s20 = lambda s, u, d: float(s &lt; 20); V20, Q20 = solve(s20)
+print("dealer busts: 6 up %.6f, 10 up %.6f, ace up %.6f" % (D[6][22], D[10][22], D[1][22]))
+print("optimal policy: v(fresh deal) = %.6f; agrees with the published table on %d of 200 cells"
+      % (start(Vo, Qo), sum(best[k] == basic(*k) for k in best)))
+print("closest calls, q(hit) - q(stick):", [(k, round(Qo[k][1] - Qo[k][0], 4)) for k in sorted(Qo, key=lambda k: abs(Qo[k][1] - Qo[k][0]))[:4]])
+print("stick on 20: v(fresh deal) = %.6f, v(13, usable ace, dealer 2) = %.6f" % (start(V20, Q20, s20), V20[13, 1, 2]))
+for e in (0.1, 0.3): print("best %.1f-soft policy: v(fresh deal) = %.6f" % (e, start(*solve(eps=e), eps=e)))
+
+env = gym.make("Blackjack-v1")                     # registered with sab=True: Sutton &amp; Barto's rules
+def play(pol, n, seed):
+    G = np.empty(n); obs, _ = env.reset(seed=seed)
+    for i in range(n):
+        if i: obs, _ = env.reset()
+        done = False
+        while not done:
+            s, d, u = obs; obs, r, done, _, _ = env.step(1 if s &lt; 12 else int(pol(s, u, d)))
+        G[i] = r
+    return G
+out = {"sim": {}}
+for name, pol, exact in (("stick20", s20, start(V20, Q20, s20)), ("optimal", lambda s, u, d: best[s, u, d], start(Vo, Qo))):
+    G = play(pol, 50000, 1); out["sim"][name] = [G.mean(), G.std() / np.sqrt(len(G))]
+    print(f"Gymnasium, {name}: mean return {G.mean():.4f} +- {G.std() / np.sqrt(len(G)):.4f} over 50,000 hands (exact {exact:.4f})")
+
+uenv, rng = env.unwrapped, np.random.default_rng(0)          # Monte Carlo control with exploring starts
+Q = np.zeros((22, 2, 11, 2)); N = np.zeros((22, 2, 11, 2)); pi = np.zeros((22, 2, 11), int); pi[12:20] = 1   # stick on 20, 21
+def hand(s, u): return ([1, s - 11] if s &lt; 21 else [1, 5, 5]) if u else ([10, s - 10] if s &lt; 21 else [10, 9, 2])
+t0 = time.time()
+for ep in range(300000):
+    s, u, d, a = (int(x) for x in (rng.integers(12, 22), rng.integers(2), rng.integers(1, 11), rng.integers(2)))
+    uenv.reset(); uenv.player = hand(s, u); uenv.dealer[0] = d; traj, done = [], False
+    while not done:
+        traj.append((s, u, d, a)); obs, r, done, _, _ = uenv.step(a)
+        if not done: s, d, u = obs; a = int(pi[s, u, d])
+    for (s, u, d, a) in traj:                      # gamma = 1 and the only reward is the last, so every G = r
+        N[s, u, d, a] += 1; Q[s, u, d, a] += (r - Q[s, u, d, a]) / N[s, u, d, a]
+        pi[s, u, d] = int(Q[s, u, d, 1] &gt; Q[s, u, d, 0])
+learned = lambda s, u, d: float(pi[s, u, d]); Vl, Ql = solve(learned)
+diff = [k for k in best if pi[k] != best[k]]
+out["es"] = {"n": 300000, "match": 200 - len(diff), "v": start(Vl, Ql, learned), "diff": diff, "pi": {f"{s},{u},{d}": int(pi[s, u, d]) for (s, u, d) in best}}
+print(f"MC ES on Gymnasium, 300,000 episodes, {time.time() - t0:.0f} s: {200 - len(diff)} of 200 cells match the optimum,"
+      f" v(fresh deal) of the learned policy = {out['es']['v']:.6f}")
+print("cells that differ (sum, usable ace, dealer):", diff)
+
+v0, runs, n = V20[13, 1, 2], 100, 1000             # off-policy prediction of v(13, usable ace, dealer 2), random behaviour
+est = {"ordinary": np.zeros((runs, n)), "weighted": np.zeros((runs, n))}
+for run in range(runs):
+    num = den = 0.0
+    for i in range(n):
+        uenv.reset(); uenv.player = [1, 2]; uenv.dealer[0] = 2; s, rho, done = 13, 1.0, False
+        while not done:
+            a = int(rng.integers(2)); rho *= (a == (s &lt; 20)) / 0.5
+            obs, r, done, _, _ = uenv.step(a); s = obs[0]
+        num += rho * r; den += rho
+        est["ordinary"][run, i] = num / (i + 1); est["weighted"][run, i] = num / den if den else 0.0
+out["is"] = {k: [float(((e[:, m - 1] - v0) ** 2).mean()) for m in (1, 10, 100, 1000)] for k, e in est.items()}
+for k in est: print(f"{k:8s} importance sampling, MSE after 1, 10, 100, 1000 episodes:", np.round(out["is"][k], 4))
+json.dump(out, open("x069-py.json", "w"), default=float)</code></pre>
+<pre class="code out"><code>dealer busts: 6 up 0.423150, 10 up 0.212109, ace up 0.115286
+optimal policy: v(fresh deal) = -0.043113; agrees with the published table on 200 of 200 cells
+closest calls, q(hit) - q(stick): [((12, 0, 4), -0.0025), ((16, 0, 10), 0.0065), ((13, 0, 2), -0.015), ((12, 0, 6), -0.0168)]
+stick on 20: v(fresh deal) = -0.350111, v(13, usable ace, dealer 2) = -0.277204
+best 0.1-soft policy: v(fresh deal) = -0.074908
+best 0.3-soft policy: v(fresh deal) = -0.138521
+Gymnasium, stick20: mean return -0.3532 +- 0.0041 over 50,000 hands (exact -0.3501)
+Gymnasium, optimal: mean return -0.0435 +- 0.0043 over 50,000 hands (exact -0.0431)
+MC ES on Gymnasium, 300,000 episodes, 40 s: 197 of 200 cells match the optimum, v(fresh deal) of the learned policy = -0.043532
+cells that differ (sum, usable ace, dealer): [(12, 0, 4), (12, 0, 6), (18, 1, 10)]
+ordinary importance sampling, MSE after 1, 10, 100, 1000 episodes: [2.5925 1.3084 0.114  0.0085]
+weighted importance sampling, MSE after 1, 10, 100, 1000 episodes: [0.1302 0.5053 0.0946 0.0088]</code></pre>
+    <p class="note" style="max-width:72ch">The browser&rsquo;s exact model is a separate JavaScript implementation of the same recursion; its dealer probabilities, optimal values and policy values agree with Python&rsquo;s to within 10<sup>&minus;15</sup>, including the value of the policy Python learnt (&minus;0.043532 both ways). The <em>learnt</em> policies do not match cell for cell, and should not: the browser uses its own random-number generator (mulberry32, seeded), Python uses Gymnasium&rsquo;s NumPy generator, and the cells where they differ are the close calls, where q(hit) and q(stick) differ by less than 0.02 and a few hundred thousand episodes cannot reliably tell them apart. Hard 12 against a 4 is the closest, a gap of 0.0025; separating it at two standard errors needs millions of visits to that one pair. The Python side runs Gymnasium&rsquo;s own <code>step()</code> for every hand (about 60 s in all); exploring starts are set up by writing the starting hand into the environment, since Gymnasium has no option for it.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up &middot; rl 5.10</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Monte Carlo methods estimate values by averaging the returns of complete episodes: no model, no bootstrapping, and each state&rsquo;s estimate stands on its own.</li>
+      <li>Without a model you need action values, and action values need exploration: exploring starts, or &epsilon;-soft policies that converge to the best &epsilon;-soft policy.</li>
+      <li>Control is generalised policy iteration: evaluate by averaging returns, improve greedily, and interleave the two episode by episode.</li>
+      <li>Off-policy learning reweights a behaviour policy&rsquo;s returns by &rho; = &prod; &pi;/b: ordinary IS is unbiased but can have infinite variance; weighted IS is biased but far steadier.</li>
+      <li>Store running sums, not returns (C and W/C steps), and cut variance by giving each reward only the ratios it needs (discounting-aware and per-decision IS).</li>
+    </ul>
+    <div class="prose" style="margin-top:14px"><p>Compared with dynamic programming, Monte Carlo methods have four advantages: they learn from actual or simulated experience without a model; a simulator is often far easier to build than a table of probabilities; they can spend their effort on the states that matter, such as the start states, without sweeping the rest; and, because they do not bootstrap, they are less harmed when the Markov property only roughly holds. The price is that nothing is learnt until an episode ends, which the temporal-difference methods of the next chapter remove.</p></div>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why does model-free control estimate q(s, a) rather than v(s)?</summary><p>Choosing an action from v needs a one-step look-ahead, &Sigma; p(s&prime;, r | s, a)[r + &gamma;v(s&prime;)], which needs the model. With q the greedy action is simply argmax<sub>a</sub> q(s, a), no model required.</p></details>
+      <details class="q"><summary>In blackjack, first-visit and every-visit MC give identical estimates. Why?</summary><p>No state can occur twice in one hand: a hit either raises your sum or turns a usable ace into a non-usable one, so each state is visited at most once per episode and the two definitions coincide.</p></details>
+      <details class="q"><summary>Your &epsilon;-greedy agent has converged with &epsilon; = 0.1. Is its policy optimal?</summary><p>It is the best policy among &epsilon;-soft ones, not the optimal policy, because it still acts at random 10% of the time. Its greedy part is often optimal or nearly so; you can deploy that, or decay &epsilon; towards 0 during learning (the GLIE condition).</p></details>
+      <details class="q"><summary>A behaviour policy never sticks on 20. Can you evaluate &ldquo;stick on 20+&rdquo; off-policy from its episodes?</summary><p>No. Coverage fails: the target takes an action that b never takes, so every episode that reaches 20 has &rho; = 0 for the target&rsquo;s trajectory, and no reweighting can recover what was never observed.</p></details>
+      <details class="q"><summary>Why does off-policy MC control stop its backward loop at the first non-greedy action?</summary><p>The target policy is greedy, so &pi;(A<sub>t</sub>|S<sub>t</sub>) = 0 for a non-greedy action. Every earlier step&rsquo;s ratio includes that factor and is zero, so those steps would receive zero weight; stopping saves the work. It also means only the tail of each episode is learnt from.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../td-learning/">Next chapter: Temporal-Difference Learning in Depth &rarr;</a>
+      <a class="btn" href="../dynamic-programming/">&larr; Previous: Dynamic Programming: Evaluate, Improve, Iterate</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Sutton, R. S. &amp; Barto, A. G. (2018). <em>Reinforcement Learning: An Introduction</em>, 2nd ed. MIT Press, ch. 5 (Monte Carlo methods).</li>
+      <li>Singh, S. P. &amp; Sutton, R. S. (1996). Reinforcement learning with replacing eligibility traces. <em>Machine Learning</em> 22: first-visit versus every-visit Monte Carlo.</li>
+      <li>Kahn, H. &amp; Marshall, A. W. (1953). Methods of reducing sample size in Monte Carlo computations. <em>Journal of the Operations Research Society of America</em> 1(5).</li>
+      <li>Rubinstein, R. Y. (1981). <em>Simulation and the Monte Carlo Method</em>. Wiley: ordinary and weighted importance sampling.</li>
+      <li>Precup, D., Sutton, R. S. &amp; Singh, S. (2000). Eligibility traces for off-policy policy evaluation. <em>Proc. ICML 2000</em>: per-decision importance sampling.</li>
+      <li>Mahmood, A. R., van Hasselt, H. &amp; Sutton, R. S. (2014). Weighted importance sampling for off-policy learning with linear function approximation. <em>Advances in Neural Information Processing Systems</em> 27.</li>
+      <li>Tsitsiklis, J. N. (2002). On the convergence of optimistic policy iteration. <em>Journal of Machine Learning Research</em> 3.</li>
+      <li>Baldwin, R. R., Cantey, W. E., Maisel, H. &amp; McDermott, J. P. (1956). The optimum strategy in blackjack. <em>Journal of the American Statistical Association</em> 51(275).</li>
+      <li>Thorp, E. O. (1966). <em>Beat the Dealer</em>, 2nd ed. Random House.</li>
+      <li>Towers, M. et al. (2024). Gymnasium: a standard interface for reinforcement learning environments. arXiv:2407.17032. Blackjack-v1, MIT licence.</li>
+      <li>Wikipedia contributors. Blackjack (basic strategy table), revision 1382551223 of 29 October 2026. <em>Wikipedia, The Free Encyclopedia</em>, CC BY-SA 4.0.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated. Blackjack-v1 from Gymnasium (MIT licence); basic-strategy extract from Wikipedia, CC BY-SA 4.0, shared under the same licence.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- blackjack core: exact model + simulator + Monte Carlo learners (x069) ---------- */
+const BJ = (() => {
+  const P = [0, 1 / 13, 1 / 13, 1 / 13, 1 / 13, 1 / 13, 1 / 13, 1 / 13, 1 / 13, 1 / 13, 4 / 13];
+  const tot = (h, ace) => (ace && h + 10 <= 21 ? h + 10 : h);
+  const K = (s, u, d) => ((s - 12) * 2 + u) * 10 + d - 1;          // state index 0..199
+  const S_ = k => 12 + Math.floor(k / 20), U_ = k => Math.floor(k / 10) % 2, D_ = k => k % 10 + 1;
+  // distribution of the dealer's final total: index 0..4 = 17..21, 5 = bust
+  function dealerDist(up) {
+    const out = new Float64Array(6);
+    const go = (h, ace, p) => { const t = tot(h, ace); if (t >= 17) { out[t > 21 ? 5 : t - 17] += p; return; } for (let c = 1; c <= 10; c++) go(h + c, ace || c === 1, p * P[c]); };
+    go(up, up === 1, 1); return out;
+  }
+  const DD = [null]; for (let d = 1; d <= 10; d++) DD.push(dealerDist(d));
+  const PNAT = d => (d === 1 ? P[10] : d === 10 ? P[1] : 0);
+  const STK = new Float64Array(220);                                   // stick value, index (s-12)*10 + d-1... for s 12..21
+  for (let s = 12; s <= 21; s++) for (let d = 1; d <= 10; d++) { const q = DD[d]; let v = q[5]; for (let t = 17; t <= 21; t++) v += q[t - 17] * (t < s ? 1 : t > s ? -1 : 0); STK[(s - 12) * 10 + d - 1] = v; }
+  const stick = (s, d) => STK[(s - 12) * 10 + d - 1];
+  function nxt(s, u, c) { // returns [s', u'] or null for bust
+    if (u) return s + c <= 21 ? [s + c, 1] : [s + c - 10, 0];
+    if (c === 1 && s + 11 <= 21) return [s + 11, 1];
+    return s + c <= 21 ? [s + c, 0] : null;
+  }
+  const ORDER = []; for (const u of [0, 1]) for (let s = 21; s >= 12; s--) ORDER.push([s, u]);
+  const NX = []; for (let k = 0; k < 200; k++) { const s = S_(k), u = U_(k), d = D_(k), row = []; for (let c = 1; c <= 10; c++) { const n = nxt(s, u, c); row.push(n ? K(n[0], n[1], d) : -1); } NX.push(row); }
+  // evaluate a policy (hit: Float64Array(200) of P(hit)), or find the best eps-soft policy (hit = null)
+  function solve(hit, eps) {
+    eps = eps || 0; const V = new Float64Array(200), Q = new Float64Array(400), H = new Float64Array(200);
+    for (let d = 1; d <= 10; d++) for (const [s, u] of ORDER) {
+      const k = K(s, u, d), qs = stick(s, d); let qh = 0; const nx = NX[k];
+      for (let c = 1; c <= 10; c++) qh += P[c] * (nx[c - 1] < 0 ? -1 : V[nx[c - 1]]);
+      Q[2 * k] = qs; Q[2 * k + 1] = qh;
+      const h = hit ? hit[k] : (qh > qs ? 1 - eps / 2 : eps / 2); H[k] = h; V[k] = h * qh + (1 - h) * qs;
+    }
+    return { V, Q, H, eps };
+  }
+  // expected return of a fresh deal under the solved policy (below 12 the player always hits)
+  function startValue(sol, natHit) {
+    const { V, Q, H } = sol; let total = 0;
+    for (let d = 1; d <= 10; d++) {
+      const memo = {};
+      const low = h => { if (memo[h] != null) return memo[h]; let v = 0; for (let c = 1; c <= 10; c++) { let s, u; if (c === 1 && h + 11 <= 21) { s = h + 11; u = 1; } else { s = h + c; u = 0; } v += P[c] * (s >= 12 ? V[K(s, u, d)] : low(s)); } return (memo[h] = v); };
+      let vd = 0;
+      for (let c1 = 1; c1 <= 10; c1++) for (let c2 = 1; c2 <= 10; c2++) {
+        let v; const p = P[c1] * P[c2];
+        if ((c1 === 1 && c2 === 10) || (c1 === 10 && c2 === 1)) { const k = K(21, 1, d), qs = 1 - PNAT(d), qh = Q[2 * k + 1]; const h = natHit != null ? natHit(k, qs, qh) : H[k]; v = h * qh + (1 - h) * qs; }
+        else { const t = c1 + c2, ace = c1 === 1 || c2 === 1; let s = t, u = 0; if (ace && t + 10 <= 21) { s = t + 10; u = 1; } v = s >= 12 ? V[K(s, u, d)] : low(s); }
+        vd += p * v;
+      }
+      total += P[d] * vd;
+    }
+    return total;
+  }
+  const policyValue = hit => startValue(solve(hit));
+  const OPT = solve(null), BEST = new Uint8Array(200); for (let k = 0; k < 200; k++) BEST[k] = OPT.Q[2 * k + 1] > OPT.Q[2 * k] ? 1 : 0;
+  const V_OPT = startValue(OPT, (k, qs, qh) => (qh > qs ? 1 : 0));
+  const bestSoft = eps => { const so = solve(null, eps); return startValue(so, (k, qs, qh) => (qh > qs ? 1 - eps / 2 : eps / 2)); };
+  const hitOf = pi => { const h = new Float64Array(200); for (let k = 0; k < 200; k++) h[k] = pi[k]; return h; };
+  const thresh = t => { const h = new Float64Array(200); for (let k = 0; k < 200; k++) h[k] = S_(k) < t ? 1 : 0; return h; };
+  // P(first visit to decision state k without a natural | dealer up card), for the conditional value of cell (21, usable, d)
+  function visits(hit) {
+    const M = new Float64Array(200);
+    for (let d = 1; d <= 10; d++) {
+      const low = new Float64Array(12);
+      for (let c1 = 1; c1 <= 10; c1++) for (let c2 = 1; c2 <= 10; c2++) {
+        if ((c1 === 1 && c2 === 10) || (c1 === 10 && c2 === 1)) continue;
+        const p = P[c1] * P[c2], t = c1 + c2, ace = c1 === 1 || c2 === 1; let s = t, u = 0; if (ace && t + 10 <= 21) { s = t + 10; u = 1; }
+        if (s >= 12) M[K(s, u, d)] += p; else low[s] += p;
+      }
+      for (let h = 2; h <= 11; h++) if (low[h]) for (let c = 1; c <= 10; c++) { let s, u; if (c === 1 && h + 11 <= 21) { s = h + 11; u = 1; } else { s = h + c; u = 0; } if (s >= 12) M[K(s, u, d)] += low[h] * P[c]; else low[s] += low[h] * P[c]; }
+      for (const u of [1, 0]) for (let s = 12; s <= 21; s++) { const k = K(s, u, d), m = M[k] * hit[k]; if (!m) continue; for (let c = 1; c <= 10; c++) { const n = NX[k][c - 1]; if (n >= 0) M[n] += m * P[c]; } }
+    }
+    return M;
+  }
+  // what first-visit MC estimates in each cell under a policy dealt from fresh hands: V, except that cell (21, usable)
+  // mixes naturals (+1 unless the dealer has one) with soft 21s reached by hitting
+  function cellTruth(hit) {
+    const so = solve(hit), M = visits(hit), T = Float64Array.from(so.V), pn = 2 * P[1] * P[10];
+    for (let d = 1; d <= 10; d++) { const k = K(21, 1, d), h = hit[k], vn = h * so.Q[2 * k + 1] + (1 - h) * (1 - PNAT(d)); T[k] = (pn * vn + M[k] * so.V[k]) / (pn + M[k]); }
+    return { T, sol: so, M };
+  }
+
+  /* ----- the simulator: same rules as Gymnasium Blackjack-v1 (sab=True) ----- */
+  const draw = r => { const c = 1 + Math.floor(r() * 13); return c > 10 ? 10 : c; };
+  const TR = new Int32Array(40), TA = new Uint8Array(40), TB = new Float64Array(40);
+  const sim = { len: 0, nat: false, rec: false, pc: [], dc: [], ps: 0, ds: 0, dnat: false };
+  // act(k, step) -> 0 stick / 1 hit; st = {s, u, d, a0} for an exploring start (hand built from the state, never a natural)
+  function play(r, act, st) {
+    let h, ace, d, nat = false;
+    if (st) { d = st.d; if (st.u) { h = st.s - 10; ace = true; } else { h = st.s; ace = false; } if (sim.rec) { sim.pc = []; sim.start = st; } }
+    else { const c1 = draw(r), c2 = draw(r); d = draw(r); h = c1 + c2; ace = c1 === 1 || c2 === 1; nat = ace && h === 11; if (sim.rec) { sim.pc = [c1, c2]; sim.start = null; } }
+    const hid = draw(r); if (sim.rec) sim.dc = [d, hid];
+    let s = tot(h, ace); sim.len = 0;
+    while (s < 12) { const c = draw(r); if (sim.rec) sim.pc.push(c); h += c; ace = ace || c === 1; s = tot(h, ace); }
+    for (;;) {
+      const u = ace && h + 10 <= 21 ? 1 : 0, k = ((s - 12) * 2 + u) * 10 + d - 1;
+      const a = sim.len === 0 && st && st.a0 != null ? st.a0 : act(k, sim.len);
+      TR[sim.len] = k; TA[sim.len] = a; sim.len++;
+      if (a !== 1) break;
+      const c = draw(r); if (sim.rec) sim.pc.push(c); h += c; ace = ace || c === 1; s = tot(h, ace); nat = false;
+      if (s > 21) { sim.ps = s; sim.ds = 0; sim.nat = false; return -1; }
+    }
+    let dh = d + hid, da = d === 1 || hid === 1; const dnat = da && dh === 11; let ds = tot(dh, da);
+    while (ds < 17) { const c = draw(r); if (sim.rec) sim.dc.push(c); dh += c; da = da || c === 1; ds = tot(dh, da); }
+    sim.ps = s; sim.ds = ds; sim.nat = nat; sim.dnat = dnat;
+    if (nat && !dnat) return 1;
+    if (ds > 21) return 1;
+    return s > ds ? 1 : s < ds ? -1 : 0;
+  }
+  function playRec(r, act, st) { sim.rec = true; const g = play(r, act, st); sim.rec = false; return g; }
+
+  /* ----- learners ----- */
+  function learner(kind) {
+    const L = { kind, Q: new Float64Array(400), N: new Float64Array(400), pi: new Uint8Array(200), n: 0, steps: 0, used: 0 }; for (let k = 0; k < 200; k++) L.pi[k] = S_(k) < 20 ? 1 : 0;   // start: stick on 20 or 21
+    return L;
+  }
+  const greedy = (L, k) => (L.Q[2 * k + 1] > L.Q[2 * k] ? 1 : 0);
+  function esRun(L, n, r) { // Monte Carlo ES: exploring starts, first-visit sample averages (no state repeats in blackjack)
+    const st = { s: 12, u: 0, d: 1, a0: 0 }, act = k => L.pi[k];
+    for (let i = 0; i < n; i++) {
+      st.s = 12 + Math.floor(r() * 10); st.u = r() < 0.5 ? 0 : 1; st.d = 1 + Math.floor(r() * 10); st.a0 = r() < 0.5 ? 0 : 1;
+      const G = play(r, act, st), m = sim.len; L.steps += m; L.used += m;
+      for (let t = 0; t < m; t++) { const k = TR[t], j = 2 * k + TA[t]; L.N[j]++; L.Q[j] += (G - L.Q[j]) / L.N[j]; L.pi[k] = greedy(L, k); }
+    }
+    L.n += n;
+  }
+  function onRun(L, n, eps, r) { // on-policy first-visit MC control with an eps-greedy policy, fresh deals
+    const act = k => (r() < eps ? (r() < 0.5 ? 0 : 1) : L.pi[k]);
+    for (let i = 0; i < n; i++) {
+      const G = play(r, act), m = sim.len; L.steps += m; L.used += m;
+      for (let t = 0; t < m; t++) { const k = TR[t], j = 2 * k + TA[t]; L.N[j]++; L.Q[j] += (G - L.Q[j]) / L.N[j]; L.pi[k] = greedy(L, k); }
+    }
+    L.n += n;
+  }
+  function offRun(L, n, eps, r) { // off-policy MC control, weighted importance sampling; behaviour eps-greedy w.r.t. Q
+    const act = (k, t) => { const g = L.pi[k], a = r() < eps ? (r() < 0.5 ? 0 : 1) : g; TB[t] = a === g ? 1 - eps / 2 : eps / 2; return a; };
+    for (let i = 0; i < n; i++) {
+      const G = play(r, act), m = sim.len; L.steps += m; let W = 1;
+      for (let t = m - 1; t >= 0; t--) {           // gamma = 1 and the only reward is the last, so G is the same at every step
+        const k = TR[t], j = 2 * k + TA[t]; L.used++;
+        L.N[j] += W; L.Q[j] += (W / L.N[j]) * (G - L.Q[j]); L.pi[k] = greedy(L, k);
+        if (TA[t] !== L.pi[k]) break;
+        W /= TB[t];
+      }
+    }
+    L.n += n;
+  }
+  const matches = pi => { let m = 0; for (let k = 0; k < 200; k++) if (pi[k] === BEST[k]) m++; return m; };
+  return { P, K, S_, U_, D_, DD, PNAT, stick, solve, startValue, policyValue, OPT, BEST, V_OPT, bestSoft, hitOf, thresh, visits, cellTruth,
+    draw, play, playRec, sim, TR, TA, learner, esRun, onRun, offRun, matches, greedy, tot };
+})();
+
+
+const BASIC = {"revid":1382551223,"hard":{"12":"HHHSSSHHHH","13":"HSSSSSHHHH","14":"HSSSSSHHHH","15":"HSSSSSHHHH","16":"HSSSSSHHHH","17":"SSSSSSSSSS","18":"SSSSSSSSSS","19":"SSSSSSSSSS","20":"SSSSSSSSSS","21":"SSSSSSSSSS"},"soft":{"12":"HHHHHHHHHH","13":"HHHHHHHHHH","14":"HHHHHHHHHH","15":"HHHHHHHHHH","16":"HHHHHHHHHH","17":"HHHHHHHHHH","18":"HSSSSSSSHH","19":"SSSSSSSSSS","20":"SSSSSSSSSS","21":"SSSSSSSSSS"}};
+const PY = {"sim": {"stick20": [-0.35316, 0.004054227458838489], "optimal": [-0.04352, 0.004263862121598211]}, "es": {"n": 300000, "match": 197, "v": -0.04353155241940072, "diff": [[12, 0, 4], [12, 0, 6], [18, 1, 10]], "pi": {"21,0,1": 0, "20,0,1": 0, "19,0,1": 0, "18,0,1": 0, "17,0,1": 0, "16,0,1": 1, "15,0,1": 1, "14,0,1": 1, "13,0,1": 1, "12,0,1": 1, "21,1,1": 0, "20,1,1": 0, "19,1,1": 0, "18,1,1": 1, "17,1,1": 1, "16,1,1": 1, "15,1,1": 1, "14,1,1": 1, "13,1,1": 1, "12,1,1": 1, "21,0,2": 0, "20,0,2": 0, "19,0,2": 0, "18,0,2": 0, "17,0,2": 0, "16,0,2": 0, "15,0,2": 0, "14,0,2": 0, "13,0,2": 0, "12,0,2": 1, "21,1,2": 0, "20,1,2": 0, "19,1,2": 0, "18,1,2": 0, "17,1,2": 1, "16,1,2": 1, "15,1,2": 1, "14,1,2": 1, "13,1,2": 1, "12,1,2": 1, "21,0,3": 0, "20,0,3": 0, "19,0,3": 0, "18,0,3": 0, "17,0,3": 0, "16,0,3": 0, "15,0,3": 0, "14,0,3": 0, "13,0,3": 0, "12,0,3": 1, "21,1,3": 0, "20,1,3": 0, "19,1,3": 0, "18,1,3": 0, "17,1,3": 1, "16,1,3": 1, "15,1,3": 1, "14,1,3": 1, "13,1,3": 1, "12,1,3": 1, "21,0,4": 0, "20,0,4": 0, "19,0,4": 0, "18,0,4": 0, "17,0,4": 0, "16,0,4": 0, "15,0,4": 0, "14,0,4": 0, "13,0,4": 0, "12,0,4": 1, "21,1,4": 0, "20,1,4": 0, "19,1,4": 0, "18,1,4": 0, "17,1,4": 1, "16,1,4": 1, "15,1,4": 1, "14,1,4": 1, "13,1,4": 1, "12,1,4": 1, "21,0,5": 0, "20,0,5": 0, "19,0,5": 0, "18,0,5": 0, "17,0,5": 0, "16,0,5": 0, "15,0,5": 0, "14,0,5": 0, "13,0,5": 0, "12,0,5": 0, "21,1,5": 0, "20,1,5": 0, "19,1,5": 0, "18,1,5": 0, "17,1,5": 1, "16,1,5": 1, "15,1,5": 1, "14,1,5": 1, "13,1,5": 1, "12,1,5": 1, "21,0,6": 0, "20,0,6": 0, "19,0,6": 0, "18,0,6": 0, "17,0,6": 0, "16,0,6": 0, "15,0,6": 0, "14,0,6": 0, "13,0,6": 0, "12,0,6": 1, "21,1,6": 0, "20,1,6": 0, "19,1,6": 0, "18,1,6": 0, "17,1,6": 1, "16,1,6": 1, "15,1,6": 1, "14,1,6": 1, "13,1,6": 1, "12,1,6": 1, "21,0,7": 0, "20,0,7": 0, "19,0,7": 0, "18,0,7": 0, "17,0,7": 0, "16,0,7": 1, "15,0,7": 1, "14,0,7": 1, "13,0,7": 1, "12,0,7": 1, "21,1,7": 0, "20,1,7": 0, "19,1,7": 0, "18,1,7": 0, "17,1,7": 1, "16,1,7": 1, "15,1,7": 1, "14,1,7": 1, "13,1,7": 1, "12,1,7": 1, "21,0,8": 0, "20,0,8": 0, "19,0,8": 0, "18,0,8": 0, "17,0,8": 0, "16,0,8": 1, "15,0,8": 1, "14,0,8": 1, "13,0,8": 1, "12,0,8": 1, "21,1,8": 0, "20,1,8": 0, "19,1,8": 0, "18,1,8": 0, "17,1,8": 1, "16,1,8": 1, "15,1,8": 1, "14,1,8": 1, "13,1,8": 1, "12,1,8": 1, "21,0,9": 0, "20,0,9": 0, "19,0,9": 0, "18,0,9": 0, "17,0,9": 0, "16,0,9": 1, "15,0,9": 1, "14,0,9": 1, "13,0,9": 1, "12,0,9": 1, "21,1,9": 0, "20,1,9": 0, "19,1,9": 0, "18,1,9": 1, "17,1,9": 1, "16,1,9": 1, "15,1,9": 1, "14,1,9": 1, "13,1,9": 1, "12,1,9": 1, "21,0,10": 0, "20,0,10": 0, "19,0,10": 0, "18,0,10": 0, "17,0,10": 0, "16,0,10": 1, "15,0,10": 1, "14,0,10": 1, "13,0,10": 1, "12,0,10": 1, "21,1,10": 0, "20,1,10": 0, "19,1,10": 0, "18,1,10": 0, "17,1,10": 1, "16,1,10": 1, "15,1,10": 1, "14,1,10": 1, "13,1,10": 1, "12,1,10": 1}}, "is": {"ordinary": [2.5924894932733524, 1.3083846117129505, 0.11398838180115119, 0.008472667658073394], "weighted": [0.13020991245585337, 0.505253286836131, 0.09461477835581106, 0.008807661710494512]}};
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), ink: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const K = BJ.K, S_ = BJ.S_, U_ = BJ.U_, D_ = BJ.D_;
+const DL = d => (d === 1 ? 'A' : String(d));
+const CARD = c => (c === 1 ? 'A' : String(c));
+const f = (v, d) => fmt(v, d == null ? 3 : d).replace(/^-/, '−');
+const fs = (v, d) => (v > 0 ? '+' : '') + f(v, d);
+const fp = (v, d) => (v < 0 ? '(' + f(v, d) + ')' : f(v, d));
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const nf = n => Math.round(n).toLocaleString('en-GB');
+const nk = n => (n >= 1e6 ? fmt(n / 1e6, n % 1e6 ? 1 : 0) + 'M' : n >= 1e3 ? fmt(n / 1e3, n % 1e3 ? 1 : 0) + 'k' : String(n));
+const cellName = k => `${S_(k)} ${U_(k) ? 'with a usable ace' : 'with no usable ace'} against a dealer&rsquo;s ${DL(D_(k)) === 'A' ? 'ace' : DL(D_(k))}`;
+const cellShort = k => `${U_(k) ? 'soft' : 'hard'} ${S_(k)} v ${DL(D_(k))}`;
+const ACT = a => (a ? 'hit' : 'stick');
+function hex(c) { c = String(c).trim(); if (c[0] === '#') { if (c.length === 4) c = '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3]; return [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)); } const m = c.match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : [128, 128, 128]; }
+const mix = (a, b, t) => { const A = hex(a), B = hex(b); return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * clamp(t, 0, 1))).join(',')})`; };
+const divCol = (C, v) => (v >= 0 ? mix(C.soft, C.a, v) : mix(C.soft, C.bad, -v));
+const SUP = n => String(n).replace(/-/g, '⁻').replace(/\d/g, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]);
+const big = x => (x >= 1e7 ? (x / Math.pow(10, Math.floor(Math.log10(x)))).toFixed(1) + '×10' + SUP(Math.floor(Math.log10(x))) : x >= 100 ? nf(x) : f(x, 1));
+const logTick = x => { const n = Math.round(Math.pow(10, x)); return n >= 1e6 ? (n / 1e6) + 'M' : n >= 1e3 ? (n / 1e3) + 'k' : String(n); };
+const POL = { '20': BJ.thresh(20), '17': BJ.thresh(17), opt: BJ.hitOf(BJ.BEST) };
+const SOL = { '20': BJ.solve(POL['20']), '17': BJ.solve(POL['17']), opt: BJ.OPT };
+const POLNAME = { '20': 'stick on 20+', '17': 'stick on 17+', opt: 'the optimal policy' };
+const BASICPI = new Uint8Array(200); for (let k = 0; k < 200; k++) BASICPI[k] = BASIC[U_(k) ? 'soft' : 'hard'][S_(k)][D_(k) - 1] === 'H' ? 1 : 0;
+const agreeBasic = pi => { let m = 0; for (let k = 0; k < 200; k++) if (pi[k] === BASICPI[k]) m++; return m; };
+const V20 = SOL['20'].V[K(13, 1, 2)];
+function fitText(ctx, s, w) { if (ctx.measureText(s).width <= w) return s; let lo = 0, hi = s.length; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (ctx.measureText(s.slice(0, m) + '…').width <= w) lo = m; else hi = m - 1; } return s.slice(0, lo) + '…'; }
+function runChunks(total, chunkOf, work, tick, done) {
+  let left = total;
+  const go = () => { const n = Math.min(left, Math.max(1, Math.round(chunkOf()))); work(n); left -= n; if (tick) tick(total - left, total); if (left > 0) setTimeout(go, 0); else if (done) done(); };
+  setTimeout(go, 0);
+}
+const busy = (ids, on) => ids.forEach(id => { const b = $('#' + id); if (b) b.disabled = on; });
+
+/* ---------- the two 10 x 10 policy panels ---------- */
+// cell(k) -> { f: fill, a: alpha, ring: bool, t: text, tc: text colour }
+function grids(cv, cell, o) {
+  o = o || {}; const C = C0(); const v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }); const c = v.ctx, W = v.w, H = v.h;
+  const side = W / H > 1.2, narrow = W < 420, lab = narrow ? 24 : 28, top = 22, bot = 20;
+  const panels = side ? [[0, 0, W / 2, H], [W / 2, 0, W / 2, H]] : [[0, 0, W, H / 2], [0, H / 2, W, H / 2]];
+  const geo = [];
+  [0, 1].forEach(u => {
+    const [x0, y0, pw, ph] = panels[u], gx = x0 + lab + 6, gy = y0 + top, gw = pw - lab - (side ? 16 : 10), gh = ph - top - bot - 4, cw = gw / 10, ch = gh / 10;
+    c.save(); c.font = '600 12px ' + css('--f-body'); c.fillStyle = C.ink; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+    c.fillText(u ? 'Usable ace' : 'No usable ace', gx, y0 + 15);
+    c.font = '11px ' + css('--f-body'); c.fillStyle = C.muted; c.textAlign = 'right'; c.fillText(narrow ? 'dealer →' : 'dealer shows →', gx + gw, y0 + 15); c.restore();
+    for (let s = 12; s <= 21; s++) for (let d = 1; d <= 10; d++) {
+      const k = K(s, u, d), q = cell(k), x = gx + (d - 1) * cw, y = gy + (21 - s) * ch;
+      c.globalAlpha = q.a == null ? 1 : q.a; c.fillStyle = q.f; c.fillRect(x + 0.5, y + 0.5, cw - 1, ch - 1); c.globalAlpha = 1;
+      if (q.ring) { c.save(); c.strokeStyle = C.ink; c.lineWidth = 2; c.setLineDash([3, 2]); c.strokeRect(x + 2, y + 2, cw - 4, ch - 4); c.restore(); }
+      if (q.t && cw >= 26 && ch >= 15) { c.save(); c.font = (cw >= 34 ? '10.5px ' : '9.5px ') + css('--f-mono'); c.fillStyle = q.tc || C.ink; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(q.t, x + cw / 2, y + ch / 2 + 0.5); c.restore(); }
+      if (o.sel === k) { c.save(); c.strokeStyle = C.lda; c.lineWidth = 3; c.strokeRect(x + 1.5, y + 1.5, cw - 3, ch - 3); c.restore(); }
+    }
+    c.save(); c.font = '10.5px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'right'; c.textBaseline = 'middle';
+    for (let s = 12; s <= 21; s++) c.fillText(String(s), gx - 5, gy + (21 - s + 0.5) * ch);
+    c.textAlign = 'center'; c.textBaseline = 'top'; for (let d = 1; d <= 10; d++) c.fillText(DL(d), gx + (d - 0.5) * cw, gy + gh + 4);
+    c.restore();
+    geo.push({ u, gx, gy, cw, ch });
+  });
+  cv._geo = geo;
+}
+function gridHit(cv, e) { const g = cv._geo; if (!g) return -1; const [px, py] = evPos(cv, e); for (const q of g) { const col = Math.floor((px - q.gx) / q.cw), row = Math.floor((py - q.gy) / q.ch); if (col >= 0 && col < 10 && row >= 0 && row < 10) return K(21 - row, q.u, col + 1); } return -1; }
+function onCell(cv, fn) { cv.addEventListener('click', e => { const k = gridHit(cv, e); if (k >= 0) fn(k); }); cv.style.cursor = 'pointer'; }
+// a learner's policy as cells: colour = action, paler = closer call, dashed ring = differs from the reference
+function policyCells(L, ref, confident) {
+  const C = C0();
+  return k => { const a = L.pi[k], n = L.N[2 * k] + L.N[2 * k + 1]; if (!n && L.n) return { f: C.soft, ring: false };
+    const gap = Math.abs(L.Q[2 * k + 1] - L.Q[2 * k]); return { f: a ? C.b : C.a, a: confident ? 0.32 + 0.68 * Math.min(1, gap / 0.2) : 0.9, ring: ref ? a !== ref[k] : false, t: a ? 'H' : 'S', tc: '#fff' }; };
+}
+
+/* ---------- hand description ---------- */
+function handText(G) {
+  const s = BJ.sim, pc = s.pc.map(CARD), dc = s.dc.map(CARD);
+  let you = s.start ? `${s.start.u ? 'soft' : 'hard'} ${s.start.s}${pc.length ? ', drew ' + pc.join(' ') : ''}` : pc.join(' ');
+  const busted = G === -1 && s.ds === 0;
+  you += busted ? ` &rarr; bust (${s.ps})` : ` &rarr; ${s.ps}${s.nat ? ' (natural)' : ''}`;
+  const dealer = busted ? `${dc[0]} showing (no need to play)` : `${dc.join(' ')} &rarr; ${s.ds > 21 ? 'bust (' + s.ds + ')' : s.ds}${s.dnat ? ' (natural)' : ''}`;
+  return `You: ${you} &middot; dealer: ${dealer} &middot; <b>${G > 0 ? '+1' : G < 0 ? '−1' : '0'}</b>`;
+}
+
+/* ---------- hero: Monte Carlo ES learning live ---------- */
+const HERO = { L: BJ.learner('es'), r: mulberry32(2026), show: mulberry32(77), run: false, sel: K(16, 0, 10), last: '', vis: true };
+BJ.esRun(HERO.L, 4000, HERO.r);
+function heroDeal() { const L = HERO.L, G = BJ.playRec(HERO.show, k => L.pi[k]); HERO.last = handText(G); }
+function drawHero() {
+  const L = HERO.L; grids($('#hero-cv'), policyCells(L, BJ.BEST, true), { sel: HERO.sel });
+  const k = HERO.sel, m = BJ.matches(L.pi), nh = L.N[2 * k + 1], ns = L.N[2 * k];
+  $('#hero-n').innerHTML = `${tip(nf(L.n), 'episodes of Monte Carlo ES so far\neach starts from a random state and a random first action')} episodes &middot; ${tip(m + ' of 200', 'cells whose greedy action equals the exact optimum\n(found by dynamic programming, used only to mark the dashed cells)')} cells optimal`;
+  const q = (a, n) => n ? tip(f(L.Q[2 * k + a], 3), `average of ${nf(n)} returns after ${ACT(a)}ting here`.replace('stickting', 'sticking').replace('hitting', 'hitting')) : 'no data yet';
+  $('#hero-cap').innerHTML = `<b>${cellShort(k)}</b> (selected): Q(hit) = ${q(1, nh)}, Q(stick) = ${q(0, ns)}, so the agent ${L.pi[k] ? '<span class="key hit">hits</span>' : '<span class="key stick">sticks</span>'}${BJ.BEST[k] !== L.pi[k] ? ', which is not yet optimal' : ''}. Paler cells are closer calls; dashed cells still disagree with the optimum.<br>Last hand dealt with this policy: ${HERO.last || '(press Learn)'}`;
+}
+function heroTick() {
+  if (!HERO.run) return;
+  if (HERO.vis) { const L = HERO.L, n = L.n < 20000 ? 500 : L.n < 200000 ? 4000 : 25000; BJ.esRun(L, n, HERO.r); heroDeal(); drawHero(); if (L.n >= 5e6) { HERO.run = false; $('#hero-go').textContent = 'Learn'; return; } }
+  requestAnimationFrame(heroTick);
+}
+$('#hero-go').addEventListener('click', () => { HERO.run = !HERO.run; $('#hero-go').textContent = HERO.run ? 'Pause' : 'Learn'; if (HERO.run) requestAnimationFrame(heroTick); });
+$('#hero-reset').addEventListener('click', () => { HERO.L = BJ.learner('es'); HERO.last = ''; drawHero(); });
+onCell($('#hero-cv'), k => { HERO.sel = k; drawHero(); });
+if ('IntersectionObserver' in window) new IntersectionObserver(es => es.forEach(e => { HERO.vis = e.isIntersecting; }), { threshold: 0.05 }).observe($('#hero-cv'));
+fig($('#hero-cv'), drawHero);
+
+/* ---------- shared selects ---------- */
+function fillSel(sid, did, s0, d0) { $(sid).innerHTML = Array.from({ length: 10 }, (_, i) => `<option value="${12 + i}">your sum ${12 + i}</option>`).join(''); $(sid).value = s0; $(did).innerHTML = Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}">dealer shows ${DL(i + 1)}</option>`).join(''); $(did).value = d0; }
+
+/* ---------- 1. averaging returns ---------- */
+const WY = { s: 13, d: 2, u: 0, pol: '20', r: mulberry32(11), n: 0, sum: 0, sq: 0, w: 0, dr: 0, l: 0, hist: [], hand: '' };
+fillSel('#wy-s', '#wy-d', WY.s, WY.d);
+function wyReset() { Object.assign(WY, { n: 0, sum: 0, sq: 0, w: 0, dr: 0, l: 0, hist: [], hand: '' }); drawWY(); }
+function wyDeal(n) {
+  const pol = POL[WY.pol], act = k => pol[k], st = { s: WY.s, u: WY.u, d: WY.d };
+  for (let i = 0; i < n; i++) {
+    const G = i === n - 1 ? BJ.playRec(WY.r, act, st) : BJ.play(WY.r, act, st);
+    WY.n++; WY.sum += G; WY.sq += G * G; if (G > 0) WY.w++; else if (G < 0) WY.l++; else WY.dr++;
+    const last = WY.hist.length ? WY.hist[WY.hist.length - 1][0] : 0;
+    if (WY.n <= 100 || WY.n >= last * 1.03) WY.hist.push([WY.n, WY.sum / WY.n, wySE()]);
+    if (i === n - 1) WY.hand = handText(G);
+  }
+  drawWY();
+}
+function wySE() { if (WY.n < 2) return 1; const m = WY.sum / WY.n, v = (WY.sq - WY.n * m * m) / (WY.n - 1); return Math.sqrt(Math.max(0, v) / WY.n); }
+function drawWY() {
+  const C = C0(), k = K(WY.s, WY.u, WY.d), ex = SOL[WY.pol].V[k], N = Math.max(100, WY.n), v = frame($('#wy-cv'), [0, Math.log10(N) + 0.05], [-1.05, 1.05], { l: 44, b: 28 }), c = v.ctx;
+  axes(v, 'hands (log scale)', 'average return', { sx: 1, sy: 0.5, fx: logTick, fy: y => f(y, 1) }); clip(v);
+  const H = WY.hist;
+  if (H.length) {
+    c.save(); c.fillStyle = C.a; c.globalAlpha = 0.18; c.beginPath();
+    H.forEach((p, i) => { const x = v.X(Math.log10(p[0])), y = v.Y(Math.min(1.05, p[1] + 2 * p[2])); i ? c.lineTo(x, y) : c.moveTo(x, y); });
+    for (let i = H.length - 1; i >= 0; i--) c.lineTo(v.X(Math.log10(H[i][0])), v.Y(Math.max(-1.05, H[i][1] - 2 * H[i][2])));
+    c.closePath(); c.fill(); c.restore();
+    c.save(); c.strokeStyle = C.a; c.lineWidth = 2.4; c.beginPath(); H.forEach((p, i) => { const x = v.X(Math.log10(p[0])), y = v.Y(p[1]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore();
+    const p = H[H.length - 1]; dot(v, Math.log10(p[0]), p[1], C.a, 4.5);
+  }
+  seg(v, v.xl[0], ex, v.xl[1], ex, C.ink, 1.6, [6, 4]); v.ctx.restore();
+  const m = WY.n ? WY.sum / WY.n : 0, se = wySE();
+  $('#wy-n').innerHTML = nf(WY.n);
+  $('#wy-v').innerHTML = WY.n ? tip(f(m, 3), `(wins − losses) / hands = (${nf(WY.w)} − ${nf(WY.l)}) / ${nf(WY.n)}\n= ${f(m, 5)}`) : '–';
+  $('#wy-x').innerHTML = tip(f(ex, 4), `exact value of ${POLNAME[WY.pol]} from ${cellShort(k)}\ndynamic programming over the dealer's draws\n= ${f(ex, 6)}`);
+  $('#wy-wdl').innerHTML = `${nf(WY.w)} &middot; ${nf(WY.dr)} &middot; ${nf(WY.l)}`;
+  $('#wy-hand').innerHTML = WY.hand ? 'Last hand: ' + WY.hand : 'Deal a hand to see one played out.';
+  const z = WY.n > 1 ? Math.abs(m - ex) / se : 0, pi = POL[WY.pol][k];
+  $('#wy-say').innerHTML = !WY.n ? `Every hand starts from ${cellName(k)}; you then follow ${POLNAME[WY.pol]}, which ${pi ? 'hits' : 'sticks'} here. Deal one hand: its return is a single sample of the value.`
+    : WY.n < 30 ? `After ${WY.n} hand${WY.n === 1 ? '' : 's'} the average is ${f(m, 2)}, against an exact value of ${f(ex, 3)}. Each return is &minus;1, 0 or +1, so a handful of hands says little: the band is &plusmn;${f(2 * se, 2)} wide on each side.`
+    : z <= 2 ? `After ${nf(WY.n)} hands the average ${f(m, 3)} is within ${f(z, 1)} standard errors of the exact ${f(ex, 3)}; the band (&plusmn;${f(2 * se, 3)}) should contain the truth about 95% of the time. ${WY.n < 20000 ? 'Each extra hundredfold in hands narrows it tenfold.' : 'This is how precise Monte Carlo gets: slowly, but with no model at all.'} ${WY.pol === '20' && WY.s < 17 ? 'Notice how bad &ldquo;stick on 20+&rdquo; is from here: it keeps hitting and usually busts.' : ''}`
+    : `The average ${f(m, 3)} is ${f(z, 1)} standard errors from the exact ${f(ex, 3)}. That happens by chance about 1 time in 20 for a 2-SE band; deal more hands and it will drift back.`;
+  $('#run-wy').innerHTML = WY.n ? `<b>Running example</b>: V<sub>${nf(WY.n)}</sub>(s) = (${nf(WY.w)} &times; 1 + ${nf(WY.dr)} &times; 0 + ${nf(WY.l)} &times; (&minus;1)) / ${nf(WY.n)} = ${tip('<b>' + f(m, 4) + '</b>', 'sum of returns / number of hands')}; SE = &sigma;&#770;/&radic;n = ${tip(f(se * Math.sqrt(WY.n), 3), 'sample standard deviation of the returns')} / &radic;${nf(WY.n)} = ${tip(f(se, 4), 'standard error of the average')}; exact v<sub>&pi;</sub>(s) = ${f(ex, 4)}.`
+    : `<b>Running example</b>: deal some hands to fill in V<sub>n</sub>(s) = (1/n) &Sigma; G<sup>(i)</sup>; the exact value it aims at is v<sub>&pi;</sub>(s) = ${f(ex, 4)}.`;
+}
+$('#wy-s').addEventListener('change', e => { WY.s = +e.target.value; wyReset(); });
+$('#wy-d').addEventListener('change', e => { WY.d = +e.target.value; wyReset(); });
+seg1('[data-wyu]', 'data-wyu', v => { WY.u = +v; wyReset(); });
+seg1('[data-wyp]', 'data-wyp', v => { WY.pol = v; wyReset(); });
+$('#wy-1').addEventListener('click', () => wyDeal(1)); $('#wy-100').addEventListener('click', () => wyDeal(100)); $('#wy-10k').addEventListener('click', () => wyDeal(10000)); $('#wy-0').addEventListener('click', wyReset);
+fig($('#wy-cv'), drawWY);
+
+/* ---------- 2. prediction: value table + looping task ---------- */
+const CT = BJ.cellTruth(POL['20']);
+const PR = { sum: new Float64Array(200), cnt: new Float64Array(200), n: 0, view: 'est', r: mulberry32(21), sel: K(21, 1, 10) };
+function prDeal(n) { const p = POL['20'], act = k => p[k]; for (let i = 0; i < n; i++) { const G = BJ.play(PR.r, act); for (let t = 0; t < BJ.sim.len; t++) { PR.sum[BJ.TR[t]] += G; PR.cnt[BJ.TR[t]]++; } } PR.n += n; drawPR(); }
+function prRMS() { let s = 0, m = 0, worst = -1, wv = 0; for (let k = 0; k < 200; k++) if (PR.cnt[k]) { const e = PR.sum[k] / PR.cnt[k] - CT.T[k]; s += e * e; m++; if (Math.abs(e) > wv) { wv = Math.abs(e); worst = k; } } return { rms: m ? Math.sqrt(s / m) : NaN, m, worst, wv }; }
+function drawPR() {
+  const C = C0(), V = PR.view;
+  grids($('#pr-cv'), k => { const n = PR.cnt[k], est = n ? PR.sum[k] / n : null, ex = CT.T[k];
+    if (V === 'ex') return { f: divCol(C, ex), t: f(ex, 2) };
+    if (!n) return { f: C.soft, t: '' };
+    if (V === 'err') { const e = est - ex; return { f: mix(C.soft, C.c, Math.abs(e) / 0.1), t: fs(e, 2).replace('+', '') }; }
+    return { f: divCol(C, est), t: f(est, 2) }; }, { sel: PR.sel });
+  const R = prRMS(), k = PR.sel, n = PR.cnt[k];
+  $('#pr-n').innerHTML = nf(PR.n);
+  $('#pr-rms').innerHTML = R.m ? tip(f(R.rms, 4), `√(mean over ${R.m} visited cells of (estimate − exact)²)\nworst cell: ${cellShort(R.worst)}, off by ${f(R.wv, 3)}`) : '–';
+  $('#pr-cap').innerHTML = V === 'err' ? 'Estimate minus exact value; darker = bigger error (full colour at 0.1). Rows: your sum; columns: the dealer&rsquo;s card. Click a cell.' : `${V === 'ex' ? 'Exact' : 'Estimated'} value of each state under &ldquo;stick on 20+&rdquo;: <span style="color:var(--cA)">&#9632;</span> towards +1, <span style="color:var(--qda)">&#9632;</span> towards &minus;1. Rows: your sum; columns: the dealer&rsquo;s card. Click a cell.`;
+  $('#pr-say').innerHTML = !PR.n ? 'No hands yet. Each hand you deal adds its return to the average of every state it passed through.'
+    : PR.n < 50000 ? `After ${nf(PR.n)} hands the broad shape is already there: only sums of 20 and 21 are worth anything, because this policy keeps hitting below 20. Rare cells are still noisy, the RMS error is ${f(R.rms, 3)}, and the worst cell, ${cellShort(R.worst)}, is off by ${f(R.wv, 2)}.`
+    : `With ${nf(PR.n)} hands the estimates are close to exact everywhere (RMS error ${f(R.rms, 3)}). Usable-ace cells are visited far less often than the others, so they converge last. Each cell is its own average; none was computed from a neighbour.`;
+  const T = CT.T[k], Vk = CT.sol.V[k];
+  const exTip = U_(k) && S_(k) === 21 ? `this cell mixes naturals (dealt A + 10: ${f(1 - BJ.PNAT(D_(k)), 4)}) with soft 21s reached by hitting (${f(Vk, 4)}),\nweighted by how often each happens: ${f(T, 4)}` : `exact v of stick-on-20+ = ${f(T, 6)}`;
+  const lp = LP.n ? ` Looping task: the last episode lasted L = ${LP.L} steps, so first-visit records G = ${LP.L} and every-visit records ${LP.L}, ${LP.L - 1}, &hellip;, 1, averaging ${tip(f((LP.L + 1) / 2, 1), '(L + 1) / 2')}.` : '';
+  $('#run-pr').innerHTML = `<b>Running example</b>: ${cellShort(k)} has been visited ${nf(n)} times; V(s) = ${n ? `${f(PR.sum[k], 0)} / ${nf(n)} = ${tip('<b>' + f(PR.sum[k] / n, 4) + '</b>', 'sum of the returns that followed each visit / number of visits\n(γ = 1 and only the last reward is nonzero, so each G is the hand result)')}` : '–'}, exact ${tip(f(T, 4), exTip)}.${lp}`;
+}
+$('#pr-10k').addEventListener('click', () => prDeal(10000)); $('#pr-100k').addEventListener('click', () => { busy(['pr-100k'], true); setTimeout(() => { prDeal(100000); busy(['pr-100k'], false); }, 10); });
+$('#pr-0').addEventListener('click', () => { PR.sum.fill(0); PR.cnt.fill(0); PR.n = 0; drawPR(); });
+seg1('[data-prv]', 'data-prv', v => { PR.view = v; drawPR(); });
+onCell($('#pr-cv'), k => { PR.sel = k; drawPR(); });
+fig($('#pr-cv'), drawPR);
+
+const LP = { p: 0.9, r: mulberry32(31), n: 0, fs: 0, es: 0, eN: 0, L: 0, hist: [] };
+function lpEp(n) { for (let i = 0; i < n; i++) { let L = 1; while (LP.r() < LP.p) L++; LP.L = L; LP.n++; LP.fs += L; LP.es += L * (L + 1) / 2; LP.eN += L; LP.hist.push([LP.n, LP.fs / LP.n, LP.es / LP.eN]); } drawLP(); drawPR(); }
+function drawLP() {
+  const C = C0(), tv = 1 / (1 - LP.p), N = Math.max(20, LP.n), H = LP.hist;
+  let ymax = tv * 2; H.forEach(h => { ymax = Math.max(ymax, h[1] * 1.08, h[2] * 1.08); }); ymax = Math.min(ymax, tv * 6);
+  const v = frame($('#lp-cv'), [0, N], [0, ymax], { l: 40, b: 26 }); axes(v, 'episodes', 'estimate of v(s)', { ny: 4, fy: y => fmt(y, 0) }); clip(v);
+  seg(v, 0, tv, N, tv, C.ink, 1.6, [6, 4]);
+  [[1, C.a], [2, C.b]].forEach(([j, col]) => { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = 2.2; c.beginPath(); H.forEach((h, i) => { const x = v.X(h[0]), y = v.Y(h[j]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); if (H.length) dot(v, H[H.length - 1][0], H[H.length - 1][j], col, 3.5); });
+  v.ctx.restore();
+  $('#lp-p-o').textContent = fmt(LP.p, 2);
+  $('#lp-f').innerHTML = LP.n ? tip(f(LP.fs / LP.n, 2), `sum of episode lengths / episodes = ${nf(LP.fs)} / ${nf(LP.n)}\ntrue value 1/(1 − p) = ${f(tv, 2)}`) : '–';
+  $('#lp-e').innerHTML = LP.n ? tip(f(LP.es / LP.eN, 2), `sum of L(L+1)/2 / sum of L = ${nf(LP.es)} / ${nf(LP.eN)}\n(every visit's return, averaged)`) : '–';
+  $('#lp-say').innerHTML = !LP.n ? `Each episode repeats the state L times, with returns L, L&minus;1, &hellip;, 1 after the successive visits. The true value is 1/(1 &minus; ${fmt(LP.p, 2)}) = ${f(tv, 1)}.`
+    : LP.n === 1 ? `One episode of length ${LP.L}: first-visit says ${LP.L}, every-visit averages the ${LP.L} returns ${LP.L}, &hellip;, 1 and says ${f((LP.L + 1) / 2, 1)}. The every-visit average leans towards the short returns at the end of the episode.`
+    : LP.n < 200 ? `After ${LP.n} episodes: first-visit ${f(LP.fs / LP.n, 2)}, every-visit ${f(LP.es / LP.eN, 2)}, truth ${f(tv, 2)}. Every-visit gives long episodes more votes (one per visit), which happens to cancel its lean towards short returns as data accumulates.`
+    : `After ${nf(LP.n)} episodes both are close to ${f(tv, 2)}: every-visit MC is biased for small samples but converges to the same value.`;
+}
+$('#lp-p').addEventListener('input', e => { LP.p = +e.target.value; Object.assign(LP, { n: 0, fs: 0, es: 0, eN: 0, L: 0, hist: [] }); drawLP(); drawPR(); });
+$('#lp-1').addEventListener('click', () => lpEp(1)); $('#lp-100').addEventListener('click', () => lpEp(100)); $('#lp-0').addEventListener('click', () => { Object.assign(LP, { n: 0, fs: 0, es: 0, eN: 0, L: 0, hist: [] }); drawLP(); drawPR(); });
+fig($('#lp-cv'), drawLP);
+
+/* ---------- 3. action values ---------- */
+const AV = { s: 15, d: 10, u: 0, pol: '17', ex: 1, r: mulberry32(41), n: [0, 0], sum: [0, 0], sq: [0, 0], hist: [], tot: 0 };
+fillSel('#av-s', '#av-d', AV.s, AV.d);
+function avReset() { Object.assign(AV, { n: [0, 0], sum: [0, 0], sq: [0, 0], hist: [], tot: 0 }); drawAV(); }
+const avM = a => (AV.n[a] ? AV.sum[a] / AV.n[a] : NaN), avSE = a => { const n = AV.n[a]; if (n < 2) return 1; const m = AV.sum[a] / n; return Math.sqrt(Math.max(0, (AV.sq[a] - n * m * m) / (n - 1)) / n); };
+function avRun(n) {
+  const pol = POL[AV.pol], k0 = K(AV.s, AV.u, AV.d), act = k => pol[k], st = { s: AV.s, u: AV.u, d: AV.d, a0: 0 };
+  for (let i = 0; i < n; i++) {
+    st.a0 = AV.ex ? (AV.r() < 0.5 ? 0 : 1) : pol[k0];
+    const G = BJ.play(AV.r, act, st), a = st.a0; AV.n[a]++; AV.sum[a] += G; AV.sq[a] += G * G; AV.tot++;
+    const last = AV.hist.length ? AV.hist[AV.hist.length - 1][0] : 0;
+    if (AV.tot <= 100 || AV.tot >= last * 1.03) AV.hist.push([AV.tot, avM(1), avSE(1), avM(0), avSE(0)]);
+  }
+  drawAV();
+}
+function drawAV() {
+  const C = C0(), k = K(AV.s, AV.u, AV.d), Q = SOL[AV.pol].Q, qh = Q[2 * k + 1], qs = Q[2 * k], N = Math.max(100, AV.tot);
+  const v = frame($('#av-cv'), [0, Math.log10(N) + 0.05], [-1.05, 1.05], { l: 44, b: 28 }), c = v.ctx; axes(v, 'episodes (log scale)', 'action-value estimate', { sx: 1, sy: 0.5, fx: logTick, fy: y => f(y, 1) }); clip(v);
+  const H = AV.hist;
+  [[1, C.b], [3, C.a]].forEach(([j, col]) => {
+    const pts = H.filter(h => isFinite(h[j])); if (!pts.length) return;
+    c.save(); c.fillStyle = col; c.globalAlpha = 0.16; c.beginPath(); pts.forEach((p, i) => { const x = v.X(Math.log10(p[0])), y = v.Y(Math.min(1.05, p[j] + 2 * p[j + 1])); i ? c.lineTo(x, y) : c.moveTo(x, y); });
+    for (let i = pts.length - 1; i >= 0; i--) c.lineTo(v.X(Math.log10(pts[i][0])), v.Y(Math.max(-1.05, pts[i][j] - 2 * pts[i][j + 1]))); c.closePath(); c.fill(); c.restore();
+    c.save(); c.strokeStyle = col; c.lineWidth = 2.3; c.beginPath(); pts.forEach((p, i) => { const x = v.X(Math.log10(p[0])), y = v.Y(p[j]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore();
+  });
+  seg(v, v.xl[0], qh, v.xl[1], qh, C.b, 1.5, [6, 4]); seg(v, v.xl[0], qs, v.xl[1], qs, C.a, 1.5, [6, 4]); v.ctx.restore();
+  const mh = avM(1), ms = avM(0), seH = avSE(1), seS = avSE(0), pa = POL[AV.pol][k];
+  $('#av-h').innerHTML = AV.n[1] ? tip(f(mh, 3), `average of ${nf(AV.n[1])} returns that began with a hit\n± ${f(2 * seH, 3)} (2 SE)`) : 'no data';
+  $('#av-st').innerHTML = AV.n[0] ? tip(f(ms, 3), `average of ${nf(AV.n[0])} returns that began with a stick\n± ${f(2 * seS, 3)} (2 SE)`) : 'no data';
+  $('#av-ex').innerHTML = tip(`${f(qh, 3)} &middot; ${f(qs, 3)}`, `exact q under ${POLNAME[AV.pol]} afterwards\nstick: dealer-outcome probabilities; hit: one card, then the policy`);
+  const both = AV.n[0] && AV.n[1], diff = mh - ms, sed = Math.sqrt(seH * seH + seS * seS), sure = both && Math.abs(diff) > 2 * sed;
+  $('#av-vd').innerHTML = !AV.tot ? '–' : !both ? `${ACT(AV.n[1] ? 1 : 0)} (only one tried)` : tip(`${ACT(diff > 0 ? 1 : 0)}${sure ? '' : '?'}`, `difference ${f(diff, 3)} ± ${f(2 * sed, 3)} (2 SE)\n${sure ? 'clear at two standard errors' : 'not yet clear at two standard errors'}`);
+  const best = qh > qs ? 1 : 0;
+  $('#av-say').innerHTML = !AV.tot ? `From ${cellName(k)}, ${POLNAME[AV.pol]} would ${ACT(pa)}. The exact values say ${ACT(best)}ting is better by ${f(Math.abs(qh - qs), 3)}.`.replace('stickting', 'sticking').replace('hitting', 'hitting')
+    : !AV.ex ? `With exploration off, every episode starts by doing what the policy does here, ${ACT(pa)}, so q&#770;(s, ${ACT(1 - pa)}) has received <b>no returns at all</b>. ${pa === best ? 'The policy happens to be right here, but it could never find out.' : 'The policy is wrong here, and it can never find out: the better action is never tried.'} Switch exploring starts back on.`
+    : !sure ? `Both actions are being tried (${nf(AV.n[1])} hits, ${nf(AV.n[0])} sticks), but the difference, ${f(diff, 3)}, is still within two standard errors (&plusmn;${f(2 * sed, 3)}). The exact gap is ${f(qh - qs, 3)}; ${Math.abs(qh - qs) < 0.03 ? 'a close call like this one needs a great many episodes.' : 'keep going.'}`
+    : `The estimates separate: ${ACT(diff > 0 ? 1 : 0)}ting is better by ${f(Math.abs(diff), 3)} &plusmn; ${f(2 * sed, 3)}, ${(diff > 0) === (qh > qs) ? 'which agrees with the exact values' : 'which, unusually, disagrees with the exact values: a 1-in-20 fluke at two standard errors'}. A greedy step here would ${ACT(diff > 0 ? 1 : 0)}${pa === (diff > 0 ? 1 : 0) ? ', as the policy already does.' : ', changing the policy.'}`.replace('stickting', 'sticking');
+  $('#run-av').innerHTML = `<b>Running example</b>: q&#770;(s, hit) = ${AV.n[1] ? tip(f(mh, 3), nf(AV.n[1]) + ' returns') : '?'} vs exact ${f(qh, 3)}; q&#770;(s, stick) = ${AV.n[0] ? tip(f(ms, 3), nf(AV.n[0]) + ' returns') : '?'} vs exact ${f(qs, 3)}; so &pi;&prime;(s) = argmax = <b>${both ? ACT(diff > 0 ? 1 : 0) : AV.n[1] ? 'hit (by default)' : AV.n[0] ? 'stick (by default)' : '?'}</b>.`;
+}
+$('#av-s').addEventListener('change', e => { AV.s = +e.target.value; avReset(); });
+$('#av-d').addEventListener('change', e => { AV.d = +e.target.value; avReset(); });
+seg1('[data-avu]', 'data-avu', v => { AV.u = +v; avReset(); });
+seg1('[data-avp]', 'data-avp', v => { AV.pol = v; avReset(); });
+seg1('[data-ave]', 'data-ave', v => { AV.ex = +v; avReset(); });
+$('#av-100').addEventListener('click', () => avRun(100)); $('#av-10k').addEventListener('click', () => avRun(10000)); $('#av-0').addEventListener('click', avReset);
+fig($('#av-cv'), drawAV);
+
+/* ---------- learner panels shared by ES, on-policy and off-policy control ---------- */
+function curveDraw(cv, hist) {
+  const C = C0(), N = Math.max(1e4, hist.length ? hist[hist.length - 1][0] : 1e4), lo = Math.log10(1000);
+  const v = frame(cv, [lo, Math.log10(N) + 0.05], [100, 200], { l: 40, r: 48, b: 26 }), c = v.ctx; axes(v, 'episodes (log scale)', 'cells optimal', { sx: 1, sy: 25, fx: logTick });
+  const vy = y => v.Y(100 + (y + 0.12) / 0.08 * 100); // right axis: −0.12 .. −0.04
+  c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.lda; c.textAlign = 'left'; c.textBaseline = 'middle';
+  [-0.12, -0.1, -0.08, -0.06, -0.04].forEach(y => c.fillText(f(y, 2), v.w - v.pad.r + 4, vy(y))); c.restore(); clip(v);
+  c.save(); c.strokeStyle = C.ink; c.setLineDash([6, 4]); c.lineWidth = 1.4; c.beginPath(); c.moveTo(v.pad.l, vy(BJ.V_OPT)); c.lineTo(v.w - v.pad.r, vy(BJ.V_OPT)); c.stroke(); c.restore();
+  const pts = hist.filter(h => h[0] >= 1000);
+  [[1, C.a, h => v.Y(h)], [2, C.lda, vy]].forEach(([j, col, Y]) => { c.save(); c.strokeStyle = col; c.lineWidth = 2.2; c.beginPath(); pts.forEach((h, i) => { const x = v.X(Math.log10(h[0])), y = Y(h[j]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); pts.forEach(h => { c.beginPath(); c.arc(v.X(Math.log10(h[0])), Y(h[j]), 2.6, 0, 7); c.fillStyle = col; c.fill(); }); });
+  c.restore();
+}
+
+/* ---------- 4. Monte Carlo ES ---------- */
+const ES = { L: BJ.learner('es'), r: mulberry32(51), hist: [], view: 'pol', sel: K(16, 0, 10), busy: false };
+const esPt = () => ES.hist.push([ES.L.n, BJ.matches(ES.L.pi), BJ.policyValue(BJ.hitOf(ES.L.pi))]);
+function esRun(n) {
+  if (ES.busy) return; ES.busy = true; busy(['es-1m', 'es-10k', 'es-0'], true);
+  runChunks(n, () => clamp(ES.L.n * 0.35, 1000, 100000), m => { BJ.esRun(ES.L, m, ES.r); esPt(); }, () => drawES(), () => { ES.busy = false; busy(['es-1m', 'es-10k', 'es-0'], false); drawES(); });
+}
+function drawES() {
+  const C = C0(), L = ES.L;
+  if (ES.view === 'pol') grids($('#es-cv'), policyCells(L, BJ.BEST, false), { sel: ES.sel });
+  else grids($('#es-cv'), k => { const n = L.N[2 * k] + L.N[2 * k + 1]; if (!n) return { f: C.soft }; const m = Math.max(L.N[2 * k] ? L.Q[2 * k] : -9, L.N[2 * k + 1] ? L.Q[2 * k + 1] : -9); return { f: divCol(C, m), t: f(m, 2) }; }, { sel: ES.sel });
+  curveDraw($('#es-curve'), ES.hist);
+  const m = BJ.matches(L.pi), val = BJ.policyValue(BJ.hitOf(L.pi)), k = ES.sel, bad = []; for (let j = 0; j < 200; j++) if (L.pi[j] !== BJ.BEST[j]) bad.push(j);
+  $('#es-n').innerHTML = nf(L.n); $('#es-m').innerHTML = tip(m + ' / 200', bad.length ? 'differ: ' + bad.slice(0, 12).map(cellShort).join(', ') + (bad.length > 12 ? ', …' : '') : 'every cell matches the exact optimum');
+  $('#es-v').innerHTML = tip(f(val, 4), `exact expected return per fresh hand of the greedy policy\n(dynamic programming)\noptimum: ${f(BJ.V_OPT, 4)}`);
+  const qh = L.Q[2 * k + 1], qs = L.Q[2 * k], nh = L.N[2 * k + 1], ns = L.N[2 * k];
+  $('#es-q').innerHTML = `${nh ? tip(f(qh, 3), nf(nh) + ' returns') : '–'} &middot; ${ns ? tip(f(qs, 3), nf(ns) + ' returns') : '–'}`;
+  $('#es-cap').innerHTML = (ES.view === 'pol' ? '<span class="key stick">S</span> stick &nbsp;<span class="key hit">H</span> hit, the greedy action; dashed: differs from the exact optimum.' : 'max<sub>a</sub> Q(s, a): the estimated value of each state under the greedy policy.') + ' Rows: your sum; columns: the dealer&rsquo;s card. Click a cell.';
+  $('#es-say').innerHTML = !L.n ? 'The policy starts as &ldquo;stick on 20+&rdquo; and Q is all zeros. Each episode starts at a random state with a random first action, then follows the current greedy policy.'
+    : L.n < 100000 ? `After ${nf(L.n)} episodes, ${m} of 200 cells already match the optimum. The big structure appears first: stick on hard 17+, and stick on hard 13&ndash;16 when the dealer shows a weak 2&ndash;6. ${bad.length ? 'Most remaining errors are close calls such as ' + cellShort(bad[0]) + '.' : ''}`
+    : bad.length ? `${nf(L.n)} episodes: ${m} of 200 cells optimal, and the greedy policy&rsquo;s expected return is ${f(val, 4)} against the optimum ${f(BJ.V_OPT, 4)}, a gap of ${f(val - BJ.V_OPT, 4)} per hand. The ${bad.length} wrong cell${bad.length > 1 ? 's are' : ' is'} ${bad.slice(0, 4).map(cellShort).join(', ')}${bad.length > 4 ? ', …' : ''}: close calls where the two actions differ by a hair, so mistakes cost almost nothing.`
+    : `${nf(L.n)} episodes: every cell matches the exact optimum, which is also the published basic strategy. Nobody gave the agent a single probability.`;
+  const g = qh > qs ? 1 : 0;
+  $('#run-es').innerHTML = `<b>Running example</b>: ${cellShort(k)}: Q(s, hit) = ${nh ? f(qh, 3) : '–'}, Q(s, stick) = ${ns ? f(qs, 3) : '–'}, so &pi;(s) = argmax<sub>a</sub> Q(s, a) = <b>${nh || ns ? ACT(L.pi[k]) : 'stick (start)'}</b>${nh && ns ? ` and max<sub>a</sub> Q(s, a) = ${tip(f(Math.max(qh, qs), 3), 'the value the improvement step guarantees, at least the value of either action')} &ge; ${f(Math.min(qh, qs), 3)}` : ''}. Exact: q*(s, hit) = ${f(BJ.OPT.Q[2 * k + 1], 3)}, q*(s, stick) = ${f(BJ.OPT.Q[2 * k], 3)}${g === BJ.BEST[k] || !(nh && ns) ? '' : ' (the averages still have the order wrong)'}.`;
+}
+$('#es-1m').addEventListener('click', () => esRun(1000000)); $('#es-10k').addEventListener('click', () => esRun(10000));
+$('#es-0').addEventListener('click', () => { ES.L = BJ.learner('es'); ES.hist = []; drawES(); });
+seg1('[data-esv]', 'data-esv', v => { ES.view = v; drawES(); });
+onCell($('#es-cv'), k => { ES.sel = k; drawES(); });
+fig($('#es-cv'), drawES); fig($('#es-curve'), () => curveDraw($('#es-curve'), ES.hist));
+
+/* ---------- 5. on-policy epsilon-soft ---------- */
+const SO = { eps: 0.1, L: BJ.learner('on'), r: mulberry32(61), busy: false, sel: K(18, 1, 9), best: BJ.bestSoft(0.1) };
+const softHit = (pi, e) => { const h = new Float64Array(200); for (let k = 0; k < 200; k++) h[k] = pi[k] ? 1 - e / 2 : e / 2; return h; };
+function soRun(n) { if (SO.busy) return; SO.busy = true; busy(['so-1m', 'so-10k', 'so-0'], true); runChunks(n, () => 100000, m => BJ.onRun(SO.L, m, SO.eps, SO.r), () => drawSO(), () => { SO.busy = false; busy(['so-1m', 'so-10k', 'so-0'], false); drawSO(); }); }
+function drawSO() {
+  const L = SO.L; grids($('#so-cv'), policyCells(L, BJ.BEST, false), { sel: SO.sel });
+  const so = BJ.solve(softHit(L.pi, SO.eps)), vs = BJ.startValue(so), vg = BJ.policyValue(BJ.hitOf(L.pi)), m = BJ.matches(L.pi), e = SO.eps;
+  $('#so-e-o').textContent = fmt(e, 2); $('#so-n').innerHTML = nf(L.n);
+  $('#so-vs').innerHTML = tip(f(vs, 4), `exact expected return of the ε-greedy policy (ε = ${fmt(e, 2)}) that is generating the data`);
+  $('#so-vb').innerHTML = tip(f(SO.best, 4), `the best any ${fmt(e, 2)}-soft policy can do (dynamic programming)`);
+  $('#so-vg').innerHTML = tip(f(vg, 4), `greedy part alone, exploration switched off\n${m} of 200 cells match the optimum; optimum ${f(BJ.V_OPT, 4)}`);
+  $('#so-cap').innerHTML = `The greedy part of the learnt policy (what it does when not exploring); dashed cells differ from the exact optimum: ${m} of 200 match. Click a cell.`;
+  $('#so-say').innerHTML = !L.n ? `Episodes now start from ordinary deals. At every decision the agent explores with probability &epsilon; = ${fmt(e, 2)}, so no special starting states are needed.`
+    : `After ${nf(L.n)} episodes the &epsilon;-greedy policy earns ${f(vs, 4)} per hand, ${Math.abs(vs - SO.best) < 0.002 ? 'essentially' : 'close to'} the best possible for an &epsilon;-soft policy (${f(SO.best, 4)}). That is ${f(BJ.V_OPT - SO.best, 4)} per hand worse than optimal play: the cost of exploring ${pct(e, 0)} of the time. Switch exploration off and its greedy part earns ${f(vg, 4)}${vg > SO.best + 0.005 ? ', far better: deploy the greedy part, not the learner' : ''}. ${m < 195 ? 'The remaining dashed cells are close calls or rarely visited states, mostly with a usable ace, and they are learnt slowly.' : ''}`;
+  const k = SO.sel, qh = so.Q[2 * k + 1], qs = so.Q[2 * k], lhs = (e / 2) * (qh + qs) + (1 - e) * Math.max(qh, qs), vk = so.V[k];
+  $('#run-so').innerHTML = `<b>Running example</b>: ${cellShort(k)}, with the exact q of the current &epsilon;-greedy policy: (&epsilon;/2)(q<sub>hit</sub> + q<sub>stick</sub>) + (1 &minus; &epsilon;) max = (${fmt(e, 2)}/2)(${f(qh, 3)} + ${fp(qs, 3)}) + ${fmt(1 - e, 2)} &times; ${fp(Math.max(qh, qs), 3)} = ${tip('<b>' + f(lhs, 4) + '</b>', 'value of acting ε-greedily w.r.t. q for one step, then following π')} &ge; v<sub>&pi;</sub>(s) = ${tip(f(vk, 4), `π(hit|s) = ${f(so.H[k], 2)}: ${f(so.H[k], 2)} × ${f(qh, 3)} + ${f(1 - so.H[k], 2)} × ${f(qs, 3)}`)}${Math.abs(lhs - vk) < 5e-5 ? ': equal, because here the policy is already greedy with respect to its own q' : ''}.`;
+}
+$('#so-e').addEventListener('input', e => { SO.eps = +e.target.value; SO.L = BJ.learner('on'); SO.best = BJ.bestSoft(SO.eps); drawSO(); });
+$('#so-1m').addEventListener('click', () => soRun(1000000)); $('#so-10k').addEventListener('click', () => soRun(10000));
+$('#so-0').addEventListener('click', () => { SO.L = BJ.learner('on'); drawSO(); });
+onCell($('#so-cv'), k => { SO.sel = k; drawSO(); });
+fig($('#so-cv'), drawSO);
+
+/* ---------- 6. off-policy prediction: ordinary vs weighted IS ---------- */
+const IS = { mode: 'bj', runs: 100, e: 3, seed: 1, res: null };
+const tgt20 = POL['20'], S0 = { s: 13, u: 1, d: 2 };
+function isCompute() {
+  const r = mulberry32(1000 + IS.seed), N = Math.pow(10, IS.e + (IS.mode === 'loop' ? 2 : 0)), pts = []; for (let x = 0; x <= Math.log10(N) + 1e-9; x += 0.05) { const n = Math.round(Math.pow(10, x)); if (!pts.length || n > pts[pts.length - 1]) pts.push(n); }
+  if (IS.mode === 'bj') {
+    const se = { o: new Float64Array(pts.length), w: new Float64Array(pts.length) }, rand = () => (r() < 0.5 ? 0 : 1); let last = null, lastRun = null;
+    for (let run = 0; run < IS.runs; run++) {
+      let num = 0, den = 0, j = 0;
+      for (let i = 1; i <= N; i++) {
+        const G = BJ.play(r, rand, S0); let rho = 1; for (let t = 0; t < BJ.sim.len; t++) rho *= BJ.TA[t] === tgt20[BJ.TR[t]] ? 2 : 0;
+        num += rho * G; den += rho;
+        if (run === 0 && i === N) { last = { G, rho, len: BJ.sim.len, acts: Array.from(BJ.TA.slice(0, BJ.sim.len)) }; lastRun = { num, den, n: i }; }
+        if (i === pts[j]) { const vo = num / i, vw = den ? num / den : 0; se.o[j] += (vo - V20) ** 2; se.w[j] += (vw - V20) ** 2; j++; }
+      }
+    }
+    IS.res = { pts, o: Array.from(se.o, x => x / IS.runs), w: Array.from(se.w, x => x / IS.runs), last, lastRun, N };
+  } else {
+    const R = Math.min(IS.runs, 10), lines = [];
+    for (let run = 0; run < R; run++) {
+      let num = 0, den = 0, j = 0, maxRho = 0; const o = [], w = [];
+      for (let i = 1; i <= N; i++) {
+        let L = 0, ok = true, G = 0;
+        for (;;) { if (r() < 0.5) { ok = false; break; } L++; if (r() < 0.1) { G = 1; break; } }
+        const rho = ok ? Math.pow(2, L) : 0; num += rho * G; den += rho; if (rho > maxRho) maxRho = rho;
+        if (i === pts[j]) { o.push(num / i); w.push(den ? num / den : 0); j++; }
+      }
+      lines.push({ o, w, num, den, maxRho });
+    }
+    IS.res = { pts, lines, N, R };
+  }
+}
+function drawIS() {
+  if (!IS.res) isCompute();
+  const C = C0(), R = IS.res, lx = Math.log10(R.N);
+  $('#is-r-o').textContent = IS.mode === 'loop' ? Math.min(IS.runs, 10) + ' (max 10 here)' : IS.runs; $('#is-n-o').textContent = nf(R.N);
+  if (IS.mode === 'bj') {
+    const v = frame($('#is-cv'), [0, lx + 0.05], [-4, 1], { l: 48, b: 28 }), c = v.ctx; axes(v, 'episodes (log scale)', 'mean squared error (log)', { sx: 1, sy: 1, fx: logTick, fy: y => '10' + SUP(fmt(y, 0)) }); clip(v);
+    [['o', C.b], ['w', C.a]].forEach(([key, col]) => { c.save(); c.strokeStyle = col; c.lineWidth = 2.6; c.beginPath(); R.pts.forEach((n, i) => { const y = v.Y(Math.log10(Math.max(1e-5, R[key][i]))); i ? c.lineTo(v.X(Math.log10(n)), y) : c.moveTo(v.X(Math.log10(n)), y); }); c.stroke(); c.restore(); });
+    if (IS.runs === 100 && R.N >= 1000) [1, 10, 100, 1000].forEach((n, i) => { dot(v, Math.log10(n), Math.log10(PY.is.ordinary[i]), C.b, 4, true); dot(v, Math.log10(n), Math.log10(PY.is.weighted[i]), C.a, 4, true); });
+    v.ctx.restore();
+    const io = R.pts.length - 1, at = n => R.pts.indexOf(n);
+    $('#is-ok').textContent = `ordinary IS: MSE after ${nf(R.N)}`; $('#is-wk').textContent = `weighted IS: MSE after ${nf(R.N)}`;
+    $('#is-o').innerHTML = tip(f(R.o[io], 4), `mean over ${IS.runs} runs of (V_ord − v)²\nv = v_π(13, usable ace, dealer 2) = ${f(V20, 5)}`);
+    $('#is-w').innerHTML = tip(f(R.w[io], 4), `mean over ${IS.runs} runs of (V_wtd − v)²`);
+    $('#is-cap').innerHTML = `<span style="color:var(--cB)">&#9644;</span> ordinary IS &nbsp; <span style="color:var(--cA)">&#9644;</span> weighted IS: mean squared error over ${IS.runs} runs, both axes logarithmic.${IS.runs === 100 && R.N >= 1000 ? ' &#9675; the same experiment run on Gymnasium in Python (100 runs).' : ''}`;
+    const i10 = at(10), i100 = at(100);
+    $('#is-say').innerHTML = `Weighted IS is far more accurate early on: after 10 episodes its MSE is ${f(R.w[i10], 3)} against ${f(R.o[i10], 3)} for ordinary IS. Ordinary IS is unbiased, but a single lucky episode with &rho; = 8 or 16 throws it far off; weighted IS is a weighted average of returns that each lie in [&minus;1, 1], so it can never stray outside that range. Its curve starts low only because, before any episode has followed the target, the estimate is reported as 0, which happens to be near ${f(V20, 2)}. ${R.N >= 1000 ? `By ${nf(R.N)} episodes the two are close (${f(R.o[io], 4)} and ${f(R.w[io], 4)}): weighted IS&rsquo;s bias fades as the data accumulate, and both errors fall roughly as 1/n.` : ''}`;
+    const L = R.last, lr = R.lastRun, acts = L.acts.map(a => (a ? 'hit' : 'stick'));
+    $('#run-is').innerHTML = `<b>Running example</b>: in run 1, episode ${nf(lr.n)}, the coin chose ${acts.join(', ')}; &rho; = ${tip(String(L.rho), `${L.len} decision${L.len > 1 ? 's' : ''}; each contributes π/b = 1/0.5 = 2 if it matches stick-on-20+, else 0`)}, G = ${L.G}. After all ${nf(lr.n)} episodes: V<sub>ord</sub> = ${f(lr.num, 0)} / ${nf(lr.n)} = ${tip('<b>' + f(lr.num / lr.n, 4) + '</b>', 'Σ ρG / number of episodes')}, V<sub>wtd</sub> = ${f(lr.num, 0)} / ${nf(lr.den)} = ${tip('<b>' + f(lr.den ? lr.num / lr.den : 0, 4) + '</b>', 'Σ ρG / Σ ρ')}; truth ${f(V20, 4)}.`;
+  } else {
+    const v = frame($('#is-cv'), [0, lx + 0.05], [0, 3], { l: 40, b: 28 }), c = v.ctx; axes(v, 'episodes (log scale)', 'estimate of v(s)', { sx: 1, sy: 0.5, fx: logTick, fy: y => fmt(y, 1) }); clip(v);
+    R.lines.forEach((ln, q) => { [['o', C.b, 1.4], ['w', C.a, 2]].forEach(([key, col, lw]) => { c.save(); c.strokeStyle = col; c.globalAlpha = key === 'o' ? 0.75 : 0.9; c.lineWidth = lw; c.beginPath(); R.pts.forEach((n, i) => { const y = v.Y(Math.min(3.2, ln[key][i])); i ? c.lineTo(v.X(Math.log10(n)), y) : c.moveTo(v.X(Math.log10(n)), y); }); c.stroke(); c.restore(); }); });
+    seg(v, 0, 1, lx + 0.05, 1, C.ink, 1.6, [6, 4]); v.ctx.restore();
+    const fin = R.lines.map(l => l.num / R.N), lo = Math.min(...fin), hi = Math.max(...fin), mx = Math.max(...R.lines.map(l => l.maxRho));
+    $('#is-ok').textContent = `ordinary IS: final estimates, ${R.R} runs`; $('#is-wk').textContent = 'weighted IS: final estimates';
+    $('#is-o').innerHTML = tip(`${f(lo, 2)}&ndash;${f(hi, 2)}`, `lowest and highest of the ${R.R} runs after ${nf(R.N)} episodes\ntrue value 1`);
+    $('#is-w').innerHTML = tip('1.00', 'every return with nonzero weight equals 1, so the weighted average is exactly 1 once any has arrived');
+    $('#is-cap').innerHTML = `<span style="color:var(--cB)">&#9644;</span> ordinary IS, ${R.R} independent runs &nbsp; <span style="color:var(--cA)">&#9644;</span> weighted IS &nbsp; <span style="color:var(--ink)">- -</span> v<sub>&pi;</sub>(s) = 1. Estimates above 3 are drawn at the top edge.`;
+    $('#is-say').innerHTML = `Even after ${nf(R.N)} episodes the ${R.R} ordinary-IS runs disagree, from ${f(lo, 2)} to ${f(hi, 2)}, and each keeps jumping when a rare long all-left episode arrives with a huge ratio (the largest here: 2<sup>${Math.round(Math.log2(mx))}</sup> = ${nf(mx)}). That is infinite variance in practice: the estimate is unbiased, yet it never settles. Weighted IS sits at exactly 1 after the first episode that followed the target.`;
+    const l0 = R.lines[0];
+    $('#run-is').innerHTML = `<b>Running example</b>: in run 1, &Sigma; &rho;G = ${nf(l0.num)} over ${nf(R.N)} episodes gives V<sub>ord</sub> = ${tip('<b>' + f(l0.num / R.N, 3) + '</b>', 'Σ ρG / n')}; &Sigma; &rho; = ${nf(l0.den)}, so V<sub>wtd</sub> = ${tip('<b>' + f(l0.den ? l0.num / l0.den : 0, 3) + '</b>', 'Σ ρG / Σ ρ')}. The biggest single weight was ${nf(l0.maxRho)}.`;
+  }
+}
+seg1('[data-ism]', 'data-ism', v => { IS.mode = v; IS.res = null; drawIS(); });
+$('#is-r').addEventListener('change', e => { IS.runs = +e.target.value; IS.res = null; drawIS(); }); $('#is-r').addEventListener('input', e => { $('#is-r-o').textContent = IS.mode === 'loop' ? Math.min(+e.target.value, 10) + ' (max 10 here)' : e.target.value; });
+$('#is-n').addEventListener('change', e => { IS.e = +e.target.value; IS.res = null; drawIS(); }); $('#is-n').addEventListener('input', e => { $('#is-n-o').textContent = nf(Math.pow(10, +e.target.value + (IS.mode === 'loop' ? 2 : 0))); });
+$('#is-go').addEventListener('click', () => { IS.seed++; IS.res = null; drawIS(); });
+fig($('#is-cv'), drawIS);
+
+/* ---------- 7. incremental weighted IS ---------- */
+const IN = { r: mulberry32(71), n: 0, C: 0, V: 0, num: 0, ordS: 0, rows: [], hist: [] };
+function inStep(n) {
+  const rand = () => (IN.r() < 0.5 ? 0 : 1);
+  for (let i = 0; i < n; i++) {
+    const G = BJ.playRec(IN.r, rand, S0), len = BJ.sim.len; let W = 1; const acts = [];
+    let s = 13, u = 1, ci = 0; const parts = ['soft 13'];
+    for (let t = 0; t < len; t++) { const a = BJ.TA[t]; W *= a === tgt20[BJ.TR[t]] ? 2 : 0; acts.push(a);
+      if (a) { const cd = BJ.sim.pc[ci++]; if (u) { s += cd; if (s > 21) { s -= 10; u = 0; } } else if (cd === 1 && s + 11 <= 21) { s += 11; u = 1; } else s += cd; parts.push(`hit ${CARD(cd)} &rarr; ${s > 21 ? 'bust' : (u ? 'soft ' : '') + s}`); }
+      else parts.push('stick'); }
+    const V0 = IN.V; IN.n++; IN.C += W; if (W) IN.V += (W / IN.C) * (G - IN.V); IN.num += W * G; IN.ordS += W * G;
+    const dealer = BJ.sim.ds ? `; dealer ${BJ.sim.dc.map(CARD).join(' ')} &rarr; ${BJ.sim.ds > 21 ? 'bust' : BJ.sim.ds}` : '';
+    IN.rows.push({ n: IN.n, play: parts.join(', ') + dealer, G, W, C: IN.C, V0, V: IN.V, ord: IN.ordS / IN.n }); if (IN.rows.length > 8) IN.rows.shift();
+    IN.hist.push([IN.n, IN.V, IN.ordS / IN.n]);
+  }
+  drawIN();
+}
+function drawIN() {
+  const C = C0(), N = Math.max(20, IN.n), v = frame($('#in-cv'), [0, N], [-1.6, 1.2], { l: 40, b: 26 }); axes(v, 'episodes', 'estimate', { ny: 4, fy: y => f(y, 1) }); clip(v);
+  seg(v, 0, V20, N, V20, C.ink, 1.5, [6, 4]);
+  [[1, C.a], [2, C.b]].forEach(([j, col]) => { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = 2.2; c.beginPath(); IN.hist.forEach((h, i) => { const x = v.X(h[0]), y = v.Y(clamp(h[j], -1.6, 1.2)); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.restore(); });
+  v.ctx.restore();
+  $('#in-tbl').innerHTML = '<thead><tr><th>#</th><th>episode (behaviour tosses a coin)</th><th>G</th><th>W = &rho;</th><th>C</th><th>V (weighted)</th><th>ordinary</th></tr></thead><tbody>' + (IN.rows.length ? IN.rows.map(x => `<tr${x.W ? '' : ' class="z"'}><td class="num">${x.n}</td><td class="play">${x.play}</td><td class="num">${fs(x.G, 0).replace('+0', '0')}</td><td class="num">${x.W}</td><td class="num">${nf(x.C)}</td><td class="num">${x.W ? tip(f(x.V, 4), `${f(x.V0, 4)} + (${x.W}/${nf(x.C)}) × (${x.G} − ${f(x.V0, 4)})`) : f(x.V, 4)}</td><td class="num">${f(x.ord, 4)}</td></tr>`).join('') : '<tr><td colspan="7">Press &ldquo;Next episode&rdquo;.</td></tr>') + '</tbody>';
+  const batch = IN.C ? IN.num / IN.C : 0;
+  $('#in-n').innerHTML = nf(IN.n); $('#in-c').innerHTML = tip(nf(IN.C), 'sum of all weights W so far'); $('#in-v').innerHTML = tip(f(IN.V, 6), 'incremental: V ← V + (W/C)(G − V)');
+  $('#in-b').innerHTML = tip(f(batch, 6), `Σ WG / Σ W = ${nf(IN.num)} / ${nf(IN.C)}\nthe batch formula of the previous section`);
+  const last = IN.rows[IN.rows.length - 1];
+  $('#in-say').innerHTML = !IN.n ? 'Each episode starts from soft 13 against a dealer&rsquo;s 2. The behaviour policy tosses a coin at every decision; the target policy, &ldquo;stick on 20+&rdquo;, would hit until 20.'
+    : `${last.W ? `The last episode followed the target policy all the way, so its weight is ${last.W} and it moved V by ${f(last.V - last.V0, 4)}.` : 'The last episode did something the target policy never would, so its weight is 0 and it changed nothing (greyed rows).'} ${nf(IN.rows.length ? IN.n : 0)} episodes so far; the incremental value ${f(IN.V, 6)} and the batch formula ${f(batch, 6)} agree${Math.abs(IN.V - batch) < 1e-12 ? ' exactly' : ' to ' + f(Math.abs(IN.V - batch), 12)}, without any returns being stored.`;
+  $('#run-in').innerHTML = last ? `<b>Running example</b>: episode ${last.n}: C = ${nf(last.C - last.W)} + ${last.W} = ${nf(last.C)}; ${last.W ? `V = ${f(last.V0, 4)} + (${last.W}/${nf(last.C)})(${last.G} &minus; ${fp(last.V0, 4)}) = ${tip('<b>' + f(last.V, 4) + '</b>', 'weighted IS, incremental')}` : `W = 0, so V stays ${f(last.V, 4)}`}.` : '<b>Running example</b>: no episodes yet; C<sub>0</sub> = 0 and V is undefined (shown as 0).';
+}
+$('#in-1').addEventListener('click', () => inStep(1)); $('#in-10').addEventListener('click', () => inStep(10)); $('#in-100').addEventListener('click', () => inStep(100));
+$('#in-0').addEventListener('click', () => { Object.assign(IN, { n: 0, C: 0, V: 0, num: 0, ordS: 0, rows: [], hist: [] }); drawIN(); });
+fig($('#in-cv'), drawIN);
+
+/* ---------- 8. off-policy MC control ---------- */
+const OC = { eps: 0.3, L: BJ.learner('off'), r: mulberry32(81), busy: false, sel: K(16, 0, 10) };
+function ocRun(n) { if (OC.busy) return; OC.busy = true; busy(['oc-1m', 'oc-10k', 'oc-0'], true); runChunks(n, () => 100000, m => BJ.offRun(OC.L, m, OC.eps, OC.r), () => drawOC(), () => { OC.busy = false; busy(['oc-1m', 'oc-10k', 'oc-0'], false); drawOC(); }); }
+function drawOC() {
+  const L = OC.L; grids($('#oc-cv'), policyCells(L, BJ.BEST, false), { sel: OC.sel });
+  const m = BJ.matches(L.pi), val = BJ.policyValue(BJ.hitOf(L.pi)), use = L.steps ? L.used / L.steps : 0, e = OC.eps;
+  $('#oc-e-o').textContent = fmt(e, 2); $('#oc-n').innerHTML = nf(L.n); $('#oc-m').innerHTML = tip(m + ' / 200', 'greedy target policy vs the exact optimum');
+  $('#oc-v').innerHTML = tip(f(val, 4), `exact expected return of the greedy target policy\noptimum ${f(BJ.V_OPT, 4)}`);
+  $('#oc-u').innerHTML = L.steps ? tip(pct(use, 1), `${nf(L.used)} of ${nf(L.steps)} decisions were inside an episode's tail\n(after the last non-greedy action) and so updated Q`) : '–';
+  $('#oc-cap').innerHTML = `The greedy target policy &pi;; dashed cells differ from the exact optimum. The behaviour policy is &epsilon;-greedy with &epsilon; = ${fmt(e, 2)}${e >= 0.999 ? ', which is uniformly random' : ''}. Click a cell.`;
+  $('#oc-say').innerHTML = !L.n ? 'Press a button. Episodes come from ordinary deals played by the behaviour policy; the target policy is never played at all.'
+    : `After ${nf(L.n)} episodes the target policy matches the optimum in ${m} of 200 cells and earns ${f(val, 4)} per hand (optimum ${f(BJ.V_OPT, 4)}). Of all decisions, ${pct(use, 1)} fed an update; the rest came before a non-greedy action and were discarded. ${e >= 0.999 ? 'With a random behaviour policy half of all decisions are non-greedy, yet blackjack hands are so short that most decisions still sit in a tail.' : e < 0.15 ? 'With so little exploration, rarely chosen actions get few weighted returns, and their Q values stay unreliable.' : 'In a task with long episodes this share would collapse, which is the method&rsquo;s weakness.'}`;
+  const k = OC.sel;
+  $('#run-oc').innerHTML = `<b>Running example</b>: ${cellShort(k)}: C(s, hit) = ${tip(f(L.N[2 * k + 1], 1), 'total importance weight of the returns used for this pair')}, Q(s, hit) = ${f(L.Q[2 * k + 1], 3)}; C(s, stick) = ${f(L.N[2 * k], 1)}, Q(s, stick) = ${f(L.Q[2 * k], 3)}; so &pi;(s) = <b>${ACT(L.pi[k])}</b>. When b takes the greedy action here, the weight for earlier steps is divided by b = ${fmt(1 - e / 2, 3)} (multiplied by ${fmt(1 / (1 - e / 2), 3)}).`;
+}
+$('#oc-e').addEventListener('input', e => { OC.eps = +e.target.value; OC.L = BJ.learner('off'); drawOC(); });
+$('#oc-1m').addEventListener('click', () => ocRun(1000000)); $('#oc-10k').addEventListener('click', () => ocRun(10000));
+$('#oc-0').addEventListener('click', () => { OC.L = BJ.learner('off'); drawOC(); });
+onCell($('#oc-cv'), k => { OC.sel = k; drawOC(); });
+fig($('#oc-cv'), drawOC);
+
+/* ---------- 9. discounting-aware and per-decision IS on a corridor ---------- */
+const PD = { T: 10, g: 0.9, b: 0.5, seed: 5, M: 20000 };
+function pdExact(T, g, b) { // all three estimators depend only on K, the number of leading forward steps
+  let v = 0; for (let k = 0; k < T; k++) v += Math.pow(g, k);
+  const mom = { o: [0, 0], d: [0, 0], p: [0, 0] };
+  for (let K2 = 0; K2 <= T; K2++) {
+    const pK = K2 < T ? Math.pow(b, K2) * (1 - b) : Math.pow(b, T);
+    const xo = K2 === T ? Math.pow(b, -T) * v : 0;
+    let xp = 0; for (let k = 0; k < K2; k++) xp += Math.pow(g, k) * Math.pow(b, -(k + 1));
+    let xd = 0; for (let h = 1; h <= Math.min(K2, T - 1); h++) xd += (1 - g) * Math.pow(g, h - 1) * Math.pow(b, -h) * h; if (K2 === T) xd += Math.pow(g, T - 1) * Math.pow(b, -T) * T;
+    [['o', xo], ['d', xd], ['p', xp]].forEach(([key, x]) => { mom[key][0] += pK * x; mom[key][1] += pK * x * x; });
+  }
+  const sd = key => Math.sqrt(Math.max(0, mom[key][1] - mom[key][0] ** 2));
+  return { v, mean: { o: mom.o[0], d: mom.d[0], p: mom.p[0] }, sd: { o: sd('o'), d: sd('d'), p: sd('p') } };
+}
+function pdSim(T, g, b, M, r) { // generic: simulate episodes and apply each estimator's definition
+  const acc = { o: [0, 0], d: [0, 0], p: [0, 0] }, rho = new Float64Array(T), R = new Float64Array(T);
+  for (let m = 0; m < M; m++) {
+    for (let t = 0; t < T; t++) { const fw = r() < b; rho[t] = fw ? 1 / b : 0; R[t] = fw ? 1 : 0; }
+    let P = 1, G = 0, gk = 1; for (let t = 0; t < T; t++) { P *= rho[t]; G += gk * R[t]; gk *= g; }
+    const xo = P * G;
+    let xp = 0; for (let t = T - 1; t >= 0; t--) xp = rho[t] * (R[t] + g * xp);
+    let xd = 0, Pr = 1, flat = 0; for (let h = 1; h <= T; h++) { Pr *= rho[h - 1]; flat += R[h - 1]; if (h < T) xd += (1 - g) * Math.pow(g, h - 1) * Pr * flat; else xd += Math.pow(g, T - 1) * Pr * flat; }
+    [['o', xo], ['d', xd], ['p', xp]].forEach(([key, x]) => { acc[key][0] += x; acc[key][1] += x * x; });
+  }
+  const out = {}; for (const key of ['o', 'd', 'p']) { const mu = acc[key][0] / M, va = Math.max(0, acc[key][1] / M - mu * mu); out[key] = { mu, sd: Math.sqrt(va * M / (M - 1)), se: Math.sqrt(va / M) }; }
+  return out;
+}
+function drawPD() {
+  const C = C0(), { T, g, b } = PD, E = pdExact(T, g, b), Sm = pdSim(T, g, b, PD.M, mulberry32(PD.seed * 1000 + T * 37 + Math.round(g * 100) + Math.round(b * 1000)));
+  const keys = [['o', 'ordinary IS', C.b], ['d', 'discounting-aware', C.c], ['p', 'per-decision', C.a]], cv = $('#pd-cv'), narrow = cv.getBoundingClientRect().width < 520;
+  const hi = Math.max(2, Math.ceil(Math.log10(Math.max(E.sd.o, E.sd.d, E.sd.p, 1)) + 0.6)), lo = -2;
+  const v = frame(cv, [lo, hi], [0, 3], { l: 22, r: 16, t: 12, b: 30 }), c = v.ctx; axes(v, narrow ? 's.d. (log scale)' : 'standard deviation of one episode’s estimate (log scale)', '', { sx: hi - lo > 8 ? 2 : 1, sy: 10, fx: x => '10' + SUP(fmt(x, 0)), fy: () => '' });
+  keys.forEach(([key, name, col], i) => {
+    const y0 = v.pad.t + (i + 0.18) * v.ph / 3, bh = v.ph / 3 * 0.34, sdE = E.sd[key], sdS = Sm[key].sd;
+    c.save(); c.font = (narrow ? '600 11.5px ' : '600 12.5px ') + css('--f-body'); c.fillStyle = C.ink; c.textBaseline = 'top'; c.fillText(name, v.pad.l + 4, y0 - 2);
+    c.font = (narrow ? '10.5px ' : '11.5px ') + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'right';
+    c.fillText(`mean ${f(Sm[key].mu, 2)} ± ${f(2 * Sm[key].se, 2)}`, v.w - v.pad.r - 4, y0 - 2); c.restore();
+    const xb = v.X(clamp(Math.log10(Math.max(sdE, 1e-9)), lo, hi)); c.fillStyle = col; c.globalAlpha = 0.85; c.fillRect(v.X(lo), y0 + 18, Math.max(2, xb - v.X(lo)), bh); c.globalAlpha = 1;
+    const xs = sdS > 0 ? clamp(Math.log10(sdS), lo, hi) : lo; c.beginPath(); c.arc(v.X(xs), y0 + 18 + bh / 2, 5.5, 0, 7); if (sdS > 0) { c.fillStyle = C.ink; c.fill(); } else { c.strokeStyle = C.ink; c.lineWidth = 1.6; c.stroke(); }
+    c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.ink; c.textBaseline = 'middle'; const lab = 'exact ' + big(sdE); c.font = '600 11px ' + css('--f-mono'); const lw2 = c.measureText(lab).width; if (xb - v.X(lo) > lw2 + 14) { c.fillStyle = '#fff'; c.textAlign = 'right'; c.fillText(lab, xb - 6, y0 + 18 + bh / 2); } else { c.textAlign = 'left'; c.fillText(lab, xb + 12, y0 + 18 + bh / 2); } c.restore();
+  });
+  $('#pd-t-o').textContent = T; $('#pd-g-o').textContent = fmt(g, 2); $('#pd-b-o').textContent = fmt(b, 2);
+  $('#pd-v').innerHTML = tip(f(E.v, 3), `1 + γ + … + γ^(T−1), T = ${T}, γ = ${fmt(g, 2)}\nexact means of the three estimators: ${f(E.mean.o, 4)}, ${f(E.mean.d, 4)}, ${f(E.mean.p, 4)}`);
+  const sdTip = key => `exact, summing over K = number of leading forward steps (0..T)\nsimulated over ${nf(PD.M)} episodes: ${f(Sm[key].sd, 3)}`;
+  $('#pd-so').innerHTML = tip(big(E.sd.o), sdTip('o')); $('#pd-sd').innerHTML = tip(big(E.sd.d), sdTip('d')); $('#pd-sp').innerHTML = tip(big(E.sd.p), sdTip('p'));
+  const pAll = Math.pow(b, T), none = Sm.o.sd === 0;
+  $('#pd-say').innerHTML = `${T === 1 ? 'With a single step all three estimators are the same: &rho;<sub>0</sub>R<sub>1</sub>.' : g === 0 ? 'With &gamma; = 0 only the first reward counts. Discounting-aware and per-decision IS both reduce to &rho;<sub>0</sub>R<sub>1</sub>, while ordinary IS still multiplies by all ' + T + ' ratios.' : g === 1 ? 'With &gamma; = 1 there is no discounting to exploit, so discounting-aware IS is ordinary IS again; per-decision IS still helps, because each reward carries only the ratios before it.' : `Ordinary IS has standard deviation ${big(E.sd.o)}, discounting-aware ${f(E.sd.d, 1)} and per-decision ${f(E.sd.p, 1)}, for a value of ${f(E.v, 2)}.`} Ordinary IS keeps a return only if all ${T} behaviour actions matched the target, which happens with probability &beta;<sup>T</sup> = ${pAll < 1e-3 ? '1 in ' + big(1 / pAll) : f(pAll, 3)}, and then multiplies it by 1/&beta;<sup>T</sup> = ${big(1 / pAll)}.${none ? ` Not one of the ${nf(PD.M)} simulated episodes did, so its simulated mean is 0 and its spread is 0 (hollow dot): unbiased in theory, useless in practice.` : ''}`;
+  $('#run-pd').innerHTML = `<b>Running example</b>: (T = ${T}, &gamma; = ${fmt(g, 2)}, &beta; = ${fmt(b, 2)}): an episode whose first two actions were forward and third was back has &rho; = 1/&beta;, 1/&beta;, 0, &hellip; Ordinary IS: &rho;<sub>0:T&minus;1</sub>G = 0. Per-decision: &rho;<sub>0</sub>R<sub>1</sub> + &gamma;&rho;<sub>0:1</sub>R<sub>2</sub> = ${fmt(1 / b, 2)} + ${fmt(g, 2)} &times; ${fmt(1 / b / b, 2)} = ${tip('<b>' + f(1 / b + g / b / b, 3) + '</b>', 'the first two rewards survive with their own ratios; everything after the back step is 0')}${T > 2 ? `. Discounting-aware: (1&minus;&gamma;)[&rho;<sub>0</sub>&middot;1 + &gamma;&rho;<sub>0:1</sub>&middot;2] = ${tip('<b>' + f((1 - g) * (1 / b + g * 2 / b / b), 3) + '</b>', 'flat partial returns 1 and 2, each with the ratios up to its horizon')}` : ''}.`;
+}
+['t', 'g', 'b'].forEach(id => $('#pd-' + id).addEventListener('input', e => { PD[{ t: 'T', g: 'g', b: 'b' }[id]] = +e.target.value; drawPD(); }));
+fig($('#pd-cv'), drawPD);
+
+/* ---------- project ---------- */
+const PJ = { method: 'es', n: 300000, res: [], cur: null, busy: false, sim: null };
+function pjCheck() {
+  const rows = [['stick on 20+', POL['20'], PY.sim.stick20], ['dealer&rsquo;s rule: stick on 17+', POL['17'], null], ['optimal policy (= basic strategy)', POL.opt, PY.sim.optimal]];
+  $('#pj-check').innerHTML = '<thead><tr><th>policy</th><th>exact (dynamic programming)</th><th>browser simulation</th><th>Gymnasium, 50,000 hands (Python)</th></tr></thead><tbody>' + rows.map(([n, p, py], i) => {
+    const ex = BJ.policyValue(p), s = PJ.sim && PJ.sim[i];
+    return `<tr><td><b>${n}</b></td><td class="num">${tip(f(ex, 4), 'expected return per hand, exact')}</td><td class="num">${s ? tip(`${f(s[0], 4)} &plusmn; ${f(s[1], 4)}`, `mean return over ${nf(s[2])} hands ± 1 standard error\n${f(Math.abs(s[0] - ex) / s[1], 1)} SE from exact`) : 'press the button'}</td><td class="num">${py ? tip(`${f(py[0], 4)} &plusmn; ${f(py[1], 4)}`, `${f(Math.abs(py[0] - ex) / py[1], 1)} SE from exact`) : '&mdash;'}</td></tr>`; }).join('') + '</tbody>';
+}
+function pjSim() {
+  $('#pj-sim').disabled = true; $('#pj-simp').textContent = 'Playing…';
+  setTimeout(() => { const t = performance.now(), r = mulberry32(90210), N = 1000000;
+    PJ.sim = [POL['20'], POL['17'], POL.opt].map(p => { let s = 0, q = 0; const act = k => p[k]; for (let i = 0; i < N; i++) { const G = BJ.play(r, act); s += G; q += G * G; } const m = s / N; return [m, Math.sqrt((q / N - m * m) / (N - 1)), N]; });
+    $('#pj-simp').textContent = `3,000,000 hands in ${fmt(performance.now() - t, 0)} ms.`; $('#pj-sim').disabled = false; pjCheck(); }, 20);
+}
+const MNAME = { es: 'Monte Carlo ES', on: 'on-policy, ε = 0.1 (greedy part)', off: 'off-policy, random behaviour' };
+function pjLearn() {
+  if (PJ.busy) return; PJ.busy = true; $('#pj-go').disabled = true;
+  const L = BJ.learner(PJ.method), r = mulberry32(4242 + PJ.res.length), meth = PJ.method, N = PJ.n, t = performance.now();
+  runChunks(N, () => 200000, m => { if (meth === 'es') BJ.esRun(L, m, r); else if (meth === 'on') BJ.onRun(L, m, 0.1, r); else BJ.offRun(L, m, 1, r); }, (d, tt) => { $('#pj-prog').textContent = `${nf(d)} / ${nf(tt)} episodes…`; },
+    () => { const res = { meth, N, pi: Uint8Array.from(L.pi), agree: agreeBasic(L.pi), v: BJ.policyValue(BJ.hitOf(L.pi)), ms: performance.now() - t }; PJ.res.push(res); PJ.cur = res; PJ.busy = false; $('#pj-go').disabled = false;
+      $('#pj-prog').textContent = `${nf(N)} episodes in ${fmt(res.ms / 1000, 1)} s.`; drawPJ(); pjBoard(); });
+}
+function drawPJ() {
+  const C = C0(), R = PJ.cur;
+  grids($('#pj-bs'), k => ({ f: BASICPI[k] ? C.b : C.a, a: 0.9, t: BASICPI[k] ? 'H' : 'S', tc: '#fff' }));
+  if (!R) { grids($('#pj-cv'), () => ({ f: C.soft })); $('#pj-cap').textContent = 'Learning…'; return; }
+  grids($('#pj-cv'), k => ({ f: R.pi[k] ? C.b : C.a, a: 0.9, ring: R.pi[k] !== BASICPI[k], t: R.pi[k] ? 'H' : 'S', tc: '#fff' }));
+  const d = []; for (let k = 0; k < 200; k++) if (R.pi[k] !== BASICPI[k]) d.push(k);
+  $('#pj-cap').innerHTML = `Learnt by ${MNAME[R.meth]} from ${nf(R.N)} simulated hands: ${tip(R.agree + ' of 200', d.length ? 'differs on ' + d.map(cellShort).join(', ') : 'identical to the published table')} cells agree with the published table; dashed cells differ.`;
+}
+function pjBoard() {
+  const ref = [['exact optimum (dynamic programming)', POL.opt, BJ.BEST], ['published basic strategy, hit/stand', BJ.hitOf(BASICPI), BASICPI], ['stick on 20+ (where control starts)', POL['20'], null], ['dealer&rsquo;s rule: stick on 17+', POL['17'], null]];
+  const agreeOf = (h, pi) => { if (pi) return agreeBasic(pi); let m = 0; for (let k = 0; k < 200; k++) if ((h[k] > 0.5 ? 1 : 0) === BASICPI[k]) m++; return m; };
+  const diffs = pi => { const d = []; for (let k = 0; k < 200; k++) if (pi[k] !== BASICPI[k]) d.push(cellShort(k)); return d.length ? d.join(', ') : 'none'; };
+  const pyPi = new Uint8Array(200); Object.entries(PY.es.pi).forEach(([key, a]) => { const [s, u, d] = key.split(',').map(Number); pyPi[K(s, u, d)] = a; });
+  const row = (name, agree, v, dd, cls) => `<tr${cls ? ' class="' + cls + '"' : ''}><td><b>${name}</b></td><td class="num">${agree} / 200</td><td class="num">${tip(f(v, 4), 'exact expected return per hand\n(dynamic programming on the learnt policy)')}</td><td class="num">${pct(-v, 2)}</td><td class="wrap2">${dd}</td></tr>`;
+  $('#pj-board').innerHTML = '<thead><tr><th>strategy</th><th>agrees with basic strategy</th><th>expected return per hand</th><th>house edge</th><th>cells that differ from basic strategy</th></tr></thead><tbody>'
+    + PJ.res.map(R => row(`${MNAME[R.meth]}, ${nk(R.N)} hands (browser)`, R.agree, R.v, diffs(R.pi), R === PJ.cur ? 'win' : '')).join('')
+    + row('Monte Carlo ES, 300k hands, on Gymnasium (Python)', agreeBasic(pyPi), PY.es.v, diffs(pyPi))
+    + ref.map(([n, h, pi]) => row(n, agreeOf(h, pi), BJ.policyValue(h), pi ? diffs(pi) : '&mdash;')).join('') + '</tbody>';
+  const R = PJ.cur;
+  $('#pj-say').innerHTML = R ? `Learnt from nothing but simulated hands, ${MNAME[R.meth]} agrees with the published basic strategy on ${R.agree} of 200 cells after ${nf(R.N)} episodes, and its expected return, ${f(R.v, 4)} per hand, is within ${f(R.v - BJ.V_OPT, 4)} of perfect play. The exact optimum for these rules and the published table agree on all 200 cells, even though the table was computed for a 4&ndash;8 deck game in which the dealer hits soft 17. Even perfect play loses ${pct(-BJ.V_OPT, 2)} of each stake here, because this game has no doubling or splitting and pays a natural only even money. Try 5M episodes of Monte Carlo ES, and compare the off-policy learner, which never once played the policy it learnt.` : '';
+}
+seg1('[data-pjm]', 'data-pjm', v => { PJ.method = v; });
+seg1('[data-pjn]', 'data-pjn', v => { PJ.n = +v; });
+$('#pj-go').addEventListener('click', pjLearn); $('#pj-sim').addEventListener('click', pjSim);
+fig($('#pj-cv'), drawPJ); fig($('#pj-bs'), drawPJ);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+wyDeal(200); prDeal(20000); lpEp(3); avRun(300); BJ.esRun(ES.L, 2000, ES.r); esPt(); BJ.esRun(ES.L, 8000, ES.r); esPt(); BJ.esRun(ES.L, 20000, ES.r); esPt(); BJ.onRun(SO.L, 200000, SO.eps, SO.r); inStep(16); BJ.offRun(OC.L, 50000, OC.eps, OC.r);
+redrawAll(); pjCheck();
+setTimeout(() => { pjLearn(); pjSim(); }, 300);
+window.__x069 = { BJ, HERO, WY, PR, LP, AV, ES, SO, IS, IN, OC, PD, PJ, pdExact, pdSim, isCompute, agreeBasic, BASICPI };
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

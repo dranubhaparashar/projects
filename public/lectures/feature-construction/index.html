@@ -1,0 +1,1498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on feature construction for linear reinforcement learning: why a value function linear in its weights can still be curved in the state, polynomial features and their exploding count, the Fourier cosine basis with per-feature step sizes, a live race between polynomials and cosines on the 1000-state random walk, coarse coding with receptive fields you can teach by clicking, tile coding with offset tilings and tile shapes, hashing, and a Mountain Car project solved by semi-gradient Sarsa with tile coding and Fourier features, reproducing Gymnasium and Python step for step.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Feature Construction for Linear RL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.hillplot { aspect-ratio: 4 / 1; }
+.panel .hillplot { margin-bottom: 6px; }
+.seg-wrap { border-radius: 14px; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+#pj-sim td.num { font-size: 0.82rem; }
+@media (max-width: 560px) { .plot.ar-16x10 { aspect-ratio: 1.15 / 1; } .plot.tall2 { aspect-ratio: 0.8 / 1; } .hillplot { aspect-ratio: 3 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Features for linear RL <span>&middot; where the knowledge goes</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Linear in w</a>
+      <a href="#poly">Polynomials</a>
+      <a href="#fourier">Fourier</a>
+      <a href="#race">The race</a>
+      <a href="#coarse">Coarse coding</a>
+      <a href="#tile">Tile coding</a>
+      <a href="#hash">Hashing</a>
+      <a href="#project">Mountain Car project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Reinforcement learning &amp; decision making &middot; chapter 3.1j &middot; feature construction</div>
+      <h1>Feature Construction for Linear RL</h1>
+      <div class="sub">Polynomials, Fourier cosines, coarse coding and tile coding</div>
+      <p class="lead">A linear value function is a weighted sum of features, so it can only ever be as good as the features you hand it. Choosing them is where your knowledge of the problem goes in. On the right is Mountain Car: an underpowered car must rock back and forth to escape a valley. The map is the car&rsquo;s state, position across and velocity up, shaded by how many steps a learner believes it still needs. That learner is a plain weighted sum over 8 overlapping grids of tiles, trained in your browser a moment ago. <strong>Touch anywhere on the map</strong> to drop the car in that state and watch it drive itself out.</p>
+      <dl class="facts">
+        <div><dt>The model</dt><dd>v&#770;(s, w) = w &middot; x(s): linear in the weights, as curved as you like in the state</dd></div>
+        <div><dt>The toolkit</dt><dd>Polynomials, Fourier cosines, overlapping circles, offset tilings, hashing</dd></div>
+        <div><dt>The test</dt><dd>Mountain Car, solved by tile coding and by Fourier features, checked against Gymnasium</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot ar-16x10"><canvas id="hero-cv" aria-label="Mountain Car state space shaded by estimated steps to the goal; touch to start the car"></canvas></div>
+      <div class="plot hillplot" style="margin-top:8px"><canvas id="hero-hill" aria-label="The valley with the car driving out"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>9 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Linear in the weights</a></li>
+    <li><a href="#poly"><i>02</i>Polynomial features</a></li>
+    <li><a href="#fourier"><i>03</i>The Fourier basis</a></li>
+    <li><a href="#race"><i>04</i>Polynomials vs cosines</a></li>
+    <li><a href="#coarse"><i>05</i>Coarse coding</a></li>
+    <li><a href="#tile"><i>06</i>Tile coding</a></li>
+    <li><a href="#hash"><i>07</i>Hashing</a></li>
+    <li><a href="#project"><i>08</i>Mountain Car project</a></li>
+    <li><a href="#summary"><i>09</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The idea</div>
+    <h2>Linear in the weights, not in the state</h2>
+    <div class="prose">
+      <p>The last chapter fitted value functions of the form v&#770;(s, w) = w &middot; x(s). Everything about that model is linear <em>in w</em>: the gradient is just x(s), semi-gradient TD has a single fixed point, and LSTD solves for it directly. Nothing forces it to be linear <em>in the state</em>. The feature vector x(s) can bend, multiply and chop the raw state numbers in any way you like, and the curvature of v&#770; is exactly the curvature you built into x.</p>
+      <p>The catch is that a linear model cannot invent what its features leave out. In Mountain Car, how urgently you need to push depends on position and velocity <em>together</em>: a car near the bottom moving fast is in a very different place from one near the bottom standing still. With only the raw numbers as features, v&#770; is a tilted plane and can represent no such interaction. Below, the target is the real thing: the fewest steps to the flag from every state, worked out (approximately) by value iteration on a 91 &times; 71 grid in your browser. <strong>Swap feature sets</strong> and see how close the best possible weighted sum comes. Drag the ring to read off a single state.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \hat v(s,\mathbf w) &= \mathbf w^{\top}\mathbf x(s) \\ &= \sum_{i=1}^{d} w_i\,x_i(s) \\ \nabla_{\mathbf w}\hat v(s,\mathbf w) &= \mathbf x(s) \end{aligned} \]</div><div class="read"><b>Read it as:</b> a state s is turned into d numbers x<sub>1</sub>(s) &hellip; x<sub>d</sub>(s), its features; the estimate is their weighted sum. Because the weights enter only by multiplication, the gradient with respect to w is the feature vector itself, whatever the features are. Here the weights are chosen by least squares over all 6,461 grid states, the best any learning rule could hope to reach with these features.</div><div class="eq-say"><b>Say it</b><em>&ldquo;v-hat of s is w transpose x of s, the sum of w-i times x-i of s; its gradient in w is x of s.&rdquo;</em></div><div class="eq-run" id="run-wy"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall2"><canvas id="wy-cv" aria-label="Left: the true steps-to-goal surface; right: the best fit with the chosen features"></canvas></div><figcaption>Left (top on a phone): fewest steps to the flag (value iteration). Right (bottom): the least-squares fit with your features, on the same colour scale. Deeper colour = more steps. The ring marks the state read off below.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <span class="mini-h">Feature set (s scaled to [0, 1]&sup2;)</span>
+        <div class="seg seg-wrap" role="group" aria-label="Feature set"><button type="button" data-wyf="raw" aria-pressed="true">1, p, v</button><button type="button" data-wyf="prod">+ p&middot;v</button><button type="button" data-wyf="p2">Polynomial, n = 2</button><button type="button" data-wyf="p4">Polynomial, n = 4</button><button type="button" data-wyf="f4">Fourier, n = 4</button><button type="button" data-wyf="f8">Fourier, n = 8</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="wy-d"></div><div class="k">features d</div></div><div class="stat"><div class="v" id="wy-rmse"></div><div class="k">RMS error (steps)</div></div><div class="stat"><div class="v" id="wy-r2"></div><div class="k">variance explained</div></div><div class="stat"><div class="v" id="wy-pt"></div><div class="k">at the ring: fit vs truth</div></div></div>
+        <p class="note" id="wy-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- POLY -->
+<section class="chap" id="poly">
+  <div class="wrap">
+    <div class="tag">Recipe 1</div>
+    <h2>Polynomial features</h2>
+    <div class="prose">
+      <p>The most familiar way to add curvature is to multiply the state variables together and raise them to powers, exactly as in polynomial regression. For a state with k numbers s<sub>1</sub>, &hellip;, s<sub>k</sub> (each scaled to [0, 1]), an <em class="term">order-n polynomial basis</em> contains every product in which each variable appears with a power from 0 to n. Order 1 in two dimensions gives 1, s<sub>1</sub>, s<sub>2</sub> and the interaction s<sub>1</sub>s<sub>2</sub>; order 2 adds the squares and their products, nine features in all.</p>
+      <p>Two problems appear quickly. The count explodes with the number of state variables, so in practice you keep only a hand-picked subset. And the high powers all look alike: on [0, 1], s<sup>9</sup> and s<sup>10</sup> are both flat near 0 and shoot up near 1, so their columns are almost parallel. Least squares copes, but a gradient method creeps along those nearly parallel directions, as the race below will show. The target here is the true value of the 1,000-state random walk from the previous chapter. <strong>Raise the order</strong>, watch the fit and the basis, then add dimensions to see the bill.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} x_i(s) &= \prod_{j=1}^{k} s_j^{\,c_{i,j}} \\ c_{i,j} &\in \{0, 1, \dots, n\} \end{aligned} \]</div><div class="read"><b>Read it as:</b> feature i is a product of the state variables, variable j raised to the power c<sub>i,j</sub>. Each feature is one choice of the k exponents. All exponents 0 gives the constant feature 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;x-i of s is the product over j of s-j to the power c-i-j, each c between zero and n.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ d = (n+1)^{k} \]</div><div class="read"><b>Read it as:</b> each of the k variables picks one of n + 1 powers independently, so the full basis has (n + 1)<sup>k</sup> features. It grows exponentially with the number of state variables k.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The number of features is n plus one to the power k.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-po" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="po-cv" aria-label="True value of the random walk and the polynomial least-squares fit"></canvas></div><figcaption><span style="color:var(--muted)">- -</span> true value v(s) &nbsp; <span style="color:var(--cA)">&#9644;</span> best order-n polynomial (least squares over the 1,000 states). Click the plot to move the marker.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="po-basis" aria-label="The polynomial basis functions"></canvas></div><figcaption>The basis functions 1, s, s&sup2;, &hellip;, s<sup>n</sup> on [0, 1]; the two highest powers are drawn darker.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="po-n">Order n</label><output id="po-n-o"></output></div><input type="range" id="po-n" min="0" max="10" step="1" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="po-k">State variables k (for the count)</label><output id="po-k-o"></output></div><input type="range" id="po-k" min="1" max="8" step="1" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="po-cnt"></div><div class="k">features (n+1)<sup>k</sup></div></div><div class="stat"><div class="v" id="po-rmse"></div><div class="k">RMS error of the fit</div></div><div class="stat"><div class="v" id="po-cos"></div><div class="k">cosine of s<sup>n</sup> and s<sup>n&minus;1</sup></div></div></div>
+        <p class="note" id="po-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOURIER -->
+<section class="chap" id="fourier">
+  <div class="wrap">
+    <div class="tag">Recipe 2</div>
+    <h2>The Fourier basis</h2>
+    <div class="prose">
+      <p>Any reasonable function on an interval can be built from waves. On [0, 1] you even get away with cosines alone: reflect the function about 0 to make it symmetric on [&minus;1, 1], and a symmetric function needs no sines. The one-dimensional <em class="term">Fourier cosine basis</em> of order n is therefore cos(0), cos(&pi;s), cos(2&pi;s), &hellip;, cos(n&pi;s): a constant, then waves with one, two, &hellip;, n half-periods across the state range.</p>
+      <p>In k dimensions each feature takes an integer vector c and becomes a plane wave, cos(&pi; c &middot; s). The vector picks both the direction the wave travels and how many crests it fits in: c = (2, 0) ripples along position only, c = (1, 1) runs diagonally and so couples position with velocity. There are again (n + 1)<sup>k</sup> features, but unlike powers these waves are spread out evenly and nearly at right angles to each other, which is exactly what a gradient method likes. Konidaris, Osentoski and Thomas (2011) also suggest giving each feature its own step size, smaller for the faster waves. <strong>Pick a vector c</strong> and see its wave; then raise n and compare the fit with the polynomial of the same order.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} x_i(s) &= \cos\!\big(\pi\, \mathbf s^{\top}\mathbf c^{i}\big) \\ \mathbf c^{i} &\in \{0,\dots,n\}^{k} \end{aligned} \]</div><div class="read"><b>Read it as:</b> s is the state scaled to [0, 1]<sup>k</sup>. The integer vector c<sup>i</sup> gives the number of half-waves along each axis; the feature is the cosine of &pi; times the dot product. c = 0 gives the constant 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;x-i of s is the cosine of pi times s dotted with c-i.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \alpha_i = \frac{\alpha}{\Vert \mathbf c^{i} \Vert} \quad (\alpha_0 = \alpha) \]</div><div class="read"><b>Read it as:</b> each feature&rsquo;s weight learns with its own step size: the base &alpha; divided by the length of its frequency vector, so slow, broad waves move fast and rapid ripples move cautiously. The constant feature keeps &alpha;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Alpha-i is alpha over the norm of c-i.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-fo" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="fo-cv" aria-label="The two-dimensional Fourier feature for your vector c"></canvas></div><figcaption><span style="color:var(--cA)">&#9632;</span> positive &nbsp; <span style="color:var(--cB)">&#9632;</span> negative: the feature cos(&pi;(c<sub>1</sub>s<sub>1</sub> + c<sub>2</sub>s<sub>2</sub>)) over the Mountain Car state space. Drag the ring to read off a value.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="fo-basis" aria-label="The one-dimensional Fourier cosine basis and fit"></canvas></div><figcaption><span style="color:var(--muted)">&#9644;</span> the cosines cos(j&pi;s), j = 0 &hellip; n &nbsp; <span style="color:var(--cA)">&#9644;</span> least-squares fit of the random-walk value with them &nbsp; <span style="color:var(--muted)">- -</span> the true value.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="fo-c1">c&#8321; (waves along position)</label><output id="fo-c1-o"></output></div><input type="range" id="fo-c1" min="0" max="5" step="1" value="1"></div>
+        <div class="ctrl"><div class="top"><label for="fo-c2">c&#8322; (waves along velocity)</label><output id="fo-c2-o"></output></div><input type="range" id="fo-c2" min="0" max="5" step="1" value="2"></div>
+        <div class="ctrl"><div class="top"><label for="fo-n">1-D order n</label><output id="fo-n-o"></output></div><input type="range" id="fo-n" min="0" max="10" step="1" value="3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="fo-al"></div><div class="k">this feature&rsquo;s step &alpha;<sub>i</sub> (&alpha; = 0.01)</div></div><div class="stat"><div class="v" id="fo-cos"></div><div class="k">largest cosine between two of the 1-D features</div></div><div class="stat"><div class="v" id="fo-rmse"></div><div class="k">RMS error, Fourier vs polynomial</div></div></div>
+        <p class="note" id="fo-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- RACE -->
+<section class="chap" id="race">
+  <div class="wrap">
+    <div class="tag">Head to head</div>
+    <h2>The race: polynomials against cosines, learning online</h2>
+    <div class="prose"><p>Least squares sees all the data at once. A reinforcement-learning agent does not: it learns one sample at a time with stochastic-gradient steps, and then the shape of the feature space matters a great deal. Here both bases learn the value of the 1,000-state random walk by <em class="term">gradient Monte Carlo</em>: run an episode from the middle, then nudge the weights towards the final outcome at every state visited. Both get the same episodes, 10 runs of 5,000 each, and the dashed lines show the best each basis could possibly do (the weighted least-squares fit). Polynomials have the capacity but cannot get there: their nearly parallel features force a tiny step size, and progress along the weak directions is glacial. Sutton and Barto reach the same verdict and advise against polynomials for online learning. <strong>Choose an order and run the race</strong>; then try nudging the step sizes.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf w \leftarrow \mathbf w &+ \alpha\,\big[G_t - \hat v(S_t,\mathbf w)\big] \\ &\quad\times \mathbf x(S_t) \end{aligned} \]</div><div class="read"><b>Read it as:</b> G<sub>t</sub> is the return that followed state S<sub>t</sub> (here simply &minus;1 or +1, the outcome of the episode). The error times the feature vector is the gradient step for the squared error at that state. With Fourier features each component also gets its own &alpha;<sub>i</sub> in principle; in one dimension the plain &alpha; already works.</div><div class="eq-say"><b>Say it</b><em>&ldquo;w becomes w plus alpha times G-t minus v-hat of S-t, times x of S-t.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \overline{\text{VE}}(\mathbf w) = \sum_{s} \mu(s)\,\big[&v_\pi(s) \\ &- \hat v(s,\mathbf w)\big]^2 \end{aligned} \]</div><div class="read"><b>Read it as:</b> the error is averaged over states with weight &mu;(s), the share of time the walk spends in s, so the busy middle counts more than the rarely visited edges. The plot shows its square root. Both v<sub>&pi;</sub> and &mu; are solved exactly in your browser from the walk&rsquo;s 1,000 linear equations.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The value error is the sum over states of mu of s times the squared gap between v-pi and v-hat.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-ra" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="ra-cv" aria-label="Root mean value error against episodes for the two bases"></canvas></div><figcaption><span style="color:var(--cB)">&#9644;</span> polynomial &nbsp; <span style="color:var(--cA)">&#9644;</span> Fourier: &radic;VE averaged over 10 runs, every 100 episodes. Dashed: the best each basis can reach (weighted least squares).</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Order of both bases"><button type="button" data-ran="5" aria-pressed="true">Order 5</button><button type="button" data-ran="10">Order 10</button><button type="button" data-ran="20">Order 20</button></div>
+        <div class="ctrl"><div class="top"><label for="ra-ap">Polynomial step &alpha;</label><output id="ra-ap-o"></output></div><input type="range" id="ra-ap" min="-5" max="-3" step="0.1" value="-4"></div>
+        <div class="ctrl"><div class="top"><label for="ra-af">Fourier step &alpha;</label><output id="ra-af-o"></output></div><input type="range" id="ra-af" min="-5" max="-3" step="0.1" value="-4.3"></div>
+        <div class="btns"><button type="button" class="btn primary" id="ra-go">Run the race</button><span class="note" id="ra-prog" style="align-self:center"></span></div>
+        <div class="stats"><div class="stat"><div class="v" id="ra-p"></div><div class="k">polynomial &radic;VE, last 1,000 episodes</div></div><div class="stat"><div class="v" id="ra-f"></div><div class="k">Fourier &radic;VE, last 1,000 episodes</div></div><div class="stat"><div class="v" id="ra-pb"></div><div class="k">best possible: polynomial</div></div><div class="stat"><div class="v" id="ra-fb"></div><div class="k">best possible: Fourier</div></div></div>
+        <p class="note" id="ra-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- COARSE -->
+<section class="chap" id="coarse">
+  <div class="wrap">
+    <div class="tag">Recipe 3</div>
+    <h2>Coarse coding: overlapping receptive fields</h2>
+    <div class="prose">
+      <p>A completely different idea: scatter many overlapping regions over the state space, circles say, and give each one a binary feature that is 1 when the state lies inside it and 0 otherwise. This is <em class="term">coarse coding</em> (Hinton, 1984). A state is described by the handful of circles it falls in; two states are similar if they share circles. Train the value at one state and every weight of its circles moves, so the change spreads to every state that shares any of them, most strongly to those that share the most.</p>
+      <p>So the size and shape of the regions decide <b>how learning generalises</b>: big circles spread each lesson widely, long thin ellipses spread it along one direction only. If some point lies in no circle at all, nothing can ever be learned there. <strong>Click the map to teach it</strong> (each click pulls the value at that point half-way to the target), then change the radius or the shape and teach again. Smooth bumps instead of hard-edged circles give <em class="term">radial basis functions</em>, the same idea with graded membership.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} x_i(s) &= \mathbb 1\big[s \in \text{region}_i\big] \\ w_i &\leftarrow w_i + \frac{\alpha}{m(s)}\big[U - \hat v(s,\mathbf w)\big] \\ &\qquad \times x_i(s) \end{aligned} \]</div><div class="read"><b>Read it as:</b> each feature is 1 inside its region and 0 outside; m(s) is how many regions contain s. A training example with target U moves every active weight by the same amount, and dividing by m(s) makes &alpha; the share of the error removed at s: &alpha; = 1 fixes it in one step, &alpha; = &frac12; halves it. Any other state t moves by a fraction proportional to how many active regions it shares with s.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Each active weight moves by alpha over m of s times the error U minus v-hat.&rdquo;</em></div><div class="eq-run" id="run-co"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="co-cv" aria-label="Receptive fields and the learned value; click to train"></canvas></div><figcaption>100 regions scattered at random; the ones containing your last click are outlined. <span style="color:var(--cA)">&#9632;</span> positive value &nbsp; <span style="color:var(--cB)">&#9632;</span> negative &nbsp; <span style="color:var(--qda)">&#9632;</span> hatched: covered by no region.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="co-r">Region size</label><output id="co-r-o"></output></div><input type="range" id="co-r" min="0.04" max="0.3" step="0.01" value="0.12"></div>
+        <div class="seg" role="group" aria-label="Region shape"><button type="button" data-cos="circle" aria-pressed="true">Circles</button><button type="button" data-cos="wide">Wide ellipses</button><button type="button" data-cos="tall">Tall ellipses</button></div>
+        <div class="seg" role="group" aria-label="Target of the next click"><button type="button" data-cou="1" aria-pressed="true">Teach +1</button><button type="button" data-cou="-1">Teach &minus;1</button></div>
+        <div class="btns"><button type="button" class="btn" id="co-reset">Forget everything</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="co-m"></div><div class="k">regions at your click, m(s)</div></div><div class="stat"><div class="v" id="co-v"></div><div class="k">v&#770; at your click</div></div><div class="stat"><div class="v" id="co-gap"></div><div class="k">share of the map in no region</div></div><div class="stat"><div class="v" id="co-reach"></div><div class="k">share of the map your click moved</div></div></div>
+        <p class="note" id="co-say"></p>
+      </div></div>
+    </div>
+    <div class="prose" style="margin-top:28px"><p><b>Broad is not blurry.</b> It is tempting to think wide regions must give a blurry answer. They don&rsquo;t, in the end. Below, 50 intervals along a line learn a two-step target from random samples. Wide intervals generalise further, so after a few dozen samples they already have the rough shape; but with many samples all three widths settle on a similarly sharp step, because the final acuity is set by how densely the region edges are packed, which is the same here, not by how wide each region is. <strong>Move through the sample counts for each width</strong>.</p></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="cw-cv" aria-label="A one-dimensional target learned by coarse coding with intervals of three widths"></canvas></div><figcaption><span style="color:var(--muted)">- -</span> target &nbsp; <span style="color:var(--cA)">&#9644;</span> your width &nbsp; faint lines: the other two widths after the same samples. The bar at the bottom is one interval at your width.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Interval width"><button type="button" data-cww="0">Narrow</button><button type="button" data-cww="1" aria-pressed="true">Medium</button><button type="button" data-cww="2">Broad</button></div>
+        <div class="ctrl"><div class="top"><label for="cw-n">Training samples</label><output id="cw-n-o"></output></div><input type="range" id="cw-n" min="0" max="6" step="1" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="cw-m"></div><div class="k">intervals active at a typical point</div></div><div class="stat"><div class="v" id="cw-e"></div><div class="k">RMS error: narrow / medium / broad</div></div></div>
+        <p class="note" id="cw-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- TILE -->
+<section class="chap" id="tile">
+  <div class="wrap">
+    <div class="tag">Recipe 4</div>
+    <h2>Tile coding: coarse coding built for speed</h2>
+    <div class="prose">
+      <p><em class="term">Tile coding</em> (Albus, 1975, who called it CMAC) is coarse coding with the regions arranged so that a computer can find them instantly. Cover the state space with a grid, a <em class="term">tiling</em>; each tile is a binary feature, and exactly one tile per tiling is active. One tiling alone is just a lookup table with no generalisation inside a tile and none across. Lay n tilings on top of each other, each shifted by a fraction of a tile, and every state is in exactly n tiles. Neighbouring states share most of them, distant ones share none: generalisation and fine resolution at once, for the price of n array look-ups.</p>
+      <p>Because exactly n features are always active, the step size has a simple meaning: with &alpha; = 1/n a single update moves v&#770;(s) all the way to its target, and &alpha; = 1/(10n) moves it a tenth of the way. How the tilings are shifted matters too. Shifting every tiling by the same amount along each axis (offsets 1, 1) lines the tile corners up on a diagonal, and generalisation smears along it. Shifting by odd multiples, 1 along position and 3 along velocity, spreads it more evenly. Tiles need not be squares: stripes ignore one variable entirely, diagonal stripes generalise along a combination. <strong>Drag the ring, then change the offsets and the shapes</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} i_t(s) &= t\,G^2 + \big\lfloor u_1 + o_{t,1} \big\rfloor\, G \\ &\quad + \big\lfloor u_2 + o_{t,2} \big\rfloor \\ o_{t,j} &= \frac{d_j\, t \bmod n}{n} \end{aligned} \]</div><div class="read"><b>Read it as:</b> u<sub>j</sub> is state variable j measured in tile widths from the edge of the box; tiling t shifts it by o<sub>t,j</sub>, a fraction of a tile set by the displacement d = (1, 1) or (1, 3). Rounding down gives the tile&rsquo;s row and column, and with G = T + 1 tiles per side (one spare for the shift) i<sub>t</sub>(s) is that tile&rsquo;s position in one long weight array.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The active tile of tiling t is t G squared plus floor of u-one plus its offset times G, plus floor of u-two plus its offset.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \hat v(s) &= \sum_{t=0}^{n-1} w_{i_t(s)} \\ \hat v_{\text{new}}(s) &= \hat v(s) + n\alpha\,\big[U - \hat v(s)\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> the estimate is the sum of the n active weights, no multiplications needed. Adding &alpha;[U &minus; v&#770;(s)] to each of them moves the sum by n&alpha; times the error, so &alpha; = 1/n jumps straight to the target U. Another state t moves by the share of tiles it has in common with s.</div><div class="eq-say"><b>Say it</b><em>&ldquo;v-hat is the sum of the n active weights; one update moves it by n alpha times the error.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-ti" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="ti-cv" aria-label="Tilings over the Mountain Car state space, the ring's active tiles and how far one update generalises"></canvas></div><figcaption>Shading: how far one update at the ring (with &alpha; = 1/n, target 1) moves the value elsewhere, which is the share of tiles each state shares with the ring. Outlines: the ring&rsquo;s n active tiles. Faint grid: tiling 0.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ti-n">Tilings n</label><output id="ti-n-o"></output></div><input type="range" id="ti-n" min="1" max="16" step="1" value="8"></div>
+        <div class="ctrl"><div class="top"><label for="ti-T">Tiles per side T</label><output id="ti-T-o"></output></div><input type="range" id="ti-T" min="2" max="12" step="1" value="6"></div>
+        <div class="seg" role="group" aria-label="Offsets"><button type="button" data-tio="1" aria-pressed="true">Offsets (1, 3)</button><button type="button" data-tio="0">Offsets (1, 1)</button></div>
+        <div class="seg seg-wrap" role="group" aria-label="Tile shape"><button type="button" data-tis="sq" aria-pressed="true">Squares</button><button type="button" data-tis="sp">Stripes: position</button><button type="button" data-tis="sv">Stripes: velocity</button><button type="button" data-tis="dg">Diagonal stripes</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ti-d"></div><div class="k">features (weights)</div></div><div class="stat"><div class="v" id="ti-a"></div><div class="k">active per state</div></div><div class="stat"><div class="v" id="ti-res"></div><div class="k">finest step in position</div></div><div class="stat"><div class="v" id="ti-asym"></div><div class="k">diagonal stretch</div></div></div>
+        <p class="note" id="ti-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- HASH -->
+<section class="chap" id="hash">
+  <div class="wrap">
+    <div class="tag">Saving memory</div>
+    <h2>Hashing: many tiles, few weights</h2>
+    <div class="prose"><p>A tiling over k state variables with T tiles per side has T<sup>k</sup> tiles, and that number is hopeless beyond a handful of dimensions. But an agent only ever visits a thin slice of its state space. <em class="term">Hashing</em> keeps a fixed table of M weights and sends every tile to a pseudo-random slot. Most visited tiles still get a slot to themselves; occasionally two tiles, usually far apart, share one, and then whatever is learned at one leaks into the other. Because each state has n tiles and a collision usually hits only one of them, a little leakage is diluted by the other n &minus; 1. This page uses Knuth&rsquo;s multiplicative hash on the 648 tiles of the project&rsquo;s tile coder (8 tilings of 9 &times; 9). <strong>Shrink the table</strong> and watch where the ring&rsquo;s weights reappear; then run Mountain Car at every table size.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} h(i) &= \Big\lfloor \frac{(a\, i) \bmod 2^{32}}{2^{32-b}} \Big\rfloor \\ a &= 2654435761 \end{aligned} \]</div><div class="read"><b>Read it as:</b> multiply the tile number i by a large odd constant (close to 2<sup>32</sup> divided by the golden ratio), keep the low 32 bits, and read off the top b of them: a slot between 0 and M &minus; 1 = 2<sup>b</sup> &minus; 1. Neighbouring tile numbers land far apart.</div><div class="eq-say"><b>Say it</b><em>&ldquo;h of i is a times i modulo two to the thirty-two, divided by two to the thirty-two minus b, rounded down.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \mathbb E[\text{slots used}] = M\Big[1 - \big(1 - \tfrac{1}{M}\big)^{K}\Big] \]</div><div class="read"><b>Read it as:</b> if K tiles were thrown into M slots at random, a given slot stays empty with probability (1 &minus; 1/M)<sup>K</sup>; the rest are used. Fewer slots used than tiles means some tiles share. The real hash is not random, so the count it achieves is shown beside the formula.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected number of used slots is M times one minus, one minus one over M, to the K.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-ha" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="ha-cv" aria-label="States that share weights with the ring, genuinely or through hash collisions"></canvas></div><figcaption><span style="color:var(--cA)">&#9632;</span> shares a real tile with the ring &nbsp; <span style="color:var(--qda)">&#9632;</span> shares a weight only through a hash collision. Shading strength: how many of the 8 weights are shared. Drag the ring.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="ha-curve" aria-label="Mountain Car performance against table size"></canvas></div><figcaption>Mean steps per episode over episodes 101&ndash;150 of semi-gradient Sarsa (5 runs each) against the table size M; dashed: no hashing (648 weights per action). Lower is better; values above 400 sit on the top edge.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="ha-b">Table size M = 2<sup>b</sup></label><output id="ha-b-o"></output></div><input type="range" id="ha-b" min="4" max="12" step="1" value="7"></div>
+        <div class="btns"><button type="button" class="btn primary" id="ha-go">Run Mountain Car at every size</button><span class="note" id="ha-prog" style="align-self:center"></span></div>
+        <div class="stats"><div class="stat"><div class="v" id="ha-used"></div><div class="k">slots used (expected if random)</div></div><div class="stat"><div class="v" id="ha-col"></div><div class="k">tiles sharing a slot</div></div><div class="stat"><div class="v" id="ha-far"></div><div class="k">of the map that leaks into the ring</div></div></div>
+        <p class="note" id="ha-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: escaping the valley with tile coding and Fourier features</h2>
+    <div class="prose">
+      <p>Mountain Car (Moore, 1990) is the classic test bed for feature construction. The state is two numbers, position in [&minus;1.2, 0.6] and velocity in [&minus;0.07, 0.07]; the actions are push left, coast and push right; every step costs &minus;1 until the car passes 0.5 with non-negative velocity. Gravity beats the engine, so the only way out is to swing back up the left slope first, and the value function has a sharp spiral ridge between &ldquo;one more swing&rdquo; and &ldquo;go now&rdquo;. This page runs <b>Gymnasium&rsquo;s MountainCar-v0</b> (Farama Foundation, MIT licence), re-implemented line for line in JavaScript from version 1.4.0, with two honest changes: the time limit is raised from Gymnasium&rsquo;s default 200 steps to 1,000, so the first clumsy episodes are visible rather than cut off, and starting positions come from the page&rsquo;s own random-number generator (passed to Gymnasium through its reset options) so that Python can replay every run exactly.</p>
+      <p>The learner is <em class="term">semi-gradient Sarsa</em> with &gamma; = 1, acting greedily on q&#770;(s, a, w) = w<sub>a</sub> &middot; x(s), one weight vector per action. All weights start at 0, which is optimistic (true values are all negative), so the agent explores by itself: everything it has tried looks worse than what it hasn&rsquo;t. Ties are broken at random.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \delta &= R + \hat q(S',A',\mathbf w) - \hat q(S,A,\mathbf w) \\ \mathbf w_{A} &\leftarrow \mathbf w_{A} + \delta\;\boldsymbol\alpha \odot \mathbf x(S) \end{aligned} \]</div><div class="read"><b>Read it as:</b> after taking action A in state S, seeing reward R = &minus;1 and choosing A&prime; in S&prime;, the TD error &delta; moves only the weights of action A, along the features of S. &alpha; is a vector of step sizes: &alpha;/n for every tile, or &alpha;/&Vert;c<sup>i</sup>&Vert; for each Fourier feature. At the flag the q&#770;(S&prime;, A&prime;) term is dropped; at the 1,000-step limit it is kept, because running out of time is not a real ending.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Delta is R plus q-hat of S-prime A-prime minus q-hat of S A; the weights of A move by delta times alpha times x of S.&rdquo;</em></div><div class="eq-run" id="run-pj"></div></div>
+
+    <h3>1 &middot; Check the simulator</h3>
+    <div class="tbl-wrap block"><table class="hand" id="pj-sim"></table></div>
+
+    <h3>2 &middot; Train ten agents</h3>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="pj-cv" aria-label="Steps per episode, averaged over 10 runs, for your agent and the reference agents"></canvas></div><figcaption>Steps per episode (log scale), mean of 10 runs, smoothed over 5 episodes. <span style="color:var(--cA)">&#9644;</span> your settings; faint: the five reference settings in the table below. Dotted: value iteration&rsquo;s estimate of the fastest possible average.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Features"><button type="button" data-pjm="tile" aria-pressed="true">Tile coding</button><button type="button" data-pjm="fourier">Fourier basis</button></div>
+        <div id="pj-tile-ctl">
+          <div class="ctrl"><div class="top"><label for="pj-n">Tilings n</label><output id="pj-n-o"></output></div><input type="range" id="pj-n" min="1" max="16" step="1" value="8"></div>
+          <div class="ctrl"><div class="top"><label for="pj-T">Tiles per side T</label><output id="pj-T-o"></output></div><input type="range" id="pj-T" min="2" max="16" step="1" value="8"></div>
+          <div class="ctrl"><div class="top"><label for="pj-a">Step &alpha; (each tile gets &alpha;/n)</label><output id="pj-a-o"></output></div><input type="range" id="pj-a" min="0.05" max="1.2" step="0.05" value="0.5"></div>
+          <div class="seg" role="group" aria-label="Memory"><button type="button" data-pjh="0" aria-pressed="true">No hashing</button><button type="button" data-pjh="9">512 slots</button><button type="button" data-pjh="7">128 slots</button></div>
+        </div>
+        <div id="pj-four-ctl" hidden>
+          <div class="ctrl"><div class="top"><label for="pj-k">Fourier order n</label><output id="pj-k-o"></output></div><input type="range" id="pj-k" min="1" max="8" step="1" value="5"></div>
+          <div class="ctrl"><div class="top"><label for="pj-fa">Base step &alpha;</label><output id="pj-fa-o"></output></div><input type="range" id="pj-fa" min="0.002" max="0.05" step="0.001" value="0.01"></div>
+        </div>
+        <div class="btns"><button type="button" class="btn primary" id="pj-go">Train 10 agents &times; 150 episodes</button><span class="note" id="pj-prog" style="align-self:center"></span></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-d"></div><div class="k">weights (3 actions)</div></div><div class="stat"><div class="v" id="pj-e1"></div><div class="k">steps, episodes 1&ndash;10</div></div><div class="stat"><div class="v" id="pj-e3"></div><div class="k">steps, episodes 101&ndash;150</div></div><div class="stat"><div class="v" id="pj-all"></div><div class="k">steps, all 150</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div>
+    </div>
+    </div>
+
+    <h3>3 &middot; What one agent learned</h3>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="pj-map" aria-label="The trained agent's cost-to-go over the state space and its greedy path"></canvas></div><figcaption>&minus;max<sub>a</sub> q&#770;(s, a): run 1&rsquo;s estimate of steps to go, deeper colour = more; the line is its greedy drive from your start. The sharp spiral edges are the boundaries between needing one more swing and being able to go now.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="plot hillplot"><canvas id="pj-hill" aria-label="The car driving out under the trained agent"></canvas></div>
+        <div class="ctrl"><div class="top"><label for="pj-x0">Start position (velocity 0)</label><output id="pj-x0-o"></output></div><input type="range" id="pj-x0" min="-1.2" max="0.45" step="0.01" value="-0.5"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-k1"></div><div class="k">steps to the flag, greedy</div></div><div class="stat"><div class="v" id="pj-k2"></div><div class="k">value iteration&rsquo;s fewest</div></div><div class="stat"><div class="v" id="pj-k3"></div><div class="k">agent&rsquo;s own estimate</div></div></div>
+        <p class="note" id="pj-say2"></p>
+      </div></div>
+    </div>
+
+    <h3>4 &middot; The scoreboard</h3>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-board"></table></div>
+    <p class="note block" style="max-width:72ch" id="pj-bsay"></p>
+
+    <h3>The same experiment in Python</h3>
+<pre class="code"><code>import math, numpy as np, gymnasium as gym
+XL, XH, VL, VH = -1.2, 0.6, -0.07, 0.07
+
+def tiles(n, T, disp=(1, 3), hb=0):         # n offset tilings of (T+1) x (T+1) tiles, optionally hashed
+    wx, wv, G = (XH - XL) / T, (VH - VL) / T, T + 1
+    def f(x, v):
+        out = []
+        for t in range(n):
+            ix = math.floor((x - XL) / wx + ((disp[0] * t) % n) / n)
+            iv = math.floor((v - VL) / wv + ((disp[1] * t) % n) / n)
+            ix, iv = min(T, max(0, ix)), min(T, max(0, iv))   # float32 observations can sit a hair outside the box
+            i = t * G * G + ix * G + iv
+            out.append(((i * 2654435761) &amp; 0xFFFFFFFF) &gt;&gt; (32 - hb) if hb else i)
+        return out
+    return f, (1 &lt;&lt; hb) if hb else n * G * G
+
+def fourier(k):                             # cos(pi c.s) for every c in {0..k}^2, s scaled to [0,1]^2
+    C = [(i, j) for i in range(k + 1) for j in range(k + 1)]
+    def f(x, v):
+        u, w = (x - XL) / (XH - XL), (v - VL) / (VH - VL)
+        return [math.cos(math.pi * (c1 * u + c2 * w)) for c1, c2 in C]
+    return f, len(C), [1.0 if c == (0, 0) else 1 / math.hypot(*c) for c in C]
+
+def sarsa(cfg, seed, episodes=150, cap=1000):
+    env, rng = gym.make("MountainCar-v0", max_episode_steps=cap), Mulberry(seed)   # Mulberry: the page's RNG
+    tile = cfg["kind"] == "tile"
+    if tile: phi, D = tiles(cfg["n"], cfg["T"], cfg.get("disp", (1, 3)), cfg.get("hb", 0))
+    else: phi, D, sc = fourier(cfg["k"])
+    W = [[0.0] * D for _ in range(3)]
+    def q(a, F):
+        s = 0.0
+        if tile:
+            for i in F: s += W[a][i]
+        else:
+            for i in range(D): s += W[a][i] * F[i]
+        return s
+    def update(a, F, d):
+        if tile:
+            for i in F: W[a][i] += cfg["alpha"] / cfg["n"] * d
+        else:
+            for i in range(D): W[a][i] += cfg["alpha"] * sc[i] * d * F[i]
+    def act(F):                             # greedy, ties broken at random; w = 0 is optimistic
+        qs = [q(a, F) for a in range(3)]; best = [a for a in range(3) if qs[a] == max(qs)]
+        return best[0] if len(best) == 1 else best[math.floor(rng() * len(best))]
+    steps = []
+    for ep in range(episodes):
+        x0 = -0.6 + 0.2 * rng()
+        obs, _ = env.reset(options={"low": x0, "high": x0}); F = phi(*map(float, obs)); a = act(F); k = 0
+        while True:
+            obs, r, term, trunc, _ = env.step(a); k += 1
+            if term: update(a, F, r - q(a, F)); break
+            F2 = phi(*map(float, obs)); a2 = act(F2)
+            update(a, F, r + q(a2, F2) - q(a, F)); F, a = F2, a2
+            if trunc: break
+        steps.append(k)
+    return steps, W
+
+configs = {"tiles 8 x 8x8, offsets (1,3)": dict(kind="tile", n=8, T=8, alpha=0.5),
+           "tiles 8 x 8x8, offsets (1,1)": dict(kind="tile", n=8, T=8, disp=(1, 1), alpha=0.5),
+           "tiles hashed into 512": dict(kind="tile", n=8, T=8, hb=9, alpha=0.5),
+           "Fourier order 3": dict(kind="fourier", k=3, alpha=0.01),
+           "Fourier order 5": dict(kind="fourier", k=5, alpha=0.01)}
+print(f"gymnasium {gym.__version__}; 10 runs x 150 episodes each, cap 1000 steps")
+for name, cfg in configs.items():
+    runs = [sarsa(cfg, seed) for seed in range(1, 11)]
+    S = np.array([s for s, _ in runs])
+    print(f"{name:30s} steps/episode: ep 1-10 {S[:, :10].mean():7.2f}  ep 11-50 {S[:, 10:50].mean():7.2f}"
+          f"  ep 101-150 {S[:, 100:].mean():7.2f}  all {S.mean():7.2f}  total {S.sum()}")
+    print(f"{'':30s} run 1, first 8 episodes: {S[0, :8].tolist()}  sum of run-1 weights {sum(map(sum, runs[0][1])):.10f}")
+
+env = gym.make("MountainCar-v0").unwrapped       # the simulator itself: always push the way the car is already moving
+env.reset(options={"low": -0.5, "high": -0.5}); k = 0; term = False
+while not term:
+    _, _, term, _, _ = env.step(2 if env.state[1] &gt;= 0 else 0); k += 1
+print(f"push-with-velocity from -0.5: flag after {k} steps at position {float(env.state[0])!r}, velocity {float(env.state[1])!r}")</code></pre>
+<pre class="code out"><code>gymnasium 1.4.0; 10 runs x 150 episodes each, cap 1000 steps
+tiles 8 x 8x8, offsets (1,3)   steps/episode: ep 1-10  548.32  ep 11-50  206.13  ep 101-150  137.57  all  187.01  total 280517
+                               run 1, first 8 episodes: [1000, 736, 619, 580, 412, 406, 325, 445]  sum of run-1 weights -6476.8596446119
+tiles 8 x 8x8, offsets (1,1)   steps/episode: ep 1-10  564.96  ep 11-50  205.31  ep 101-150  139.41  all  187.55  total 281330
+                               run 1, first 8 episodes: [1000, 648, 995, 583, 587, 320, 418, 235]  sum of run-1 weights -6409.3458081098
+tiles hashed into 512          steps/episode: ep 1-10  529.70  ep 11-50  204.69  ep 101-150  144.71  all  189.75  total 284619
+                               run 1, first 8 episodes: [1000, 741, 720, 474, 597, 266, 329, 271]  sum of run-1 weights -6555.3149548988
+Fourier order 3                steps/episode: ep 1-10  504.72  ep 11-50  147.00  ep 101-150  146.30  all  169.04  total 253554
+                               run 1, first 8 episodes: [1000, 1000, 661, 675, 650, 230, 444, 395]  sum of run-1 weights -120.5566903168
+Fourier order 5                steps/episode: ep 1-10  587.98  ep 11-50  164.19  ep 101-150  138.00  all  176.04  total 264065
+                               run 1, first 8 episodes: [1000, 1000, 960, 590, 550, 740, 452, 471]  sum of run-1 weights -101.1633754820
+push-with-velocity from -0.5: flag after 124 steps at position 0.5349499825655736, velocity 0.04819097792866507</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>A linear value function is linear in its weights, not in the state: all the curvature, interaction and resolution comes from the features, which is where your knowledge of the problem goes in.</li>
+      <li>Polynomials add interactions but their high powers are nearly parallel and their number grows as (n + 1)<sup>k</sup>; for online learning they are a poor choice.</li>
+      <li>The Fourier basis cos(&pi; c &middot; s) gives evenly spread, nearly orthogonal waves; with step sizes &alpha;/&Vert;c&Vert; it learns fast and smoothly in low dimensions.</li>
+      <li>Coarse coding makes binary features from overlapping regions: region size and shape decide how far and in which direction learning spreads, while the density of features sets the final acuity.</li>
+      <li>Tile coding is coarse coding with offset grids: exactly n active features, so v&#770; is a sum of n weights and &alpha; = 1/(10n) has a clear meaning; asymmetric offsets avoid diagonal artefacts, and hashing keeps memory fixed.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why can&rsquo;t v&#770; = w&#8320; + w&#8321;p + w&#8322;v capture &ldquo;a fast car near the bottom is nearly out&rdquo;?</summary><p>Because the effect of velocity on v&#770; is w&#8322; whatever the position is: the model is a tilted plane. Any dependence on the combination of the two needs a feature that combines them, such as p&middot;v, a diagonal Fourier wave or a two-dimensional tile.</p></details>
+      <details class="q"><summary>A robot arm has 6 joint angles. How many features does a full order-3 polynomial or Fourier basis have?</summary><p>(3 + 1)<sup>6</sup> = 4,096. At order 5 it would be 6<sup>6</sup> = 46,656, which is why in more than a few dimensions you keep only a chosen subset, for example the features that involve at most two variables at a time.</p></details>
+      <details class="q"><summary>You use tile coding with 10 tilings. What step size makes each update cover about a tenth of the error at the trained state?</summary><p>&alpha; = 1/(10 &times; 10) = 0.01. Each of the 10 active weights moves by &alpha; times the error, so v&#770;(s) moves by 10&alpha; = 0.1 of it.</p></details>
+      <details class="q"><summary>Why do wide coarse-coding regions not make the final value function blurry?</summary><p>Early on, wide regions generalise each sample far, so the shape appears fast but smeared. With enough data the weights adjust so that the regions&rsquo; edges, packed as densely as before, carve out the fine detail. Acuity is set by the number and density of features, not their width.</p></details>
+      <details class="q"><summary>What is the price of hashing 648 tiles into 128 weights, and why is it often small?</summary><p>Several far-apart tiles share each weight, so learning at one state leaks into unrelated states. But each state&rsquo;s value is the sum of n weights, collisions rarely hit all of them at once, and an agent visits only part of its state space, so most of the leakage lands where it never goes.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../deep-q-networks/">Next chapter: Deep Q-Networks &rarr;</a>
+      <a class="btn" href="../value-function-approximation/">&larr; Previous: Value-Function Approximation</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Sutton, R. S. &amp; Barto, A. G. (2018). <em>Reinforcement Learning: An Introduction</em>, 2nd ed. MIT Press, &sect;9.5 (feature construction) and &sect;10.1 (Mountain Car with semi-gradient Sarsa).</li>
+      <li>Konidaris, G., Osentoski, S. &amp; Thomas, P. (2011). Value function approximation in reinforcement learning using the Fourier basis. <em>Proc. AAAI 2011</em>.</li>
+      <li>Albus, J. S. (1975). A new approach to manipulator control: the cerebellar model articulation controller (CMAC). <em>Journal of Dynamic Systems, Measurement, and Control</em> 97(3).</li>
+      <li>Hinton, G. E. (1984). Distributed representations. Technical report CMU-CS-84-157, Carnegie Mellon University.</li>
+      <li>Sutton, R. S. (1996). Generalization in reinforcement learning: successful examples using sparse coarse coding. <em>Advances in Neural Information Processing Systems</em> 8.</li>
+      <li>Moore, A. W. (1990). <em>Efficient Memory-based Learning for Robot Control</em>. PhD thesis, University of Cambridge (Technical Report 209): the origin of Mountain Car.</li>
+      <li>Towers, M. et al. (2024). Gymnasium: a standard interface for reinforcement learning environments. arXiv:2407.17032. Software: Farama Foundation, MIT licence, version 1.4.0.</li>
+      <li>Knuth, D. E. (1998). <em>The Art of Computer Programming, Vol. 3: Sorting and Searching</em>, 2nd ed. Addison-Wesley, &sect;6.4: multiplicative hashing.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated. Mountain Car dynamics from Gymnasium (Farama Foundation), MIT licence.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- x076 core: Mountain Car (Gymnasium 1.4.0 physics), feature constructors, Sarsa, random walk ---------- */
+const MC = { XL: -1.2, XH: 0.6, VL: -0.07, VH: 0.07, GOAL: 0.5 };
+// one step of MountainCarEnv.step, operation for operation (velocity, position are float64 inside Gymnasium)
+function mcStep(p, v, a) {
+  v = v + ((a - 1) * 0.001 + Math.cos(3 * p) * (-0.0025));
+  v = Math.min(Math.max(v, -0.07), 0.07);
+  p = p + v;
+  p = Math.min(Math.max(p, -1.2), 0.6);
+  if (p === -1.2 && v < 0) v = 0;
+  return [p, v, p >= 0.5 && v >= 0];
+}
+// tile coder over the Mountain Car box: n tilings of (T+1) x (T+1) tiles, tiling t shifted by (d1 t mod n, d2 t mod n)/n of a tile
+function makeTiles(n, T, disp, hb) {
+  disp = disp || [1, 3]; hb = hb || 0;
+  const wx = (MC.XH - MC.XL) / T, wv = (MC.VH - MC.VL) / T, G = T + 1, D = hb ? (1 << hb) : n * G * G;
+  const ox = [], ov = []; for (let t = 0; t < n; t++) { ox.push(((disp[0] * t) % n) / n); ov.push(((disp[1] * t) % n) / n); }
+  const raw = new Int32Array(n);
+  function idx(p, v, out) {
+    const px = (p - MC.XL) / wx, pv = (v - MC.VL) / wv;
+    for (let t = 0; t < n; t++) {
+      const ix = Math.min(T, Math.max(0, Math.floor(px + ox[t]))), iv = Math.min(T, Math.max(0, Math.floor(pv + ov[t])));
+      let i = t * G * G + ix * G + iv; raw[t] = i;
+      if (hb) i = (Math.imul(i, 2654435761 | 0) >>> 0) >>> (32 - hb);
+      out[t] = i;
+    }
+    return out;
+  }
+  return { kind: 'tile', n, T, G, D, hb, disp, wx, wv, ox, ov, idx, raw, m: n };
+}
+// Fourier cosine basis of order k over the normalised box [0,1]^2: x_i(s) = cos(pi c_i . s), c_i in {0..k}^2
+function makeFourier(k) {
+  const C = []; for (let i = 0; i <= k; i++) for (let j = 0; j <= k; j++) C.push([i, j]);
+  const D = C.length, sc = C.map(c => (c[0] === 0 && c[1] === 0) ? 1 : 1 / Math.sqrt(c[0] * c[0] + c[1] * c[1]));
+  function feat(p, v, out) {
+    const u = (p - MC.XL) / (MC.XH - MC.XL), w = (v - MC.VL) / (MC.VH - MC.VL);
+    for (let i = 0; i < D; i++) out[i] = Math.cos(Math.PI * (C[i][0] * u + C[i][1] * w));
+    return out;
+  }
+  return { kind: 'fourier', k, C, D, sc, feat };
+}
+// semi-gradient Sarsa(0), gamma = 1, epsilon-greedy with random tie-breaking, weights start at 0 (optimistic)
+// cfg: { kind:'tile', n, T, disp, hb, alpha } or { kind:'fourier', k, alpha }; returns per-episode steps and the weights
+function sarsaRun(cfg, seed, episodes, cap, eps, onEp) {
+  eps = eps || 0; const rng = mulberry32(seed);
+  const tile = cfg.kind === 'tile', FX = tile ? makeTiles(cfg.n, cfg.T, cfg.disp, cfg.hb) : makeFourier(cfg.k), D = FX.D;
+  const W = [new Float64Array(D), new Float64Array(D), new Float64Array(D)];
+  const al = tile ? cfg.alpha / cfg.n : null, als = tile ? null : FX.sc.map(s => cfg.alpha * s);
+  let F = tile ? new Int32Array(FX.n) : new Float64Array(D), F2 = tile ? new Int32Array(FX.n) : new Float64Array(D);
+  const phi = (p, v, out) => tile ? FX.idx(Math.fround(p), Math.fround(v), out) : FX.feat(Math.fround(p), Math.fround(v), out);
+  const qv = (a, f) => { let s = 0; const w = W[a]; if (tile) { for (let t = 0; t < f.length; t++) s += w[f[t]]; } else { for (let i = 0; i < D; i++) s += w[i] * f[i]; } return s; };
+  const upd = (a, f, d) => { const w = W[a]; if (tile) { for (let t = 0; t < f.length; t++) w[f[t]] += cfg.alpha / cfg.n * d; } else { for (let i = 0; i < D; i++) w[i] += als[i] * d * f[i]; } };
+  const q3 = [0, 0, 0];
+  const act = f => {
+    if (eps > 0 && rng() < eps) return Math.floor(rng() * 3);
+    for (let a = 0; a < 3; a++) q3[a] = qv(a, f);
+    const m = Math.max(q3[0], q3[1], q3[2]), b = []; for (let a = 0; a < 3; a++) if (q3[a] === m) b.push(a);
+    return b.length === 1 ? b[0] : b[Math.floor(rng() * b.length)];
+  };
+  const steps = [];
+  for (let ep = 0; ep < episodes; ep++) {
+    const x0 = -0.6 + 0.2 * rng(); let p = x0, v = 0; phi(p, v, F); let a = act(F), k = 0;
+    for (;;) {
+      const r = mcStep(p, v, a); p = r[0]; v = r[1]; k++;
+      if (r[2]) { upd(a, F, -1 - qv(a, F)); break; }
+      phi(p, v, F2); const a2 = act(F2); upd(a, F, -1 + qv(a2, F2) - qv(a, F));
+      const tmp = F; F = F2; F2 = tmp; a = a2;
+      if (k >= cap) break;
+    }
+    steps.push(k); if (onEp) onEp(ep, k);
+  }
+  return { steps, W, FX, cfg };
+}
+// greedy value / action of a trained agent at a raw state
+function agentQ(R, p, v) {
+  const tile = R.FX.kind === 'tile', f = tile ? R.FX.idx(Math.fround(p), Math.fround(v), new Int32Array(R.FX.n)) : R.FX.feat(Math.fround(p), Math.fround(v), new Float64Array(R.FX.D));
+  const q = [0, 0, 0];
+  for (let a = 0; a < 3; a++) { let s = 0; const w = R.W[a]; if (tile) { for (let t = 0; t < f.length; t++) s += w[f[t]]; } else { for (let i = 0; i < f.length; i++) s += w[i] * f[i]; } q[a] = s; }
+  return q;
+}
+function greedyRoll(R, p, v, cap) {
+  const path = [[p, v]]; let k = 0, done = false;
+  while (k < cap) { const q = agentQ(R, p, v), a = q.indexOf(Math.max(...q)); const r = mcStep(p, v, a); p = r[0]; v = r[1]; k++; path.push([p, v, a]); if (r[2]) { done = true; break; } }
+  return { path, k, done };
+}
+// minimum steps to the goal by value iteration on an (NX x NV) grid with bilinear interpolation (an approximation)
+function mcValueIteration(NX, NV, iters) {
+  const V = new Float64Array(NX * NV), dx = (MC.XH - MC.XL) / (NX - 1), dv = (MC.VH - MC.VL) / (NV - 1);
+  const look = (p, v) => {
+    const fx = (p - MC.XL) / dx, fv = (v - MC.VL) / dv; let i = Math.floor(fx), j = Math.floor(fv); if (i > NX - 2) i = NX - 2; if (j > NV - 2) j = NV - 2; if (i < 0) i = 0; if (j < 0) j = 0;
+    const a = fx - i, b = fv - j; return (1 - a) * (1 - b) * V[i * NV + j] + a * (1 - b) * V[(i + 1) * NV + j] + (1 - a) * b * V[i * NV + j + 1] + a * b * V[(i + 1) * NV + j + 1];
+  };
+  let it = 0, ch = 0;
+  for (it = 0; it < iters; it++) {
+    ch = 0; const N = new Float64Array(NX * NV);
+    for (let i = 0; i < NX; i++) for (let j = 0; j < NV; j++) {
+      const p = MC.XL + i * dx, v = MC.VL + j * dv; let best = Infinity;
+      for (let a = 0; a < 3; a++) { const r = mcStep(p, v, a), c = r[2] ? 1 : 1 + look(r[0], r[1]); if (c < best) best = c; }
+      N[i * NV + j] = best; ch = Math.max(ch, Math.abs(best - V[i * NV + j]));
+    }
+    V.set(N); if (ch < 1e-9) break;
+  }
+  return { V, NX, NV, look, it: it + 1, ch };
+}
+/* ---------- the 1000-state random walk ---------- */
+const RW = { N: 1000, J: 100 };
+// solve (I - P) x = rhs for the walk's symmetric banded P (P[s][s'] = 1/200 for 0 < |s - s'| <= 100), no pivoting needed
+function rwSolve(rhs) {
+  const N = RW.N, J = RW.J, B = J, W = 2 * B + 1, A = new Float64Array(N * W), x = Float64Array.from(rhs);
+  for (let i = 0; i < N; i++) for (let d = -B; d <= B; d++) { const j = i + d; if (j < 0 || j >= N) continue; A[i * W + d + B] = d === 0 ? 1 : -1 / 200; }
+  for (let k = 0; k < N; k++) {
+    const piv = A[k * W + B];
+    for (let i = k + 1; i <= Math.min(N - 1, k + B); i++) {
+      const f = A[i * W + (k - i) + B] / piv; if (!f) continue;
+      for (let j = k; j <= Math.min(N - 1, k + B); j++) A[i * W + (j - i) + B] -= f * A[k * W + (j - k) + B];
+      x[i] -= f * x[k];
+    }
+  }
+  for (let i = N - 1; i >= 0; i--) { let s = x[i]; for (let j = i + 1; j <= Math.min(N - 1, i + B); j++) s -= A[i * W + (j - i) + B] * x[j]; x[i] = s / A[i * W + B]; }
+  return x;
+}
+function rwTruth() {
+  const N = RW.N, r = new Float64Array(N);
+  for (let s = 1; s <= N; s++) { let t = 0; for (let k = 1; k <= RW.J; k++) { if (s - k < 1) t -= 1 / 200; if (s + k > N) t += 1 / 200; } r[s - 1] = t; }
+  const V = rwSolve(r), h = new Float64Array(N); h[499] = 1; const eta = rwSolve(h); let tot = 0; for (const e of eta) tot += e;
+  return { V, mu: eta.map(e => e / tot), len: tot };
+}
+function rwFeats(kind, n) {
+  const N = RW.N, X = new Float64Array(N * (n + 1));
+  for (let s = 0; s < N; s++) { const u = s / (N - 1); for (let j = 0; j <= n; j++) X[s * (n + 1) + j] = kind === 'poly' ? Math.pow(u, j) : Math.cos(j * Math.PI * u); }
+  return X;
+}
+// gradient Monte Carlo on the walk; returns RMSVE (weighted by mu) after every `every` episodes
+function rwGradMC(kind, n, alpha, episodes, seed, every, T) {
+  const X = rwFeats(kind, n), m = n + 1, w = new Float64Array(m), rng = mulberry32(seed), out = [], traj = [];
+  const rms = () => { let e = 0; for (let s = 0; s < RW.N; s++) { let y = 0; for (let j = 0; j < m; j++) y += X[s * m + j] * w[j]; e += T.mu[s] * (y - T.V[s]) ** 2; } return Math.sqrt(e); };
+  for (let ep = 0; ep < episodes; ep++) {
+    let s = 500, G = 0; traj.length = 0;
+    for (;;) { traj.push(s); const d = rng() < 0.5 ? -1 : 1, k = 1 + Math.floor(rng() * 100); s += d * k; if (s < 1) { G = -1; break; } if (s > RW.N) { G = 1; break; } }
+    for (const st of traj) { const o = (st - 1) * m; let y = 0; for (let j = 0; j < m; j++) y += X[o + j] * w[j]; const g = alpha * (G - y); for (let j = 0; j < m; j++) w[j] += g * X[o + j]; }
+    if ((ep + 1) % every === 0) out.push(rms());
+  }
+  return { out, w };
+}
+
+
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), ink: css('--ink'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), lda: css('--lda'), bad: css('--qda'), soft: css('--soft') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sub = n => String(n).split('').map(ch => '₀₁₂₃₄₅₆₇₈₉'[+ch] || ch).join('');
+const sup = n => String(n).split('').map(ch => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+ch] || ch).join('');
+const tick = () => new Promise(r => setTimeout(r, 0));
+const PX = [MC.XL, MC.XH], PV = [MC.VL, MC.VH];
+const toU = p => (p - MC.XL) / (MC.XH - MC.XL), toW = v => (v - MC.VL) / (MC.VH - MC.VL);
+const ACT = ['push left', 'coast', 'push right'];
+const fy2 = y => fmt(y, 2);
+
+/* ---------- drawing helpers ---------- */
+function subView(v0, pad, xl, yl) {
+  const { ctx, w, h } = v0, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  return { ctx, w, h, pad, pw, ph, xl, yl, X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+const RGB = new Map(), rgbC = document.createElement('canvas'); rgbC.width = rgbC.height = 1;
+function rgbOf(col) { if (RGB.has(col)) return RGB.get(col); const x = rgbC.getContext('2d', { willReadFrequently: true }); x.clearRect(0, 0, 1, 1); x.fillStyle = col; x.fillRect(0, 0, 1, 1); const d = x.getImageData(0, 0, 1, 1).data, o = [d[0], d[1], d[2]]; RGB.set(col, o); return o; }
+// a field drawn as one pixel per cell, scaled up (smoothly, or crisp for tilings)
+function heat(v, f, step, cf, crisp) {
+  const nx = Math.max(1, Math.ceil(v.pw / step)), ny = Math.max(1, Math.ceil(v.ph / step)), sc = document.createElement('canvas'); sc.width = nx; sc.height = ny;
+  const sx = sc.getContext('2d'), img = sx.createImageData(nx, ny), D = img.data, kx = v.pw / nx, ky = v.ph / ny;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const r = cf(f(v.iX(v.pad.l + (i + 0.5) * kx), v.iY(v.pad.t + (j + 0.5) * ky))); if (!r) continue;
+    const c = rgbOf(r[0]), o = 4 * (j * nx + i); D[o] = c[0]; D[o + 1] = c[1]; D[o + 2] = c[2]; D[o + 3] = Math.round(255 * clamp(r[1], 0, 1));
+  }
+  sx.putImageData(img, 0, 0); const c = v.ctx; c.save(); c.imageSmoothingEnabled = !crisp; c.drawImage(sc, v.pad.l, v.pad.t, v.pw, v.ph); c.restore();
+}
+// cached heat layer (expensive maps are drawn once per size / content)
+function cachedHeat(store, key, v, f, step, cf) {
+  const cv = v.ctx.canvas;
+  if (!store.oc || store.key !== key || store.oc.width !== cv.width || store.oc.height !== cv.height) {
+    const oc = store.oc || document.createElement('canvas'); oc.width = cv.width; oc.height = cv.height;
+    const octx = oc.getContext('2d'), d = cv.width / v.w; octx.setTransform(d, 0, 0, d, 0, 0); octx.clearRect(0, 0, v.w, v.h);
+    heat(Object.assign({}, v, { ctx: octx }), f, step, cf); store.oc = oc; store.key = key;
+  }
+  v.ctx.drawImage(store.oc, 0, 0, v.w, v.h);
+}
+function ring(v, x, y, col) { const c = v.ctx; c.save(); c.beginPath(); c.arc(v.X(x), v.Y(y), 8, 0, 7); c.strokeStyle = css('--surface'); c.lineWidth = 4; c.stroke(); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); c.restore(); }
+function label(v, x, y, text, col, align) { const c = v.ctx; c.save(); c.font = '600 11px ' + css('--f-mono'); c.textAlign = align || 'left'; c.textBaseline = 'middle'; c.fillStyle = css('--surface'); c.globalAlpha = 0.8; const tw = c.measureText(text).width; c.fillRect((align === 'right' ? x - tw : align === 'center' ? x - tw / 2 : x) - 3, y - 8, tw + 6, 16); c.globalAlpha = 1; c.fillStyle = col; c.fillText(text, x, y); c.restore(); }
+// pointer handling across several views on one canvas: cb(view, x, y)
+function pick(cv, views, cb) {
+  let on = false;
+  const go = e => { const vs = views(); if (!vs || !vs.length) return; const [px, py] = evPos(cv, e); let v = vs.find(q => px >= q.pad.l - 4 && px <= q.pad.l + q.pw + 4 && py >= q.pad.t - 4 && py <= q.pad.t + q.ph + 4); if (!v) return false; cb(v, clamp(v.iX(px), v.xl[0], v.xl[1]), clamp(v.iY(py), v.yl[0], v.yl[1])); return true; };
+  cv.addEventListener('pointerdown', e => { if (go(e) !== false) { on = true; cv.setPointerCapture(e.pointerId); e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { if (on) go(e); });
+  const up = () => { on = false; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function phaseAxes(v) { axes(v, 'position', 'velocity', { fy: fy2, sy: 0.02, sx: 0.3 }); }
+const steelCol = (val, hi, col) => [col, 0.04 + 0.92 * clamp(val / hi, 0, 1)];
+const sgnJoin = parts => parts.map((p, i) => (i ? (p.neg ? ' &minus; ' : ' + ') : (p.neg ? '&minus;' : '')) + p.html).join('');
+
+/* ---------- least squares by Householder QR ---------- */
+function lstsq(X, m, d, y) {
+  const A = Float64Array.from(X), b = Float64Array.from(y), Rd = new Float64Array(d);
+  for (let k = 0; k < d; k++) {
+    let nrm = 0; for (let i = k; i < m; i++) nrm += A[i * d + k] * A[i * d + k]; nrm = Math.sqrt(nrm);
+    if (nrm === 0) { Rd[k] = 0; continue; }
+    const al = A[k * d + k] > 0 ? -nrm : nrm; A[k * d + k] -= al; let vn = 0; for (let i = k; i < m; i++) vn += A[i * d + k] * A[i * d + k];
+    Rd[k] = al; if (vn === 0) continue;
+    for (let j = k + 1; j < d; j++) { let s = 0; for (let i = k; i < m; i++) s += A[i * d + k] * A[i * d + j]; s = 2 * s / vn; for (let i = k; i < m; i++) A[i * d + j] -= s * A[i * d + k]; }
+    let s = 0; for (let i = k; i < m; i++) s += A[i * d + k] * b[i]; s = 2 * s / vn; for (let i = k; i < m; i++) b[i] -= s * A[i * d + k];
+  }
+  const x = new Float64Array(d), tol = Math.max(...Rd.map(Math.abs)) * 1e-13;
+  for (let k = d - 1; k >= 0; k--) { if (Math.abs(Rd[k]) <= tol) { x[k] = 0; continue; } let s = b[k]; for (let j = k + 1; j < d; j++) s -= A[k * d + j] * x[j]; x[k] = s / Rd[k]; }
+  return x;
+}
+
+/* ---------- shared state: the walk, the hero agent, value iteration ---------- */
+const RWT = rwTruth();
+const HERO_CFG = { kind: 'tile', n: 8, T: 8, alpha: 0.5 };
+const HA = sarsaRun(HERO_CFG, 1, 150, 1000);
+let VI = null; const viReady = [];
+const viStart = () => { if (!VI) return null; let s = 0; for (let i = 0; i <= 200; i++) s += VI.look(-0.6 + 0.2 * i / 200, 0); return s / 201; };
+const costOf = R => (p, v) => { const q = agentQ(R, p, v); return -Math.max(q[0], q[1], q[2]); };
+
+/* ---------- hill strip with the car ---------- */
+function drawHill(cv, path, t) {
+  const v = frame(cv, PX, [-1.25, 1.3], { l: 10, r: 10, t: 8, b: 8 }), c = v.ctx, C = C0();
+  c.save(); c.beginPath(); c.moveTo(v.X(MC.XL), v.Y(-1.25)); for (let i = 0; i <= 120; i++) { const x = MC.XL + i / 120 * 1.8; c.lineTo(v.X(x), v.Y(Math.sin(3 * x))); } c.lineTo(v.X(MC.XH), v.Y(-1.25)); c.closePath(); c.fillStyle = C.soft; c.fill();
+  c.beginPath(); for (let i = 0; i <= 120; i++) { const x = MC.XL + i / 120 * 1.8; i ? c.lineTo(v.X(x), v.Y(Math.sin(3 * x))) : c.moveTo(v.X(x), v.Y(Math.sin(3 * x))); } c.strokeStyle = C.muted; c.lineWidth = 1.5; c.stroke();
+  const fx = v.X(MC.GOAL), fy = v.Y(Math.sin(1.5)); c.strokeStyle = C.ink; c.lineWidth = 1.5; c.beginPath(); c.moveTo(fx, fy); c.lineTo(fx, fy - 24); c.stroke(); c.fillStyle = C.c; c.beginPath(); c.moveTo(fx, fy - 24); c.lineTo(fx + 13, fy - 19); c.lineTo(fx, fy - 14); c.closePath(); c.fill();
+  if (path && path.length) {
+    const k = Math.min(path.length - 1, Math.floor(t)), [p] = path[k];
+    c.globalAlpha = 0.35; for (let i = Math.max(0, k - 60); i < k; i += 2) { c.beginPath(); c.arc(v.X(path[i][0]), v.Y(Math.sin(3 * path[i][0])) - 6, 2, 0, 7); c.fillStyle = C.a; c.fill(); } c.globalAlpha = 1;
+    const ang = Math.atan(3 * Math.cos(3 * p) * (v.Y(1) - v.Y(0)) / (v.X(1) - v.X(0))), cx = v.X(p), cy = v.Y(Math.sin(3 * p));
+    c.translate(cx, cy); c.rotate(ang); c.fillStyle = C.a; c.strokeStyle = C.surf; c.lineWidth = 1.5; c.beginPath(); c.roundRect ? c.roundRect(-11, -15, 22, 10, 3) : c.rect(-11, -15, 22, 10); c.fill(); c.stroke();
+    c.fillStyle = C.ink; c.beginPath(); c.arc(-6, -4, 3, 0, 7); c.arc(6, -4, 3, 0, 7); c.fill();
+    if (k > 0 && path[k][2] != null && path[k][2] !== 1) { c.strokeStyle = C.ink; c.lineWidth = 1.5; const dir = path[k][2] === 2 ? 1 : -1; c.beginPath(); c.moveTo(-dir * 13, -10); c.lineTo(-dir * 21, -10); c.stroke(); }
+  }
+  c.restore();
+}
+
+/* ---------- hero ---------- */
+const HERO = { p: -0.5, v: 0, roll: null, t: 0, raf: 0, store: {}, v0: null };
+const heroCost = costOf(HA);
+function heroRoll() { HERO.roll = greedyRoll(HA, HERO.p, HERO.v, 1000); HERO.t = 0; cancelAnimationFrame(HERO.raf); const go = () => { HERO.t += 1.6; drawHero(); if (HERO.t < HERO.roll.path.length - 1) HERO.raf = requestAnimationFrame(go); }; HERO.raf = requestAnimationFrame(go); }
+function drawHero() {
+  const cv = $('#hero-cv'), v = HERO.v0 = frame(cv, PX, PV, { l: 46, r: 12, t: 12, b: 30 }), C = C0();
+  cachedHeat(HERO.store, 'hero' + C.a, v, heroCost, 4, val => steelCol(val, 125, C.a));
+  phaseAxes(v); clip(v);
+  const T = HA.FX, c = v.ctx; c.strokeStyle = C.surf; c.globalAlpha = 0.5; c.lineWidth = 1;
+  for (let i = 0; i <= T.T + 1; i++) { const x = MC.XL + (i - T.ox[0]) * T.wx, y = MC.VL + (i - T.ov[0]) * T.wv; c.beginPath(); c.moveTo(v.X(x), v.pad.t); c.lineTo(v.X(x), v.pad.t + v.ph); c.stroke(); c.beginPath(); c.moveTo(v.pad.l, v.Y(y)); c.lineTo(v.pad.l + v.pw, v.Y(y)); c.stroke(); }
+  c.globalAlpha = 1;
+  const R = HERO.roll;
+  if (R) { const k = Math.min(R.path.length - 1, Math.floor(HERO.t)); c.strokeStyle = C.ink; c.lineWidth = 2; c.beginPath(); for (let i = 0; i <= k; i++) { const q = R.path[i]; i ? c.lineTo(v.X(q[0]), v.Y(q[1])) : c.moveTo(v.X(q[0]), v.Y(q[1])); } c.stroke(); dot(v, R.path[k][0], R.path[k][1], C.ink, 4); }
+  seg(v, MC.GOAL, 0, MC.GOAL, MC.VH, C.c, 2, [5, 4]);
+  ring(v, HERO.p, HERO.v, C.ink); v.ctx.restore();
+  label(v, v.X(MC.GOAL) + 4, v.pad.t + 12, 'flag', C.c);
+  drawHill($('#hero-hill'), R ? R.path : [[HERO.p, HERO.v]], R ? HERO.t : 0);
+  if (R) {
+    const est = heroCost(HERO.p, HERO.v), vi = VI ? VI.look(HERO.p, HERO.v) : null;
+    $('#hero-cap').innerHTML = `From position ${tip(fmt(HERO.p, 3), 'where you touched, across')}, velocity ${tip(fmt(HERO.v, 4), 'where you touched, up')}: ${R.done ? `the car reaches the flag in <b class="num">${tip(R.k, 'greedy actions under the learned q̂, simulated with Gymnasium\'s equations')} steps</b>` : 'the car has not reached the flag after 1,000 steps'}. It expected ${tip(fmt(est, 0), `−max over actions of q̂(s, a)\n= −max(${agentQ(HA, HERO.p, HERO.v).map(q => fmt(q, 1)).join(', ')})`)}${vi != null ? `; value iteration says the fewest possible is about ${tip(fmt(vi, 0), 'value iteration on a 91 × 71 grid,\nbilinear interpolation between grid points')}` : ''}. Deeper colour = more steps to go; the grid is one of the 8 tilings. <b>Touch another state.</b>`;
+  }
+}
+fig($('#hero-cv'), drawHero); fig($('#hero-hill'), drawHero);
+pick($('#hero-cv'), () => HERO.v0 ? [HERO.v0] : [], (v, x, y) => { HERO.p = x; HERO.v = y; heroRoll(); });
+
+/* ---------- 1 · linear in w ---------- */
+const WY = { f: 'raw', p: -0.55, v: 0.035, fits: {}, vs: [] };
+const WYN = { raw: 'the raw state 1, p, v', prod: 'raw plus the product p·v', p2: 'the order-2 polynomial', p4: 'the order-4 polynomial', f4: 'the order-4 Fourier basis', f8: 'the order-8 Fourier basis' };
+function wyFeat(kind) {
+  if (kind === 'raw') return { d: 3, names: ['1', 'u', 'w'], f: (u, w) => [1, u, w] };
+  if (kind === 'prod') return { d: 4, names: ['1', 'u', 'w', 'u·w'], f: (u, w) => [1, u, w, u * w] };
+  const n = +kind[1], C = []; for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) C.push([i, j]);
+  if (kind[0] === 'p') return { d: C.length, C, names: C.map(([i, j]) => (i ? 'u' + (i > 1 ? sup(i) : '') : '') + (j ? 'w' + (j > 1 ? sup(j) : '') : '') || '1'), f: (u, w) => C.map(([i, j]) => Math.pow(u, i) * Math.pow(w, j)) };
+  return { d: C.length, C, names: C.map(([i, j]) => `cos π(${i}u+${j}w)`), f: (u, w) => C.map(([i, j]) => Math.cos(Math.PI * (i * u + j * w))) };
+}
+function wyFit(kind) {
+  if (WY.fits[kind]) return WY.fits[kind];
+  const F = wyFeat(kind), m = VI.NX * VI.NV, X = new Float64Array(m * F.d), y = new Float64Array(m), dx = 1.8 / (VI.NX - 1), dv = 0.14 / (VI.NV - 1);
+  for (let i = 0; i < VI.NX; i++) for (let j = 0; j < VI.NV; j++) { const r = i * VI.NV + j, x = F.f(toU(MC.XL + i * dx), toW(MC.VL + j * dv)); for (let k = 0; k < F.d; k++) X[r * F.d + k] = x[k]; y[r] = VI.V[r]; }
+  const w = lstsq(X, m, F.d, y); let ss = 0, st = 0, my = 0; for (let r = 0; r < m; r++) my += y[r]; my /= m;
+  for (let r = 0; r < m; r++) { let f = 0; for (let k = 0; k < F.d; k++) f += X[r * F.d + k] * w[k]; ss += (f - y[r]) ** 2; st += (y[r] - my) ** 2; }
+  const out = { F, w, rmse: Math.sqrt(ss / m), r2: 1 - ss / st, ss, st, m, ev: (p, v) => { const x = F.f(toU(p), toW(v)); let s = 0; for (let k = 0; k < F.d; k++) s += x[k] * w[k]; return s; } };
+  return WY.fits[kind] = out;
+}
+WY.store = [{}, {}];
+function drawWhy() {
+  const cv = $('#wy-cv'), v0 = frame(cv, PX, PV, { l: 0, r: 0, t: 0, b: 0 }), C = C0();
+  if (!VI) { label(v0, v0.w / 2, v0.h / 2, 'solving value iteration…', C.muted, 'center'); return; }
+  const stack = v0.w < 520, g = 18;
+  const pads = stack ? [{ l: 46, r: 12, t: 22, b: v0.h / 2 + 22 }, { l: 46, r: 12, t: v0.h / 2 + 34, b: 28 }] : [{ l: 46, r: v0.w / 2 + g / 2, t: 22, b: 30 }, { l: v0.w / 2 + g / 2 + 34, r: 12, t: 22, b: 30 }];
+  const F = wyFit(WY.f), hi = VI.max, vs = WY.vs = pads.map(p => subView(v0, p, PX, PV));
+  [[VI.look, 'truth: fewest steps'], [F.ev, 'best fit: ' + ({ raw: '1, p, v', prod: '+ p·v', p2: 'polynomial n = 2', p4: 'polynomial n = 4', f4: 'Fourier n = 4', f8: 'Fourier n = 8' })[WY.f]]].forEach(([f, name], i) => {
+    const v = vs[i]; cachedHeat(WY.store[i], (i ? WY.f : 'truth') + C.a + v.pw, v, f, 4, val => steelCol(val, hi, C.a));
+    axes(v, 'position', 'velocity', { fy: fy2, sy: 0.02, sx: 0.6 }); clip(v); ring(v, WY.p, WY.v, C.ink); v.ctx.restore(); label(v, v.pad.l + 2, v.pad.t - 11, name, C.ink);
+  });
+  const tv = VI.look(WY.p, WY.v), fv = F.ev(WY.p, WY.v), x = F.F.f(toU(WY.p), toW(WY.v));
+  $('#wy-d').innerHTML = tip(F.F.d, WY.f[0] === 'p' || WY.f[0] === 'f' ? `(n + 1)² = (${WY.f[1]} + 1)² = ${F.F.d}` : F.F.names.join(', '));
+  $('#wy-rmse').innerHTML = tip(fmt(F.rmse, 1), `√(Σ (fit − truth)² ÷ ${F.m.toLocaleString('en-GB')} grid states)\n= √(${fmt(F.ss, 0)} ÷ ${F.m})`);
+  $('#wy-r2').innerHTML = tip(pct(F.r2), `1 − Σ(fit − truth)² ÷ Σ(truth − mean)²\n= 1 − ${fmt(F.ss, 0)} ÷ ${fmt(F.st, 0)}`);
+  $('#wy-pt').innerHTML = `${tip(fmt(fv, 0), 'w · x(s) at the ring')} vs ${tip(fmt(tv, 0), 'value iteration at the ring')}`;
+  const terms = x.map((xi, k) => ({ k, xi, w: F.w[k], t: xi * F.w[k] })), show = terms.length <= 4 ? terms : terms.slice().sort((a, b) => Math.abs(b.t) - Math.abs(a.t)).slice(0, 3);
+  $('#run-wy').innerHTML = `<b>Running example</b> at the ring, p = ${fmt(WY.p, 3)}, v = ${fmt(WY.v, 4)}, scaled to u = ${tip(fmt(toU(WY.p), 3), `(p + 1.2) ÷ 1.8 = (${fmt(WY.p, 3)} + 1.2) ÷ 1.8`)}, w = ${tip(fmt(toW(WY.v), 3), `(v + 0.07) ÷ 0.14 = (${fmt(WY.v, 4)} + 0.07) ÷ 0.14`)}: v&#770; = ${sgnJoin(show.map(o => ({ neg: o.w < 0, html: tip(`${fmt(Math.abs(o.w), 1)} × ${fmt(o.xi, 3)}`, `w for feature ${F.F.names[o.k]} = ${fmt(o.w, 4)}\nx = ${F.F.names[o.k]} = ${fmt(o.xi, 4)}`) })))}${terms.length > 4 ? ` + ${tip(`${terms.length - 3} more terms`, `the other ${terms.length - 3} terms add up to ${fmt(fv - show.reduce((s, o) => s + o.t, 0), 1)}`)}` : ''} = <b class="num">${fmt(fv, 1)}</b> steps, against ${fmt(tv, 1)} for the truth.`;
+  const msg = { raw: `With ${WYN.raw} the fit is a tilted plane: it can say &ldquo;further left is worse&rdquo; and &ldquo;moving right is better&rdquo;, but not that they interact. It explains only ${pct(F.r2, 0)} of the variation.`,
+    prod: `The single product feature p&middot;v lets the slope in velocity change with position, a first taste of interaction, and the fit explains ${pct(F.r2, 0)}. Still nowhere near the spiral.`,
+    p2: `Nine polynomial features bend the surface into a saddle; ${pct(F.r2, 0)} explained, an RMS error of ${fmt(F.rmse, 0)} steps.`,
+    p4: `Twenty-five polynomial features follow the broad shape (${pct(F.r2, 0)}), but the sharp spiral edges of the truth are beyond any smooth low-order surface.`,
+    f4: `Twenty-five Fourier waves reach ${pct(F.r2, 0)}, compared with ${pct(wyFit('p4').r2, 0)} for the same number of polynomial features.`,
+    f8: `Eighty-one waves start to trace the spiral (${pct(F.r2, 0)}, RMS error ${fmt(F.rmse, 0)} steps). The edges stay soft: smooth waves struggle with jumps, which is where tile coding will shine.` }[WY.f];
+  $('#wy-say').innerHTML = msg + ' The weights are the best possible for these features; no learning rule using them can do better on this measure.';
+}
+fig($('#wy-cv'), drawWhy);
+seg1('[data-wyf]', 'data-wyf', k => { WY.f = k; drawWhy(); });
+pick($('#wy-cv'), () => WY.vs, (v, x, y) => { WY.p = x; WY.v = y; drawWhy(); });
+
+/* ---------- 2 · polynomials ---------- */
+const RWS = Array.from({ length: RW.N }, (_, i) => i / (RW.N - 1));
+const fitCache = {};
+function rwFit(kind, n, weighted) {
+  const key = kind + n + (weighted ? 'w' : ''); if (fitCache[key]) return fitCache[key];
+  const X = rwFeats(kind, n), m = RW.N, d = n + 1, Xw = new Float64Array(m * d), y = new Float64Array(m);
+  for (let s = 0; s < m; s++) { const sw = weighted ? Math.sqrt(RWT.mu[s]) : 1; for (let j = 0; j < d; j++) Xw[s * d + j] = X[s * d + j] * sw; y[s] = RWT.V[s] * sw; }
+  const w = lstsq(Xw, m, d, y), fit = new Float64Array(m); let e = 0, ew = 0;
+  for (let s = 0; s < m; s++) { let f = 0; for (let j = 0; j < d; j++) f += X[s * d + j] * w[j]; fit[s] = f; e += (f - RWT.V[s]) ** 2; ew += RWT.mu[s] * (f - RWT.V[s]) ** 2; }
+  return fitCache[key] = { w, fit, X, d, rmse: Math.sqrt(e / m), rmsve: Math.sqrt(ew) };
+}
+function colCos(X, d, a, b) { let ab = 0, aa = 0, bb = 0; for (let s = 0; s < RW.N; s++) { const x = X[s * d + a], y = X[s * d + b]; ab += x * y; aa += x * x; bb += y * y; } return ab / Math.sqrt(aa * bb); }
+const PO = { n: 3, k: 1, s: 750, v: null };
+function drawPoly() {
+  const n = PO.n, F = rwFit('poly', n), C = C0(), cv = $('#po-cv'), v = PO.v = frame(cv, [1, 1000], [-1.05, 1.05]);
+  axes(v, 'state', 'value', { sx: 100 }); clip(v);
+  curve(v, x => RWT.V[clamp(Math.round(x) - 1, 0, 999)], C.muted, 2, [6, 5]);
+  curve(v, x => F.fit[clamp(Math.round(x) - 1, 0, 999)], C.a, 2.6);
+  seg(v, PO.s, -1.05, PO.s, 1.05, C.line, 1, [3, 3]); dot(v, PO.s, F.fit[PO.s - 1], C.a, 5); dot(v, PO.s, RWT.V[PO.s - 1], C.muted, 3.5);
+  v.ctx.restore();
+  const vb = frame($('#po-basis'), [0, 1], [-0.05, 1.05], { l: 36, r: 10, t: 10, b: 26 }); axes(vb, 's', '', { sx: 0.2, sy: 0.5 }); clip(vb);
+  for (let j = 0; j <= n; j++) curve(vb, x => Math.pow(x, j), j >= n - 1 && n >= 1 ? C.ink : C.muted, j >= n - 1 && n >= 1 ? 2.2 : 1.2);
+  vb.ctx.restore();
+  const cos = n >= 1 ? colCos(F.X, F.d, n, n - 1) : null, cnt = Math.pow(n + 1, PO.k), u = (PO.s - 1) / 999;
+  $('#po-n-o').textContent = n; $('#po-k-o').textContent = PO.k;
+  $('#po-cnt').innerHTML = tip(cnt.toLocaleString('en-GB'), `(n + 1)^k = (${n} + 1)^${PO.k} = ${cnt.toLocaleString('en-GB')}`);
+  $('#po-rmse').innerHTML = tip(fmt(F.rmse, 4), `least squares over the 1,000 states:\n√(Σ (fit − v)² ÷ 1000)`);
+  $('#po-cos').innerHTML = cos == null ? '—' : tip(fmt(cos, 4), `Σ s^${n} s^${n - 1} ÷ √(Σ s^${2 * n} · Σ s^${2 * n - 2})\nover the 1,000 states; 1 would mean identical directions`);
+  const xs = Array.from({ length: n + 1 }, (_, j) => Math.pow(u, j)), fv = F.fit[PO.s - 1];
+  $('#run-po').innerHTML = `<b>Running example</b> at state ${PO.s} (s = ${tip(fmt(u, 4), `(${PO.s} − 1) ÷ 999`)}), order n = ${n}: x(s) = (${xs.slice(0, 5).map((x, j) => tip(fmt(x, 3), `s^${j} = ${fmt(u, 4)}^${j}`)).join(', ')}${n > 4 ? ', …' : ''}), and v&#770;(s) = ${tip('Σ w<sub>j</sub> s<sup>j</sup>', 'w = ' + Array.from(F.w).map(w => fmt(w, 2)).join(', '))} = <b class="num">${fmt(fv, 4)}</b> against the true ${fmt(RWT.V[PO.s - 1], 4)}. In k = ${PO.k} dimension${PO.k > 1 ? 's' : ''} the same order would need ${tip(cnt.toLocaleString('en-GB'), `(${n} + 1)^${PO.k}`)} features.`;
+  let say;
+  if (n === 0) say = 'Order 0 is a single constant feature: the fit is the average value, flat at about zero, and knows nothing about where the walk is.';
+  else if (n <= 2) say = `With n = ${n} the fit ${n === 1 ? 'is a straight line through the S-shaped truth' : 'can bend once, but the S-curve has two bends'}; RMS error ${fmt(F.rmse, 3)}.`;
+  else say = `At order ${n} least squares follows the S-curve closely (RMS error ${fmt(F.rmse, 4)}). But look at the basis: s<sup>${n}</sup> and s<sup>${n - 1}</sup> have cosine ${fmt(cos, 3)}, nearly the same direction${cos > 0.99 ? ', so the columns are almost redundant and a gradient method will crawl' : ''}.`;
+  if (PO.k > 1) say += ` For a ${PO.k}-variable state the full basis needs ${cnt.toLocaleString('en-GB')} features${cnt > 5000 ? ', far too many to use as is' : ''}.`;
+  $('#po-say').innerHTML = say;
+}
+fig($('#po-cv'), drawPoly); fig($('#po-basis'), drawPoly);
+$('#po-n').addEventListener('input', e => { PO.n = +e.target.value; drawPoly(); });
+$('#po-k').addEventListener('input', e => { PO.k = +e.target.value; drawPoly(); });
+pick($('#po-cv'), () => PO.v ? [PO.v] : [], (v, x) => { PO.s = clamp(Math.round(x), 1, 1000); drawPoly(); });
+
+/* ---------- 3 · Fourier ---------- */
+const FO = { c1: 1, c2: 2, n: 3, p: -0.6, v: 0.02, v0: null, store: {} };
+function drawFourier() {
+  const C = C0(), { c1, c2 } = FO, cv = $('#fo-cv'), v = FO.v0 = frame(cv, PX, PV, { l: 46, r: 12, t: 12, b: 30 });
+  cachedHeat(FO.store, `${c1},${c2}` + C.a, v, (p, vv) => Math.cos(Math.PI * (c1 * toU(p) + c2 * toW(vv))), 4, x => [x >= 0 ? C.a : C.b, 0.04 + 0.6 * Math.abs(x)]);
+  phaseAxes(v); clip(v); ring(v, FO.p, FO.v, C.ink); v.ctx.restore();
+  const n = FO.n, F = rwFit('fourier', n), Fp = rwFit('poly', n);
+  const vb = frame($('#fo-basis'), [0, 1], [-1.1, 1.1], { l: 36, r: 10, t: 10, b: 26 }); axes(vb, 's', '', { sx: 0.2, sy: 1 }); clip(vb);
+  for (let j = 0; j <= n; j++) curve(vb, x => Math.cos(j * Math.PI * x), C.muted, 1, null);
+  curve(vb, x => RWT.V[clamp(Math.round(x * 999), 0, 999)], C.muted, 2, [6, 5]); curve(vb, x => F.fit[clamp(Math.round(x * 999), 0, 999)], C.a, 2.4); vb.ctx.restore();
+  let mc = 0, mi = '—'; for (let a = 0; a <= n; a++) for (let b = a + 1; b <= n; b++) { const q = Math.abs(colCos(F.X, F.d, a, b)); if (q > mc) { mc = q; mi = `cos(${a}πs) and cos(${b}πs)`; } }
+  const nc = Math.hypot(c1, c2), ai = nc ? 0.01 / nc : 0.01, u = toU(FO.p), w = toW(FO.v), dotp = c1 * u + c2 * w, val = Math.cos(Math.PI * dotp);
+  $('#fo-c1-o').textContent = c1; $('#fo-c2-o').textContent = c2; $('#fo-n-o').textContent = n;
+  $('#fo-al').innerHTML = tip(fmt(ai, 4), nc ? `α ÷ ‖c‖ = 0.01 ÷ √(${c1}² + ${c2}²)\n= 0.01 ÷ ${fmt(nc, 3)}` : 'c = 0: the constant feature keeps α');
+  $('#fo-cos').innerHTML = n ? tip(fmt(mc, 4), `largest |cosine| over all pairs, between ${mi},\nmeasured over the 1,000 states`) : '—';
+  $('#fo-rmse').innerHTML = `${tip(fmt(F.rmse, 4), 'least-squares fit with cos(jπs), j = 0…' + n)} / ${tip(fmt(Fp.rmse, 4), 'least-squares fit with s^j, j = 0…' + n)}`;
+  $('#run-fo').innerHTML = `<b>Running example</b> at the ring, u = ${tip(fmt(u, 3), '(p + 1.2) ÷ 1.8')}, w = ${tip(fmt(w, 3), '(v + 0.07) ÷ 0.14')}, with c = (${c1}, ${c2}): s&#8868;c = ${tip(fmt(dotp, 3), `${c1} × ${fmt(u, 3)} + ${c2} × ${fmt(w, 3)}`)}, so x(s) = cos(&pi; &times; ${fmt(dotp, 3)}) = <b class="num">${fmt(val, 3)}</b>. Its weight would learn with &alpha;<sub>i</sub> = ${tip(fmt(ai, 4), nc ? `0.01 ÷ ‖(${c1}, ${c2})‖ = 0.01 ÷ ${fmt(nc, 3)}` : 'α itself')}. A full order-${Math.max(c1, c2)} basis in these two variables has (${Math.max(c1, c2)} + 1)&sup2; = ${(Math.max(c1, c2) + 1) ** 2} such features.`;
+  let say = c1 === 0 && c2 === 0 ? 'c = (0, 0) is the constant feature: 1 everywhere, the bias term.'
+    : c2 === 0 ? `c = (${c1}, 0) varies with position only: ${c1} half-wave${c1 > 1 ? 's' : ''} across the track, the same at every speed.`
+    : c1 === 0 ? `c = (0, ${c2}) varies with velocity only: ${c2} half-wave${c2 > 1 ? 's' : ''} from full speed left to full speed right.`
+    : `c = (${c1}, ${c2}) is a tilted wave: its stripes run across both axes, so it couples position and velocity, which is exactly the kind of interaction Mountain Car needs.`;
+  say += n ? ` In one dimension the ${n + 1} cosines are nearly at right angles (largest cosine ${fmt(mc, 3)}${n >= 1 ? `, against ${fmt(colCos(Fp.X, Fp.d, n, n - 1), 3)} for the top two powers` : ''}); at order ${n} they fit the walk with RMS error ${fmt(F.rmse, 4)} against ${fmt(Fp.rmse, 4)} for powers. ${F.rmse < Fp.rmse ? 'The cosines fit better here.' : 'Here the powers happen to fit as well or better: capacity is not the issue, learning is.'}` : '';
+  $('#fo-say').innerHTML = say;
+}
+fig($('#fo-cv'), drawFourier); fig($('#fo-basis'), drawFourier);
+['c1', 'c2', 'n'].forEach(k => $('#fo-' + k).addEventListener('input', e => { FO[k] = +e.target.value; drawFourier(); }));
+pick($('#fo-cv'), () => FO.v0 ? [FO.v0] : [], (v, x, y) => { FO.p = x; FO.v = y; drawFourier(); });
+
+/* ---------- 4 · the race ---------- */
+const RA = { n: 5, ap: -4, af: -4.3, res: null, running: false, key: '' };
+const RA_RUNS = 10, RA_EPS = 5000, RA_EVERY = 100;
+async function raceRun() {
+  if (RA.running) return; RA.running = true; const n = RA.n, ap = Math.pow(10, RA.ap), af = Math.pow(10, RA.af), key = `${n},${RA.ap},${RA.af}`;
+  const acc = { poly: new Float64Array(RA_EPS / RA_EVERY), fourier: new Float64Array(RA_EPS / RA_EVERY) }, last = {};
+  for (let r = 0; r < RA_RUNS; r++) {
+    $('#ra-prog').textContent = `run ${r + 1} of ${RA_RUNS}…`; await tick();
+    for (const [kind, al] of [['poly', ap], ['fourier', af]]) { const o = rwGradMC(kind, n, al, RA_EPS, r + 1, RA_EVERY, RWT); o.out.forEach((e, i) => { acc[kind][i] += e / RA_RUNS; }); if (r === 0) last[kind] = o.w; }
+  }
+  RA.res = { n, ap, af, acc, w1: last, key }; RA.running = false; $('#ra-prog').textContent = ''; drawRace();
+}
+function drawRace() {
+  const C = C0(), v = frame($('#ra-cv'), [0, RA_EPS], [0, 0.6]); axes(v, 'episodes', '√VE', { sx: 1000, sy: 0.1 }); clip(v);
+  const R = RA.res, n = RA.res ? R.n : RA.n, bp = rwFit('poly', n, true), bf = rwFit('fourier', n, true);
+  seg(v, 0, bp.rmsve, RA_EPS, bp.rmsve, C.b, 1.5, [6, 5]); seg(v, 0, bf.rmsve, RA_EPS, bf.rmsve, C.a, 1.5, [6, 5]);
+  if (R) for (const [kind, col] of [['poly', C.b], ['fourier', C.a]]) { const c = v.ctx; c.strokeStyle = col; c.lineWidth = 2.4; c.beginPath(); c.moveTo(v.X(0), v.Y(Math.sqrt(RWT.V.reduce((s, x, i) => s + RWT.mu[i] * x * x, 0)))); R.acc[kind].forEach((e, i) => c.lineTo(v.X((i + 1) * RA_EVERY), v.Y(e))); c.stroke(); }
+  v.ctx.restore();
+  $('#ra-ap-o').textContent = Math.pow(10, RA.ap).toExponential(1).replace('e-', '×10⁻').replace(/(\d)$/, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+d]);
+  $('#ra-af-o').textContent = Math.pow(10, RA.af).toExponential(1).replace('e-', '×10⁻').replace(/(\d)$/, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+d]);
+  $('#ra-pb').innerHTML = tip(fmt(bp.rmsve, 4), `weighted least squares with weights μ(s):\nmin over w of √(Σ μ(s)[v(s) − w·x(s)]²), order ${n} powers${n >= 20 ? '\n(at order 20 this is at the limit of double precision:\nnumpy finds 0.00024)' : ''}`);
+  $('#ra-fb').innerHTML = tip(fmt(bf.rmsve, 4), `the same for the cosines cos(jπs), j = 0…${n}`);
+  const v0 = Math.sqrt(RWT.V.reduce((s, x, i) => s + RWT.mu[i] * x * x, 0));
+  if (!R) { $('#ra-p').textContent = '…'; $('#ra-f').textContent = '…'; $('#ra-say').innerHTML = 'The race starts when this section comes into view.'; $('#run-ra').innerHTML = `<b>Running example</b> waiting for the race. Before any learning, w = 0 and &radic;VE = ${tip(fmt(v0, 4), '√(Σ μ(s) v(s)²): predicting 0 everywhere')}.`; return; }
+  const tail = a => a.slice(-10).reduce((s, x) => s + x, 0) / 10, tp = tail(R.acc.poly), tf = tail(R.acc.fourier);
+  $('#ra-p').innerHTML = tip(fmt(tp, 4), `mean of √VE at episodes 4,100, 4,200, …, 5,000,\naveraged over ${RA_RUNS} runs`); $('#ra-f').innerHTML = tip(fmt(tf, 4), `mean of √VE at episodes 4,100, 4,200, …, 5,000,\naveraged over ${RA_RUNS} runs`);
+  const X = rwFeats('fourier', R.n), w = R.w1.fourier, o = 499 * (R.n + 1); let y = 0; for (let j = 0; j <= R.n; j++) y += X[o + j] * w[j]; const g = R.af * (1 - y);
+  $('#run-ra').innerHTML = `<b>Running example</b> after 5,000 episodes of run 1, the Fourier estimate at the start state 500 is v&#770; = ${tip(fmt(y, 4), 'Σ w_j cos(jπ s) at s = 499 ÷ 999')} (truth ${fmt(RWT.V[499], 4)}). If the next episode ends at +1, every visit to state 500 moves the constant weight w&#8320; by &alpha;(G &minus; v&#770;)x&#8320; = ${R.af.toExponential(1)} &times; (1 &minus; ${y < 0 ? '(&minus;' + fmt(-y, 3) + ')' : fmt(y, 3)}) &times; 1 = ${tip(g.toExponential(2), `${R.af.toExponential(2)} × ${fmt(1 - y, 4)} × cos(0)`)}: thousands of tiny nudges make up the learning curve.`;
+  const ratioP = tp / bp.rmsve, ratioF = tf / bf.rmsve;
+  $('#ra-say').innerHTML = `Over the last 1,000 episodes the polynomial sits at &radic;VE ${fmt(tp, 3)}, ${fmt(ratioP, 1)}&times; its best possible ${fmt(bp.rmsve, 3)}; the Fourier basis sits at ${fmt(tf, 3)}, ${fmt(ratioF, 1)}&times; its best. ${tf < tp ? `The cosines win by ${pct(1 - tf / tp, 0)}${R.n >= 10 ? ', and raising the order does not rescue the powers: the new high powers are almost copies of the old ones' : ''}.` : 'With these step sizes the powers keep up, so try the defaults again.'} ${R.ap > 1.5e-4 ? 'A bigger polynomial step makes the curve noisier rather than faster.' : ''}${R.af > 2e-4 ? ' A large Fourier step learns fast but then jitters around: constant-α Monte Carlo never settles.' : ''}`;
+}
+fig($('#ra-cv'), drawRace);
+seg1('[data-ran]', 'data-ran', k => { RA.n = +k; RA.res = null; drawRace(); raceRun(); });
+$('#ra-ap').addEventListener('input', e => { RA.ap = +e.target.value; drawRace(); });
+$('#ra-af').addEventListener('input', e => { RA.af = +e.target.value; drawRace(); });
+$('#ra-go').addEventListener('click', raceRun);
+
+/* ---------- 5 · coarse coding ---------- */
+const CO = { r: 0.12, shape: 'circle', U: 1, w: new Float64Array(100), last: null, v0: null };
+const COC = (() => { const r = mulberry32(5); return Array.from({ length: 100 }, () => [-0.05 + 1.1 * r(), -0.05 + 1.1 * r()]); })();
+const coR = () => CO.shape === 'wide' ? [CO.r * 2, CO.r / 2] : CO.shape === 'tall' ? [CO.r / 2, CO.r * 2] : [CO.r, CO.r];
+function coAct(u, w) { const [rx, ry] = coR(), o = []; for (let i = 0; i < COC.length; i++) { const a = (u - COC[i][0]) / rx, b = (w - COC[i][1]) / ry; if (a * a + b * b <= 1) o.push(i); } return o; }
+const coV = (u, w) => { let s = 0; for (const i of coAct(u, w)) s += CO.w[i]; return s; };
+function coTeach(u, w) {
+  const A = coAct(u, w), before = coV(u, w); let moved = 0;
+  if (A.length) { const d = 0.5 * (CO.U - before) / A.length; for (const i of A) CO.w[i] += d; }
+  const S = new Set(A); for (let i = 0; i < 60; i++) for (let j = 0; j < 60; j++) if (coAct((i + 0.5) / 60, (j + 0.5) / 60).some(k => S.has(k))) moved++;
+  CO.last = { u, w, A, before, after: coV(u, w), U: CO.U, moved: moved / 3600 };
+}
+let coGap = 0; const coGapCalc = () => { let g = 0; for (let i = 0; i < 80; i++) for (let j = 0; j < 80; j++) if (!coAct((i + 0.5) / 80, (j + 0.5) / 80).length) g++; coGap = g / 6400; };
+function drawCoarse() {
+  const C = C0(), v = CO.v0 = frame($('#co-cv'), [0, 1], [0, 1], { l: 36, r: 12, t: 12, b: 28 });
+  heat(v, (u, w) => { const A = coAct(u, w); if (!A.length) return null; let s = 0; for (const i of A) s += CO.w[i]; return s; }, 5, x => x == null ? null : [x >= 0 ? C.a : C.b, 0.03 + 0.75 * clamp(Math.abs(x), 0, 1)], true);
+  heat(v, (u, w) => coAct(u, w).length, 5, m => m ? null : [C.bad, 0.22], true);
+  axes(v, 's₁', 's₂', { sx: 0.2, sy: 0.2 }); clip(v);
+  const [rx, ry] = coR(), c = v.ctx, L = CO.last, act = new Set(L ? L.A : []);
+  COC.forEach(([cx, cy], i) => { c.beginPath(); c.ellipse(v.X(cx), v.Y(cy), rx * v.pw, ry * v.ph, 0, 0, 7); c.strokeStyle = act.has(i) ? C.ink : C.muted; c.globalAlpha = act.has(i) ? 0.9 : 0.18; c.lineWidth = act.has(i) ? 1.8 : 1; c.stroke(); });
+  c.globalAlpha = 1; if (L) ring(v, L.u, L.w, C.ink); v.ctx.restore();
+  $('#co-r-o').textContent = fmt(CO.r, 2);
+  $('#co-gap').innerHTML = tip(pct(coGap, 0), 'share of an 80 × 80 grid of points\nthat lie inside no region');
+  if (!L) { $('#co-m').textContent = '—'; $('#co-v').textContent = '—'; $('#co-reach').textContent = '—'; $('#run-co').innerHTML = '<b>Running example</b> click the map to make a training step.'; $('#co-say').innerHTML = 'Nothing has been taught yet: every weight is 0. Click the map.'; return; }
+  const m = L.A.length;
+  $('#co-m').innerHTML = tip(m, 'regions whose ' + (CO.shape === 'circle' ? 'circle' : 'ellipse') + ' contains your click');
+  $('#co-v').innerHTML = tip(fmt(L.after, 3), `before: ${fmt(L.before, 3)}\nafter: ${fmt(L.before, 3)} + 0.5 × (${L.U} − ${fmt(L.before, 3)})`);
+  $('#co-reach').innerHTML = tip(pct(L.moved, 0), 'share of a 60 × 60 grid of points that share\nat least one region with your click');
+  $('#run-co').innerHTML = m ? `<b>Running example</b> your click lies in m = ${m} regions, where v&#770; was ${tip(fmt(L.before, 3), 'sum of the ' + m + ' active weights')}. With &alpha; = 0.5 and target U = ${L.U}, each active weight moves by ${tip(fmt(0.5 * (L.U - L.before) / m, 4), `α ÷ m × (U − v̂) = 0.5 ÷ ${m} × (${L.U} − ${fmt(L.before, 3)})`)}, so v&#770; becomes ${fmt(L.before, 3)} + 0.5 &times; (${L.U} &minus; ${fmt(L.before, 3)}) = <b class="num">${fmt(L.after, 3)}</b>. A point sharing j of these regions moves by j/${m} of that change.` : '<b>Running example</b> your click lies in no region at all, so there is no weight to change: v&#770; stays 0 there for ever.';
+  const shapeSay = CO.shape === 'circle' ? 'Circles spread it equally in every direction.' : CO.shape === 'wide' ? 'Wide ellipses carry the lesson far along s&#8321; and hardly at all along s&#8322;.' : 'Tall ellipses carry the lesson along s&#8322; and keep it narrow in s&#8321;.';
+  $('#co-say').innerHTML = (m ? `That one step moved the value over ${pct(L.moved, 0)} of the map: every state sharing a region with your click. ${shapeSay}` : 'Your click fell in a gap between regions: nothing was learned.') + (coGap > 0.02 ? ` ${pct(coGap, 0)} of the map is in no region at all (hatched), so values there can never be learned; small regions need many more features to cover the space.` : CO.r >= 0.2 ? ' Large regions cover everything, but each lesson now spills a long way, including onto states that should have different values.' : '');
+}
+fig($('#co-cv'), drawCoarse);
+pick($('#co-cv'), () => CO.v0 ? [CO.v0] : [], (v, x, y) => { coTeach(x, y); drawCoarse(); });
+const coReset = () => { CO.w.fill(0); CO.last = null; coGapCalc(); };
+$('#co-r').addEventListener('input', e => { CO.r = +e.target.value; coReset(); coTeach(0.35, 0.6); drawCoarse(); });
+seg1('[data-cos]', 'data-cos', k => { CO.shape = k; coReset(); coTeach(0.35, 0.6); drawCoarse(); });
+seg1('[data-cou]', 'data-cou', k => { CO.U = +k; });
+$('#co-reset').addEventListener('click', () => { coReset(); drawCoarse(); });
+
+/* coarse coding in 1-D: narrow, medium, broad */
+const CW = { wi: 1, ni: 1, widths: [0.06, 0.18, 0.5], NS: [10, 40, 160, 640, 2560, 10240], F: 50, al: 0.2 };
+const cwTarget = s => s < 0.2 ? 0 : s < 0.45 ? 1 : s < 0.7 ? 0.4 : 0;
+const cwCent = Array.from({ length: CW.F }, (_, i) => (i + 0.5) / CW.F);
+const cwAct = (s, wd) => { const o = []; for (let i = 0; i < CW.F; i++) if (Math.abs(s - cwCent[i]) <= wd / 2) o.push(i); return o; };
+CW.snap = CW.widths.map(wd => { const r = mulberry32(3), w = new Float64Array(CW.F), out = []; let k = 0;
+  for (const N of CW.NS) { for (; k < N; k++) { const s = r(), A = cwAct(s, wd); if (!A.length) continue; let y = 0; for (const i of A) y += w[i]; const d = CW.al * (cwTarget(s) - y) / A.length; for (const i of A) w[i] += d; } out.push(Float64Array.from(w)); }
+  return out; });
+const cwVal = (w, s, wd) => { let y = 0; for (const i of cwAct(s, wd)) y += w[i]; return y; };
+const cwErr = (wi, ni) => { let e = 0; for (let j = 0; j < 1000; j++) { const s = (j + 0.5) / 1000; e += (cwVal(CW.snap[wi][ni], s, CW.widths[wi]) - cwTarget(s)) ** 2; } return Math.sqrt(e / 1000); };
+const CWE = CW.widths.map((_, wi) => CW.NS.map((_, ni) => cwErr(wi, ni)));
+function drawCW() {
+  const C = C0(), v = frame($('#cw-cv'), [0, 1], [-0.3, 1.3]); axes(v, 's', 'value', { sx: 0.2, sy: 0.5 }); clip(v);
+  CW.widths.forEach((wd, wi) => { if (wi !== CW.wi) curve(v, s => cwVal(CW.snap[wi][CW.ni], s, wd), C.muted, 1.2); });
+  curve(v, cwTarget, C.ink, 1.6, [6, 5]); curve(v, s => cwVal(CW.snap[CW.wi][CW.ni], s, CW.widths[CW.wi]), C.a, 2.6);
+  const wd = CW.widths[CW.wi], c = v.ctx; c.fillStyle = C.a; c.globalAlpha = 0.5; c.fillRect(v.X(0.5 - wd / 2), v.Y(-0.22), v.X(0.5 + wd / 2) - v.X(0.5 - wd / 2), 6); c.globalAlpha = 1;
+  v.ctx.restore();
+  const N = CW.NS[CW.ni], names = ['narrow', 'medium', 'broad'], E = CWE.map(r => r[CW.ni]), best = E.indexOf(Math.min(...E)), worst = E.indexOf(Math.max(...E));
+  $('#cw-n-o').textContent = N.toLocaleString('en-GB');
+  $('#cw-m').innerHTML = tip(fmt(wd * CW.F, 0), `width × 50 intervals per unit = ${fmt(wd, 2)} × 50\n(fewer near the ends of the line)`);
+  $('#cw-e').innerHTML = E.map((e, i) => tip(fmt(e, 3), `${names[i]} (width ${CW.widths[i]}), after ${N.toLocaleString('en-GB')} samples:\n√(mean over 1,000 points of (v̂ − target)²)`)).join(' / ');
+  const spread = Math.max(...E) - Math.min(...E);
+  $('#cw-say').innerHTML = `After ${N.toLocaleString('en-GB')} samples the ${names[best]} intervals are closest to the target (RMS error ${fmt(E[best], 3)}) and the ${names[worst]} are furthest (${fmt(E[worst], 3)}). ` + (CW.ni <= 1 ? 'Early on, broad intervals spread each sample over many neighbours and get the rough shape fastest; narrow ones have learned only near the few points they have seen.' : CW.ni >= 5 ? `With this much data the gap between widths has shrunk to ${fmt(spread, 3)}: all three now carve a fairly sharp step, because the 50 interval edges are packed equally densely whatever the width. The remaining differences are small next to how far apart the widths started.` : 'As data accumulates the narrow intervals catch up: every part of the line has now been sampled.');
+}
+fig($('#cw-cv'), drawCW);
+seg1('[data-cww]', 'data-cww', k => { CW.wi = +k; drawCW(); });
+$('#cw-n').addEventListener('input', e => { CW.ni = +e.target.value; drawCW(); });
+
+/* ---------- 6 · tile coding ---------- */
+const TI = { n: 8, T: 6, asym: true, shape: 'sq', p: -0.45, v: 0.012, v0: null };
+function tiOff() { const d = TI.asym ? [1, 3] : [1, 1]; return Array.from({ length: TI.n }, (_, t) => [((d[0] * t) % TI.n) / TI.n, ((d[1] * t) % TI.n) / TI.n]); }
+function tiIdx(u, w, O) {
+  const T = TI.T, G = T + 1, out = new Int32Array(TI.n), fl = z => clamp(Math.floor(z), 0, T);
+  for (let t = 0; t < TI.n; t++) {
+    const [o1, o2] = O[t];
+    out[t] = TI.shape === 'sq' ? t * G * G + fl(u * T + o1) * G + fl(w * T + o2) : TI.shape === 'sp' ? t * G + fl(u * T + o1) : TI.shape === 'sv' ? t * G + fl(w * T + o2) : t * G + fl((u + w) / 2 * T + o1);
+  }
+  return out;
+}
+function tiStretch(O, R) {
+  if (TI.shape !== 'sq') return null; let sd = 0, sa = 0; const N = 240;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { const u = (i + 0.5) / N, w = (j + 0.5) / N, I = tiIdx(u, w, O); let k = 0; for (let t = 0; t < TI.n; t++) if (I[t] === R[t]) k++; if (!k) continue; const du = (u - toU(TI.p)) * TI.T, dw = (w - toW(TI.v)) * TI.T; sd += k * (du + dw) ** 2 / 2; sa += k * (du - dw) ** 2 / 2; }
+  return Math.sqrt(sd / sa);
+}
+function drawTile() {
+  const C = C0(), v = TI.v0 = frame($('#ti-cv'), PX, PV, { l: 46, r: 12, t: 12, b: 30 }), O = tiOff(), R = tiIdx(toU(TI.p), toW(TI.v), O), T = TI.T, n = TI.n;
+  heat(v, (p, vv) => { const I = tiIdx(toU(p), toW(vv), O); let k = 0; for (let t = 0; t < n; t++) if (I[t] === R[t]) k++; return k / n; }, 3, g => g ? [C.a, 0.08 + 0.72 * g] : null, true);
+  phaseAxes(v); clip(v);
+  const c = v.ctx, wx = 1.8 / T, wv = 0.14 / T, P = u => MC.XL + u * 1.8, Q = w => MC.VL + w * 0.14;
+  if (TI.shape === 'sq' || TI.shape === 'sp' || TI.shape === 'sv') { c.strokeStyle = C.muted; c.globalAlpha = 0.35; c.lineWidth = 1;
+    for (let i = 0; i <= T + 1; i++) { if (TI.shape !== 'sv') { const x = MC.XL + (i - O[0][0]) * wx; c.beginPath(); c.moveTo(v.X(x), v.pad.t); c.lineTo(v.X(x), v.pad.t + v.ph); c.stroke(); } if (TI.shape !== 'sp') { const y = MC.VL + (i - O[0][1]) * wv; c.beginPath(); c.moveTo(v.pad.l, v.Y(y)); c.lineTo(v.pad.l + v.pw, v.Y(y)); c.stroke(); } }
+    c.globalAlpha = 1; }
+  c.strokeStyle = C.ink; c.lineWidth = 1.4;
+  for (let t = 0; t < n; t++) {
+    const [o1, o2] = O[t], G = T + 1; c.globalAlpha = 0.25 + 0.6 * (n === 1 ? 1 : t / (n - 1));
+    if (TI.shape === 'sq') { const ix = Math.floor((R[t] - t * G * G) / G), iv = (R[t] - t * G * G) % G, x0 = P((ix - o1) / T), y0 = Q((iv - o2) / T); c.strokeRect(v.X(x0), v.Y(y0 + wv), v.X(x0 + wx) - v.X(x0), v.Y(y0) - v.Y(y0 + wv)); }
+    else if (TI.shape === 'sp') { const ix = R[t] - t * G, x0 = P((ix - o1) / T); c.strokeRect(v.X(x0), v.pad.t, v.X(x0 + wx) - v.X(x0), v.ph); }
+    else if (TI.shape === 'sv') { const iv = R[t] - t * G, y0 = Q((iv - o2) / T); c.strokeRect(v.pad.l, v.Y(y0 + wv), v.pw, v.Y(y0) - v.Y(y0 + wv)); }
+    else { const iz = R[t] - t * G, z0 = 2 * (iz - o1) / T, z1 = 2 * (iz + 1 - o1) / T; c.beginPath(); [[z0 + 1, -1], [z0 - 2, 2], [z1 - 2, 2], [z1 + 1, -1]].forEach(([u, w], k) => k ? c.lineTo(v.X(P(u)), v.Y(Q(w))) : c.moveTo(v.X(P(u)), v.Y(Q(w)))); c.closePath(); c.stroke(); }
+  }
+  c.globalAlpha = 1; ring(v, TI.p, TI.v, C.ink); v.ctx.restore();
+  const G = T + 1, D = TI.shape === 'sq' ? n * G * G : n * G, st = tiStretch(O, R);
+  $('#ti-n-o').textContent = n; $('#ti-T-o').textContent = T;
+  $('#ti-d').innerHTML = tip(D.toLocaleString('en-GB'), TI.shape === 'sq' ? `n × (T + 1)² = ${n} × ${G}²` : `n × (T + 1) = ${n} × ${G}`);
+  $('#ti-a').innerHTML = tip(n, 'one tile per tiling');
+  $('#ti-res').innerHTML = TI.shape === 'sv' ? '—' : tip(fmt(1.8 / T / (TI.shape === 'dg' ? 1 : n) * (TI.shape === 'dg' ? 2 / n : 1), 3), TI.shape === 'dg' ? `diagonal stripes are 2/T wide in u + w; n shifted copies\nsplit that into n steps: 2 × 1.8 ÷ (T n) = 3.6 ÷ (${T} × ${n})` : `tile width ÷ n = (1.8 ÷ ${T}) ÷ ${n}\nthe tilings' edges fall at n different places in each tile`);
+  $('#ti-asym').innerHTML = st == null ? '—' : tip(fmt(st, 2), 'spread of the shading along the diagonal ÷ spread across it\n(√ of the share-weighted second moments, in tile units);\n1 means no diagonal bias');
+  const ix0 = TI.shape === 'sq' ? Math.floor((R[0]) / G) : null;
+  $('#run-ti').innerHTML = `<b>Running example</b> at the ring: in tile widths, u&#8321; = ${tip(fmt(toU(TI.p) * T, 3), `(p + 1.2) ÷ (1.8 ÷ ${T})`)} and u&#8322; = ${tip(fmt(toW(TI.v) * T, 3), `(v + 0.07) ÷ (0.14 ÷ ${T})`)}. ` + (TI.shape === 'sq' ? `Tiling 0 has no shift, so i&#8320; = 0 + ${ix0} &times; ${G} + ${R[0] % G} = ${tip(R[0], `⌊${fmt(toU(TI.p) * T, 3)}⌋ × ${G} + ⌊${fmt(toW(TI.v) * T, 3)}⌋`)}${n > 1 ? `; tiling 1 shifts by (${fmt(O[1][0], 3)}, ${fmt(O[1][1], 3)}) and gives i&#8321; = ${tip(R[1], `1 × ${G}² + ⌊${fmt(toU(TI.p) * T, 3)} + ${fmt(O[1][0], 3)}⌋ × ${G} + ⌊${fmt(toW(TI.v) * T, 3)} + ${fmt(O[1][1], 3)}⌋`)}` : ''}. ` : `Active features: ${Array.from(R).slice(0, 4).join(', ')}${n > 4 ? ', …' : ''}. `) + `With &alpha; = 1/n = ${tip(fmt(1 / n, 4), `1 ÷ ${n}`)}, one update from v&#770; = 0 towards U = 1 adds ${fmt(1 / n, 4)} to each of the ${n} active weights, so v&#770;(ring) = ${n} &times; ${fmt(1 / n, 4)} = <b class="num">1</b>; a state that shares k of the tiles now reads k/${n}.`;
+  let say; const stAlt = TI.shape === 'sq' && n > 1 ? (TI.asym = !TI.asym, (() => { const O2 = tiOff(), r2 = tiIdx(toU(TI.p), toW(TI.v), O2), x = tiStretch(O2, r2); TI.asym = !TI.asym; return x; })()) : null;
+  if (n === 1) say = 'One tiling is a plain lookup table: the update fills the ring&rsquo;s own tile to 1 and nothing else, a hard-edged block with no generalisation beyond it.';
+  else if (TI.shape === 'sq') say = TI.asym ? `With offsets (1, 3) the ${n} tilings scatter their corners, and the shaded patch is much closer to symmetric: diagonal stretch ${fmt(st, 2)}, against ${fmt(stAlt, 2)} with offsets (1, 1). Resolution is a tile width divided by ${n}, while generalisation still reaches about a tile in every direction.` : `With offsets (1, 1) every tiling slides along the same diagonal, so the tiles&rsquo; corners line up and generalisation smears along it: diagonal stretch ${fmt(st, 2)}, against ${fmt(stAlt, 2)} with offsets (1, 3). Switch and compare.`;
+  else if (TI.shape === 'sp') say = 'Stripes across position ignore velocity entirely: whatever is learned at the ring applies at every speed with the same position. Useful when one variable matters far more, or mixed with other tilings.';
+  else if (TI.shape === 'sv') say = 'Stripes across velocity ignore position: the lesson spreads along the whole track at the ring&rsquo;s speed.';
+  else say = 'Diagonal stripes generalise along lines of constant position + velocity, a crude &ldquo;energy-like&rdquo; combination: tile shapes are a place to put prior knowledge.';
+  $('#ti-say').innerHTML = say;
+}
+fig($('#ti-cv'), drawTile);
+$('#ti-n').addEventListener('input', e => { TI.n = +e.target.value; drawTile(); });
+$('#ti-T').addEventListener('input', e => { TI.T = +e.target.value; drawTile(); });
+seg1('[data-tio]', 'data-tio', k => { TI.asym = k === '1'; drawTile(); });
+seg1('[data-tis]', 'data-tis', k => { TI.shape = k; drawTile(); });
+pick($('#ti-cv'), () => TI.v0 ? [TI.v0] : [], (v, x, y) => { TI.p = x; TI.v = y; drawTile(); });
+
+/* ---------- 7 · hashing ---------- */
+const HS = { b: 7, p: -0.5, v: 0.02, v0: null, res: null, running: false };
+const HTC = makeTiles(8, 8, [1, 3], 0), hsh = (i, b) => (Math.imul(i, 2654435761 | 0) >>> 0) >>> (32 - b);
+function hsStats(b) { const M = 1 << b, cnt = new Map(); for (let i = 0; i < HTC.D; i++) { const h = hsh(i, b); cnt.set(h, (cnt.get(h) || 0) + 1); } let sh = 0; for (const [, k] of cnt) if (k > 1) sh += k; return { M, used: cnt.size, share: sh / HTC.D, exp: M * (1 - Math.pow(1 - 1 / M, HTC.D)) }; }
+async function hashRun() {
+  if (HS.running) return; HS.running = true; const out = [];
+  for (const b of [0, 4, 5, 6, 7, 8, 9, 10, 11, 12]) { $('#ha-prog').textContent = b ? `M = ${1 << b}…` : 'no hashing…'; await tick(); let s = 0; for (let r = 1; r <= 5; r++) { const R = sarsaRun({ kind: 'tile', n: 8, T: 8, alpha: 0.5, hb: b }, r, 150, 1000); for (let e = 100; e < 150; e++) s += R.steps[e]; } out.push([b, s / 250]); }
+  HS.res = out; HS.running = false; $('#ha-prog').textContent = ''; drawHash();
+}
+function drawHash() {
+  const C = C0(), v = HS.v0 = frame($('#ha-cv'), PX, PV, { l: 46, r: 12, t: 12, b: 30 }), b = HS.b, St = hsStats(b);
+  const ri = HTC.idx(HS.p, HS.v, new Int32Array(8)), raw0 = Int32Array.from(ri), RB = new Set(Array.from(raw0).map(i => hsh(i, b))), tmp = new Int32Array(8);
+  let leak = 0, tot = 0;
+  heat(v, (p, vv) => { const I = HTC.idx(p, vv, tmp); let g = 0, h = 0; for (let t = 0; t < 8; t++) { if (I[t] === raw0[t]) g++; else if (RB.has(hsh(I[t], b))) h++; } tot++; if (!g && h) leak++; return [g, h]; }, 4, ([g, h]) => g ? [C.a, 0.1 + 0.7 * g / 8] : h ? [C.bad, 0.25 + 0.6 * h / 8] : null, true);
+  phaseAxes(v); clip(v); ring(v, HS.p, HS.v, C.ink); v.ctx.restore();
+  $('#ha-b-o').innerHTML = `${1 << b} (b = ${b})`;
+  $('#ha-used').innerHTML = `${tip(St.used, `distinct slots h(i) over the ${HTC.D} tiles`)} (${tip(fmt(St.exp, 0), `M[1 − (1 − 1/M)^K] = ${St.M} × [1 − (1 − 1/${St.M})^${HTC.D}]`)})`;
+  $('#ha-col').innerHTML = tip(pct(St.share, 0), 'tiles whose slot is also used by another tile,\nout of all 648');
+  $('#ha-far').innerHTML = tip(pct(leak / tot, 0), 'share of the map (sampled every 4 pixels) that shares\nno real tile with the ring but at least one hashed weight');
+  const i0 = raw0[0], prod = (Math.imul(i0, 2654435761 | 0) >>> 0);
+  $('#run-ha').innerHTML = `<b>Running example</b> the ring&rsquo;s tile in tiling 0 is number i = ${tip(i0, 'from the tile-coding formula, 8 tilings of 9 × 9')}. Then a&middot;i mod 2&sup3;&sup2; = ${tip(prod.toLocaleString('en-GB'), `2654435761 × ${i0} = ${(2654435761 * i0).toLocaleString('en-GB')}\nmod 4,294,967,296`)}, and its top ${b} bits give slot ${tip(hsh(i0, b), `⌊${prod.toLocaleString('en-GB')} ÷ 2^${32 - b}⌋`)} of ${St.M}. With K = 648 tiles and M = ${St.M}, randomness would leave about ${fmt(St.exp, 0)} slots in use; this hash uses <b class="num">${St.used}</b>.`;
+  let say = b >= 10 ? `With ${St.M} slots for 648 tiles, collisions are rare (${pct(St.share, 0)} of tiles share): almost nothing leaks.` : b >= 8 ? `${St.M} slots for 648 tiles: ${pct(St.share, 0)} of tiles share a slot, and ${pct(leak / tot, 0)} of the map leaks into the ring through some collision, mostly through just one of its 8 weights.` : `Only ${St.M} slots for 648 tiles: every slot is shared, and ${pct(leak / tot, 0)} of the map leaks into the ring&rsquo;s weights. Learning anywhere now disturbs the ring.`;
+  const cv2 = $('#ha-curve'), w = frame(cv2, [3.5, 12.5], [100, 400], { l: 46, r: 12, t: 10, b: 28 }); axes(w, 'M (log scale)', 'steps', { sx: 1, sy: 100, fx: x => (x === Math.round(x) ? String(1 << x) : '') }); clip(w);
+  if (HS.res) { const full = HS.res[0][1]; seg(w, 3.5, full, 12.5, full, C.muted, 1.5, [6, 5]); const c = w.ctx; c.strokeStyle = C.a; c.lineWidth = 2.4; c.beginPath(); HS.res.slice(1).forEach(([bb, s], i) => i ? c.lineTo(w.X(bb), w.Y(Math.min(s, 400))) : c.moveTo(w.X(bb), w.Y(Math.min(s, 400)))); c.stroke(); HS.res.slice(1).forEach(([bb, s]) => dot(w, bb, Math.min(s, 400), bb === b ? C.ink : C.a, bb === b ? 5.5 : 3.5));
+    const mine = HS.res.find(r => r[0] === b); say += ` In Mountain Car, M = ${St.M} gives ${tip(fmt(mine[1], 1), `mean over 5 runs × episodes 101–150`)} steps per episode late in training, against ${tip(fmt(full, 1), 'the same without hashing')} with a private weight for every tile.${mine[1] > full * 1.3 ? ' That is a real loss: too much sharing.' : Math.abs(mine[1] - full) < 8 ? ' Practically no loss.' : ''}`; }
+  w.ctx.restore();
+  $('#ha-say').innerHTML = say;
+}
+fig($('#ha-cv'), drawHash); fig($('#ha-curve'), drawHash);
+$('#ha-b').addEventListener('input', e => { HS.b = +e.target.value; drawHash(); });
+$('#ha-go').addEventListener('click', hashRun);
+pick($('#ha-cv'), () => HS.v0 ? [HS.v0] : [], (v, x, y) => { HS.p = x; HS.v = y; drawHash(); });
+
+/* ---------- project ---------- */
+const PY = {
+  a: { name: 'Tiles 8 × 8×8, offsets (1, 3)', cfg: { kind: 'tile', n: 8, T: 8, alpha: 0.5 }, e10: 548.32, e50: 206.13, e150: 137.57, all: 187.01, total: 280517, f8: [1000, 736, 619, 580, 412, 406, 325, 445], ws: '-6476.8596446119' },
+  b: { name: 'Tiles 8 × 8×8, offsets (1, 1)', cfg: { kind: 'tile', n: 8, T: 8, disp: [1, 1], alpha: 0.5 }, e10: 564.96, e50: 205.31, e150: 139.41, all: 187.55, total: 281330, f8: [1000, 648, 995, 583, 587, 320, 418, 235], ws: '-6409.3458081098' },
+  c: { name: 'Tiles hashed into 512', cfg: { kind: 'tile', n: 8, T: 8, hb: 9, alpha: 0.5 }, e10: 529.70, e50: 204.69, e150: 144.71, all: 189.75, total: 284619, f8: [1000, 741, 720, 474, 597, 266, 329, 271], ws: '-6555.3149548988' },
+  d: { name: 'Fourier order 3', cfg: { kind: 'fourier', k: 3, alpha: 0.01 }, e10: 504.72, e50: 147.00, e150: 146.30, all: 169.04, total: 253554, f8: [1000, 1000, 661, 675, 650, 230, 444, 395], ws: '-120.5566903168' },
+  e: { name: 'Fourier order 5', cfg: { kind: 'fourier', k: 5, alpha: 0.01 }, e10: 587.98, e50: 164.19, e150: 138.00, all: 176.04, total: 264065, f8: [1000, 1000, 960, 590, 550, 740, 452, 471], ws: '-101.1633754820' } };
+const PYSIM = { k: 124, p: 0.5349499825655736, v: 0.04819097792866507 };
+const PJ = { m: 'tile', n: 8, T: 8, a: 0.5, hb: 0, k: 5, fa: 0.01, x0: -0.5, refs: {}, mine: null, running: false, store: {}, roll: null, t: 0, raf: 0 };
+const pjCfg = () => PJ.m === 'tile' ? { kind: 'tile', n: PJ.n, T: PJ.T, alpha: PJ.a, hb: PJ.hb } : { kind: 'fourier', k: PJ.k, alpha: PJ.fa };
+const pjD = c => 3 * (c.kind === 'tile' ? (c.hb ? 1 << c.hb : c.n * (c.T + 1) ** 2) : (c.k + 1) ** 2);
+const cfgKey = c => JSON.stringify([c.kind, c.n, c.T, c.alpha, c.hb || 0, (c.disp || [1, 3]).join(), c.k]);
+const pjName = c => c.kind === 'tile' ? `Tiles ${c.n} × ${c.T}×${c.T}, α = ${fmt(c.alpha, 2)}${c.hb ? `, hashed into ${1 << c.hb}` : ''}` : `Fourier order ${c.k}, α = ${fmt(c.alpha, 3)}`;
+function summarise(runs) {
+  const mean = (a, b) => { let t = 0, n = 0; runs.forEach(r => { for (let e = a; e < b; e++) { t += r.steps[e]; n++; } }); return t / n; };
+  const curve = Array.from({ length: 150 }, (_, e) => runs.reduce((s, r) => s + r.steps[e], 0) / runs.length);
+  let ws = 0; runs[0].W.forEach(w => { let s = 0; for (const x of w) s += x; ws += s; });
+  return { e10: mean(0, 10), e50: mean(10, 50), e150: mean(100, 150), all: mean(0, 150), total: runs.reduce((t, r) => t + r.steps.reduce((x, y) => x + y, 0), 0), f8: runs[0].steps.slice(0, 8), ws: ws.toFixed(10), curve, r1: runs[0] };
+}
+async function trainCfg(cfg, label) { const runs = []; for (let s = 1; s <= 10; s++) { if (label) $('#pj-prog').textContent = `${label}: agent ${s} of 10…`; await tick(); runs.push(sarsaRun(cfg, s, 150, 1000)); } return summarise(runs); }
+async function pjRefs() { for (const k of Object.keys(PY)) { if (PJ.refs[k]) continue; PJ.refs[k] = await trainCfg(PY[k].cfg, 'reference ' + PY[k].name); drawPJCurve(); drawBoard(); } $('#pj-prog').textContent = ''; if (!PJ.mine) { PJ.mine = Object.assign({ cfg: PY.a.cfg }, PJ.refs.a); pjAfter(); } }
+async function pjTrain() { if (PJ.running) return; PJ.running = true; const cfg = pjCfg(); const r = await trainCfg(cfg, 'your settings'); PJ.mine = Object.assign({ cfg }, r); PJ.running = false; $('#pj-prog').textContent = ''; pjAfter(); }
+function pjAfter() { drawPJCurve(); drawBoard(); pjRoll(); }
+function drawPJCurve() {
+  const C = C0(), L = Math.log10, v = frame($('#pj-cv'), [1, 150], [L(80), L(1100)]); axes(v, 'episode', 'steps per episode', { sx: 25, sy: 10, fy: () => '' });
+  const c = v.ctx; c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.strokeStyle = C.line; c.textAlign = 'right'; c.textBaseline = 'middle';
+  [100, 200, 300, 500, 1000].forEach(y => { const py = Math.round(v.Y(L(y))) + 0.5; c.globalAlpha = 0.6; c.beginPath(); c.moveTo(v.pad.l, py); c.lineTo(v.w - v.pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(String(y), v.pad.l - 6, py); }); c.restore();
+  clip(v);
+  const sm = a => a.map((_, i) => { let s = 0, n = 0; for (let j = Math.max(0, i - 2); j <= Math.min(a.length - 1, i + 2); j++) { s += a[j]; n++; } return s / n; });
+  const line = (a, col, lw, al) => { c.save(); c.globalAlpha = al; c.strokeStyle = col; c.lineWidth = lw; c.beginPath(); sm(a).forEach((y, i) => i ? c.lineTo(v.X(i + 1), v.Y(L(y))) : c.moveTo(v.X(i + 1), v.Y(L(y)))); c.stroke(); c.restore(); };
+  Object.entries(PJ.refs).forEach(([k, r]) => line(r.curve, PY[k].cfg.kind === 'tile' ? C.b : C.lda, 1.4, 0.45));
+  if (PJ.mine) line(PJ.mine.curve, C.a, 2.8, 1);
+  const vs = viStart(); if (vs) { seg(v, 1, L(vs), 150, L(vs), C.ink, 1.2, [2, 4]); }
+  v.ctx.restore();
+  if (vs) label(v, v.w - v.pad.r - 4, v.Y(L(vs)) - 10, `fastest ≈ ${fmt(vs, 0)}`, C.muted, 'right');
+  const M = PJ.mine;
+  if (M) { const c2 = M.cfg; $('#pj-d').innerHTML = tip(pjD(c2).toLocaleString('en-GB'), c2.kind === 'tile' ? (c2.hb ? `3 actions × ${1 << c2.hb} hashed slots` : `3 actions × n (T + 1)² = 3 × ${c2.n} × ${c2.T + 1}²`) : `3 actions × (n + 1)² = 3 × ${c2.k + 1}²`);
+    [['pj-e1', 'e10', 'episodes 1–10'], ['pj-e3', 'e150', 'episodes 101–150'], ['pj-all', 'all', 'all 150 episodes']].forEach(([id, k, w]) => { $('#' + id).innerHTML = tip(fmt(M[k], 1), `mean steps per episode over ${w},\n10 agents (seeds 1–10)`); });
+    const best = Object.entries(PJ.refs).reduce((b, [k, r]) => !b || r.all < b[1].all ? [k, r] : b, null);
+    $('#pj-say').innerHTML = `${pjName(c2)}: the first ten episodes average ${fmt(M.e10, 0)} steps, as the optimistic agent explores; by episodes 101&ndash;150 it needs ${fmt(M.e150, 0)}${vs ? `, against roughly ${fmt(vs, 0)} for a perfect driver` : ''}. ` + (M.e150 > 500 ? 'It has not learned to escape reliably: try a larger step size or more tiles.' : best ? `Of the reference settings, ${PY[best[0]].name} has the lowest average over all 150 episodes (${fmt(best[1].all, 1)}).` : '');
+  }
+}
+function drawBoard() {
+  const rows = Object.entries(PY).map(([k, P]) => { const r = PJ.refs[k], ok = r && r.total === P.total && r.ws === P.ws && r.f8.join() === P.f8.join();
+    return `<tr data-k="${k}"><td>${P.name}</td><td class="num">${pjD(P.cfg).toLocaleString('en-GB')}</td>${['e10', 'e50', 'e150', 'all'].map(f => `<td class="num">${r ? tip(fmt(r[f], 2), `browser: ${fmt(r[f], 2)}\nPython: ${fmt(P[f], 2)}`) : '…'}</td>`).join('')}<td class="num">${r ? tip(r.total.toLocaleString('en-GB'), `browser total steps of 10 runs; Python: ${P.total.toLocaleString('en-GB')}\nrun 1 first 8 episodes: ${r.f8.join(', ')}\nsum of run-1 weights: ${r.ws} (Python ${P.ws})`) : '…'}</td><td>${r ? (ok ? '&check; identical' : '&times; differs') : ''}</td></tr>`; });
+  const M = PJ.mine; if (M && !Object.values(PY).some(P => cfgKey(P.cfg) === cfgKey(M.cfg))) rows.push(`<tr><td><b>Your settings</b>: ${pjName(M.cfg)}</td><td class="num">${pjD(M.cfg).toLocaleString('en-GB')}</td>${['e10', 'e50', 'e150', 'all'].map(f => `<td class="num">${fmt(M[f], 2)}</td>`).join('')}<td class="num">${M.total.toLocaleString('en-GB')}</td><td>browser only</td></tr>`);
+  $('#pj-board').innerHTML = `<thead><tr><th>Features</th><th>weights</th><th>ep 1&ndash;10</th><th>ep 11&ndash;50</th><th>ep 101&ndash;150</th><th>all 150</th><th>total steps</th><th>vs Python</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+  const done = Object.keys(PJ.refs).length === 5;
+  if (done) { const best = Object.entries(PJ.refs).reduce((b, e) => !b || e[1].all < b[1].all ? e : b, null), late = Object.entries(PJ.refs).reduce((b, e) => !b || e[1].e150 < b[1].e150 ? e : b, null); const tr = $(`#pj-board tr[data-k="${best[0]}"]`); if (tr) tr.classList.add('win');
+    const nOk = Object.entries(PY).filter(([k, P]) => PJ.refs[k].total === P.total && PJ.refs[k].ws === P.ws).length;
+    $('#pj-bsay').innerHTML = `Each row is 10 agents (seeds 1&ndash;10) &times; 150 episodes, steps per episode averaged; hover a number for the Python value. ${nOk} of 5 settings reproduce Python exactly: the same total number of steps over 1,500 episodes, the same first episodes, and the same final weights to 10 decimal places. ${PY[best[0]].name} learns fastest overall (${fmt(best[1].all, 1)} steps per episode), helped by its quick start; late in training ${PY[late[0]].name} is best (${fmt(late[1].e150, 1)}). The differences in the last column but one are small: with these settings both feature families solve Mountain Car, and the gaps between them are about the size of the run-to-run noise.`;
+    $('#pj-honest').innerHTML = `How exact is &ldquo;identical&rdquo;? The tile coders use only additions, divisions and rounding down, which JavaScript and Python perform bit for bit the same. Cosines are different: Gymnasium&rsquo;s physics calls cos(3p) and the Fourier features call cos too, and the C library behind Python and the JavaScript engine disagree in the last bit for a few per cent of inputs. ${SIMD ? `In the simulator check above that shows up as a difference of ${SIMD.toExponential(0)} after 124 steps.` : 'In the simulator check above the two agree to every digit; on a different test, 400 random pushes, they end up differing in the 16th significant digit.'} Such a difference is far too small to change a 32-bit observation or a greedy choice in these runs, which is why all ${nOk} totals agree; with other seeds or many more episodes, a run could eventually drift. Two more caveats: the value-iteration &ldquo;fastest&rdquo; line comes from a 91 &times; 71 grid with interpolation, so treat it as an estimate within a few steps; and 10 runs per setting is enough to see the shape of learning, not to rank settings whose averages differ by a few steps.`; }
+}
+function pjRoll() { const R = PJ.mine && PJ.mine.r1; if (!R) return; PJ.roll = greedyRoll(R, PJ.x0, 0, 1000); PJ.t = 0; cancelAnimationFrame(PJ.raf); const go = () => { PJ.t += 1.6; drawPJMap(); if (PJ.t < PJ.roll.path.length - 1) PJ.raf = requestAnimationFrame(go); }; PJ.raf = requestAnimationFrame(go); }
+function drawPJMap() {
+  const C = C0(), v = frame($('#pj-map'), PX, PV, { l: 46, r: 12, t: 12, b: 30 }), M = PJ.mine;
+  $('#pj-x0-o').textContent = fmt(PJ.x0, 2);
+  if (!M) { label(v, v.w / 2, v.h / 2, 'training…', C.muted, 'center'); return; }
+  const f = costOf(M.r1); cachedHeat(PJ.store, JSON.stringify(M.cfg) + C.a + M.total, v, f, 4, val => steelCol(val, 125, C.a));
+  phaseAxes(v); clip(v); const R = PJ.roll, c = v.ctx;
+  if (R) { const k = Math.min(R.path.length - 1, Math.floor(PJ.t)); c.strokeStyle = C.ink; c.lineWidth = 2; c.beginPath(); for (let i = 0; i <= k; i++) { const q = R.path[i]; i ? c.lineTo(v.X(q[0]), v.Y(q[1])) : c.moveTo(v.X(q[0]), v.Y(q[1])); } c.stroke(); dot(v, R.path[k][0], R.path[k][1], C.ink, 4); }
+  seg(v, MC.GOAL, 0, MC.GOAL, MC.VH, C.c, 2, [5, 4]); ring(v, PJ.x0, 0, C.ink); v.ctx.restore();
+  drawHill($('#pj-hill'), R ? R.path : [[PJ.x0, 0]], R ? PJ.t : 0);
+  if (!R) return;
+  const est = f(PJ.x0, 0), vi = VI ? VI.look(PJ.x0, 0) : null, q = agentQ(M.r1, PJ.x0, 0), a = q.indexOf(Math.max(...q));
+  $('#pj-k1').innerHTML = R.done ? tip(R.k, 'greedy drive with Gymnasium physics') : '> 1000';
+  $('#pj-k2').innerHTML = vi == null ? '…' : tip(fmt(vi, 0), 'value iteration, 91 × 71 grid (an estimate)');
+  $('#pj-k3').innerHTML = tip(fmt(est, 0), `−max(${q.map(x => fmt(x, 1)).join(', ')})`);
+  $('#pj-say2').innerHTML = R.done ? `From ${fmt(PJ.x0, 2)} at rest the agent first chooses <b>${ACT[a]}</b> and reaches the flag in ${R.k} steps${vi != null ? `; value iteration estimates the fewest possible at about ${fmt(vi, 0)}` : ''}. Its own estimate of ${fmt(est, 0)} is ${Math.abs(est - R.k) < 0.1 * R.k ? 'close to what actually happens' : est < R.k ? 'too optimistic' : 'too pessimistic'}: the learned q&#770; is an approximation, accurate only where the agent has been.` : 'From here the greedy agent gets stuck: this start is far from the states it practised on.';
+  const s1 = R.path[1], q2 = agentQ(M.r1, s1[0], s1[1]), a2 = q2.indexOf(Math.max(...q2)), d = -1 + q2[a2] - q[a];
+  $('#run-pj').innerHTML = `<b>Running example</b> with run 1 of your agent at the start state (${fmt(PJ.x0, 2)}, 0): it picks A = ${ACT[a]} with q&#770;(S, A) = ${tip(fmt(q[a], 2), `w_A · x(S); all three: ${q.map(x => fmt(x, 2)).join(', ')}`)}, lands in S&prime; = (${fmt(s1[0], 4)}, ${fmt(s1[1], 5)}), picks A&prime; = ${ACT[a2]} with q&#770;(S&prime;, A&prime;) = ${tip(fmt(q2[a2], 2), `all three: ${q2.map(x => fmt(x, 2)).join(', ')}`)}. TD error = ${tip(fmt(d, 3), `R + q̂(S′, A′) − q̂(S, A)\n= −1 + (${fmt(q2[a2], 3)}) − (${fmt(q[a], 3)})`)}: <b class="num">${Math.abs(d) < 0.5 ? 'close to zero' : 'still sizeable'}</b>, ${Math.abs(d) < 0.5 ? 'because a trained q&#770; already predicts one step less to go after each step.' : 'so learning here is not finished.'}`;
+}
+fig($('#pj-cv'), drawPJCurve); fig($('#pj-map'), drawPJMap); fig($('#pj-hill'), drawPJMap);
+seg1('[data-pjm]', 'data-pjm', k => { PJ.m = k; $('#pj-tile-ctl').hidden = k !== 'tile'; $('#pj-four-ctl').hidden = k === 'tile'; });
+seg1('[data-pjh]', 'data-pjh', k => { PJ.hb = +k; });
+[['n', 0], ['T', 0], ['a', 2], ['k', 0], ['fa', 3]].forEach(([k, d]) => { const el = $('#pj-' + k), o = () => { PJ[k] = +el.value; $('#pj-' + k + '-o').textContent = fmt(PJ[k], d); }; el.addEventListener('input', o); o(); });
+$('#pj-x0').addEventListener('input', e => { PJ.x0 = +e.target.value; pjRoll(); });
+$('#pj-go').addEventListener('click', pjTrain);
+let SIMD = null;
+function simCheck() {
+  let p = -0.5, v = 0, k = 0, done = false; while (!done) { const o = mcStep(p, v, v >= 0 ? 2 : 0); p = o[0]; v = o[1]; done = o[2]; k++; }
+  SIMD = Math.max(Math.abs(p - PYSIM.p), Math.abs(v - PYSIM.v)); const df = d => d === 0 ? '0' : tip(d.toExponential(1), 'browser − Python: the last bit of a cosine');
+  $('#pj-sim').innerHTML = `<thead><tr><th>Test: push the way the car moves, from &minus;0.5 at rest</th><th>Gymnasium 1.4.0 (Python)</th><th>your browser</th><th>difference</th></tr></thead><tbody>
+    <tr><td>steps to the flag</td><td class="num">${PYSIM.k}</td><td class="num">${k}</td><td class="num">${k - PYSIM.k}</td></tr>
+    <tr><td>position at the flag</td><td class="num">${PYSIM.p}</td><td class="num">${p}</td><td class="num">${df(p - PYSIM.p)}</td></tr>
+    <tr><td>velocity at the flag</td><td class="num">${PYSIM.v}</td><td class="num">${v}</td><td class="num">${df(v - PYSIM.v)}</td></tr></tbody>`;
+}
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+// value iteration runs once the first paint is done
+setTimeout(() => { VI = mcValueIteration(91, 71, 1000); VI.max = Math.max(...VI.V); drawWhy(); drawHero(); drawPJCurve(); drawPJMap(); }, 30);
+coReset(); coTeach(0.35, 0.6); simCheck(); drawBoard(); heroRoll();
+{
+  const once = (sel, fn) => { const el = $(sel); if (!('IntersectionObserver' in window)) { fn(); return; } const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); fn(); } }, { rootMargin: '300px' }); io.observe(el); };
+  once('#race', raceRun); once('#hash', hashRun); once('#project', pjRefs);
+}
+window.__fcDebug = { RWT, HA, PJ, RA, HS, CW, CWE, WY, wyFit, rwFit, sarsaRun, get VI() { return VI; } };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

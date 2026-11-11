@@ -1,0 +1,1660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on dynamic programming for Markov decision processes: evaluate any policy you draw, sweep iterative policy evaluation two ways, make policies greedy and watch no state get worse, run policy iteration and modified policy iteration, race asynchronous backup orders including prioritised and real-time DP, trace generalised policy iteration's zig-zag, test which reward transformations change the optimal policy, drag a point around the linear-programming view of an MDP, measure DP's cost on random MDPs, and plan restocking for a real product from the UCI Online Retail data with numbers verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Dynamic Programming: Evaluate, Improve, Iterate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.qsel { width: 100%; max-width: 100%; font: inherit; font-size: 0.86rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.qsel:focus-visible { outline: 2px solid var(--lda); outline-offset: 1px; }
+.plot.gridplot { aspect-ratio: 3 / 2; }
+.plot.gridplot43 { aspect-ratio: 4 / 3; max-width: 620px; margin: 0 auto; }
+.plot.gridplot44 { aspect-ratio: 1 / 1; max-width: 460px; margin: 0 auto; }
+.plot.mazeplot { aspect-ratio: 11 / 7; }
+.plot.stripplot { aspect-ratio: 6 / 1; }
+.plot.pjplot { aspect-ratio: 3 / 1; }
+.plot.tallsm { aspect-ratio: 2.6 / 1; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+#pj-trace td, #pj-trace th { font-size: 0.84rem; padding: 4px 8px; }
+#hero-cv, #md-cv, #ev-cv, #im-cv, #rs-cv { cursor: pointer; }
+@media (max-width: 560px) { .plot.stripplot { aspect-ratio: 3.2 / 1; } .plot.pjplot { aspect-ratio: 1.6 / 1; } .plot.tallsm { aspect-ratio: 1.7 / 1; } .plot.tall { aspect-ratio: 0.95 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Dynamic Programming <span>&middot; evaluate, improve, iterate</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#mdp">Planning with a model</a>
+      <a href="#eval">Evaluation</a>
+      <a href="#improve">Improvement</a>
+      <a href="#iterate">Policy iteration</a>
+      <a href="#async">Asynchronous DP</a>
+      <a href="#gpi">GPI</a>
+      <a href="#scales">Reward scales</a>
+      <a href="#lp">The LP view</a>
+      <a href="#cost">Efficiency</a>
+      <a href="#project">Inventory project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Reinforcement learning &amp; decision making &middot; chapter 3.1b &middot; dynamic programming</div>
+      <h1>Dynamic Programming: Evaluate, Improve, Iterate</h1>
+      <div class="sub">When you know the rules of the world, you can plan instead of learn</div>
+      <p class="lead">A robot crosses an icy garden: one move in five slips sideways, pits cost a point, the flag earns one. If you know those odds exactly, you need no trial and error at all. You can <b>evaluate</b> any plan by solving a set of equations, <b>improve</b> it by acting greedily on what you learned, and repeat. Each round is guaranteed to be no worse than the last, and the loop stops at an optimal policy, usually within a handful of rounds. Every colour in the garden is a computed value; every arrow is the current policy. <strong>Press Play and watch policy iteration think</strong>, then click any square to turn it into a wall, a pit or a flag, and solve again.</p>
+      <dl class="facts">
+        <div><dt>The assumption</dt><dd>A perfect model: every p(s&prime;, r | s, a) is known</dd></div>
+        <div><dt>The two moves</dt><dd>Evaluate a policy; then act greedily on its values</dd></div>
+        <div><dt>The payoff</dt><dd>An optimal policy, usually in a handful of rounds</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot gridplot"><canvas id="hero-cv" aria-label="A grid world solved by policy iteration: colours are state values, arrows the policy. Click a square to change it."></canvas></div>
+      <div class="btns" style="margin-top:10px"><button type="button" class="btn primary" id="hero-play">Play</button><button type="button" class="btn" id="hero-step">Step</button><button type="button" class="btn" id="hero-reset">Reset arrows</button>
+        <div class="seg" role="group" aria-label="Floor"><button type="button" data-hfl="0.8" aria-pressed="true">Icy floor</button><button type="button" data-hfl="1">Dry floor</button></div></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>11 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#mdp"><i>01</i>Planning with a model</a></li>
+    <li><a href="#eval"><i>02</i>Policy evaluation</a></li>
+    <li><a href="#improve"><i>03</i>Policy improvement</a></li>
+    <li><a href="#iterate"><i>04</i>Policy iteration</a></li>
+    <li><a href="#async"><i>05</i>Asynchronous DP</a></li>
+    <li><a href="#gpi"><i>06</i>Generalised policy iteration</a></li>
+    <li><a href="#scales"><i>07</i>Reward scales</a></li>
+    <li><a href="#lp"><i>08</i>The linear-programming view</a></li>
+    <li><a href="#cost"><i>09</i>Efficiency of DP</a></li>
+    <li><a href="#project"><i>10</i>Restocking project</a></li>
+    <li><a href="#summary"><i>11</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- MDP -->
+<section class="chap" id="mdp">
+  <div class="wrap">
+    <div class="tag">The setting</div>
+    <h2>Planning when you know the rules</h2>
+    <div class="prose">
+      <p>Many decisions come in chains: what you do now changes where you will be, and so what you can do next. A <em class="term">sequential decision problem</em> under uncertainty is modelled as a <em class="term">Markov decision process</em> (MDP): states s, actions a, a <b>transition model</b> p(s&prime;, r | s, a) that gives the chance of landing in s&prime; with reward r, and a discount &gamma; for the future. A plan (&ldquo;up, up, right, right, right&rdquo;) is no good when moves can fail, because you may not be where the plan assumed. You need a <em class="term">policy</em> &pi;(a | s): an instruction for <i>every</i> state.</p>
+      <p><em class="term">Dynamic programming</em> (DP) is the family of algorithms that compute good policies when the model is known exactly. That is a strong assumption, and the rest of reinforcement learning is largely about doing without it, but DP is the foundation they all imitate. Its key tool is a consistency condition. The value v<sub>&pi;</sub>(s), the expected discounted return from s when following &pi;, must equal the expected reward of one step plus the discounted value of wherever that step lands.</p>
+      <p>Below is the classic 4&times;3 world from Russell and Norvig&rsquo;s <i>Artificial Intelligence: A Modern Approach</i>: a wall in the middle, an exit worth +1, another worth &minus;1, and a cost of 0.04 on every other move. A move goes where you aimed with probability q and slips to either side otherwise. Here &gamma; = 1: nothing is discounted, but every step costs. <strong>Click squares to turn their arrows, and see what your policy is worth</strong>.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} v_\pi(s) &= \textstyle\sum_a \pi(a\mid s) \\ &\quad\times \textstyle\sum_{s',\,r} p(s',r\mid s,a) \\ &\quad\times \big[\,r + \gamma\, v_\pi(s')\,\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> the value of s under &pi; is an average over what can happen next: over the actions &pi; might choose, then over the next state s&prime; and reward r the world might return. Each outcome is worth its reward plus &gamma; times the value of where it lands. One equation per state; together they pin down v<sub>&pi;</sub>. This is the <i>Bellman expectation equation</i>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;v-pi of s is the sum over actions of pi of a given s, times the sum over s-prime and r of p of s-prime, r given s, a, times r plus gamma v-pi of s-prime.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} v_*(s) &= \max_a \textstyle\sum_{s',\,r} p(s',r\mid s,a) \\ &\quad\times \big[\,r + \gamma\, v_*(s')\,\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> the best achievable value v<sub>*</sub> obeys the same equation with the average over actions replaced by the best action. A policy that picks, in every state, an action achieving this maximum is optimal. All of DP is a set of ways to solve these two equations.</div><div class="eq-say"><b>Say it</b><em>&ldquo;v-star of s is the max over a of the sum over s-prime and r of p times r plus gamma v-star of s-prime.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-md" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot gridplot43"><canvas id="md-cv" aria-label="The 4 by 3 world with your policy and its values; click a square to turn its arrow"></canvas></div><figcaption>Colour and number: v<sub>&pi;</sub>(s) for your policy, solved exactly. The ringed square is the one you clicked last; its Bellman equation is written out above. S marks the start.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Policy preset"><button type="button" data-mdp="best" aria-pressed="true">Optimal</button><button type="button" data-mdp="short">Shortest path</button><button type="button" data-mdp="down">All down</button></div>
+        <div class="ctrl"><div class="top"><label for="md-q">Move goes where aimed, q</label><output id="md-q-o"></output></div><input type="range" id="md-q" min="0.5" max="1" step="0.05" value="0.8"></div>
+        <div class="stats"><div class="stat"><div class="v" id="md-v"></div><div class="k">v<sub>&pi;</sub>(start)</div></div><div class="stat"><div class="v" id="md-p"></div><div class="k">chance of ending at +1</div></div><div class="stat"><div class="v" id="md-n"></div><div class="k">expected moves</div></div><div class="stat"><div class="v" id="md-gap"></div><div class="k">short of the best, v<sub>*</sub>(start)</div></div></div>
+        <p class="note" id="md-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- EVALUATION -->
+<section class="chap" id="eval">
+  <div class="wrap">
+    <div class="tag">Move 1 &middot; prediction</div>
+    <h2>Policy evaluation: sweep until nothing changes</h2>
+    <div class="prose"><p>The Bellman equation gives one linear equation per state, so v<sub>&pi;</sub> could be found by solving a linear system, as the previous lab did. DP usually does something simpler that scales better: <em class="term">iterative policy evaluation</em>. Start from any guess v<sub>0</sub> (zeros), and use the right-hand side of the Bellman equation as an update rule, applied to every state in turn. One pass over the states is a <em class="term">sweep</em>. Each sweep pushes information one step further back from the exits, and the guesses converge to v<sub>&pi;</sub>. Two bookkeeping choices: keep the old values in a separate array until the sweep ends (<b>two arrays</b>), or overwrite as you go (<b>in place</b>), so later states in the sweep already see new values. This is the 4&times;4 world of Sutton and Barto&rsquo;s Example 4.1: the shaded corners end the episode, every move costs 1, moves are certain, and the policy picks each of the four directions with probability &frac14;. <strong>Step through the sweeps, then compare the two bookkeeping schemes</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} v_{k+1}(s) &= \textstyle\sum_a \pi(a\mid s) \\ &\quad\times \textstyle\sum_{s',\,r} p(s',r\mid s,a) \\ &\quad\times \big[\,r + \gamma\, v_k(s')\,\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> the new guess for s is the Bellman right-hand side evaluated with the old guesses v<sub>k</sub>. The exact answer v<sub>&pi;</sub> is a fixed point: plug it in and it comes back unchanged. Stop when the largest change in a sweep, &Delta;, falls below a small threshold &theta;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;v k-plus-one of s is the expected value of r plus gamma v-k of s-prime, under pi and the model.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf v_\pi &= \mathbf r_\pi + \gamma P_\pi \mathbf v_\pi \\ \Vert \mathbf v_{k+1} - \mathbf v_\pi \Vert_\infty &\le \gamma\, \Vert \mathbf v_k - \mathbf v_\pi \Vert_\infty \end{aligned} \]</div><div class="read"><b>Read it as:</b> stacked over all states, the equation is linear: r<sub>&pi;</sub> holds each state&rsquo;s expected reward and P<sub>&pi;</sub> its next-state probabilities, so v<sub>&pi;</sub> = (I &minus; &gamma;P<sub>&pi;</sub>)<sup>&minus;1</sup>r<sub>&pi;</sub>. With &gamma; &lt; 1, each sweep shrinks the worst error by at least a factor &gamma;. At &gamma; = 1 it still converges here, because under this policy every episode ends with probability 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;v-pi equals r-pi plus gamma P-pi v-pi; and the largest error after a sweep is at most gamma times the largest error before it.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-ev" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot gridplot44"><canvas id="ev-cv" aria-label="The 4 by 4 grid world with the current value estimates"></canvas></div><figcaption id="ev-cap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1 tallsm"><canvas id="ev-curve" aria-label="Largest error against sweeps for both bookkeeping schemes"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> two arrays &nbsp; <span style="color:var(--cB)">&#9644;</span> in place: largest error |v<sub>k</sub>(s) &minus; v<sub>&pi;</sub>(s)| after k sweeps, on a log scale. The dot is where you are.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="ev-step">One sweep</button><button type="button" class="btn" id="ev-run">Run until &Delta; &lt; &theta;</button><button type="button" class="btn" id="ev-reset">Reset</button></div>
+        <div class="seg" role="group" aria-label="Bookkeeping"><button type="button" data-evm="0" aria-pressed="true">Two arrays</button><button type="button" data-evm="1">In place</button></div>
+        <div class="seg" role="group" aria-label="Arrows"><button type="button" data-eva="1" aria-pressed="true">Show greedy arrows</button><button type="button" data-eva="0">Values only</button></div>
+        <div class="ctrl"><div class="top"><label for="ev-th">Threshold &theta;</label><output id="ev-th-o"></output></div><input type="range" id="ev-th" min="-6" max="-1" step="1" value="-4"></div>
+        <div class="ctrl"><div class="top"><label for="ev-g">Discount &gamma;</label><output id="ev-g-o"></output></div><input type="range" id="ev-g" min="0.5" max="1" step="0.05" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="ev-k"></div><div class="k">sweeps so far</div></div><div class="stat"><div class="v" id="ev-d"></div><div class="k">largest change, last sweep</div></div><div class="stat"><div class="v" id="ev-n2"></div><div class="k">sweeps to &theta;, two arrays</div></div><div class="stat"><div class="v" id="ev-n1"></div><div class="k">sweeps to &theta;, in place</div></div></div>
+        <p class="note" id="ev-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- IMPROVEMENT -->
+<section class="chap" id="improve">
+  <div class="wrap">
+    <div class="tag">Move 2 &middot; control</div>
+    <h2>Policy improvement: act greedily, never get worse</h2>
+    <div class="prose"><p>Knowing v<sub>&pi;</sub> tells you more than how good &pi; is. In any state you can ask: what if, just this once, I took action a and then went back to following &pi;? That is the <em class="term">action value</em> q<sub>&pi;</sub>(s, a), and it costs one look-ahead through the model. If some action has q<sub>&pi;</sub>(s, a) &gt; v<sub>&pi;</sub>(s), switching to it in s is better, and the <em class="term">policy improvement theorem</em> says something stronger: switching to it <i>every time</i> s is visited is better too, and no state anywhere gets worse. Doing this in every state at once gives the <b>greedy</b> policy. Each square below is split into four triangles, one per action, coloured by q<sub>&pi;</sub>; the policy&rsquo;s own choice has the dark edge. This lab discounts with &gamma; = 0.9, so that even a hopeless policy has finite values to compare. <strong>Click a square, then make it greedy, here or everywhere</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} q_\pi(s,a) &= \textstyle\sum_{s',\,r} p(s',r\mid s,a) \\ &\quad\times \big[\,r + \gamma\, v_\pi(s')\,\big] \\ \pi'(s) &= \arg\max_a\; q_\pi(s,a) \end{aligned} \]</div><div class="read"><b>Read it as:</b> q<sub>&pi;</sub>(s, a) is the value of taking a first and following &pi; afterwards: one step through the model, then v<sub>&pi;</sub>. The greedy policy &pi;&prime; picks, in each state, the action with the largest q<sub>&pi;</sub> (keeping the old action on ties).</div><div class="eq-say"><b>Say it</b><em>&ldquo;q-pi of s, a is the expected r plus gamma v-pi of s-prime after taking a; pi-prime of s is the arg-max over a of q-pi.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} & q_\pi(s,\pi'(s)) \ge v_\pi(s)\ \ \forall s \\ & \Longrightarrow\; v_{\pi'}(s) \ge v_\pi(s)\ \ \forall s \\[6pt] v_\pi(s) &\le q_\pi(s,\pi'(s)) \\ &= \mathbb E\big[R_{1} + \gamma\, v_\pi(S_{1})\big] \\ &\le \mathbb E_{\pi'}\big[R_{1} + \gamma\, q_\pi(S_1,\pi'(S_1))\big] \\ &= \mathbb E_{\pi'}\big[R_{1} + \gamma R_{2} + \gamma^2 v_\pi(S_{2})\big] \\ &\le \cdots \le v_{\pi'}(s) \end{aligned} \]</div><div class="read"><b>Read it as:</b> every expectation starts from S<sub>0</sub> = s and takes A<sub>0</sub> = &pi;&prime;(s); E<sub>&pi;&prime;</sub> means later actions follow &pi;&prime; too. If following &pi;&prime; for one step and then &pi; is at least as good as &pi; everywhere, then following &pi;&prime; for ever is at least as good. The proof keeps replacing the v<sub>&pi;</sub> at the end of the chain by the q<sub>&pi;</sub> it is bounded by, which pushes &pi;&prime; one step further each time. If the greedy policy changes nothing, &pi; already satisfies the optimality equation and is optimal.</div><div class="eq-say"><b>Say it</b><em>&ldquo;If q-pi of s, pi-prime of s is at least v-pi of s for every s, then v-pi-prime is at least v-pi everywhere.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-im" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot gridplot43"><canvas id="im-cv" aria-label="The 4 by 3 world with action values drawn as four triangles per square"></canvas></div><figcaption id="im-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Starting policy"><button type="button" data-imp="down" aria-pressed="true">All down</button><button type="button" data-imp="left">All left</button><button type="button" data-imp="rand">Random arrows</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="im-one">Greedy at this square</button><button type="button" class="btn" id="im-all">Greedy everywhere</button><button type="button" class="btn" id="im-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="im-v"></div><div class="k">v<sub>&pi;</sub>(start)</div></div><div class="stat"><div class="v" id="im-up"></div><div class="k">squares that improved, last change</div></div><div class="stat"><div class="v" id="im-dn"></div><div class="k">squares that got worse</div></div><div class="stat"><div class="v" id="im-ch"></div><div class="k">improvement steps</div></div></div>
+        <p class="note" id="im-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- POLICY ITERATION -->
+<section class="chap" id="iterate">
+  <div class="wrap">
+    <div class="tag">Putting them together</div>
+    <h2>Policy iteration, and how much evaluation is enough</h2>
+    <div class="prose"><p><em class="term">Policy iteration</em> simply alternates the two moves: evaluate &pi;, make it greedy, evaluate the new policy, make that greedy, and so on. Every new policy is strictly better than the last unless it is already optimal, and a finite MDP has only finitely many deterministic policies, so the loop must stop, and it stops at an optimal policy. In practice it stops after very few improvements. But evaluating each policy to convergence is expensive, and mostly wasted: the next improvement only needs values good enough to rank the actions. <em class="term">Modified policy iteration</em> runs just m evaluation sweeps before each improvement. With m = 1 it becomes <em class="term">value iteration</em>, the algorithm you met in chapter 3.1; with m = &infin; it is policy iteration. The garden here discounts with &gamma; = 0.95. <strong>Pick m, then alternate Evaluate and Improve by hand, or run it to the end</strong>, and see which m needs the fewest sweeps in total.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} & \pi_0 \xrightarrow{\;E\;} v_{\pi_0} \xrightarrow{\;I\;} \pi_1 \xrightarrow{\;E\;} v_{\pi_1} \\ & \xrightarrow{\;I\;} \pi_2 \;\cdots\; \xrightarrow{\;I\;} \pi_* \xrightarrow{\;E\;} v_* \end{aligned} \]</div><div class="read"><b>Read it as:</b> E is a complete policy evaluation, I a greedy improvement. Each &pi;<sub>k+1</sub> is at least as good as &pi;<sub>k</sub> in every state, strictly better somewhere unless &pi;<sub>k</sub> is optimal. There are at most |A|<sup>|S|</sup> deterministic policies, so the chain cannot run for ever.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Evaluate pi-zero, improve to pi-one, evaluate, improve, until the policy stops changing; then it is pi-star.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \mathbf v \leftarrow \big(T^{\pi}\big)^{m}\,\mathbf v, \qquad \pi \leftarrow \text{greedy}(\mathbf v) \]</div><div class="read"><b>Read it as:</b> T<sup>&pi;</sup> is one evaluation sweep (the Bellman expectation backup applied to every state), so (T<sup>&pi;</sup>)<sup>m</sup> is m sweeps, starting from the values left by the previous policy rather than from zero. Then improve. Any m &ge; 1 converges to v<sub>*</sub>; m only trades sweeps against improvements.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Apply the evaluation sweep for pi m times, then make pi greedy with respect to v.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-pi" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot gridplot"><canvas id="pi-cv" aria-label="The garden grid with the current values and policy"></canvas></div><figcaption id="pi-cap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1 tallsm"><canvas id="pi-curve" aria-label="Total sweeps needed for each m"></canvas></div><figcaption>Bars (log scale): total evaluation sweeps until every value is within 10<sup>&minus;6</sup> of v<sub>*</sub>, for each m; on wide screens the label also gives the number of improvements it took. The ringed bar is your m.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pi-m">Evaluation sweeps per round, m</label><output id="pi-m-o"></output></div><input type="range" id="pi-m" min="1" max="12" step="1" value="12"></div>
+        <div class="btns"><button type="button" class="btn primary" id="pi-e">Evaluate</button><button type="button" class="btn primary" id="pi-i">Improve</button><button type="button" class="btn" id="pi-run">Run to the end</button><button type="button" class="btn" id="pi-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pi-ni"></div><div class="k">improvements</div></div><div class="stat"><div class="v" id="pi-ns"></div><div class="k">evaluation sweeps</div></div><div class="stat"><div class="v" id="pi-ch"></div><div class="k">arrows changed, last improvement</div></div><div class="stat"><div class="v" id="pi-er"></div><div class="k">largest error, |v &minus; v<sub>*</sub>|</div></div></div>
+        <p class="note" id="pi-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ASYNC -->
+<section class="chap" id="async">
+  <div class="wrap">
+    <div class="tag">Breaking the sweep</div>
+    <h2>Asynchronous DP: back up states in any order</h2>
+    <div class="prose"><p>A sweep touches every state once, in a fixed order, before anything else happens. For a game like backgammon, with about 10<sup>20</sup> states, a single sweep would take longer than anyone can wait. <em class="term">Asynchronous DP</em> drops the sweep: back up one state at a time, in any order you like, using whatever values the other states have right now. As long as every state keeps being backed up (and &gamma; &lt; 1), the values still converge to v<sub>*</sub>. The freedom is the point: you can spend backups where they matter. Back up states near the goal first and good news travels outward in one pass. Back up the state whose value is most wrong (<b>prioritised</b>). Or back up only the states an agent actually visits while acting greedily (<b>real-time DP</b>), which interleaves planning with acting and may never touch states that don&rsquo;t matter. <strong>Choose an order and slide the budget of backups</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} v(s_k) &\leftarrow \max_a \textstyle\sum_{s',\,r} p(s',r\mid s_k,a) \\ &\quad\times \big[\,r + \gamma\, v(s')\,\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> at step k, pick one state s<sub>k</sub> by any rule and replace its value by the Bellman optimality backup, using the current values of its successors. Nothing else changes. A full in-place sweep is the special case where s<sub>k</sub> runs through the states in order.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Replace v of s-k by the max over a of the expected r plus gamma v of s-prime.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \delta(s) = \Big|&\max_a \textstyle\sum_{s',\,r} p(s',r\mid s,a) \\ &\times \big[r + \gamma\, v(s')\big] - v(s)\Big| \end{aligned} \]</div><div class="read"><b>Read it as:</b> the Bellman error of s, how much its value would move if you backed it up now. Prioritised ordering always backs up the state with the largest &delta;. When every &delta; is 0, v satisfies the optimality equation: it is v<sub>*</sub>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Delta of s is the gap between the backed-up value of s and its current value.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-as" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot mazeplot"><canvas id="as-cv" aria-label="The maze: values after the chosen number of backups, and how often each state was backed up"></canvas></div><figcaption id="as-cap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1 tallsm"><canvas id="as-curve" aria-label="Largest error against number of backups for each ordering"></canvas></div><figcaption>Largest error |v(s) &minus; v<sub>*</sub>(s)| over all states against single-state backups, log scale. <span style="color:var(--cA)">&#9644;</span> reading order &nbsp;<span style="color:var(--cB)">&#9644;</span> goal outward &nbsp;<span style="color:var(--cC)">&#9644;</span> random &nbsp;<span style="color:var(--lda)">&#9644;</span> prioritised &nbsp;<span style="color:var(--qda)">&#9644;</span> real-time DP. Your choice is drawn bold; the line is your budget.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <label class="mini-h" for="as-o">Order of backups</label>
+        <select id="as-o" class="qsel"><option value="0">Sweeps in reading order (in place)</option><option value="1">Sweeps from the goal outward</option><option value="2">One random state at a time</option><option value="3">Prioritised: largest Bellman error</option><option value="4">Real-time DP: states the agent visits</option></select>
+        <div class="ctrl"><div class="top"><label for="as-b">Budget of backups</label><output id="as-b-o"></output></div><input type="range" id="as-b" min="0" max="1" step="0.005" value="0.25"></div>
+        <div class="stats"><div class="stat"><div class="v" id="as-e"></div><div class="k">largest error now</div></div><div class="stat"><div class="v" id="as-s"></div><div class="k">error at the start square</div></div><div class="stat"><div class="v" id="as-n"></div><div class="k">backups to an error below 10<sup>&minus;4</sup></div></div><div class="stat"><div class="v" id="as-u"></div><div class="k">states never backed up</div></div></div>
+        <p class="note" id="as-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- GPI -->
+<section class="chap" id="gpi">
+  <div class="wrap">
+    <div class="tag">The big picture</div>
+    <h2>Generalised policy iteration: two processes, one fixed point</h2>
+    <div class="prose"><p>Policy iteration, value iteration, modified and asynchronous versions all share one structure. Two processes run side by side. <b>Evaluation</b> pulls the value estimate v towards v<sub>&pi;</sub>, the true value of the current policy. <b>Improvement</b> pulls the policy towards greedy(v). They interfere: making &pi; greedy changes v<sub>&pi;</sub>, so v is suddenly wrong again; fixing v makes &pi; non-greedy again. Sutton and Barto call any such interleaving <em class="term">generalised policy iteration</em> (GPI). The only way both processes can stop is when v is the value of &pi; <i>and</i> &pi; is greedy for v; that pair satisfies the Bellman optimality equation, so it is optimal. Almost every RL method in this book, from Monte Carlo control to actor&ndash;critic, is GPI with sampled experience in place of the model. Below, both gaps are measured exactly after every half-step, on the garden from the policy-iteration lab. <strong>Change how hard each process works and watch the zig-zag close in on the corner</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} e_{\text{eval}} &= \Vert \mathbf v - \mathbf v_\pi \Vert_\infty \\ e_{\text{greedy}} &= \max_s \Big[\max_a q_{\mathbf v}(s,a) \\ &\qquad - q_{\mathbf v}(s,\pi(s))\Big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> e<sub>eval</sub> is how far v is from the true value of the current policy; evaluation shrinks it. e<sub>greedy</sub> is how much better than &pi;&rsquo;s own action the best action looks under v (q<sub>v</sub> is the one-step look-ahead through the model using v); improvement sets it to 0. GPI is finished when both are 0.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The evaluation gap is the largest distance between v and v-pi; the greedy gap is the largest amount by which the best action beats pi's action.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} & e_{\text{eval}} = 0 \;\text{ and }\; e_{\text{greedy}} = 0 \\ & \Longrightarrow\; \mathbf v = \mathbf v_* ,\;\; \pi = \pi_* \end{aligned} \]</div><div class="read"><b>Read it as:</b> if v = v<sub>&pi;</sub> and &pi; already takes a best action under v, then v<sub>&pi;</sub>(s) = max<sub>a</sub> q<sub>v<sub>&pi;</sub></sub>(s, a) for every s. That is the Bellman optimality equation, whose only solution is v<sub>*</sub>.</div><div class="eq-say"><b>Say it</b><em>&ldquo;When both gaps are zero, v is v-star and pi is optimal.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-gp" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="gp-cv" aria-label="Path of the evaluation gap and greedy gap during generalised policy iteration"></canvas></div><figcaption>Each dot is the state of GPI after a half-step, on log scales (gaps below 10<sup>&minus;6</sup> sit on the floor). <span style="color:var(--cA)">&#9679;</span> after evaluation &nbsp; <span style="color:var(--cB)">&#9679;</span> after improvement. The corner at the bottom left is v<sub>*</sub>, &pi;<sub>*</sub>.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="gp-m">Evaluation sweeps between improvements</label><output id="gp-m-o"></output></div><input type="range" id="gp-m" min="1" max="10" step="1" value="3"></div>
+        <div class="seg" role="group" aria-label="Improvement scope"><button type="button" data-gps="all" aria-pressed="true">Improve all</button><button type="button" data-gps="few">Improve 5 random</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="gp-step">Next half-step</button><button type="button" class="btn" id="gp-run">Run 40 half-steps</button><button type="button" class="btn" id="gp-reset">Reset</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="gp-e"></div><div class="k">evaluation gap</div></div><div class="stat"><div class="v" id="gp-g"></div><div class="k">greedy gap</div></div><div class="stat"><div class="v" id="gp-h"></div><div class="k">half-steps</div></div><div class="stat"><div class="v" id="gp-o"></div><div class="k">largest |v &minus; v<sub>*</sub>|</div></div></div>
+        <p class="note" id="gp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- REWARD SCALES -->
+<section class="chap" id="scales">
+  <div class="wrap">
+    <div class="tag">What the numbers mean</div>
+    <h2>Reward scales: which changes alter the policy</h2>
+    <div class="prose"><p>Rewards are a design choice, and it matters which choices change the answer. Multiplying every reward by a positive number a changes the units of value and nothing else: every comparison between actions is scaled by the same a. Adding a constant b to every reward is subtler. In a task that never ends, it adds the same b/(1 &minus; &gamma;) to every value, and again no choice changes. But when episodes can end, the constant is collected once per step, so actions that finish sooner gain or lose relative to the rest. That is exactly why the 4&times;3 world&rsquo;s small cost per move, its <em class="term">living reward</em>, decides the route: make it harsh enough and the agent dives into the &minus;1 exit just to stop paying; make it positive and the agent avoids both exits for ever. The one transformation that is always safe is <em class="term">potential-based shaping</em> (Ng, Harada &amp; Russell, 1999): add &gamma;&Phi;(s&prime;) &minus; &Phi;(s) for any function &Phi; of the state (with &Phi; = 0 at the exits). It can make learning faster, but it never changes which policy is optimal. <strong>Slide the living reward, then try to change the policy by scaling, shifting or shaping</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} r' &= a\,r + b, \quad a > 0 \\ q'_\pi(s,\alpha) &= a\,q_\pi(s,\alpha) \\ &\quad + b\,\mathbb E\big[\textstyle\sum_{t \lt T}\gamma^t\big] \\ \text{no exits: } q'_\pi &= a\,q_\pi + \tfrac{b}{1-\gamma} \end{aligned} \]</div><div class="read"><b>Read it as:</b> scaling and shifting every reward (&alpha; is the action, to avoid a clash with the scale a) turns each action value into a times the old one plus b times the expected discounted number of steps left, T being the step on which the episode ends. If episodes never end, that count is 1/(1 &minus; &gamma;) for every action, so the ranking of actions cannot change. If they do end, it depends on the action, and the ranking can flip.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Scale by a and shift by b: q-prime is a q plus b times the expected discounted number of remaining steps.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} r' &= r + \gamma\,\Phi(s') - \Phi(s) \\ \Longrightarrow\; q'_\pi(s,\alpha) &= q_\pi(s,\alpha) - \Phi(s) \end{aligned} \]</div><div class="read"><b>Read it as:</b> along any trajectory the shaping terms telescope: &gamma;&Phi;(s<sub>1</sub>) &minus; &Phi;(s<sub>0</sub>) + &gamma;<sup>2</sup>&Phi;(s<sub>2</sub>) &minus; &gamma;&Phi;(s<sub>1</sub>) + &hellip; leaves only &minus;&Phi;(s<sub>0</sub>). Every action from s loses the same &Phi;(s), so the best action is the same. Here &Phi;(s) = &minus;k &times; (steps from s to the +1 exit).</div><div class="eq-say"><b>Say it</b><em>&ldquo;Add gamma Phi of s-prime minus Phi of s to every reward, and every action value just drops by Phi of s.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-rs" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot gridplot43"><canvas id="rs-cv" aria-label="The 4 by 3 world: the optimal policy under the transformed rewards"></canvas></div><figcaption id="rs-cap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot stripplot"><canvas id="rs-strip" aria-label="Which optimal policy holds for each living reward"></canvas></div><figcaption>The optimal policy for each living reward r from &minus;2 to 0.3 (untransformed rewards, your &gamma;). Each colour band is one policy; the marker is your r. Grey: no finite solution.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="rs-r">Living reward r</label><output id="rs-r-o"></output></div><input type="range" id="rs-r" min="-2" max="0.3" step="0.01" value="-0.04"></div>
+        <div class="seg" role="group" aria-label="Discount"><button type="button" data-rsg="1" aria-pressed="true">&gamma; = 1</button><button type="button" data-rsg="0.9">&gamma; = 0.9</button></div>
+        <div class="ctrl"><div class="top"><label for="rs-a">Scale every reward by a</label><output id="rs-a-o"></output></div><input type="range" id="rs-a" min="-1" max="1" step="0.05" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="rs-b">Add b to every reward</label><output id="rs-b-o"></output></div><input type="range" id="rs-b" min="-0.5" max="0.5" step="0.01" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="rs-k">Shaping strength k</label><output id="rs-k-o"></output></div><input type="range" id="rs-k" min="0" max="2" step="0.1" value="0"></div>
+        <div class="stats"><div class="stat"><div class="v" id="rs-same"></div><div class="k">same policy as untransformed?</div></div><div class="stat"><div class="v" id="rs-v"></div><div class="k">v<sub>*</sub>(start), transformed</div></div><div class="stat"><div class="v" id="rs-v0"></div><div class="k">v<sub>*</sub>(start), untransformed</div></div></div>
+        <p class="note" id="rs-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- LP -->
+<section class="chap" id="lp">
+  <div class="wrap">
+    <div class="tag">Another road to the optimum</div>
+    <h2>The linear-programming view of an MDP</h2>
+    <div class="prose"><p>The max in the Bellman optimality equation makes it non-linear, but it can be traded for inequalities. Call v a <em class="term">feasible</em> value function if, in every state, it is at least as large as the one-step look-ahead of <i>every</i> action. Any feasible v is an upper bound on v<sub>*</sub>, and v<sub>*</sub> itself is feasible, with equality for its best actions. So v<sub>*</sub> is the smallest feasible v, and finding it is a <em class="term">linear program</em> (LP): |S| unknowns, one inequality per state&ndash;action pair. LPs are solvable in polynomial time, which is the cleanest proof that MDPs are tractable. In practice LP solvers are usually slower than policy iteration on big MDPs, but the view is rich: the LP&rsquo;s <b>dual</b> has one variable per state&ndash;action pair, which turns out to be how often (discounted) the optimal policy takes that action there. The machine below has two states, so every value function is a point on the plane. A Fresh machine can Run (earns 10, wears out with probability w) or be Serviced (earns 2, stays fresh); a Worn one can Run (earns 4, stays worn) or be Serviced (costs C, becomes fresh). <strong>Drag the point around the feasible region, then change the costs and watch the corner move</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \min_{\mathbf v}\;& \textstyle\sum_s v(s) \;\;\text{ s.t., for all } s, a: \\ v(s) &\ge \textstyle\sum_{s'} p(s'\mid s,a) \\ &\quad\times \big[r(s,a,s') + \gamma\, v(s')\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> push every value as low as it will go, while each state stays at least as valuable as each of its actions. At the optimum the constraint of the best action in each state is tight (holds with equality), and v = v<sub>*</sub>. The constraints that are tight tell you the optimal policy.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Minimise the sum of the values, subject to v of s being at least the look-ahead value of every action in every state.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \max_{x \ge 0}\;& \textstyle\sum_{s,a} x(s,a)\, \bar r(s,a) \;\;\text{ s.t., } \forall s': \\ & \textstyle\sum_a x(s',a) = 1 \\ &\quad + \gamma \textstyle\sum_{s,a} p(s'\mid s,a)\, x(s,a) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the dual. x(s, a) is the discounted number of times action a is taken in state s, counted over runs that start once from every state (the 1 on the right), and r&#772;(s, a) is the expected reward of the pair. The constraint says visits are conserved: visits to s&prime; are its one start plus the discounted flow arriving from elsewhere. Maximising reward over such flows gives the same number as the primal.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Maximise total reward over discounted visit counts x, where visits into each state equal one plus gamma times the flow in.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-lp" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="lp-cv" aria-label="The feasible region of the LP in the plane of v(Fresh) and v(Worn)"></canvas></div><figcaption>Each line is one constraint (one state&ndash;action pair); the shaded region satisfies all four. &#9733; the LP optimum v<sub>*</sub>; small dots: value iteration from (0, 0); &#9679; your point (drag it). Dashed: the objective line through v<sub>*</sub>.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="lp-g">Discount &gamma;</label><output id="lp-g-o"></output></div><input type="range" id="lp-g" min="0.5" max="0.95" step="0.01" value="0.8"></div>
+        <div class="ctrl"><div class="top"><label for="lp-w">Wear probability w</label><output id="lp-w-o"></output></div><input type="range" id="lp-w" min="0.05" max="0.9" step="0.05" value="0.3"></div>
+        <div class="ctrl"><div class="top"><label for="lp-c">Service cost when worn, C</label><output id="lp-c-o"></output></div><input type="range" id="lp-c" min="0" max="40" step="0.5" value="4"></div>
+        <div class="stats"><div class="stat"><div class="v" id="lp-v"></div><div class="k">v<sub>*</sub>(Fresh), v<sub>*</sub>(Worn)</div></div><div class="stat"><div class="v" id="lp-pol"></div><div class="k">tight constraints = policy</div></div><div class="stat"><div class="v" id="lp-you"></div><div class="k">your point: feasible? objective</div></div><div class="stat"><div class="v" id="lp-x"></div><div class="k">dual visits x(s, a) on the policy</div></div></div>
+        <p class="note" id="lp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- EFFICIENCY -->
+<section class="chap" id="cost">
+  <div class="wrap">
+    <div class="tag">Is it practical?</div>
+    <h2>How efficient is dynamic programming?</h2>
+    <div class="prose"><p>DP has a reputation for being impractical, and half of it is deserved. The good half: its cost is <b>polynomial</b> in the number of states and actions. A brute-force search over deterministic policies would have to compare |A|<sup>|S|</sup> of them, which for 100 states and 4 actions is a number with 61 digits; policy iteration typically needs a handful of improvements, and each improvement or sweep costs about |S|<sup>2</sup>|A| operations at worst. Value iteration&rsquo;s sweep count depends on &gamma;: the closer &gamma; is to 1, the further information has to travel and the more sweeps it takes. The bad half is the <em class="term">curse of dimensionality</em> (Bellman&rsquo;s phrase): the number of states grows exponentially with the number of variables that describe a state, so a problem described by twenty yes/no facts already has a million states. That is a property of the problems, not a weakness of DP, and DP copes with millions of states on a laptop. The MDPs below are random: every state&ndash;action pair has a reward between 0 and 1 and three random successors. <strong>Grow the MDP, add actions, push &gamma; towards 1</strong>.</p></div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{policies:}\;& |A|^{|S|} \\ \text{one sweep:}\;& O\big(|S|\,|A|\,b\big) \\ & \le O\big(|S|^2|A|\big) \\ \text{exact evaluation:}\;& O\big(|S|^3\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> b is the number of possible successors of a state&ndash;action pair (3 here). A sweep looks at every pair and its successors. Exact evaluation solves an |S| &times; |S| linear system by elimination. All polynomial; only the policy count is exponential, and DP never enumerates it.</div><div class="eq-say"><b>Say it</b><em>&ldquo;There are A to the power S policies, but a sweep costs only S times A times b.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \Vert \mathbf v_k - \mathbf v_* \Vert_\infty &\le \gamma^k\,\frac{R_{\max}}{1-\gamma} \le \varepsilon \\ \iff k &\ge \frac{\ln\!\big(R_{\max} / (\varepsilon(1-\gamma))\big)}{\ln(1/\gamma)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> starting from v<sub>0</sub> = 0, the error of value iteration starts at most at R<sub>max</sub>/(1 &minus; &gamma;) (the largest possible value, for rewards between 0 and R<sub>max</sub>) and shrinks by &gamma; per sweep. So the number of sweeps needed for accuracy &epsilon; grows roughly like 1/(1 &minus; &gamma;) as &gamma; approaches 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The error after k sweeps is at most gamma to the k times R-max over one minus gamma; so k must be at least the log of R-max over epsilon one-minus-gamma, over the log of one over gamma.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-co" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="co-cv" aria-label="Work needed against the number of states, log scale"></canvas></div><figcaption>Log scale. <span style="color:var(--qda)">&#9644;</span> number of deterministic policies, |A|<sup>|S|</sup> &nbsp;<span style="color:var(--cB)">&#9644;</span> value-iteration sweeps to &epsilon; = 10<sup>&minus;6</sup> &nbsp;<span style="color:var(--cA)">&#9644;</span> policy-iteration rounds. Each point averages three random MDPs; the ring is your size.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="co-n">States |S|</label><output id="co-n-o"></output></div><input type="range" id="co-n" min="1" max="8" step="1" value="5"></div>
+        <div class="ctrl"><div class="top"><label for="co-a">Actions per state |A|</label><output id="co-a-o"></output></div><input type="range" id="co-a" min="2" max="6" step="1" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="co-g">Discount &gamma;</label><output id="co-g-o"></output></div><input type="range" id="co-g" min="0" max="5" step="1" value="2"></div>
+        <div class="btns"><button type="button" class="btn" id="co-new">New random MDP</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="co-pi"></div><div class="k">policy-iteration rounds</div></div><div class="stat"><div class="v" id="co-vi"></div><div class="k">value-iteration sweeps (bound)</div></div><div class="stat"><div class="v" id="co-np"></div><div class="k">deterministic policies</div></div><div class="stat"><div class="v" id="co-ms"></div><div class="k">time in your browser, PI &middot; VI</div></div></div>
+        <p class="note" id="co-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: restocking a warehouse shelf with dynamic programming</h2>
+    <div class="prose">
+      <p>Inventory control was one of the first problems dynamic programming was applied to. Here is a real one. The <b>UCI Online Retail</b> data set (Chen, Sain &amp; Guo, 2012; licensed <b>CC BY 4.0</b>) holds every invoice line of a UK-based online gift wholesaler between 1 December 2010 and 9 December 2011, 541,909 of them. From it this page takes one product, stock code <span class="mono">22423</span>, listed in the data as &ldquo;REGENCY CAKESTAND 3 TIER&rdquo;, which sold on all but 4 of the shop&rsquo;s 305 trading days. Its daily demand is the total quantity on that day&rsquo;s invoices (cancellations and returns removed). Demand from January to June 2011 (147 trading days) estimates the model; July to 9 December 2011 (138 days) is held back to test the plan on demand it has never seen.</p>
+      <p>The MDP: each evening the manager sees the stock s left on the shelf (0 to 250, the shelf&rsquo;s capacity) and chooses how many units to order; the delivery arrives overnight, so the next day opens with y = s + order. That day&rsquo;s demand D is drawn from the empirical distribution; sales are min(y, D), and unmet demand is lost. The price, &pound;12.75, is the product&rsquo;s median unit price in the data. The costs are <b>assumptions</b> you can change, since the data set doesn&rsquo;t record them: a unit cost of half the price, a fixed charge K per delivery, a holding cost h per unit left overnight, and an optional goodwill penalty g per unit of unmet demand. There are 251 states and 31,626 state&ndash;action pairs, and 10<sup>494.9</sup> deterministic policies to choose from.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} r(s,y,D) &= p\,\min(y,D) \\ &\quad - c\,(y-s) - K\,\mathbb 1[y>s] \\ &\quad - h\,(y-D)^+ \\ &\quad - g\,(D-y)^+ \\ s' &= (y - D)^+ \end{aligned} \]</div><div class="read"><b>Read it as:</b> the day&rsquo;s reward is revenue from what was sold, minus the cost of the units ordered, minus the delivery charge if anything was ordered, minus holding cost on what is left and the goodwill penalty on what was missed. The next state is what is left: (x)<sup>+</sup> means max(x, 0). The model averages the reward and the next state over the 147 training days&rsquo; demands.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Reward is p times sales minus c times the order minus K if you ordered, minus h times leftovers minus g times shortfall; next state is what's left.&rdquo;</em></div><div class="eq-run" id="run-pj"></div></div>
+
+    <h3>1 &middot; The demand</h3>
+    <figure class="block" style="max-width:900px"><div class="plot pjplot"><canvas id="pj-dem" aria-label="Daily demand for the product over the year, with the training and test periods"></canvas></div><figcaption id="pj-dem-cap"></figcaption></figure>
+
+    <h3>2 &middot; Solve the MDP by policy iteration</h3>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="pj-pol" aria-label="The optimal order quantity for each closing stock level"></canvas></div><figcaption id="pj-pol-cap"></figcaption></figure>
+        <div class="tbl-wrap" style="margin-top:12px"><table class="hand" id="pj-trace"></table></div>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-K">Delivery charge K (&pound;)</label><output id="pj-K-o"></output></div><input type="range" id="pj-K" min="0" max="150" step="5" value="40"></div>
+        <div class="ctrl"><div class="top"><label for="pj-h">Holding cost h (&pound; per unit per night)</label><output id="pj-h-o"></output></div><input type="range" id="pj-h" min="0.02" max="1" step="0.02" value="0.2"></div>
+        <div class="ctrl"><div class="top"><label for="pj-c">Unit cost, share of price</label><output id="pj-c-o"></output></div><input type="range" id="pj-c" min="0.2" max="0.9" step="0.05" value="0.5"></div>
+        <div class="ctrl"><div class="top"><label for="pj-g">Goodwill penalty g (&pound; per unit short)</label><output id="pj-g-o"></output></div><input type="range" id="pj-g" min="0" max="10" step="0.5" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="pj-gm">Daily discount &gamma;</label><output id="pj-gm-o"></output></div><input type="range" id="pj-gm" min="0.9" max="0.995" step="0.005" value="0.99"></div>
+        <div class="btns"><button type="button" class="btn" id="pj-vi">Also run value iteration</button><button type="button" class="btn" id="pj-def">Defaults</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-ss"></div><div class="k">optimal (s, S)</div></div><div class="stat"><div class="v" id="pj-it"></div><div class="k">policy iterations</div></div><div class="stat"><div class="v" id="pj-v0"></div><div class="k">v<sub>*</sub>(empty shelf)</div></div><div class="stat"><div class="v" id="pj-vi-o"></div><div class="k">value iteration: sweeps to 10<sup>&minus;6</sup></div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+
+    <h3>3 &middot; Replay the policies on real demand</h3>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-board"></table></div>
+    <figure class="block" style="max-width:900px"><div class="plot pjplot"><canvas id="pj-sim" aria-label="Stock on the shelf each day of the test period under the chosen policy"></canvas></div><figcaption id="pj-sim-cap"></figcaption></figure>
+    <div class="btns block"><div class="seg" role="group" aria-label="Policy replayed"><button type="button" data-pjp="0" aria-pressed="true">DP optimal</button><button type="button" data-pjp="1">Base-stock</button><button type="button" data-pjp="2">Top up to the mean</button><button type="button" data-pjp="3">Rule of thumb</button></div></div>
+    <p class="note block" style="max-width:72ch" id="pj-rsay"></p>
+
+    <h3>The same computation in Python</h3>
+<pre class="code"><code>import json, time, numpy as np, scipy.sparse as sp
+from scipy.optimize import linprog
+J = json.load(open("x068-data.json"))
+train = np.array([q for t, q in zip(J["dates"], J["q"]) if "2011-01-01" &lt;= t &lt;= "2011-06-30"])
+test = np.array([q for t, q in zip(J["dates"], J["q"]) if t &gt;= "2011-07-01"])
+M, p, K, h, g, gam = 250, J["price"], 40.0, 0.20, 0.0, 0.99   # capacity, price (median in data), assumed costs
+c = 0.5 * p                                     # assumed unit cost: half the selling price
+pd = np.bincount(train) / len(train); dv = np.arange(len(pd))   # empirical demand pmf
+S = np.arange(M + 1)                            # state s = units on the shelf at closing time
+y_ = S[:, None]                                 # y = s + order = units on the shelf next morning
+R = (pd * (p * np.minimum(y_, dv) - h * np.maximum(y_ - dv, 0) - g * np.maximum(dv - y_, 0))).sum(1)
+P = np.zeros((M + 1, M + 1))                    # P[y, s'] = Pr(next closing stock s' | morning stock y)
+for y in S: np.add.at(P[y], np.maximum(y - dv, 0), pd)
+Q_of = lambda v: np.where(S[None, :] &gt;= S[:, None],          # Q[s, y]: order y - s units tonight
+    (R + gam * P @ v)[None, :] - c * (S[None, :] - S[:, None]) - K * (S[None, :] &gt; S[:, None]), -np.inf)
+
+def evaluate(y):                                # exact policy evaluation: solve (I - gamma P_pi) v = r_pi
+    r = R[y] - c * (y - S) - K * (y &gt; S)
+    return np.linalg.solve(np.eye(M + 1) - gam * P[y], r)
+t = time.perf_counter(); y = S.copy(); it = 0        # start from "never order"
+while True:
+    v = evaluate(y); it += 1; Q = Q_of(v); best = Q.argmax(1)
+    new = np.where(Q[S, y] &gt;= Q[S, best] - 1e-9, y, best)    # keep the old action on ties
+    print(f"policy iteration {it}: v(0) = {v[0]:.4f}, actions changed in {int((new != y).sum())} states")
+    if np.array_equal(new, y): break
+    y = new
+tPI = time.perf_counter() - t
+s_lo = int(S[y &gt; S].max()); S_up = int(y[0])
+print(f"optimal policy: (s, S) = ({s_lo}, {S_up}); is it exactly (s, S)? {bool(np.all(y == np.where(S &lt;= s_lo, S_up, S)))}")
+print(f"v*(0) = {v[0]:.6f}, v*(60) = {v[60]:.6f}, v*(150) = {v[150]:.6f}   ({tPI * 1000:.0f} ms)")
+
+t = time.perf_counter(); w = np.zeros(M + 1); k = 0               # value iteration from zero
+while np.abs(w - v).max() &gt; 1e-6: w = Q_of(w).max(1); k += 1
+print(f"value iteration: {k} sweeps to get within 1e-6 of v* ({(time.perf_counter() - t) * 1000:.0f} ms)")
+
+rows, cols, vals, b = [], [], [], []                              # LP: min sum v  s.t.  v(s) &gt;= Q(s, y) for all y &gt;= s
+for s in S:
+    for yy in range(s, M + 1):
+        i = len(b); nz = np.nonzero(P[yy])[0]
+        rows += [i] * (len(nz) + 1); cols += [s] + list(nz); vals += [-1.0] + list(gam * P[yy, nz])
+        b.append(-(R[yy] - c * (yy - s) - K * (yy &gt; s)))
+A = sp.csr_matrix((vals, (rows, cols)), shape=(len(b), M + 1))
+t = time.perf_counter(); lp = linprog(np.ones(M + 1), A_ub=A, b_ub=b, bounds=[(None, None)] * (M + 1), method="highs")
+print(f"linear program: {A.shape[0]} constraints, {lp.status == 0 and 'solved'} in {(time.perf_counter() - t) * 1000:.0f} ms, max |v_LP - v_PI| = {np.abs(lp.x - v).max():.2e}")
+print(f"deterministic policies to choose from: 10^{np.log10(np.arange(1, M + 2)).sum():.1f}")
+
+per_day = lambda yy: (1 - gam) * evaluate(yy)[0]  # model: discounted value from an empty shelf, in per-day units
+def simulate(pol, name):                        # replay the policy on real demand, starting from an empty shelf
+    out = []
+    for days in (train, test):
+        s, prof, sold, orders = 0, 0.0, 0, 0
+        for d in days:
+            yy = pol(s); a = yy - s; prof -= c * a + K * (a &gt; 0); orders += a &gt; 0
+            sale = min(yy, d); prof += p * sale - h * max(yy - d, 0) - g * max(d - yy, 0); sold += sale; s = yy - sale
+        out.append((prof / len(days), sold / days.sum(), orders))
+    (a1, f1, o1), (a2, f2, o2) = out
+    print(f"{name:32s} model {per_day(np.array([pol(s) for s in S])):7.2f} | train {a1:7.2f} | test {a2:7.2f}  fill {f2:.4f}  deliveries {o2:3d}")
+mu = train.mean()
+KK = K; K = 0.0; y0 = S.copy()                  # base-stock policy that is optimal when deliveries are free
+while True:
+    Q = Q_of(evaluate(y0)); best = Q.argmax(1); n0 = np.where(Q[S, y0] &gt;= Q[S, best] - 1e-9, y0, best)
+    if np.array_equal(n0, y0): break
+    y0 = n0
+K = KK; B = int(y0[0])
+print(f"train: {len(train)} days, mean {mu:.2f}/day; test: {len(test)} days, {test.sum()} units, mean {test.mean():.2f}/day")
+print("profit per day (GBP)            (1-gamma) v(0) | replay on train | replay on test")
+simulate(lambda s: int(y[s]), f"DP optimal (s, S) = ({s_lo}, {S_up})")
+simulate(lambda s: max(s, B), f"base-stock {B} (best if K = 0)")
+simulate(lambda s: max(s, int(np.ceil(mu))), f"top up to the mean, {int(np.ceil(mu))}")
+simulate(lambda s: int(min(M, round(5 * mu))) if s &lt; 2 * mu else s, f"rule of thumb ({int(2 * mu)}, {int(min(M, round(5 * mu)))})")</code></pre>
+<pre class="code out"><code>policy iteration 1: v(0) = 0.0000, actions changed in 242 states
+policy iteration 2: v(0) = 18872.3393, actions changed in 242 states
+policy iteration 3: v(0) = 22072.1425, actions changed in 106 states
+policy iteration 4: v(0) = 22521.2088, actions changed in 106 states
+policy iteration 5: v(0) = 22707.0229, actions changed in 72 states
+policy iteration 6: v(0) = 22714.7548, actions changed in 0 states
+optimal policy: (s, S) = (71, 207); is it exactly (s, S)? True
+v*(0) = 22714.754770, v*(60) = 23097.254770, v*(150) = 23703.012818   (13 ms)
+value iteration: 2374 sweeps to get within 1e-6 of v* (799 ms)
+linear program: 31626 constraints, solved in 3526 ms, max |v_LP - v_PI| = 3.67e-10
+deterministic policies to choose from: 10^494.9
+train: 147 days, mean 43.75/day; test: 138 days, 5355 units, mean 38.80/day
+profit per day (GBP)            (1-gamma) v(0) | replay on train | replay on test
+DP optimal (s, S) = (71, 207)    model  227.15 | train  230.08 | test  189.81  fill 0.9356  deliveries  32
+base-stock 134 (best if K = 0)   model  201.86 | train  202.50 | test  168.32  fill 0.9391  deliveries 135
+top up to the mean, 44           model  146.43 | train  145.99 | test  130.16  fill 0.7027  deliveries 135
+rule of thumb (87, 219)          model  226.63 | train  229.59 | test  193.80  fill 0.9628  deliveries  33</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest">The browser solves the same MDP with its own JavaScript (Gaussian elimination for each policy evaluation, the same tie rule, the same starting policy). At the default settings it finds the same policy, (s, S) = (71, 207), in the same 6 policy iterations, and its 251 values agree with NumPy&rsquo;s to within 2&times;10<sup>&minus;10</sup>; value iteration takes the same 2,374 sweeps, and every replayed profit in the table matches the Python output to the penny. The linear program was solved only in Python (SciPy&rsquo;s HiGHS), and agrees with policy iteration to 4&times;10<sup>&minus;10</sup>. Honest caveats: recorded sales are not quite demand, because a day when the wholesaler ran out would show up as low sales; delivery is assumed overnight and certain; the costs are invented; and one 138-day test path is a noisy judge, so a policy that is optimal on average can lose to a reasonable rule of thumb on the particular days that happened, as it does here.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Dynamic programming computes optimal policies when the model p(s&prime;, r | s, a) is known, by turning the Bellman equations into update rules.</li>
+      <li>Policy evaluation sweeps the Bellman expectation backup until values stop changing; policy improvement makes the policy greedy, and the improvement theorem guarantees no state gets worse.</li>
+      <li>Policy iteration alternates the two and stops at an optimal policy in a few rounds; modified policy iteration and value iteration evaluate only partially, and asynchronous DP backs up states in any order it likes.</li>
+      <li>All of these are generalised policy iteration: evaluation and improvement pulling against each other until v = v<sub>*</sub>; the Bellman optimality equation is also a linear program, minimising &sum;v subject to v &ge; every action&rsquo;s look-ahead.</li>
+      <li>Positive scaling and potential-based shaping never change the optimal policy; adding a constant can, whenever episodes end. DP is polynomial in |S| and |A|; the hard part is that |S| itself explodes with the number of state variables.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Why does a sequential decision problem with slippery moves need a policy rather than a plan?</summary><p>A plan is a fixed list of actions that assumes you know where each one leaves you. When moves can fail, you may end up somewhere the plan never considered. A policy says what to do in every state, so it stays useful whatever happens.</p></details>
+      <details class="q"><summary>In-place policy evaluation usually converges in fewer sweeps than the two-array version. Why?</summary><p>Within a sweep, states updated later already use the new values of states updated earlier, so information can travel several steps in one sweep instead of exactly one. How much this helps depends on the order of the sweep relative to where the rewards are.</p></details>
+      <details class="q"><summary>Policy improvement made the policy greedy with respect to v<sub>&pi;</sub>, and nothing changed. What can you conclude?</summary><p>That &pi; takes a best action under its own value function in every state, so v<sub>&pi;</sub> satisfies the Bellman optimality equation. Hence v<sub>&pi;</sub> = v<sub>*</sub> and &pi; is optimal.</p></details>
+      <details class="q"><summary>You add +5 to every reward in an episodic maze. Can the optimal policy change? What if you multiply every reward by 5 instead?</summary><p>Adding 5 can change it: each step now earns 5, so routes that take longer gain relative to short ones, and the agent may even avoid finishing. Multiplying by 5 cannot: every action value is scaled by the same positive factor, so the ranking of actions is unchanged.</p></details>
+      <details class="q"><summary>In the LP view of an MDP, what do the tight constraints at the optimum tell you?</summary><p>A constraint v(s) &ge; look-ahead of action a is tight when that action achieves v<sub>*</sub>(s), so the tight constraints mark the optimal actions. In the dual, they are the state&ndash;action pairs with positive visit counts x(s, a).</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../monte-carlo-methods/">Next chapter: Monte Carlo Methods &amp; Importance Sampling &rarr;</a>
+      <a class="btn" href="../bandits-in-depth/">&larr; Previous: Bandits in Depth: UCB, Thompson Sampling, Gittins &amp; Context</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Sutton, R. S. &amp; Barto, A. G. (2018). <em>Reinforcement Learning: An Introduction</em>, 2nd ed. MIT Press, ch. 4 (Dynamic Programming).</li>
+      <li>Russell, S. &amp; Norvig, P. (2021). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed. Pearson, ch. 17 (Making Complex Decisions), &sect;17.1&ndash;17.2.</li>
+      <li>Bellman, R. (1957). <em>Dynamic Programming</em>. Princeton University Press.</li>
+      <li>Howard, R. A. (1960). <em>Dynamic Programming and Markov Processes</em>. MIT Press: policy iteration.</li>
+      <li>Puterman, M. L. (1994). <em>Markov Decision Processes: Discrete Stochastic Dynamic Programming</em>. Wiley: modified policy iteration, the linear-programming formulation and its dual.</li>
+      <li>Bertsekas, D. P. &amp; Tsitsiklis, J. N. (1996). <em>Neuro-Dynamic Programming</em>. Athena Scientific: asynchronous DP and its convergence.</li>
+      <li>Barto, A. G., Bradtke, S. J. &amp; Singh, S. P. (1995). Learning to act using real-time dynamic programming. <em>Artificial Intelligence</em> 72(1&ndash;2).</li>
+      <li>Ng, A. Y., Harada, D. &amp; Russell, S. (1999). Policy invariance under reward transformations: theory and application to reward shaping. <em>Proc. ICML 1999</em>.</li>
+      <li>Scarf, H. (1960). The optimality of (S, s) policies in the dynamic inventory problem. In <em>Mathematical Methods in the Social Sciences</em>, Stanford University Press.</li>
+      <li>Chen, D., Sain, S. L. &amp; Guo, K. (2012). Data mining for the online retail industry: a case study of RFM model-based customer segmentation using data mining. <em>Journal of Database Marketing &amp; Customer Strategy Management</em> 19(3). Data: UCI Machine Learning Repository, &ldquo;Online Retail&rdquo;, doi:10.24432/C5BW33, CC BY 4.0.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated. Sales data: UCI Online Retail (Chen, Sain &amp; Guo), CC BY 4.0.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- DP core: tabular MDPs, grid worlds, evaluation, improvement, iteration ---------- */
+const DP = (function () {
+  const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];           // N E S W (x right, y down)
+  const DNAME = ['up', 'right', 'down', 'left'], DARR = ['↑', '→', '↓', '←'];
+  /* grid world: rows of '.', '#'(wall), 'G'(+gR exit), 'P'(pit, pR exit), 'T'(exit worth the living reward), 'S'(start) */
+  function grid(rows, o) {
+    o = Object.assign({ q: 0.8, live: -0.04, gR: 1, pR: -1, gamma: 1 }, o || {});
+    const H = rows.length, W = rows[0].length, id = [], cells = [];
+    for (let y = 0; y < H; y++) { id.push([]); for (let x = 0; x < W; x++) { const ch = rows[y][x]; if (ch === '#') { id[y].push(-1); continue; } id[y].push(cells.length); cells.push({ x, y, ch }); } }
+    const n = cells.length, term = cells.map(c => c.ch === 'G' || c.ch === 'P' || c.ch === 'T');
+    const rIn = s2 => { const ch = cells[s2].ch; return ch === 'G' ? o.gR : ch === 'P' ? o.pR : o.live; };
+    const move = (s, d) => { const c = cells[s], nx = c.x + DIRS[d][0], ny = c.y + DIRS[d][1]; return (nx < 0 || ny < 0 || nx >= W || ny >= H || id[ny][nx] < 0) ? s : id[ny][nx]; };
+    const T = cells.map((c, s) => term[s] ? [] : DIRS.map((_, a) => {
+      const out = new Map(), add = (s2, p) => { if (p > 0) out.set(s2, (out.get(s2) || 0) + p); };
+      add(move(s, a), o.q); add(move(s, (a + 1) % 4), (1 - o.q) / 2); add(move(s, (a + 3) % 4), (1 - o.q) / 2);
+      return [...out].map(([s2, p]) => [s2, p, rIn(s2)]);
+    }));
+    const start = Math.max(0, cells.findIndex(c => c.ch === 'S'));
+    return { n, T, term, gamma: o.gamma, W, H, id, cells, start, o, nA: s => T[s].length };
+  }
+  /* generic tabular MDP from transition lists T[s][a] = [[s2, p, r], ...] */
+  function mdp(T, gamma, term) { return { n: T.length, T, gamma, term: term || T.map(a => a.length === 0), nA: s => T[s].length }; }
+  const qsa = (M, s, a, v) => { let t = 0; for (const [s2, p, r] of M.T[s][a]) t += p * (r + M.gamma * v[s2]); return t; };
+  const qAll = (M, s, v) => M.T[s].map((_, a) => qsa(M, s, a, v));
+  /* a policy is an array of action-probability arrays; det(a) makes a deterministic one */
+  const detPol = (M, acts) => acts.map((a, s) => M.term[s] ? [] : M.T[s].map((_, b) => b === a ? 1 : 0));
+  const randPol = M => M.T.map(as => as.map(() => 1 / as.length));
+  const actOf = pi => pi.map(ps => { let b = -1, bp = -1; ps.forEach((p, a) => { if (p > bp + 1e-12) { bp = p; b = a; } }); return b; });
+  function backup(M, s, pi, v) { if (M.term[s]) return 0; let t = 0; pi[s].forEach((pa, a) => { if (pa) t += pa * qsa(M, s, a, v); }); return t; }
+  /* one sweep of iterative policy evaluation; returns the largest change */
+  function evalSweep(M, pi, v, inPlace) {
+    const src = inPlace ? v : v.slice(); let d = 0;
+    for (let s = 0; s < M.n; s++) { const nv = backup(M, s, pi, src); d = Math.max(d, Math.abs(nv - v[s])); v[s] = nv; }
+    return d;
+  }
+  function gauss(A, b) {
+    const n = b.length, m = A.map((r, i) => { const x = new Float64Array(n + 1); x.set(r); x[n] = b[i]; return x; });
+    for (let c = 0; c < n; c++) {
+      let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(m[r][c]) > Math.abs(m[p][c])) p = r;
+      const t = m[c]; m[c] = m[p]; m[p] = t; const d = m[c][c]; if (Math.abs(d) < 1e-14) return null;
+      for (let r = c + 1; r < n; r++) { const f = m[r][c] / d; if (f) for (let k = c; k <= n; k++) m[r][k] -= f * m[c][k]; }
+    }
+    const x = new Float64Array(n);
+    for (let r = n - 1; r >= 0; r--) { let s = m[r][n]; for (let k = r + 1; k < n; k++) s -= m[r][k] * x[k]; x[r] = s / m[r][r]; }
+    return x;
+  }
+  /* states from which an exit is reached with probability 1 under pi (needed when gamma = 1) */
+  function proper(M, pi) {
+    const ok = M.term.slice(); let ch = true;      // can reach a terminal
+    while (ch) { ch = false; for (let s = 0; s < M.n; s++) if (!ok[s]) { let r = false; pi[s].forEach((pa, a) => { if (pa) for (const [s2, p] of M.T[s][a]) if (p > 0 && ok[s2]) r = true; }); if (r) { ok[s] = true; ch = true; } } }
+    // a state is proper only if every state it can reach can still reach a terminal
+    const bad = ok.map(x => !x); ch = true;
+    while (ch) { ch = false; for (let s = 0; s < M.n; s++) if (!bad[s]) { let r = false; pi[s].forEach((pa, a) => { if (pa) for (const [s2, p] of M.T[s][a]) if (p > 0 && bad[s2]) r = true; }); if (r) { bad[s] = true; ch = true; } } }
+    return bad.map(x => !x);
+  }
+  /* exact evaluation: solve (I - gamma P_pi) v = r_pi; states that never finish (gamma = 1) get -Infinity or +Infinity */
+  function evalExact(M, pi) {
+    const ok = M.gamma < 1 ? M.term.map(() => true) : proper(M, pi), idx = [], pos = new Int32Array(M.n).fill(-1);
+    for (let s = 0; s < M.n; s++) if (ok[s] && !M.term[s]) { pos[s] = idx.length; idx.push(s); }
+    const n = idx.length, A = idx.map(() => new Float64Array(n)), b = new Float64Array(n);
+    idx.forEach((s, i) => { A[i][i] += 1; pi[s].forEach((pa, a) => { if (!pa) return; for (const [s2, p, r] of M.T[s][a]) { b[i] += pa * p * r; if (pos[s2] >= 0) A[i][pos[s2]] -= M.gamma * pa * p; } }); });
+    const x = n ? gauss(A, b) : new Float64Array(0), v = new Float64Array(M.n);
+    for (let s = 0; s < M.n; s++) v[s] = M.term[s] ? 0 : pos[s] >= 0 ? (x ? x[pos[s]] : NaN) : impSign(M, pi, s);
+    return v;
+  }
+  function impSign(M, pi, s) { // a never-ending policy at gamma = 1 accumulates the living reward forever
+    let r = 0; pi[s].forEach((pa, a) => { if (pa) for (const [, p, rr] of M.T[s][a]) r += pa * p * rr; });
+    return r < 0 ? -Infinity : r > 0 ? Infinity : 0;
+  }
+  /* greedy policy improvement; keeps the current action unless another is better by more than tol */
+  function improve(M, v, pi, tol) {
+    tol = tol == null ? 1e-10 : tol; const cur = pi ? actOf(pi) : null, acts = [];
+    for (let s = 0; s < M.n; s++) {
+      if (M.term[s]) { acts.push(-1); continue; }
+      const q = qAll(M, s, v); let b = 0; q.forEach((x, a) => { if (x > q[b] + tol) b = a; });
+      if (cur && cur[s] >= 0 && q[cur[s]] >= q[b] - tol) b = cur[s];
+      acts.push(b);
+    }
+    return acts;
+  }
+  function viSweep(M, v, inPlace) {
+    const src = inPlace ? v : v.slice(); let d = 0;
+    for (let s = 0; s < M.n; s++) { if (M.term[s]) continue; let m = -Infinity; for (let a = 0; a < M.T[s].length; a++) m = Math.max(m, qsa(M, s, a, src)); d = Math.max(d, Math.abs(m - v[s])); v[s] = m; }
+    return d;
+  }
+  const bellErr = (M, v, s) => { if (M.term[s]) return 0; let m = -Infinity; for (let a = 0; a < M.T[s].length; a++) m = Math.max(m, qsa(M, s, a, v)); return Math.abs(m - v[s]); };
+  /* full policy iteration with exact evaluation; returns history */
+  function policyIteration(M, acts0, maxIt) {
+    let acts = acts0.slice(), hist = [];
+    for (let it = 0; it < (maxIt || 100); it++) {
+      const pi = detPol(M, acts), v = evalExact(M, pi), na = improve(M, v, pi), ch = na.filter((a, s) => a !== acts[s]).length;
+      hist.push({ acts: acts.slice(), v, changed: ch });
+      if (!ch) return { acts, v, hist };
+      acts = na;
+    }
+    return { acts, v: hist[hist.length - 1].v, hist };
+  }
+  /* modified policy iteration: m evaluation sweeps per improvement (m = Infinity: evaluate to convergence).
+     Runs until v is within eps of v*; m = 1 is value iteration written as policy iteration. */
+  function modifiedPI(M, acts0, m, eps, vStar) {
+    let acts = acts0.slice(); const v = new Float64Array(M.n); let sweeps = 0, imps = 0; const trace = [];
+    vStar = vStar || policyIteration(M, acts0).v;
+    const err = () => { let e = 0; for (let s = 0; s < M.n; s++) e = Math.max(e, Math.abs(v[s] - vStar[s])); return e; };
+    let e = err();
+    outer: for (let it = 0; it < 100000; it++) {
+      const pi = detPol(M, acts);
+      for (let k = 0; k < (isFinite(m) ? m : 1e9); k++) {
+        const d = evalSweep(M, pi, v, false); sweeps++; e = err(); trace.push([sweeps, imps, e]);
+        if (e < eps || sweeps >= 20000) break outer;
+        if (!isFinite(m) && d < eps * 1e-3) break;
+      }
+      acts = improve(M, v, pi); imps++;
+    }
+    return { acts, v, sweeps, imps, trace, vStar, err: e };
+  }
+  return { DIRS, DNAME, DARR, grid, mdp, qsa, qAll, detPol, randPol, actOf, backup, evalSweep, evalExact, improve, viSweep, bellErr, policyIteration, modifiedPI, gauss, proper };
+})();
+
+
+const PJ = {"code":"22423","desc":"REGENCY CAKESTAND 3 TIER","price":12.75,"dates":["2010-12-01","2010-12-02","2010-12-03","2010-12-05","2010-12-06","2010-12-07","2010-12-08","2010-12-09","2010-12-10","2010-12-12","2010-12-13","2010-12-14","2010-12-15","2010-12-16","2010-12-17","2010-12-19","2010-12-20","2010-12-21","2010-12-22","2010-12-23","2011-01-04","2011-01-05","2011-01-06","2011-01-07","2011-01-09","2011-01-10","2011-01-11","2011-01-12","2011-01-13","2011-01-14","2011-01-16","2011-01-17","2011-01-18","2011-01-19","2011-01-20","2011-01-21","2011-01-23","2011-01-24","2011-01-25","2011-01-26","2011-01-27","2011-01-28","2011-01-30","2011-01-31","2011-02-01","2011-02-02","2011-02-03","2011-02-04","2011-02-06","2011-02-07","2011-02-08","2011-02-09","2011-02-10","2011-02-11","2011-02-13","2011-02-14","2011-02-15","2011-02-16","2011-02-17","2011-02-18","2011-02-20","2011-02-21","2011-02-22","2011-02-23","2011-02-24","2011-02-25","2011-02-27","2011-02-28","2011-03-01","2011-03-02","2011-03-03","2011-03-04","2011-03-06","2011-03-07","2011-03-08","2011-03-09","2011-03-10","2011-03-11","2011-03-13","2011-03-14","2011-03-15","2011-03-16","2011-03-17","2011-03-18","2011-03-20","2011-03-21","2011-03-22","2011-03-23","2011-03-24","2011-03-25","2011-03-27","2011-03-28","2011-03-29","2011-03-30","2011-03-31","2011-04-01","2011-04-03","2011-04-04","2011-04-05","2011-04-06","2011-04-07","2011-04-08","2011-04-10","2011-04-11","2011-04-12","2011-04-13","2011-04-14","2011-04-15","2011-04-17","2011-04-18","2011-04-19","2011-04-20","2011-04-21","2011-04-26","2011-04-27","2011-04-28","2011-05-01","2011-05-03","2011-05-04","2011-05-05","2011-05-06","2011-05-08","2011-05-09","2011-05-10","2011-05-11","2011-05-12","2011-05-13","2011-05-15","2011-05-16","2011-05-17","2011-05-18","2011-05-19","2011-05-20","2011-05-22","2011-05-23","2011-05-24","2011-05-25","2011-05-26","2011-05-27","2011-05-29","2011-05-31","2011-06-01","2011-06-02","2011-06-03","2011-06-05","2011-06-06","2011-06-07","2011-06-08","2011-06-09","2011-06-10","2011-06-12","2011-06-13","2011-06-14","2011-06-15","2011-06-16","2011-06-17","2011-06-19","2011-06-20","2011-06-21","2011-06-22","2011-06-23","2011-06-24","2011-06-26","2011-06-27","2011-06-28","2011-06-29","2011-06-30","2011-07-01","2011-07-03","2011-07-04","2011-07-05","2011-07-06","2011-07-07","2011-07-08","2011-07-10","2011-07-11","2011-07-12","2011-07-13","2011-07-14","2011-07-15","2011-07-17","2011-07-18","2011-07-19","2011-07-20","2011-07-21","2011-07-22","2011-07-24","2011-07-25","2011-07-26","2011-07-27","2011-07-28","2011-07-29","2011-07-31","2011-08-01","2011-08-02","2011-08-03","2011-08-04","2011-08-05","2011-08-07","2011-08-08","2011-08-09","2011-08-10","2011-08-11","2011-08-12","2011-08-14","2011-08-15","2011-08-16","2011-08-17","2011-08-18","2011-08-19","2011-08-21","2011-08-22","2011-08-23","2011-08-24","2011-08-25","2011-08-26","2011-08-28","2011-08-30","2011-08-31","2011-09-01","2011-09-02","2011-09-04","2011-09-05","2011-09-06","2011-09-07","2011-09-08","2011-09-09","2011-09-11","2011-09-12","2011-09-13","2011-09-14","2011-09-15","2011-09-16","2011-09-18","2011-09-19","2011-09-20","2011-09-21","2011-09-22","2011-09-23","2011-09-25","2011-09-26","2011-09-27","2011-09-28","2011-09-29","2011-09-30","2011-10-02","2011-10-03","2011-10-04","2011-10-05","2011-10-06","2011-10-07","2011-10-09","2011-10-10","2011-10-11","2011-10-12","2011-10-13","2011-10-14","2011-10-16","2011-10-17","2011-10-18","2011-10-19","2011-10-20","2011-10-21","2011-10-23","2011-10-24","2011-10-25","2011-10-26","2011-10-27","2011-10-28","2011-10-30","2011-10-31","2011-11-01","2011-11-02","2011-11-03","2011-11-04","2011-11-06","2011-11-07","2011-11-08","2011-11-09","2011-11-10","2011-11-11","2011-11-13","2011-11-14","2011-11-15","2011-11-16","2011-11-17","2011-11-18","2011-11-20","2011-11-21","2011-11-22","2011-11-23","2011-11-24","2011-11-25","2011-11-27","2011-11-28","2011-11-29","2011-11-30","2011-12-01","2011-12-02","2011-12-04","2011-12-05","2011-12-06","2011-12-07","2011-12-08","2011-12-09"],"q":[115,184,231,92,156,129,64,87,362,53,35,74,150,63,104,16,84,83,1,10,26,21,85,87,32,53,57,33,68,187,9,26,27,1,15,35,35,57,81,18,57,15,3,8,17,32,65,25,3,11,16,5,34,54,19,90,150,43,52,12,53,74,26,34,40,26,4,16,10,221,72,11,19,36,40,51,14,49,0,38,22,59,64,76,49,43,59,83,28,57,59,30,60,78,125,25,16,60,22,59,99,13,29,57,45,130,95,32,7,28,31,89,38,41,234,45,5,34,11,67,40,19,19,34,58,177,76,2,51,60,16,112,56,12,13,18,32,38,65,3,44,16,56,134,13,16,11,57,50,69,5,11,21,46,19,71,6,4,54,12,32,21,20,4,19,4,13,23,22,20,33,24,31,23,0,14,43,4,211,9,11,20,59,27,96,86,53,19,16,6,263,20,18,19,12,28,80,20,21,59,22,37,42,18,0,35,13,36,109,7,10,119,24,38,33,28,0,12,21,66,42,6,18,24,12,24,8,64,56,58,21,65,13,6,23,19,19,48,16,22,15,47,14,60,8,5,26,47,228,75,13,20,22,26,38,57,49,22,50,28,46,109,29,6,5,13,18,28,52,19,52,21,5,65,111,25,35,11,16,46,32,29,8,45,15,49,110,8,50,29,47,82,23,30,34,93,35,34,20,20,36,160,130,32,18],"lines":2017,"rows":541909,"okrows":530104,"first":"2010-12-01","last":"2011-12-09"};
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const nf = n => (Math.round(n) || 0).toLocaleString('en-GB');
+const sum = a => { let s = 0; for (const x of a) s += x; return s; };
+const fv = (v, d) => v === -Infinity ? '−∞' : v === Infinity ? '+∞' : fmt(v, d == null ? 2 : d).replace(/^-/, '−');
+const gbp = (v, d) => (v < 0 ? '−£' : '£') + Math.abs(v).toLocaleString('en-GB', { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d });
+const sup = n => String(Math.round(n)).replace('-', '⁻').replace(/\d/g, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]);
+const p10 = y => '10' + sup(y);
+const ms = t => t < 10 ? fmt(t, 1) + ' ms' : nf(t) + ' ms';
+
+/* ---------- colour mixing ---------- */
+const _pc = document.createElement('canvas').getContext('2d'), _rgb = {};
+function rgbOf(c) { if (_rgb[c]) return _rgb[c]; _pc.fillStyle = '#000'; _pc.fillStyle = c; const s = _pc.fillStyle; let r; if (s[0] === '#') r = [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16)); else r = s.match(/[\d.]+/g).slice(0, 3).map(Number); return (_rgb[c] = r); }
+function mixC(a, b, t) { const A = rgbOf(a), B = rgbOf(b); return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * t)).join(',')})`; }
+function valFill(C, v, sc) {
+  if (v == null || isNaN(v)) return C.surf;
+  if (!isFinite(v)) return mixC(C.surf, v < 0 ? C.bad : C.a, 0.85);
+  const t = clamp(Math.abs(v) / (sc || 1), 0, 1); return mixC(C.surf, v >= 0 ? C.a : C.bad, 0.08 + 0.62 * Math.sqrt(t));
+}
+
+/* ---------- grid drawing ---------- */
+function gview(cv, G) {
+  const v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), pad = 4;
+  const cs = Math.max(4, Math.min((v.w - 2 * pad) / G.W, (v.h - 2 * pad) / G.H));
+  v.cs = cs; v.ox = (v.w - cs * G.W) / 2; v.oy = (v.h - cs * G.H) / 2; cv._gv = v; return v;
+}
+function cellAt(cv, G, e) { const v = cv._gv; if (!v) return null; const [px, py] = evPos(cv, e), x = Math.floor((px - v.ox) / v.cs), y = Math.floor((py - v.oy) / v.cs); if (x < 0 || y < 0 || x >= G.W || y >= G.H) return null; return { x, y, s: G.id[y][x] }; }
+function arrow(c, x, y, d, len, col, lw) {
+  const [dx, dy] = DP.DIRS[d], x0 = x - dx * len * 0.45, y0 = y - dy * len * 0.45, x1 = x + dx * len * 0.55, y1 = y + dy * len * 0.55, hs = Math.max(3, len * 0.42);
+  c.save(); c.strokeStyle = col; c.fillStyle = col; c.lineWidth = lw || 2; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1 - dx * hs * 0.6, y1 - dy * hs * 0.6); c.stroke();
+  c.beginPath(); c.moveTo(x1, y1); c.lineTo(x1 - dx * hs - dy * hs * 0.55, y1 - dy * hs + dx * hs * 0.55); c.lineTo(x1 - dx * hs + dy * hs * 0.55, y1 - dy * hs - dx * hs * 0.55); c.closePath(); c.fill(); c.restore();
+}
+function drawGrid(cv, G, o) {
+  const C = C0(), v = gview(cv, G), c = v.ctx, cs = v.cs; o = o || {};
+  const fs = o.font || clamp(cs * 0.2, 8, 13), dig = o.dig == null ? 2 : o.dig;
+  for (let y = 0; y < G.H; y++) for (let x = 0; x < G.W; x++) {
+    const s = G.id[y][x], X = v.ox + x * cs, Y = v.oy + y * cs, mx = X + cs / 2, my = Y + cs / 2;
+    if (s < 0) { c.fillStyle = mixC(C.surf, C.muted, 0.55); c.fillRect(X, Y, cs, cs); continue; }
+    const ch = G.cells[s].ch, term = G.term[s];
+    if (term) {
+      c.fillStyle = ch === 'G' ? mixC(C.surf, C.a, 0.75) : ch === 'P' ? mixC(C.surf, C.bad, 0.7) : mixC(C.surf, C.muted, 0.3); c.fillRect(X, Y, cs, cs);
+      if (ch !== 'T') { c.save(); c.font = `600 ${clamp(cs * 0.26, 9, 18)}px ` + css('--f-mono'); c.fillStyle = C.surf; c.textAlign = 'center'; c.textBaseline = 'middle'; const rv = ch === 'G' ? G.o.gR : G.o.pR; c.fillText(o.termLab ? o.termLab(s) : (rv > 0 ? '+' : '−') + fmt(Math.abs(rv), Math.abs(rv) % 1 ? 2 : 0), mx, my); c.restore(); }
+    } else if (o.qs && o.qs[s]) {
+      const q = o.qs[s], cor = [[X, Y], [X + cs, Y], [X + cs, Y + cs], [X, Y + cs]];
+      for (let a = 0; a < 4; a++) { const p1 = cor[a], p2 = cor[(a + 1) % 4]; c.beginPath(); c.moveTo(mx, my); c.lineTo(p1[0], p1[1]); c.lineTo(p2[0], p2[1]); c.closePath(); c.fillStyle = valFill(C, q[a], o.sc); c.fill(); c.strokeStyle = C.surf; c.lineWidth = 1; c.stroke(); }
+      if (o.acts && o.acts[s] >= 0) { const a = o.acts[s], p1 = cor[a], p2 = cor[(a + 1) % 4]; c.save(); c.beginPath(); c.moveTo(mx, my); c.lineTo(p1[0], p1[1]); c.lineTo(p2[0], p2[1]); c.closePath(); c.strokeStyle = C.q; c.lineWidth = 2.4; c.stroke(); c.restore(); }
+      if (cs >= 70) { c.save(); c.font = `${clamp(cs * 0.11, 8, 11)}px ` + css('--f-mono'); c.fillStyle = C.q; c.textAlign = 'center'; c.textBaseline = 'middle'; const off = cs * 0.31; [[0, -off], [off, 0], [0, off], [-off, 0]].forEach((d, a) => c.fillText(fv(q[a], 2), mx + d[0], my + d[1])); c.restore(); }
+    } else { c.fillStyle = o.v ? valFill(C, o.v[s], o.sc) : C.surf; c.fillRect(X, Y, cs, cs); }
+    c.strokeStyle = C.line; c.lineWidth = 1; c.strokeRect(X + 0.5, Y + 0.5, cs - 1, cs - 1);
+    if (!term && !o.qs) {
+      const dirs = o.multi ? o.multi[s] : (o.acts && o.acts[s] >= 0 ? [o.acts[s]] : []);
+      const showNum = o.v && o.num !== false && cs >= (o.numMin || 40);
+      dirs.forEach(d => arrow(c, mx, showNum ? my - cs * 0.1 : my, d, cs * (dirs.length > 1 ? 0.2 : 0.26), o.arrowCol || C.q, cs < 40 ? 1.6 : 2.2));
+      if (showNum) { c.save(); c.font = `${fs}px ` + css('--f-mono'); c.fillStyle = C.q; c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillText(fv(o.v[s], dig), mx, Y + cs - Math.max(4, cs * 0.1)); c.restore(); }
+    }
+    if (o.counts && !term && cs >= 28) { c.save(); c.font = `${clamp(cs * 0.17, 7, 10)}px ` + css('--f-mono'); c.fillStyle = o.counts[s] ? C.muted : C.bad; c.textAlign = 'right'; c.textBaseline = 'top'; c.fillText(String(o.counts[s]), X + cs - 3, Y + 3); c.restore(); }
+    if (ch === 'S' && cs >= 22) { c.save(); c.font = `600 ${clamp(cs * 0.16, 8, 11)}px ` + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText('S', X + 7, Y + 6); c.restore(); }
+    if (o.changed && o.changed.has(s)) { c.save(); c.strokeStyle = C.b; c.lineWidth = 3; c.strokeRect(X + 2.5, Y + 2.5, cs - 5, cs - 5); c.restore(); }
+    if (o.sel === s) { c.save(); c.strokeStyle = C.q; c.lineWidth = 2.5; c.setLineDash([5, 3]); c.strokeRect(X + 3, Y + 3, cs - 6, cs - 6); c.restore(); }
+  }
+  return v;
+}
+const cellName = (G, s) => `(${G.cells[s].x + 1}, ${G.H - G.cells[s].y})`;   // column, row counted from the bottom, as in AIMA
+const succText = (G, s, a, v, gam) => G.T[s][a].map(([s2, p, r]) => `${fmt(p, 2)} × (${fv(r, 2)} + ${gam === 1 ? '' : fmt(gam, 2) + '·'}${fv(v[s2], 3)})`).join(' + ');
+
+/* ---------- worlds ---------- */
+const W43 = ['...G', '.#.P', 'S...'];
+const GARDEN = ['........G', '.##.#....', '....#.P..', '.P..#....', '....##.#.', 'S.......P'];
+const MAZE = ['S...#......', '.##.#.###..', '.#..#...#..', '.#.###.#..#', '.#.....#.#.', '.####.##.#.', '......#P..G'];
+const allUp = G => G.T.map(t => t.length ? 0 : -1);
+function bfsDist(G) { // moves to the +1 exit, ignoring slips; pits and walls block
+  const d = new Array(G.n).fill(Infinity), q = []; G.cells.forEach((c, s) => { if (c.ch === 'G') { d[s] = 0; q.push(s); } });
+  while (q.length) { const s = q.shift(), cc = G.cells[s]; DP.DIRS.forEach(([dx, dy]) => { const x = cc.x - dx, y = cc.y - dy; if (x < 0 || y < 0 || x >= G.W || y >= G.H) return; const t = G.id[y][x]; if (t >= 0 && !G.term[t] && d[t] === Infinity) { d[t] = d[s] + 1; q.push(t); } }); }
+  return d;
+}
+function shortestActs(G) { const d = bfsDist(G); return G.cells.map((cc, s) => { if (G.term[s]) return -1; let b = 0, bd = Infinity; DP.DIRS.forEach(([dx, dy], a) => { const x = cc.x + dx, y = cc.y + dy; if (x < 0 || y < 0 || x >= G.W || y >= G.H) return; const t = G.id[y][x]; if (t < 0) return; const dd = G.cells[t].ch === 'G' ? 0 : G.term[t] ? Infinity : d[t]; if (dd < bd) { bd = dd; b = a; } }); return b; }); }
+
+/* ================= HERO ================= */
+const HERO = { rows: GARDEN.map(r => r.split('')), arrows: GARDEN.map(r => r.split('').map(() => 0)), q: 0.8, phase: 'eval', round: 0, v: null, changed: new Set(), done: false, timer: 0, G: null };
+function heroBuild() { HERO.G = DP.grid(HERO.rows.map(r => r.join('')), { q: HERO.q, live: -0.04, gamma: 0.95 }); }
+const heroActs = () => HERO.G.cells.map((cc, s) => HERO.G.term[s] ? -1 : HERO.arrows[cc.y][cc.x]);
+function heroReset(keepArrows) { heroBuild(); if (!keepArrows) HERO.arrows = HERO.rows.map(r => r.map(() => 0)); HERO.phase = 'eval'; HERO.round = 0; HERO.v = null; HERO.changed = new Set(); HERO.done = false; drawHero(); }
+function heroStep() {
+  const G = HERO.G, acts = heroActs(), pi = DP.detPol(G, acts);
+  if (HERO.done) return false;
+  if (HERO.phase === 'eval') { HERO.v = DP.evalExact(G, pi); HERO.round++; HERO.phase = 'imp'; HERO.changed = new Set(); }
+  else {
+    const na = DP.improve(G, HERO.v, pi); HERO.changed = new Set(); na.forEach((a, s) => { if (a !== acts[s]) { HERO.changed.add(s); HERO.arrows[G.cells[s].y][G.cells[s].x] = a; } });
+    if (!HERO.changed.size) HERO.done = true; HERO.phase = 'eval';
+  }
+  drawHero(); return !HERO.done;
+}
+function heroStop() { clearInterval(HERO.timer); HERO.timer = 0; $('#hero-play').textContent = 'Play'; }
+function heroPlay() { if (HERO.timer) return heroStop(); if (HERO.done) heroReset(); $('#hero-play').textContent = 'Pause'; heroStep(); HERO.timer = setInterval(() => { if (!heroStep()) heroStop(); }, 750); }
+function drawHero() {
+  const G = HERO.G, acts = heroActs();
+  drawGrid($('#hero-cv'), G, { v: HERO.v, acts, sc: 1, changed: HERO.changed, numMin: 46 });
+  const st = G.start, vs = HERO.v ? HERO.v[st] : null;
+  let msg;
+  if (!HERO.v) msg = `<b>Round 0.</b> The policy says &ldquo;up&rdquo; everywhere and nothing has been evaluated yet. Press Play or Step.`;
+  else if (HERO.done) msg = `<b>Done after ${HERO.round} round${HERO.round === 1 ? '' : 's'}.</b> Making the policy greedy changed nothing, so it already satisfies the Bellman optimality equation: this policy is optimal. From the start it is worth ${tip(fv(vs, 3), `v*(S) solved exactly from (I − γP_π)v = r_π\nγ = 0.95, living reward −0.04, q = ${HERO.q}`)}. Click squares to change the garden, then Play again.`;
+  else if (HERO.phase === 'imp') msg = `<b>Round ${HERO.round}: evaluated.</b> Colours are v<sub>&pi;</sub> for the current arrows, from one linear solve; the start is worth ${tip(fv(vs, 3), 'v_π(S) for the current policy')}. Next: improve.`;
+  else msg = `<b>Round ${HERO.round}: improved.</b> ${HERO.changed.size} arrow${HERO.changed.size === 1 ? '' : 's'} (ringed) switched to the action with the highest q<sub>&pi;</sub>. The colours are still the old policy&rsquo;s values; next: evaluate the new policy.`;
+  $('#hero-cap').innerHTML = msg + ` <span style="display:block;margin-top:6px;color:var(--muted)">Green: positive value, red: negative. Flags +1 and pits &minus;1 end the run; each move costs 0.04; &gamma; = 0.95.</span>`;
+}
+$('#hero-play').addEventListener('click', heroPlay);
+$('#hero-step').addEventListener('click', () => { heroStop(); if (HERO.done) heroReset(true); heroStep(); });
+$('#hero-reset').addEventListener('click', () => { heroStop(); heroReset(false); });
+seg1('[data-hfl]', 'data-hfl', q => { heroStop(); HERO.q = +q; heroReset(true); });
+$('#hero-cv').addEventListener('click', e => {
+  const hit = cellAt($('#hero-cv'), HERO.G, e); if (!hit) return; const ch = HERO.rows[hit.y][hit.x]; if (ch === 'S') return;
+  const cyc = { '.': '#', '#': 'P', 'P': 'G', 'G': '.' }; HERO.rows[hit.y][hit.x] = cyc[ch] || '.'; heroStop(); heroReset(true);
+});
+fig($('#hero-cv'), drawHero);
+
+/* ================= 1. MDP: evaluate your own policy ================= */
+const MD = { q: 0.8, acts: null, sel: null, preset: 'best' };
+const g43 = (q, o) => DP.grid(W43, Object.assign({ q, live: -0.04, gamma: 1 }, o || {}));
+function mdPreset(p) {
+  const G = g43(MD.q); MD.preset = p;
+  if (p === 'best') MD.acts = DP.policyIteration(G, shortestActs(G)).acts;
+  else if (p === 'short') MD.acts = shortestActs(G);
+  else MD.acts = G.T.map(t => t.length ? 2 : -1);
+}
+function absorbProb(G, pi) { const H = DP.grid(W43, { q: MD.q, live: 0, gR: 1, pR: 0, gamma: 1 }), v = new Float64Array(H.n); for (let k = 0; k < 4000; k++) if (DP.evalSweep(H, pi, v, true) < 1e-13) break; return v; }
+function drawMD() {
+  const G = g43(MD.q), pi = DP.detPol(G, MD.acts), v = DP.evalExact(G, pi), st = G.start;
+  if (MD.sel == null) MD.sel = st;
+  drawGrid($('#md-cv'), G, { v, acts: MD.acts, sc: 1, sel: MD.sel, dig: 3, numMin: 50 });
+  const vStar = DP.policyIteration(G, shortestActs(G)).v, pr = absorbProb(G, pi), steps = DP.evalExact(DP.grid(W43, { q: MD.q, live: -1, gR: -1, pR: -1, gamma: 1 }), pi);
+  $('#md-q-o').textContent = fmt(MD.q, 2);
+  $('#md-v').innerHTML = tip(fv(v[st], 4), `solve (I − P_π) v = r_π over the states that finish\nstart = square ${cellName(G, st)}`);
+  $('#md-p').innerHTML = tip(pct(pr[st], 1), 'same policy, reward 1 for reaching +1 and 0 otherwise\nevaluated by sweeps until the change is below 1e-13');
+  $('#md-n').innerHTML = tip(isFinite(steps[st]) ? fmt(-steps[st], 2) : '∞', 'same policy, reward −1 per move: v = −(expected moves)');
+  const gap = vStar[st] - v[st];
+  $('#md-gap').innerHTML = tip(isFinite(gap) ? fmt(gap, 4) : '∞', `v*(start) = ${fmt(vStar[st], 4)} (policy iteration)\nminus v_π(start) = ${fv(v[st], 4)}`);
+  const s = MD.sel, a = MD.acts[s];
+  if (G.term[s]) $('#run-md').innerHTML = `<b>Running example</b>: square ${cellName(G, s)} is an exit; the episode ends there, so its value is 0 and its reward was collected on entry.`;
+  else $('#run-md').innerHTML = `<b>Running example</b>, square ${cellName(G, s)}, action ${DP.DNAME[a]}: v<sub>&pi;</sub>(s) = ${succText(G, s, a, v, 1)} = ${tip('<b>' + fv(DP.qsa(G, s, a, v), 4) + '</b>', 'each term: probability × (reward + value of the landing square)\nslips go to the two perpendicular directions, (1 − q)/2 each')}, the same number shown in the square: the equation holds.`;
+  const bad = v.filter((x, k) => !G.term[k] && !isFinite(x)).length;
+  let say;
+  if (bad) say = `${bad} square${bad === 1 ? '' : 's'} never finish${bad === 1 ? 'es' : ''} under this policy: the arrows keep the robot bumping into walls or circling, and with &gamma; = 1 and a cost on every move, a run that never ends is worth &minus;&infin;. The linear system has no finite solution there. Discounting (&gamma; &lt; 1) would make these values finite, which is one practical reason to discount.`;
+  else if (gap < 1e-9) say = `This policy is optimal for q = ${fmt(MD.q, 2)}: no policy does better from any square. ${MD.acts[st] === 0 ? 'Note the detour: from the start it goes up the left side rather than along the bottom row, because that route reaches +1 by passing right next to the &minus;1 exit, where a slip is costly.' : 'With moves this reliable, the short route along the bottom is worth taking.'}`;
+  else say = `From the start this policy reaches +1 ${pct(pr[st], 1)} of the time and takes ${fmt(-steps[st], 1)} moves on average, worth ${fv(v[st], 3)}; the best possible is ${fv(vStar[st], 3)}. ${MD.preset === 'short' ? 'The shortest route passes next to the &minus;1 exit, and with slippery moves that costs more than the extra steps of the safe route.' : 'Click squares to try to close the gap.'}`;
+  $('#md-say').innerHTML = say;
+}
+seg1('[data-mdp]', 'data-mdp', p => { mdPreset(p); drawMD(); });
+$('#md-q').addEventListener('input', e => { MD.q = +e.target.value; if (MD.preset === 'best' || MD.preset === 'short') mdPreset(MD.preset); drawMD(); });
+$('#md-cv').addEventListener('click', e => {
+  const G = g43(MD.q), hit = cellAt($('#md-cv'), G, e); if (!hit || hit.s < 0) return; MD.sel = hit.s;
+  if (!G.term[hit.s]) { MD.acts[hit.s] = (MD.acts[hit.s] + 1) % 4; MD.preset = 'own'; $$('[data-mdp]').forEach(b => b.setAttribute('aria-pressed', 'false')); }
+  drawMD();
+});
+mdPreset('best'); fig($('#md-cv'), drawMD);
+
+/* ================= 2. iterative policy evaluation ================= */
+const EV = { mode: 0, arrows: true, th: 1e-4, gam: 1, k: 0, v: null, d: NaN, sel: null };
+const g44 = () => DP.grid(['T...', '....', '....', '...T'], { q: 1, live: -1, gamma: EV.gam });
+let EVC = null;
+function evCurves() {
+  const G = g44(), pi = DP.randPol(G), vt = DP.evalExact(G, pi), out = [];
+  for (const inPlace of [false, true]) { const v = new Float64Array(G.n), e = [Math.max(...vt.map(Math.abs))], d = []; let k = 0;
+    while (k < 600) { d.push(DP.evalSweep(G, pi, v, inPlace)); k++; let m = 0; for (let s = 0; s < G.n; s++) m = Math.max(m, Math.abs(v[s] - vt[s])); e.push(m); if (m < 1e-9) break; }
+    out.push({ e, d }); }
+  const toTh = th => out.map(o => { const i = o.d.findIndex(x => x < th); return i < 0 ? null : i + 1; });
+  const vStar = DP.policyIteration(G, allUp(G)).v;
+  EVC = { G, pi, vt, out, toTh, vStar };
+}
+function evReplay() { const { G, pi } = EVC; const v = new Float64Array(G.n); let d = NaN; for (let k = 0; k < EV.k; k++) d = DP.evalSweep(G, pi, v, EV.mode === 1); EV.v = v; EV.d = d; }
+function drawEV() {
+  if (!EVC) evCurves(); if (!EV.v) evReplay();
+  const C = C0(), { G, pi, vt, out, vStar } = EVC, v = EV.v, sel = EV.sel == null ? G.id[1][1] : EV.sel;
+  const multi = EV.arrows ? G.cells.map((_, s) => { if (G.term[s]) return []; const q = DP.qAll(G, s, v), m = Math.max(...q); return q.map((x, a) => x >= m - 1e-9 ? a : -1).filter(a => a >= 0); }) : null;
+  const sc = Math.max(1, ...vt.map(Math.abs));
+  drawGrid($('#ev-cv'), G, { v, multi, sc, sel, dig: 1, numMin: 36, font: clamp($('#ev-cv').getBoundingClientRect().width / 22, 9, 15) });
+  const greedyOK = multi ? G.cells.every((_, s) => G.term[s] || multi[s].every(a => Math.abs(DP.qsa(G, s, a, vStar) - vStar[s]) < 1e-9)) : null;
+  const err = Math.max(...Array.from(v, (x, s) => Math.abs(x - vt[s])));
+  $('#ev-cap').innerHTML = `After <b>${EV.k}</b> sweep${EV.k === 1 ? '' : 's'} (${EV.mode ? 'in place' : 'two arrays'}). Numbers: v<sub>k</sub>(s); shaded corners end the episode. ${EV.arrows ? `Arrows: the greedy actions for v<sub>k</sub> (all ties drawn). ${greedyOK ? '<b>Every greedy arrow is already optimal</b>, long before the values have converged.' : 'Some greedy arrows are not yet optimal.'}` : ''} Click a square to see its update written out.`;
+  $('#ev-k').innerHTML = tip(String(EV.k), 'full passes over all 14 non-terminal squares');
+  $('#ev-d').innerHTML = EV.k ? tip(fmt(EV.d, EV.d < 0.01 ? 6 : 3), 'Δ = max over s of |v_k(s) − v_(k−1)(s)|') : '–';
+  const n = EVC.toTh(EV.th);
+  $('#ev-n2').innerHTML = tip(n[0] == null ? '> 600' : String(n[0]), `first sweep with Δ < θ = ${EV.th}, two arrays`);
+  $('#ev-n1').innerHTML = tip(n[1] == null ? '> 600' : String(n[1]), `first sweep with Δ < θ = ${EV.th}, in place`);
+  $('#ev-th-o').textContent = '10^' + Math.round(Math.log10(EV.th)); $('#ev-g-o').textContent = fmt(EV.gam, 2);
+  if (G.term[sel]) $('#run-ev').innerHTML = `<b>Running example</b>: that corner is terminal; its value stays 0.`;
+  else { const nx = DP.backup(G, sel, pi, v); $('#run-ev').innerHTML = `<b>Running example</b>, square ${cellName(G, sel)}: the next update sets v(s) = &frac14;[${G.T[sel].map((t, a) => `${fmt(t[0][2], 0)} + ${EV.gam === 1 ? '' : fmt(EV.gam, 2) + '·'}${fmt(v[t[0][0]], 2)}`).join('] + &frac14;[')}] = ${tip('<b>' + fmt(nx, 3) + '</b>', 'one quarter for each direction; a move into the edge stays put\nreward −1 per move, then the current value of the landing square' + (EV.mode ? '\n(in place: neighbours already updated this sweep are used as they are now)' : ''))}; the exact answer is v<sub>&pi;</sub>(s) = ${tip(fmt(vt[sel], 3), 'from the linear system (I − γP_π)v = r_π')}.`; }
+  const vc = frame($('#ev-curve'), [0, Math.max(10, Math.min(600, Math.max(out[0].e.length, 12)))], [-9, Math.log10(sc) + 0.3], { l: 44, b: 24, t: 10 }); axes(vc, 'sweeps k', 'max error', { sy: 3, fy: p10 }); clip(vc);
+  out.forEach((o, i) => { const c = vc.ctx; c.save(); c.strokeStyle = i ? C.b : C.a; c.lineWidth = EV.mode === i ? 2.6 : 1.4; c.globalAlpha = EV.mode === i ? 1 : 0.6; c.beginPath(); o.e.forEach((x, k) => { const y = Math.log10(Math.max(x, 1e-9)); k ? c.lineTo(vc.X(k), vc.Y(y)) : c.moveTo(vc.X(k), vc.Y(y)); }); c.stroke(); c.restore(); });
+  dot(vc, EV.k, Math.log10(Math.max(err, 1e-9)), EV.mode ? C.b : C.a, 5); vc.ctx.restore();
+  const r = n[0] && n[1] ? n[0] / n[1] : null;
+  $('#ev-say').innerHTML = EV.k === 0 ? `All values start at 0. The first sweep can only see one step ahead: every non-terminal square becomes &minus;1, the cost of one move.${EV.mode ? ' Except that in place, squares later in the sweep already see their neighbours&rsquo; new &minus;1s, so they drop further.' : ''}`
+    : err < 1e-6 ? `Converged: every value is within 10<sup>&minus;6</sup> of the exact solution${EV.gam === 1 ? ': under the random policy a square next to an exit takes 14 moves on average to finish, a square in the middle 20, the far corners 22' : ''}. ${r ? `To reach &theta; = ${EV.th}, in-place updating needed ${n[1]} sweeps against ${n[0]} with two arrays, ${fmt(r, 2)} times fewer.` : ''}`
+    : `After ${EV.k} sweep${EV.k === 1 ? '' : 's'} the largest error is still ${fmt(err, 3)}${EV.gam < 1 ? `; with &gamma; = ${fmt(EV.gam, 2)} it shrinks by at least that factor every sweep, so discounting speeds evaluation up` : ''}. Values settle from the exits outward. ${greedyOK ? 'The greedy arrows are already optimal: for choosing actions, a rough evaluation was enough.' : ''}`;
+}
+function evSet(k) { EV.k = k; evReplay(); drawEV(); }
+$('#ev-step').addEventListener('click', () => evSet(EV.k + 1));
+$('#ev-run').addEventListener('click', () => { const n = EVC.toTh(EV.th)[EV.mode]; evSet(n == null ? 600 : Math.max(n, EV.k)); });
+$('#ev-reset').addEventListener('click', () => evSet(0));
+seg1('[data-evm]', 'data-evm', m => { EV.mode = +m; evReplay(); drawEV(); });
+seg1('[data-eva]', 'data-eva', m => { EV.arrows = m === '1'; drawEV(); });
+$('#ev-th').addEventListener('input', e => { EV.th = Math.pow(10, +e.target.value); drawEV(); });
+$('#ev-g').addEventListener('input', e => { EV.gam = +e.target.value; EVC = null; EV.v = null; drawEV(); });
+$('#ev-cv').addEventListener('click', e => { const G = EVC.G, hit = cellAt($('#ev-cv'), G, e); if (!hit) return; EV.sel = hit.s; drawEV(); });
+fig($('#ev-cv'), drawEV); fig($('#ev-curve'), drawEV);
+
+/* ================= 3. policy improvement ================= */
+const IM = { acts: null, sel: 2, up: null, dn: null, steps: 0, last: '', seed: 11, preset: 'down', minD: null };
+const gIm = () => DP.grid(W43, { q: 0.8, live: -0.04, gamma: 0.9 });
+function imPreset(p) {
+  const G = gIm(); IM.preset = p; IM.steps = 0; IM.up = IM.dn = null; IM.last = '';
+  if (p === 'down') IM.acts = G.T.map(t => t.length ? 2 : -1);
+  else if (p === 'left') IM.acts = G.T.map(t => t.length ? 3 : -1);
+  else { const r = mulberry32(IM.seed++); IM.acts = G.T.map(t => t.length ? Math.floor(r() * 4) : -1); }
+}
+function imApply(na, what) {
+  const G = gIm(), v0 = DP.evalExact(G, DP.detPol(G, IM.acts)), v1 = DP.evalExact(G, DP.detPol(G, na));
+  const ch = na.filter((a, s) => a !== IM.acts[s]).length;
+  IM.up = 0; IM.dn = 0; IM.minD = Infinity; v1.forEach((x, s) => { if (G.term[s]) return; const d = x - v0[s]; if (d > 1e-10) IM.up++; if (d < -1e-10) IM.dn++; IM.minD = Math.min(IM.minD, d); });
+  IM.last = what; IM.changed = ch; if (ch) IM.steps++; IM.acts = na; IM.v0start = v0[G.start];
+}
+function drawIM() {
+  const G = gIm(), pi = DP.detPol(G, IM.acts), v = DP.evalExact(G, pi), s = IM.sel == null ? G.start : IM.sel;
+  const qs = G.cells.map((_, k) => G.term[k] ? null : DP.qAll(G, k, v));
+  drawGrid($('#im-cv'), G, { qs, acts: IM.acts, sc: 1, sel: s });
+  const opt = DP.improve(G, v, pi).every((a, k) => a === IM.acts[k]);
+  $('#im-cap').innerHTML = `Four triangles per square: q<sub>&pi;</sub>(s, a) for up, right, down and left (green good, red bad); the dark-edged triangle is the policy&rsquo;s current action. &gamma; = 0.9, q = 0.8, cost 0.04 per move. ${opt ? '<b>The policy is greedy for its own values everywhere: it is optimal.</b>' : ''}`;
+  $('#im-v').innerHTML = tip(fv(v[G.start], 4), 'v_π(start), exact linear solve');
+  $('#im-up').innerHTML = IM.up == null ? '–' : tip(String(IM.up), 'squares with v_π′(s) > v_π(s) after the last change');
+  $('#im-dn').innerHTML = IM.dn == null ? '–' : tip(String(IM.dn), `squares with v_π′(s) < v_π(s)\nsmallest change: ${fmt(IM.minD, 6)}`);
+  $('#im-ch').innerHTML = tip(String(IM.steps), 'changes of policy made so far');
+  if (G.term[s]) $('#run-im').innerHTML = `<b>Running example</b>: square ${cellName(G, s)} is an exit; click a non-exit square.`;
+  else { const q = qs[s]; let b = IM.acts[s]; q.forEach((x, a) => { if (x > q[b] + 1e-10) b = a; }); $('#run-im').innerHTML = `<b>Running example</b>, square ${cellName(G, s)}: v<sub>&pi;</sub>(s) = ${tip(fv(v[s], 3), 'exact value of the current policy here')}; q<sub>&pi;</sub>(s, &middot;) = ${q.map((x, a) => `${DP.DNAME[a]} ${tip(fv(x, 3), `${DP.DNAME[a]}: ${succText(G, s, a, v, 0.9)}`)}`).join(', ')}. The policy takes <b>${DP.DNAME[IM.acts[s]]}</b>; the greedy choice is <b>${DP.DNAME[b]}</b>${b === IM.acts[s] ? ' (ties keep the current action), so there is nothing to gain here.' : `, better by ${fmt(q[b] - q[IM.acts[s]], 3)}.`}`; }
+  let say;
+  if (!IM.last) say = `A deliberately poor policy. Its values are low everywhere${IM.preset === 'down' ? ', and the bottom row can never leave: pushing into the floor only slips sideways, so those squares just pay 0.04 a move, discounted, for ever' : ''}. Look at a square&rsquo;s triangles: wherever another triangle is greener than the dark-edged one, switching helps.`;
+  else if (!IM.changed) say = opt ? `Nothing changed: the policy is already greedy with respect to its own values, so it satisfies the Bellman optimality equation. That is the stopping rule of policy iteration, reached after ${IM.steps} improvement step${IM.steps === 1 ? '' : 's'}.` : `That square already takes its best action under v<sub>&pi;</sub>. Pick a square whose dark triangle isn&rsquo;t the greenest.`;
+  else say = `The ${IM.last} changed ${IM.changed} square${IM.changed === 1 ? '' : 's'}. After re-evaluating, ${IM.up} square${IM.up === 1 ? '' : 's'} improved and ${IM.dn} got worse (smallest change ${fmt(Math.max(0, IM.minD), 4)}): exactly what the improvement theorem promises. ${IM.last === 'single-square switch' ? 'Even a switch in one square can raise values elsewhere, because other squares lead there.' : ''}${opt ? ' The new policy is greedy for its own values: optimal.' : ''}`;
+  $('#im-say').innerHTML = say;
+}
+seg1('[data-imp]', 'data-imp', p => { imPreset(p); drawIM(); });
+$('#im-one').addEventListener('click', () => { const G = gIm(), s = IM.sel == null ? G.start : IM.sel; if (G.term[s]) return; const v = DP.evalExact(G, DP.detPol(G, IM.acts)), q = DP.qAll(G, s, v); let b = IM.acts[s]; q.forEach((x, a) => { if (x > q[b] + 1e-10) b = a; }); const na = IM.acts.slice(); na[s] = b; imApply(na, 'single-square switch'); drawIM(); });
+$('#im-all').addEventListener('click', () => { const G = gIm(), pi = DP.detPol(G, IM.acts), v = DP.evalExact(G, pi); imApply(DP.improve(G, v, pi), 'greedy step everywhere'); drawIM(); });
+$('#im-reset').addEventListener('click', () => { imPreset(IM.preset === 'rand' ? 'rand' : IM.preset); drawIM(); });
+$('#im-cv').addEventListener('click', e => { const hit = cellAt($('#im-cv'), gIm(), e); if (!hit || hit.s < 0) return; IM.sel = hit.s; drawIM(); });
+imPreset('down'); fig($('#im-cv'), drawIM);
+
+/* ================= 4. policy iteration and modified PI ================= */
+const MS = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, Infinity];
+const gPI = () => DP.grid(GARDEN, { q: 0.8, live: -0.04, gamma: 0.95 });
+const PI = { G: gPI(), m: Infinity, acts: null, v: null, sweeps: 0, imps: 0, last: null, lastOp: '', bars: null };
+PI.vStar = DP.policyIteration(PI.G, allUp(PI.G)).v;
+function piReset() { PI.acts = allUp(PI.G); PI.v = new Float64Array(PI.G.n); PI.sweeps = 0; PI.imps = 0; PI.last = null; PI.lastOp = ''; PI.changed = new Set(); }
+const piErr = () => { let e = 0; for (let s = 0; s < PI.G.n; s++) e = Math.max(e, Math.abs(PI.v[s] - PI.vStar[s])); return e; };
+function piEval() { const pi = DP.detPol(PI.G, PI.acts); for (let k = 0; k < (isFinite(PI.m) ? PI.m : 1e6); k++) { const d = DP.evalSweep(PI.G, pi, PI.v, false); PI.sweeps++; if (piErr() < 1e-6) break; if (!isFinite(PI.m) && d < 1e-9) break; } PI.lastOp = 'eval'; PI.changed = new Set(); }
+function piImp() { const pi = DP.detPol(PI.G, PI.acts), na = DP.improve(PI.G, PI.v, pi); PI.changed = new Set(); na.forEach((a, s) => { if (a !== PI.acts[s]) PI.changed.add(s); }); PI.last = PI.changed.size; PI.acts = na; PI.imps++; PI.lastOp = 'imp'; }
+function piBars() { PI.bars = MS.map(m => { const o = DP.modifiedPI(PI.G, allUp(PI.G), m, 1e-6, PI.vStar); return { m, sweeps: o.sweeps, imps: o.imps }; }); }
+function drawPI() {
+  if (!PI.acts) piReset(); if (!PI.bars) piBars();
+  const C = C0(), G = PI.G, e = piErr();
+  drawGrid($('#pi-cv'), G, { v: PI.v, acts: PI.acts, sc: 1, changed: PI.changed, numMin: 46 });
+  $('#pi-cap').innerHTML = `The garden: colours are the current estimate v, arrows the current policy (ringed: changed by the last improvement). &gamma; = 0.95, q = 0.8. Optimal value at the start: ${tip(fmt(PI.vStar[G.start], 4), 'v*(S) by policy iteration with exact evaluation')}.`;
+  const mi = MS.indexOf(PI.m); $('#pi-m-o').textContent = isFinite(PI.m) ? String(PI.m) : '∞';
+  $('#pi-ni').innerHTML = tip(String(PI.imps), 'greedy improvement steps so far');
+  $('#pi-ns').innerHTML = tip(nf(PI.sweeps), 'two-array evaluation sweeps so far');
+  $('#pi-ch').innerHTML = PI.last == null ? '–' : tip(String(PI.last), 'arrows that changed in the last improvement');
+  $('#pi-er').innerHTML = tip(e < 1e-6 ? '< 10⁻⁶' : fmt(e, 4), 'max over squares of |v(s) − v*(s)|');
+  const b = PI.bars[mi];
+  $('#run-pi').innerHTML = `<b>Running example</b>: with m = ${isFinite(PI.m) ? PI.m : '&infin;'}, reaching v<sub>*</sub> to within 10<sup>&minus;6</sup> takes ${tip(String(b.imps), 'greedy improvements')} improvement${b.imps === 1 ? '' : 's'} and ${tip(nf(b.sweeps), 'evaluation sweeps (the starting values of each evaluation are the previous policy’s)')} sweeps in total, starting from &ldquo;up&rdquo; everywhere and v = 0. ${PI.m === 1 ? 'This is value iteration: one sweep, then greedy, every time.' : ''}`;
+  const best = PI.bars.reduce((a, x) => x.sweeps < a.sweeps ? x : a, PI.bars[0]);
+  const L10 = Math.log10, vc = frame($('#pi-curve'), [-0.5, MS.length - 0.5], [1, L10(Math.max(...PI.bars.map(x => x.sweeps))) + 0.25], { l: 48, b: 24, t: 10 }); axes(vc, '', 'sweeps', { sx: 1, sy: 1, fy: p10, fx: x => { const m = MS[Math.round(x)]; return m == null ? '' : isFinite(m) ? 'm=' + m : '∞'; } });
+  const c = vc.ctx, bw = vc.pw / MS.length * 0.62;
+  PI.bars.forEach((x, i) => { const X = vc.X(i), Y = vc.Y(L10(x.sweeps)); c.fillStyle = i === mi ? C.a : mixC(C.surf, C.a, 0.4); c.fillRect(X - bw / 2, Y, bw, vc.Y(1) - Y); c.save(); c.font = '10px ' + css('--f-mono'); c.fillStyle = C.q; c.textAlign = 'center'; c.fillText(nf(x.sweeps) + (vc.w > 520 ? ' · ' + x.imps : ''), X, Y - 4); c.restore(); if (i === mi) { c.save(); c.strokeStyle = C.q; c.lineWidth = 2; c.strokeRect(X - bw / 2 - 2, Y - 2, bw + 4, vc.Y(1) - Y + 2); c.restore(); } });
+  let say;
+  if (!PI.sweeps && !PI.imps) say = `Start: &ldquo;up&rdquo; everywhere and every value 0. Press Evaluate to run ${isFinite(PI.m) ? PI.m + ' sweep' + (PI.m === 1 ? '' : 's') : 'evaluation sweeps until nothing changes'}, then Improve.`;
+  else if (e < 1e-6 && PI.lastOp === 'imp' && PI.last === 0) say = `Finished: the values are v<sub>*</sub> and improvement changes nothing. ${PI.imps} improvements, ${nf(PI.sweeps)} sweeps. Over all choices of m, the fewest sweeps (${nf(best.sweeps)}) come with m = ${isFinite(best.m) ? best.m : '&infin;'}${best.m === 1 ? ': in this small, quickly-ending world, value iteration itself is cheapest, and full evaluation (m = &infin;) is by far the most expensive, because it polishes the values of policies that are about to be thrown away.' : isFinite(best.m) ? ': a little evaluation between improvements beats both extremes here.' : ': here full evaluation pays for itself.'}`;
+  else if (PI.lastOp === 'imp') say = PI.last ? `${PI.last} arrow${PI.last === 1 ? '' : 's'} changed. The values on screen still describe the old policy${isFinite(PI.m) ? ' (partly)' : ''}: evaluate again.` : `No arrow changed. ${e < 1e-6 ? '' : `The policy is greedy for the current v, but v is still ${fmt(e, 4)} from v<sub>*</sub>: keep evaluating.`}`;
+  else say = `Evaluated (${isFinite(PI.m) ? PI.m + ' sweep' + (PI.m === 1 ? '' : 's') : 'to convergence'}); the largest error to v<sub>*</sub> is ${e < 1e-6 ? 'below 10<sup>&minus;6</sup>' : fmt(e, 4)}. ${isFinite(PI.m) ? 'These are not yet the exact values of this policy, but they may already rank the actions correctly.' : 'These are the exact values of this policy.'} Now improve.`;
+  $('#pi-say').innerHTML = say;
+}
+$('#pi-m').addEventListener('input', e => { PI.m = MS[+e.target.value - 1]; drawPI(); });
+$('#pi-e').addEventListener('click', () => { piEval(); drawPI(); });
+$('#pi-i').addEventListener('click', () => { piImp(); drawPI(); });
+$('#pi-run').addEventListener('click', () => { for (let k = 0; k < 5000 && !(piErr() < 1e-6 && PI.lastOp === 'imp' && PI.last === 0); k++) { if (PI.lastOp !== 'eval') piEval(); else piImp(); if (PI.sweeps > 20000) break; } drawPI(); });
+$('#pi-reset').addEventListener('click', () => { piReset(); drawPI(); });
+fig($('#pi-cv'), drawPI); fig($('#pi-curve'), drawPI);
+
+/* ================= 5. asynchronous DP ================= */
+const gMZ = () => DP.grid(MAZE, { q: 0.9, live: -0.04, gamma: 0.95 });
+const AS = { G: gMZ(), o: 0, frac: 0.25, runs: null };
+AS.vStar = DP.policyIteration(AS.G, shortestActs(AS.G)).v;
+AS.nt = AS.G.cells.map((_, s) => s).filter(s => !AS.G.term[s]);
+AS.NB = 40 * AS.nt.length;
+AS.goalOrder = (() => { const d = bfsDist(AS.G); return AS.nt.slice().sort((a, b) => d[a] - d[b] || a - b); })();
+function asRun(o, budget, keep) {
+  const G = AS.G, v = new Float64Array(G.n), cnt = new Int32Array(G.n), err = keep ? new Float64Array(budget + 1) : null, errS = keep ? new Float64Array(budget + 1) : null, rnd = mulberry32(7), rt = mulberry32(99);
+  const E = () => { let m = 0; for (const s of AS.nt) m = Math.max(m, Math.abs(v[s] - AS.vStar[s])); return m; };
+  const bk = s => { let m = -Infinity; for (let a = 0; a < G.T[s].length; a++) m = Math.max(m, DP.qsa(G, s, a, v)); v[s] = m; cnt[s]++; };
+  let cur = G.start, i = 0;
+  if (keep) { err[0] = E(); errS[0] = Math.abs(v[G.start] - AS.vStar[G.start]); }
+  for (let k = 1; k <= budget; k++) {
+    let s;
+    if (o === 0) s = AS.nt[i++ % AS.nt.length];
+    else if (o === 1) s = AS.goalOrder[i++ % AS.nt.length];
+    else if (o === 2) s = AS.nt[Math.floor(rnd() * AS.nt.length)];
+    else if (o === 3) { let b = -1, bd = -1; for (const t of AS.nt) { const d = DP.bellErr(G, v, t); if (d > bd + 1e-15) { bd = d; b = t; } } s = b; }
+    else s = cur;
+    bk(s);
+    if (o === 4) { const q = DP.qAll(G, s, v); let a = 0; q.forEach((x, j) => { if (x > q[a] + 1e-12) a = j; }); let u = rt(), nx = G.T[s][a][G.T[s][a].length - 1][0]; for (const [s2, p] of G.T[s][a]) { if (u < p) { nx = s2; break; } u -= p; } cur = G.term[nx] ? G.start : nx; }
+    if (keep) { err[k] = E(); errS[k] = Math.abs(v[G.start] - AS.vStar[G.start]); }
+  }
+  return { v, cnt, err, errS };
+}
+function drawAS() {
+  if (!AS.runs) AS.runs = [0, 1, 2, 3, 4].map(o => asRun(o, AS.NB, true));
+  const C = C0(), G = AS.G, B = Math.round(AS.frac * AS.NB), R = asRun(AS.o, B, false), full = AS.runs[AS.o];
+  drawGrid($('#as-cv'), G, { v: R.v, sc: 1, counts: R.cnt, num: false, acts: null });
+  const names = ['reading-order sweeps', 'goal-outward sweeps', 'random states', 'prioritised backups', 'real-time DP'];
+  const sw = fmt(B / AS.nt.length, 1);
+  $('#as-cap').innerHTML = `The maze after ${nf(B)} backups (${sw} sweeps&rsquo; worth) of ${names[AS.o]}. Colour: current v(s) (true values: ${tip(fmt(Math.min(...AS.nt.map(s => AS.vStar[s])), 2) + ' to ' + fmt(Math.max(...AS.nt.map(s => AS.vStar[s])), 2), 'range of v* over non-exit squares, by policy iteration')}). Small numbers: how many times each square was backed up (red 0: never). &gamma; = 0.95, q = 0.9, cost 0.04 per move.`;
+  const e = full.err[B], es = full.errS[B], hit = Array.from(full.err).findIndex(x => x < 1e-4), never = AS.nt.filter(s => !R.cnt[s]).length;
+  $('#as-b-o').textContent = nf(B);
+  $('#as-e').innerHTML = tip(fmt(e, e < 0.001 ? 6 : 4), 'max over squares of |v(s) − v*(s)|');
+  $('#as-s').innerHTML = tip(fmt(es, es < 0.001 ? 6 : 4), '|v(start) − v*(start)|');
+  $('#as-n').innerHTML = tip(hit < 0 ? `> ${nf(AS.NB)}` : nf(hit), hit < 0 ? 'not reached within the 40-sweep budget' : `= ${fmt(hit / AS.nt.length, 1)} sweeps’ worth`);
+  $('#as-u').innerHTML = tip(String(never), `of ${AS.nt.length} non-exit squares`);
+  let s = AS.nt[0]; AS.nt.forEach(t => { if (DP.bellErr(G, R.v, t) > DP.bellErr(G, R.v, s) + 1e-15) s = t; });
+  $('#run-as').innerHTML = `<b>Running example</b>: right now the largest Bellman error is at square ${cellName(G, s)} (column, row from the bottom). Backing it up would replace v(s) = ${tip(fv(R.v[s], 4), 'its current value')} by max<sub>a</sub> q = ${tip(fv(Math.max(...DP.qAll(G, s, R.v)), 4), 'max over the four actions of Σ p (r + 0.95 v(s′)), using the current v')}, a move of &delta; = ${tip(fmt(DP.bellErr(G, R.v, s), 4), '|backed-up value − current value|')}; that is the square prioritised ordering would pick next. Its true value is v<sub>*</sub>(s) = ${tip(fv(AS.vStar[s], 4), 'from policy iteration')}.`;
+  const hits = AS.runs.map(r => Array.from(r.err).findIndex(x => x < 1e-4));
+  const vc = frame($('#as-curve'), [0, AS.NB], [-7, 0.3], { l: 44, b: 24, t: 10 }); axes(vc, 'backups', 'max error', { sy: 1, nx: vc.w < 520 ? 3 : 6, fy: y => y % 2 ? '' : p10(y), fx: x => nf(x) }); clip(vc);
+  const cols = [C.a, C.b, C.c, C.lda, C.bad];
+  AS.runs.forEach((r, o) => { const c = vc.ctx; c.save(); c.strokeStyle = cols[o]; c.lineWidth = o === AS.o ? 2.8 : 1.2; c.globalAlpha = o === AS.o ? 1 : 0.55; c.beginPath(); for (let k = 0; k <= AS.NB; k += 4) { const y = Math.log10(Math.max(r.err[k], 1e-7)); k ? c.lineTo(vc.X(k), vc.Y(y)) : c.moveTo(vc.X(k), vc.Y(y)); } c.stroke(); c.restore(); });
+  seg(vc, B, vc.yl[0], B, vc.yl[1], C.q, 1.2, [4, 3]); seg(vc, 0, -4, AS.NB, -4, C.muted, 1, [2, 4]); vc.ctx.restore();
+  const ord = [0, 1, 2, 3].filter(o => hits[o] >= 0).sort((a, b) => hits[a] - hits[b]);
+  let say = `${['Reading order backs up the squares left to right, top to bottom, in place, like a normal sweep.', 'Goal-outward order backs up the squares nearest the exit first, so each square sees its neighbours&rsquo; fresh values in the same sweep.', 'Random order: each backup picks any square, uniformly.', 'Prioritised: each backup goes to the square whose value would change most.', 'Real-time DP: an agent walks greedily from the start, and only the square it stands on is backed up; at an exit it restarts.'][AS.o]} `;
+  if (AS.o === 4) say += `After ${nf(B)} backups, ${never} square${never === 1 ? ' has' : 's have'} never been touched, so the error over the whole maze ${e > 0.01 ? 'stays large' : 'is small only where the agent went'}; but the start square is within ${fmt(es, 4)} of its true value. If all you need is to act well from the start, ignoring the rest of the maze is a feature, not a bug.`;
+  else say += hit >= 0 ? `It reaches an error below 10<sup>&minus;4</sup> after ${nf(hit)} backups (${fmt(hit / AS.nt.length, 1)} sweeps&rsquo; worth). Ranking of the orders that got there: ${ord.map(o => `${names[o]} ${nf(hits[o])}`).join(', ')}. Same answer, very different bills: the order is free to choose.` : `It has not reached 10<sup>&minus;4</sup> within the budget.`;
+  $('#as-say').innerHTML = say;
+}
+$('#as-o').addEventListener('change', e => { AS.o = +e.target.value; drawAS(); });
+$('#as-b').addEventListener('input', e => { AS.frac = +e.target.value; drawAS(); });
+fig($('#as-cv'), drawAS); fig($('#as-curve'), drawAS);
+
+/* ================= 6. generalised policy iteration ================= */
+const GP = { G: PI.G, nt: PI.G.cells.map((_, s) => s).filter(s => !PI.G.term[s]), m: 3, scope: 'all', v: null, acts: null, pts: [], phase: 'eval', rnd: null };
+function gpGaps() {
+  const G = GP.G, pi = DP.detPol(G, GP.acts), vp = DP.evalExact(G, pi); let ee = 0, eg = 0, eo = 0;
+  for (let s = 0; s < G.n; s++) { if (G.term[s]) continue; ee = Math.max(ee, Math.abs(GP.v[s] - vp[s])); const q = DP.qAll(G, s, GP.v); eg = Math.max(eg, Math.max(...q) - q[GP.acts[s]]); eo = Math.max(eo, Math.abs(GP.v[s] - PI.vStar[s])); }
+  return { ee, eg, eo };
+}
+function gpReset() { GP.v = new Float64Array(GP.G.n); GP.acts = allUp(GP.G); GP.phase = 'eval'; GP.rnd = mulberry32(5); const g = gpGaps(); GP.pts = [Object.assign({ t: 0 }, g)]; }
+function gpStep() {
+  const G = GP.G, pi = DP.detPol(G, GP.acts);
+  if (GP.phase === 'eval') { for (let k = 0; k < GP.m; k++) DP.evalSweep(G, pi, GP.v, false); GP.phase = 'imp'; GP.pts.push(Object.assign({ t: 1 }, gpGaps())); }
+  else {
+    const na = DP.improve(G, GP.v, pi);
+    if (GP.scope === 'all') GP.acts = na; else { const nt = GP.nt; for (let k = 0; k < 5; k++) { const s = nt[Math.floor(GP.rnd() * nt.length)]; GP.acts[s] = na[s]; } }
+    GP.phase = 'eval'; GP.pts.push(Object.assign({ t: 2 }, gpGaps()));
+  }
+}
+function drawGP() {
+  if (!GP.v) gpReset();
+  const C = C0(), L = x => Math.log10(Math.max(x, 1e-6)), v = frame($('#gp-cv'), [-6.3, 0.6], [-6.3, 0.6], { l: 50, b: 30, t: 12, r: 14 });
+  axes(v, 'evaluation gap', 'greedy gap', { sx: v.w < 520 ? 2 : 1, sy: 1, fx: x => x <= -6 ? '≤10⁻⁶' : p10(x), fy: y => y <= -6 ? '≤10⁻⁶' : p10(y) }); clip(v);
+  const c = v.ctx; c.save(); c.strokeStyle = C.muted; c.lineWidth = 1.2; c.globalAlpha = 0.7; c.beginPath(); GP.pts.forEach((p, i) => { const X = v.X(L(p.ee)), Y = v.Y(L(p.eg)); i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); c.restore();
+  GP.pts.forEach((p, i) => dot(v, L(p.ee), L(p.eg), p.t === 0 ? C.q : p.t === 1 ? C.a : C.b, i === GP.pts.length - 1 ? 6 : 3.6));
+  star(v, -6, -6, C.q, 9); v.ctx.restore();
+  const p = GP.pts[GP.pts.length - 1], hs = GP.pts.length - 1;
+  $('#gp-m-o').textContent = String(GP.m);
+  $('#gp-e').innerHTML = tip(fmt(p.ee, p.ee < 0.001 ? 6 : 4), 'max over squares of |v(s) − v_π(s)|, v_π by an exact linear solve');
+  $('#gp-g').innerHTML = tip(fmt(p.eg, p.eg < 0.001 ? 6 : 4), 'max over squares of [max_a q_v(s,a) − q_v(s, π(s))]');
+  $('#gp-h').innerHTML = tip(String(hs), `${Math.ceil(hs / 2)} evaluations of ${GP.m} sweep${GP.m === 1 ? '' : 's'}, ${Math.floor(hs / 2)} improvements`);
+  $('#gp-o').innerHTML = tip(fmt(p.eo, p.eo < 0.001 ? 6 : 4), 'distance from v*, the optimal values');
+  $('#run-gp').innerHTML = `<b>Running example</b>: right now e<sub>eval</sub> = ${tip(fmt(p.ee, 5), 'evaluation gap')} and e<sub>greedy</sub> = ${tip(fmt(p.eg, 5), 'greedy gap')}; the values are ${tip(fmt(p.eo, 5), '‖v − v*‖∞')} from v<sub>*</sub>. ${p.t === 1 ? 'Evaluation just moved v towards v<sub>&pi;</sub> (left), and the greedy gap reopened.' : p.t === 2 ? (GP.scope === 'all' ? `Improvement just closed the greedy gap to 0 (down to the floor)${GP.pts.length > 1 && p.ee > GP.pts[GP.pts.length - 2].ee * 1.05 ? ', and the evaluation gap jumped, because the policy changed under v.' : '; the evaluation gap barely moved, because few arrows changed.'}` : 'Improvement in five random squares shrank the greedy gap without closing it.') : 'The starting point: v = 0, &ldquo;up&rdquo; everywhere.'}`;
+  $('#gp-say').innerHTML = p.ee < 1e-6 && p.eg < 1e-6 ? `Both gaps are closed: v is the value of &pi; and &pi; is greedy for v, so this is v<sub>*</sub> and an optimal policy (distance from v<sub>*</sub>: ${fmt(p.eo, 7)}). It took ${hs} half-steps. Try fewer sweeps per evaluation: more zig-zags, but each is cheaper.`
+    : `Each evaluation step moves the dot left (towards v = v<sub>&pi;</sub>) but usually up (&pi; is no longer greedy for the new v); each improvement moves it down${GP.scope === 'all' ? ' to the floor' : ''} but to the right (v no longer matches the new policy). They pull in different directions, yet over the rounds both gaps shrink, and the zig-zag closes in on the corner.`;
+}
+$('#gp-m').addEventListener('input', e => { GP.m = +e.target.value; gpReset(); drawGP(); });
+seg1('[data-gps]', 'data-gps', s => { GP.scope = s; gpReset(); drawGP(); });
+$('#gp-step').addEventListener('click', () => { gpStep(); drawGP(); });
+$('#gp-run').addEventListener('click', () => { for (let k = 0; k < 40; k++) gpStep(); drawGP(); });
+$('#gp-reset').addEventListener('click', () => { gpReset(); drawGP(); });
+fig($('#gp-cv'), drawGP);
+
+/* ================= 7. reward scales ================= */
+const RS = { r: -0.04, gam: 1, la: 0, b: 0, k: 0, strip: {} };
+function rsWorld(r, gam, a, b, k) {
+  const G = DP.grid(W43, { q: 0.8, live: r, gamma: gam }), d = bfsDist(G), Phi = G.cells.map((cc, s) => G.term[s] ? 0 : -k * d[s]);
+  const T = G.T.map((as, s) => as.map(t => t.map(([s2, p, rr]) => [s2, p, a * rr + b + gam * Phi[s2] - Phi[s]])));
+  const M = Object.assign({}, G, { T, gamma: gam, nA: s => T[s].length }); M.Phi = Phi; return M;
+}
+function rsSolve(M, eff) { if (M.gamma === 1 && eff >= 0) return null; const r = DP.policyIteration(M, shortestActs(M), 60); return r; }
+const rsSig = acts => acts.map(a => a < 0 ? '*' : a).join('');
+function rsStrip(gam) {
+  if (RS.strip[gam]) return RS.strip[gam]; const out = [];
+  for (let i = 0; i <= 230; i++) { const r = -2 + i * 0.01, M = rsWorld(r, gam, 1, 0, 0), o = rsSolve(M, r); out.push({ r, sig: o ? rsSig(o.acts) : null, acts: o ? o.acts : null }); }
+  const ids = {}; let n = 0; out.forEach(x => { if (x.sig && ids[x.sig] == null) ids[x.sig] = n++; x.id = x.sig ? ids[x.sig] : -1; });
+  return (RS.strip[gam] = { out, n });
+}
+function drawRS() {
+  const C = C0(), a = Math.pow(10, RS.la), eff = a * RS.r + RS.b;
+  const M0 = rsWorld(RS.r, RS.gam, 1, 0, 0), o0 = rsSolve(M0, RS.r), M = rsWorld(RS.r, RS.gam, a, RS.b, RS.k), o = rsSolve(M, eff), st = M0.start;
+  const pv = o ? o.v : null;
+  drawGrid($('#rs-cv'), M0, { v: pv, acts: o ? o.acts : null, sc: Math.max(1, ...(pv ? Array.from(pv).map(x => isFinite(x) ? Math.abs(x) : 0) : [1])), dig: 2, numMin: 50, termLab: s => { const ch = M0.cells[s].ch, base = ch === 'G' ? 1 : -1, val = a * base + RS.b; return (val >= 0 ? '+' : '−') + fmt(Math.abs(val), 2); } });
+  $('#rs-r-o').textContent = fmt(RS.r, 2); $('#rs-a-o').textContent = fmt(a, a < 1 ? 2 : 1); $('#rs-b-o').textContent = fmt(RS.b, 2); $('#rs-k-o').textContent = fmt(RS.k, 1);
+  const same = o && o0 ? rsSig(o.acts) === rsSig(o0.acts) : null;
+  $('#rs-same').innerHTML = same == null ? '–' : tip(same ? 'yes' : 'no', 'optimal arrows under the transformed rewards\ncompared square by square with the untransformed ones');
+  $('#rs-v').innerHTML = o ? tip(fv(o.v[st], 4), 'v*(start) under r′ = a·r + b + γΦ(s′) − Φ(s)') : '–';
+  $('#rs-v0').innerHTML = o0 ? tip(fv(o0.v[st], 4), `v*(start) with living reward ${fmt(RS.r, 2)}, exits ±1`) : '–';
+  $('#rs-cap').innerHTML = `The optimal policy and its values under the transformed rewards (exit squares show their transformed reward). Living reward after the transformation: ${tip(fmt(eff, 3), `a·r + b = ${fmt(a, 2)} × ${fmt(RS.r, 2)} + ${fmt(RS.b, 2)}`)}${RS.k ? `, plus shaping with &Phi;(s) = &minus;${fmt(RS.k, 1)} &times; steps to +1` : ''}.`;
+  if (o) {
+    const pi = DP.detPol(M, o.acts), vOrig = DP.evalExact(M0, pi), Nw = DP.grid(W43, { q: 0.8, live: 1, gR: 1, pR: 1, gamma: RS.gam }), N = DP.evalExact(Nw, pi);
+    const pred = a * vOrig[st] + RS.b * N[st] - M.Phi[st];
+    $('#run-rs').innerHTML = `<b>Running example</b>, for the policy shown, from the start: v&prime;(start) = a&middot;v(start) + b&middot;N(start) &minus; &Phi;(start) = ${fmt(a, 2)} &times; ${tip(fv(vOrig[st], 4), 'value of this policy under the original rewards')} + ${fmt(RS.b, 2)} &times; ${tip(fv(N[st], 3), 'expected discounted number of moves, E[Σ γ^t] until an exit')} &minus; (${fv(M.Phi[st], 2)}) = ${tip('<b>' + fv(pred, 4) + '</b>', 'the identity from the equations')}, matching the value solved directly, ${fv(o.v[st], 4)}.`;
+  } else $('#run-rs').innerHTML = `<b>Running example</b>: with &gamma; = 1 and a living reward of ${fmt(eff, 3)} &ge; 0, staying on the board for ever costs nothing or pays, so there is no finite optimum to compute.`;
+  const S = rsStrip(RS.gam), vs = frame($('#rs-strip'), [-2, 0.3], [0, 1], { l: 10, r: 10, t: 6, b: 24 }), c = vs.ctx, pal = [C.a, C.b, C.c, C.lda, C.bad, C.muted];
+  axes(vs, '', '', { sx: 0.5, sy: 2, fy: () => '', fx: x => fv(x, 1) });
+  S.out.forEach(x => { const X0 = vs.X(x.r - 0.005), X1 = vs.X(x.r + 0.005); if (x.id < 0) { c.save(); c.fillStyle = mixC(C.surf, C.muted, 0.25); c.fillRect(X0, vs.Y(0.9), X1 - X0 + 0.5, vs.Y(0.1) - vs.Y(0.9)); c.restore(); return; } c.fillStyle = mixC(C.surf, pal[x.id % pal.length], 0.25 + 0.5 * ((x.id / pal.length | 0) % 2)); c.fillRect(X0, vs.Y(0.9), X1 - X0 + 0.5, vs.Y(0.1) - vs.Y(0.9)); });
+  const bounds = []; for (let i = 1; i < S.out.length; i++) if (S.out[i].id !== S.out[i - 1].id) bounds.push((S.out[i].r + S.out[i - 1].r) / 2);
+  seg(vs, RS.r, 0, RS.r, 1, C.q, 2.5);
+  const cur = S.out[Math.round((RS.r + 2) / 0.01)];
+  let say = `With &gamma; = ${RS.gam === 1 ? 1 : 0.9}, the strip shows ${S.n} different optimal policies as the living reward runs from &minus;2 to 0.3 (switches near r = ${bounds.slice(0, 6).map(x => fv(x, 2)).join(', ')}${bounds.length > 6 ? ', &hellip;' : ''}, to within 0.01). `;
+  if (!o0) say += `At r = ${fmt(RS.r, 2)} with &gamma; = 1 wandering costs nothing, so the problem has no finite solution: an agent that is paid to stay never wants to leave.`;
+  else {
+    const G = M0, into = (st, ch) => { const cc = G.cells[st], a = o0.acts[st]; if (a < 0) return false; const x = cc.x + DP.DIRS[a][0], y = cc.y + DP.DIRS[a][1]; if (x < 0 || y < 0 || x >= G.W || y >= G.H) return ch === '#'; const t = G.id[y][x]; return t < 0 ? ch === '#' : G.cells[t].ch === ch; };
+    const nt = G.cells.map((_, k) => k).filter(k => !G.term[k]), pit = nt.filter(k => into(k, 'P')), wall = nt.filter(k => into(k, '#')), goal = nt.filter(k => into(k, 'G'));
+    say += 'Untransformed: '; if (pit.length) say += `each move costs so much that from ${pit.map(k => cellName(G, k)).join(' and ')} the agent steps straight into the &minus;1 exit: ending at a loss beats paying ${fmt(-RS.r, 2)} a move to get round. `;
+    else if (!goal.length) say += `the agent is paid ${fmt(RS.r, 2)} a move, so it never steps into an exit on purpose: it stays on the board, collecting, and only discounting keeps the values finite. `;
+    else if (wall.length) say += `moves are cheap, so at ${wall.map(k => cellName(G, k)).join(' and ')} the agent deliberately pushes into a wall: it goes nowhere, but it can only slip sideways, never into the &minus;1 exit. `;
+    else say += `a moderate cost per move, and the agent heads for +1, trading route length against the risk of slipping into &minus;1. `;
+  }
+  if (o0 && !o) say += ' The transformed problem has a non-negative living reward at &gamma; = 1, so it has no finite optimum.';
+  else if (o && o0) {
+    if (RS.b !== 0 && !same) say += `Adding b = ${fmt(RS.b, 2)} to every reward changed the policy: the shift is earned once per move, so it acts like a different living reward, and episodes of different lengths are affected differently.`;
+    else if (RS.b !== 0) say += `The shift b = ${fmt(RS.b, 2)} has not changed the policy at this r, but push it further and it will: it acts exactly like a change of living reward.`;
+    else if (a !== 1 || RS.k) say += `Scaling by a = ${fmt(a, 2)}${RS.k ? ` and shaping with k = ${fmt(RS.k, 1)}` : ''} left every arrow unchanged, as the equations promise, even though the values themselves changed.`;
+    else say += 'Now scale, shift or shape the rewards and see which of them can move an arrow.';
+  }
+  $('#rs-say').innerHTML = say;
+}
+$('#rs-r').addEventListener('input', e => { RS.r = +e.target.value; drawRS(); });
+seg1('[data-rsg]', 'data-rsg', g => { RS.gam = +g; drawRS(); });
+$('#rs-a').addEventListener('input', e => { RS.la = +e.target.value; drawRS(); });
+$('#rs-b').addEventListener('input', e => { RS.b = +e.target.value; drawRS(); });
+$('#rs-k').addEventListener('input', e => { RS.k = +e.target.value; drawRS(); });
+fig($('#rs-cv'), drawRS); fig($('#rs-strip'), drawRS);
+
+/* ================= 8. linear programming ================= */
+const LP = { g: 0.8, w: 0.3, C: 4, pt: null, user: false };
+function lpModel() {   // states 0 Fresh, 1 Worn; actions 0 Run, 1 Service; each pair: [reward, p(Fresh), p(Worn)]
+  return [[[10, 1 - LP.w, LP.w], [2, 1, 0]], [[4, 0, 1], [-LP.C, 1, 0]]];
+}
+function lpSolve() {
+  const P = lpModel(), g = LP.g, pols = [[0, 0], [0, 1], [1, 0], [1, 1]];
+  const val = pol => { const A = [[1 - g * P[0][pol[0]][1], -g * P[0][pol[0]][2]], [-g * P[1][pol[1]][1], 1 - g * P[1][pol[1]][2]]], b = [P[0][pol[0]][0], P[1][pol[1]][0]], det = A[0][0] * A[1][1] - A[0][1] * A[1][0]; return [(b[0] * A[1][1] - A[0][1] * b[1]) / det, (A[0][0] * b[1] - A[1][0] * b[0]) / det]; };
+  const vs = pols.map(val), best = vs.reduce((bi, v, i) => v[0] + v[1] > vs[bi][0] + vs[bi][1] + 1e-12 ? i : bi, 0), v = vs[best], pol = pols[best];
+  const look = (vv, s, a) => P[s][a][0] + g * (P[s][a][1] * vv[0] + P[s][a][2] * vv[1]);
+  const slack = [0, 1].map(s => [0, 1].map(a => v[s] - look(v, s, a)));
+  const Pp = [[P[0][pol[0]][1], P[0][pol[0]][2]], [P[1][pol[1]][1], P[1][pol[1]][2]]];          // dual: x = (I − γ Pπᵀ)⁻¹ 1
+  const A = [[1 - g * Pp[0][0], -g * Pp[1][0]], [-g * Pp[0][1], 1 - g * Pp[1][1]]], det = A[0][0] * A[1][1] - A[0][1] * A[1][0], x = [(A[1][1] - A[0][1]) / det, (A[0][0] - A[1][0]) / det];
+  return { P, v, pol, slack, x, look, vs };
+}
+function clipPoly(poly, a, b, c) { // keep a·x + b·y <= c
+  const out = []; for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length], fp = a * p[0] + b * p[1] - c, fq = a * q[0] + b * q[1] - c; if (fp <= 0) out.push(p); if (fp * fq < 0) { const t = fp / (fp - fq); out.push([p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])]); } } return out;
+}
+let lpView = null;
+function drawLP() {
+  const C = C0(), S = lpSolve(), { P, v, pol, slack, x, look } = S, g = LP.g;
+  const hi = Math.max(v[0], v[1], 1) * 1.6, lo = Math.min(0, v[0], v[1]) - 0.15 * hi;
+  const vw = frame($('#lp-cv'), [lo, hi], [lo, hi], { l: 50, b: 30, t: 12, r: 14 }); lpView = vw;
+  axes(vw, 'v(Fresh)', 'v(Worn)', {}); clip(vw); const c = vw.ctx;
+  const cons = []; [0, 1].forEach(s => [0, 1].forEach(a => { const [r, p0, p1] = P[s][a]; cons.push({ s, a, A: g * p0 - (s === 0 ? 1 : 0), B: g * p1 - (s === 1 ? 1 : 0), c: -r }); }));
+  let poly = [[vw.xl[0], vw.yl[0]], [vw.xl[1], vw.yl[0]], [vw.xl[1], vw.yl[1]], [vw.xl[0], vw.yl[1]]]; cons.forEach(k => { poly = clipPoly(poly, k.A, k.B, k.c); });
+  if (poly.length > 2) { c.save(); c.beginPath(); poly.forEach((p, i) => i ? c.lineTo(vw.X(p[0]), vw.Y(p[1])) : c.moveTo(vw.X(p[0]), vw.Y(p[1]))); c.closePath(); c.fillStyle = mixC(C.surf, C.a, 0.16); c.fill(); c.restore(); }
+  const names = [['Fresh·Run', 'Fresh·Service'], ['Worn·Run', 'Worn·Service']], lc = [C.lda, C.c, C.b, C.bad];
+  cons.forEach((k, i) => { // A x + B y = c
+    const tight = Math.abs(slack[k.s][k.a]) < 1e-9, pts = [];
+    if (Math.abs(k.B) > 1e-12) { pts.push([vw.xl[0], (k.c - k.A * vw.xl[0]) / k.B], [vw.xl[1], (k.c - k.A * vw.xl[1]) / k.B]); } else pts.push([k.c / k.A, vw.yl[0]], [k.c / k.A, vw.yl[1]]);
+    seg(vw, pts[0][0], pts[0][1], pts[1][0], pts[1][1], lc[i], tight ? 2.6 : 1.4, tight ? null : [6, 4]);
+    const lx = vw.xl[0] + (vw.xl[1] - vw.xl[0]) * (0.08 + 0.22 * i), ly = Math.abs(k.B) > 1e-12 ? (k.c - k.A * lx) / k.B : vw.yl[0] + (vw.yl[1] - vw.yl[0]) * 0.5;
+    if (ly > vw.yl[0] && ly < vw.yl[1]) { c.save(); c.font = '600 10.5px ' + css('--f-mono'); c.fillStyle = lc[i]; c.fillText(names[k.s][k.a], vw.X(Math.abs(k.B) > 1e-12 ? lx : k.c / k.A) + 4, vw.Y(ly) - 5); c.restore(); }
+  });
+  const tot = v[0] + v[1]; seg(vw, tot - vw.yl[1], vw.yl[1], tot - vw.yl[0], vw.yl[0], C.muted, 1, [2, 4]);
+  let u = [0, 0]; const path = [u]; for (let k = 0; k < 80; k++) { u = [0, 1].map(s => Math.max(look(u, s, 0), look(u, s, 1))); path.push(u); }
+  path.forEach((p, i) => { if (i < 40) dot(vw, p[0], p[1], C.muted, 2.4); });
+  if (!LP.user || !LP.pt) { const d = 0.18 * (hi - lo); LP.pt = [v[0] + d, v[1] + d]; }
+  const P0 = LP.pt, feas = cons.every(k => k.A * P0[0] + k.B * P0[1] <= k.c + 1e-9);
+  dot(vw, P0[0], P0[1], feas ? C.a : C.bad, 7); star(vw, v[0], v[1], C.q, 10); vw.ctx.restore();
+  $('#lp-g-o').textContent = fmt(g, 2); $('#lp-w-o').textContent = fmt(LP.w, 2); $('#lp-c-o').textContent = fmt(LP.C, 1);
+  const an = ['Run', 'Service'];
+  $('#lp-v').innerHTML = tip(fmt(v[0], 3), 'v*(Fresh): vertex of the feasible region with the smallest v(F) + v(W)\n(found by evaluating the 4 deterministic policies; the LP optimum is the best one)') + ', ' + tip(fmt(v[1], 3), 'v*(Worn)');
+  $('#lp-pol').innerHTML = tip(`F: ${an[pol[0]]}, W: ${an[pol[1]]}`, `slack v*(s) − look-ahead(s,a):\nFresh·Run ${fmt(slack[0][0], 4)}, Fresh·Service ${fmt(slack[0][1], 4)}\nWorn·Run ${fmt(slack[1][0], 4)}, Worn·Service ${fmt(slack[1][1], 4)}`);
+  $('#lp-you').innerHTML = tip(`${feas ? 'yes' : 'no'}, ${fmt(P0[0] + P0[1], 2)}`, `your point (${fmt(P0[0], 2)}, ${fmt(P0[1], 2)})\nobjective v(F) + v(W); the minimum over feasible points is ${fmt(tot, 3)}`);
+  $('#lp-x').innerHTML = tip(`${fmt(x[0], 2)}, ${fmt(x[1], 2)}`, `x(Fresh, ${an[pol[0]]}), x(Worn, ${an[pol[1]]})\nsolve (I − γ P_πᵀ) x = 1; all other x(s,a) = 0`);
+  const rb = [P[0][pol[0]][0], P[1][pol[1]][0]];
+  $('#run-lp').innerHTML = `<b>Running example</b>: primal optimum v<sub>*</sub>(F) + v<sub>*</sub>(W) = ${fmt(v[0], 3)} + ${fmt(v[1], 3)} = ${tip('<b>' + fmt(tot, 3) + '</b>', 'minimum of the primal objective')}; dual objective x(F, ${an[pol[0]]})&thinsp;r&#772;(F, ${an[pol[0]]}) + x(W, ${an[pol[1]]})&thinsp;r&#772;(W, ${an[pol[1]]}) = ${fmt(x[0], 3)} &times; ${fv(rb[0], 1)} + ${fmt(x[1], 3)} &times; (${fv(rb[1], 1)}) = ${tip('<b>' + fmt(x[0] * rb[0] + x[1] * rb[1], 3) + '</b>', 'maximum of the dual objective')}. Equal, as LP duality promises; and x(F) + x(W) = ${fmt(x[0] + x[1], 3)} = 2/(1 &minus; &gamma;), the total discounted time of two runs.`;
+  const vi = path.findIndex(p => Math.abs(p[0] - v[0]) + Math.abs(p[1] - v[1]) < 1e-3);
+  $('#lp-say').innerHTML = `${feas ? `Your point is feasible: it satisfies all four constraints, so it is an upper bound on v<sub>*</sub> in both coordinates; its objective ${fmt(P0[0] + P0[1], 2)} is above the minimum ${fmt(tot, 2)}.` : `Your point is <b>infeasible</b>: at least one action looks better than the value you gave its state, so these cannot be the values of an optimal agent. The LP only searches the shaded region.`} The optimum sits on the corner where the two solid (tight) lines cross: ${an[pol[0]]} when fresh, ${an[pol[1]]} when worn. ${pol[1] === 0 ? 'Servicing a worn machine is too expensive at this cost, so the policy runs it worn for ever.' : 'Raise the service cost C and the corner will jump to the Worn&middot;Run line.'} Value iteration (grey dots) climbs from (0, 0) to the same corner from below, ${vi >= 0 ? `within 10<sup>&minus;3</sup> after ${vi} steps` : 'slowly'}: it approaches from outside the feasible region, the LP from inside.`;
+}
+['g', 'w', 'c'].forEach(k => $('#lp-' + k).addEventListener('input', e => { LP[k === 'c' ? 'C' : k] = +e.target.value; LP.user = false; drawLP(); }));
+draggable($('#lp-cv'), () => lpView, () => [LP.pt], () => { LP.user = true; drawLP(); });
+fig($('#lp-cv'), drawLP);
+
+/* ================= 9. efficiency ================= */
+const NS = [4, 8, 16, 32, 64, 128, 256, 400], GS = [0.5, 0.8, 0.9, 0.95, 0.99, 0.999];
+const CO = { ni: 5, m: 4, gi: 2, seed: 1, curve: null, ckey: '' };
+function rmdp(n, m, gam, seed) {
+  const r = mulberry32(seed * 7919 + n * 31 + m), T = [];
+  for (let s = 0; s < n; s++) { const as = []; for (let a = 0; a < m; a++) { const rw = r(), w = [r(), r(), r()], z = w[0] + w[1] + w[2], mp = new Map(); for (let j = 0; j < 3; j++) { const s2 = Math.floor(r() * n); mp.set(s2, (mp.get(s2) || 0) + w[j] / z); } as.push([...mp].map(([s2, p]) => [s2, p, rw])); } T.push(as); }
+  return DP.mdp(T, gam);
+}
+function coSolve(M) {
+  const t0 = performance.now(), pi = DP.policyIteration(M, new Array(M.n).fill(0), 200), t1 = performance.now(), v = new Float64Array(M.n); let k = 0;
+  for (; k < 100000; k++) { let e = 0; for (let s = 0; s < M.n; s++) e = Math.max(e, Math.abs(v[s] - pi.v[s])); if (e <= 1e-6) break; DP.viSweep(M, v, false); }
+  return { rounds: pi.hist.length, sweeps: k, tPI: t1 - t0, tVI: performance.now() - t1 };
+}
+function coCurve() {
+  const key = CO.m + '|' + CO.gi; if (CO.ckey === key) return CO.curve;
+  CO.curve = NS.slice(0, 7).map(n => { let pr = 0, sw = 0; for (let sd = 1; sd <= 3; sd++) { const o = coSolve(rmdp(n, CO.m, GS[CO.gi], 100 + sd)); pr += o.rounds; sw += o.sweeps; } return { n, pr: pr / 3, sw: sw / 3 }; });
+  CO.ckey = key; return CO.curve;
+}
+function drawCO() {
+  const C = C0(), n = NS[CO.ni - 1], m = CO.m, gam = GS[CO.gi], M = rmdp(n, m, gam, CO.seed), o = coSolve(M), cu = coCurve();
+  const bound = Math.ceil(Math.log(1 / (1e-6 * (1 - gam))) / Math.log(1 / gam)), lp = n * Math.log10(m);
+  $('#co-n-o').textContent = String(n); $('#co-a-o').textContent = String(m); $('#co-g-o').textContent = String(gam);
+  $('#co-pi').innerHTML = tip(String(o.rounds), 'evaluate + improve rounds, from “action 0 everywhere”\nthe last round confirms that nothing changes');
+  $('#co-vi').innerHTML = tip(nf(o.sweeps), 'sweeps from v = 0 until |v − v*| ≤ 1e-6 everywhere') + ` (${tip(nf(bound), `⌈ln(R_max / (ε(1 − γ))) / ln(1/γ)⌉\nR_max = 1, ε = 1e-6, γ = ${gam}`)})`;
+  $('#co-np').innerHTML = tip(lp < 6 ? nf(Math.pow(m, n)) : '10^' + fmt(lp, 1), `|A|^|S| = ${m}^${n}`);
+  $('#co-ms').innerHTML = tip(ms(o.tPI), 'policy iteration with Gaussian elimination') + ' &middot; ' + tip(ms(o.tVI), 'value iteration');
+  $('#run-co').innerHTML = `<b>Running example</b>: with &gamma; = ${gam}, R<sub>max</sub> = 1 and &epsilon; = 10<sup>&minus;6</sup>, the bound asks for k &ge; ln(1 / (10<sup>&minus;6</sup> &times; ${fmt(1 - gam, 3)})) / ln(1 / ${gam}) = ${fmt(Math.log(1 / (1e-6 * (1 - gam))), 2)} / ${fmt(Math.log(1 / gam), 4)} = ${tip('<b>' + nf(bound) + '</b>', 'a guarantee, usually pessimistic')} sweeps; this MDP actually needed ${nf(o.sweeps)}. One sweep here looks at ${nf(n * m)} state&ndash;action pairs with up to 3 successors each.`;
+  const ymax = 12, vw = frame($('#co-cv'), [Math.log10(3), Math.log10(320)], [0, ymax], { l: 48, b: 30, t: 12, r: 14 });
+  axes(vw, 'states |S|', 'count', { sy: 2, fx: x => { const v = Math.pow(10, x); return [4, 8, 16, 32, 64, 128, 256].find(t => Math.abs(t - v) / t < 0.02) ? fmt(v, 0) : ''; }, sx: Math.log10(2), fy: p10 });
+  clip(vw); const c = vw.ctx;
+  const line = (pts, col, lw) => { c.save(); c.strokeStyle = col; c.lineWidth = lw; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(vw.X(p[0]), vw.Y(p[1])) : c.moveTo(vw.X(p[0]), vw.Y(p[1]))); c.stroke(); c.restore(); pts.forEach(p => dot(vw, p[0], p[1], col, 3.2)); };
+  line(cu.map(p => [Math.log10(p.n), p.n * Math.log10(m)]), C.bad, 2.4);
+  line(cu.map(p => [Math.log10(p.n), Math.log10(p.sw)]), C.b, 2.4);
+  line(cu.map(p => [Math.log10(p.n), Math.log10(p.pr)]), C.a, 2.4);
+  if (n <= 256) { dot(vw, Math.log10(n), Math.log10(o.rounds), C.a, 7, true); dot(vw, Math.log10(n), Math.log10(Math.max(1, o.sweeps)), C.b, 7, true); }
+  vw.ctx.restore();
+  const big = cu[cu.length - 1];
+  c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.bad; c.textAlign = 'right'; c.fillText(`${m}²⁵⁶ = ${p10(256 * Math.log10(m))} (off the chart)`, vw.w - 18, vw.pad.t + 14); c.restore();
+  $('#co-say').innerHTML = `Averaged over three random MDPs, policy iteration needs ${fmt(cu[0].pr, 1)} rounds at 4 states and ${fmt(big.pr, 1)} at 256: the count barely grows, while the number of policies it chooses among climbs from ${nf(Math.pow(m, 4))} to 10<sup>${fmt(256 * Math.log10(m), 0)}</sup>. Value iteration&rsquo;s sweep count hardly depends on |S| at all; it is set by &gamma; (${nf(big.sw)} sweeps at &gamma; = ${gam}). ${gam >= 0.99 ? 'Near &gamma; = 1, value iteration needs thousands of sweeps while policy iteration still needs a handful of (more expensive) rounds: that is when exact evaluation pays.' : 'Push &gamma; towards 1 and watch value iteration&rsquo;s bill grow like 1/(1 &minus; &gamma;).'} ${n === 400 ? `At 400 states the elimination in each policy-iteration round costs about 400&sup3;/3 &asymp; 2 &times; 10<sup>7</sup> operations, and the whole solve still takes ${ms(o.tPI)}.` : ''}`;
+}
+let coT = 0; const coLater = () => { clearTimeout(coT); coT = setTimeout(drawCO, 120); };
+$('#co-n').addEventListener('input', e => { CO.ni = +e.target.value; $('#co-n-o').textContent = String(NS[CO.ni - 1]); coLater(); });
+$('#co-a').addEventListener('input', e => { CO.m = +e.target.value; $('#co-a-o').textContent = String(CO.m); coLater(); });
+$('#co-g').addEventListener('input', e => { CO.gi = +e.target.value; $('#co-g-o').textContent = String(GS[CO.gi]); coLater(); });
+$('#co-new').addEventListener('click', () => { CO.seed++; drawCO(); });
+fig($('#co-cv'), drawCO);
+
+/* ================= PROJECT: inventory ================= */
+const INV = (() => {
+  const tr = [], te = [], ted = [];
+  PJ.dates.forEach((d, i) => { if (d >= '2011-01-01' && d <= '2011-06-30') tr.push(PJ.q[i]); if (d >= '2011-07-01') { te.push(PJ.q[i]); ted.push(d); } });
+  const maxD = Math.max(...tr), pd = new Float64Array(maxD + 1); tr.forEach(q => pd[q] += 1 / tr.length);
+  return { tr, te, ted, pd, maxD, M: 250, mu: sum(tr) / tr.length };
+})();
+const PP = { K: 40, h: 0.2, cs: 0.5, g: 0, gam: 0.99, show: 0, vi: null };
+function invModel(o) {
+  const { pd, maxD, M } = INV, p = PJ.price, R = new Float64Array(M + 1);
+  for (let y = 0; y <= M; y++) { let r = 0; for (let d = 0; d <= maxD; d++) if (pd[d]) r += pd[d] * (p * Math.min(y, d) - o.h * Math.max(y - d, 0) - o.g * Math.max(d - y, 0)); R[y] = r; }
+  const tail = new Float64Array(M + 2); for (let y = M; y >= 0; y--) { let t = 0; for (let d = y; d <= maxD; d++) t += pd[d]; tail[y] = t; }
+  return Object.assign({ R, tail, p, c: o.cs * p }, o);
+}
+function invW(md, v) { // W(y) = R(y) + γ Σ_s' P(s'|y) v(s')
+  const { pd, maxD, M } = INV, W = new Float64Array(M + 1);
+  for (let y = 0; y <= M; y++) { let t = md.tail[y] * v[0]; for (let d = 0; d < y && d <= maxD; d++) t += pd[d] * v[y - d]; W[y] = md.R[y] + md.gam * t; }
+  return W;
+}
+const invQ = (md, W, s, y) => W[y] - md.c * (y - s) - (y > s ? md.K : 0);
+function invEval(md, y) {
+  const { pd, maxD, M } = INV, n = M + 1, A = [], b = new Float64Array(n);
+  for (let s = 0; s < n; s++) { const row = new Float64Array(n), yy = y[s]; row[s] += 1; row[0] -= md.gam * md.tail[yy]; for (let d = 0; d < yy && d <= maxD; d++) row[yy - d] -= md.gam * pd[d]; A.push(row); b[s] = md.R[yy] - md.c * (yy - s) - (yy > s ? md.K : 0); }
+  return DP.gauss(A, b);
+}
+function invImprove(md, v, y) {
+  const W = invW(md, v), M = INV.M, ny = new Int32Array(M + 1);
+  for (let s = 0; s <= M; s++) { let best = s, bq = invQ(md, W, s, s); for (let yy = s + 1; yy <= M; yy++) { const q = invQ(md, W, s, yy); if (q > bq) { bq = q; best = yy; } } ny[s] = invQ(md, W, s, y[s]) >= bq - 1e-9 ? y[s] : best; }
+  return ny;
+}
+function invPI(md) {
+  const M = INV.M; let y = new Int32Array(M + 1).map((_, s) => s); const trace = []; let v;
+  for (let it = 1; it <= 60; it++) { const t = performance.now(); v = invEval(md, y); const ny = invImprove(md, v, y); let ch = 0; for (let s = 0; s <= M; s++) if (ny[s] !== y[s]) ch++; trace.push({ it, v0: v[0], ch, t: performance.now() - t }); if (!ch) break; y = ny; }
+  return { y, v, trace };
+}
+function invVI(md, vStar) {
+  const M = INV.M; let w = new Float64Array(M + 1), k = 0; const t = performance.now();
+  const err = () => { let e = 0; for (let s = 0; s <= M; s++) e = Math.max(e, Math.abs(w[s] - vStar[s])); return e; };
+  while (err() > 1e-6 && k < 50000) { const W = invW(md, w), nw = new Float64Array(M + 1); for (let s = 0; s <= M; s++) { let m = -Infinity; for (let yy = s; yy <= M; yy++) m = Math.max(m, invQ(md, W, s, yy)); nw[s] = m; } w = nw; k++; }
+  return { k, t: performance.now() - t };
+}
+function invSim(md, pol, days) {
+  let s = 0, prof = 0, sold = 0, orders = 0; const path = [];
+  for (const d of days) { const yy = pol(s), a = yy - s; prof -= md.c * a + (a > 0 ? md.K : 0); if (a > 0) orders++; const sale = Math.min(yy, d); prof += md.p * sale - md.h * Math.max(yy - d, 0) - md.g * Math.max(d - yy, 0); sold += sale; path.push({ y: yy, s: yy - sale, a, d }); s = yy - sale; }
+  return { perDay: prof / days.length, fill: sold / sum(days), orders, path };
+}
+let PJS = null;
+function pjSolve() {
+  const md = invModel(PP), t = performance.now(), sol = invPI(md), tPI = performance.now() - t, M = INV.M, y = sol.y;
+  let sLo = -1; for (let s = 0; s <= M; s++) if (y[s] > s) sLo = s;
+  const isSS = Array.from(y).every((yy, s) => yy === (s <= sLo ? y[0] : s));
+  const md0 = Object.assign({}, md, { K: 0 }), b0 = invPI(md0).y[0];
+  const mu = INV.mu, up = Math.min(M, Math.round(5 * mu)), lo = Math.floor(2 * mu);
+  const pols = [
+    { name: `DP optimal (s, S) = (${sLo}, ${y[0]})`, f: s => y[s] },
+    { name: `base-stock ${b0} (best if K = 0)`, f: s => Math.max(s, b0) },
+    { name: `top up to the mean, ${Math.ceil(mu)}`, f: s => Math.max(s, Math.ceil(mu)) },
+    { name: `rule of thumb (${lo}, ${up})`, f: s => s < 2 * mu ? up : s }];
+  pols.forEach(P => { const yy = Int32Array.from({ length: M + 1 }, (_, s) => P.f(s)); P.model = (1 - md.gam) * invEval(md, yy)[0]; P.train = invSim(md, P.f, INV.tr); P.test = invSim(md, P.f, INV.te); });
+  PJS = { md, sol, tPI, sLo, S: y[0], isSS, pols };
+}
+const PYREF = { ss: [71, 207], it: 6, v0: 22714.754770, vi: 2374, rows: [[227.15, 230.08, 189.81, 0.9356, 32], [201.86, 202.50, 168.32, 0.9391, 135], [146.43, 145.99, 130.16, 0.7027, 135], [226.63, 229.59, 193.80, 0.9628, 33]] };
+const isDef = () => PP.K === 40 && PP.h === 0.2 && PP.cs === 0.5 && PP.g === 0 && PP.gam === 0.99;
+function drawPjDem() {
+  const C = C0(), v = frame($('#pj-dem'), [-0.5, PJ.q.length - 0.5], [0, Math.max(...PJ.q) * 1.05], { l: 40, b: 26, t: 10 }), c = v.ctx;
+  const i0 = PJ.dates.findIndex(d => d >= '2011-01-01'), i1 = PJ.dates.findIndex(d => d >= '2011-07-01');
+  c.fillStyle = mixC(C.surf, C.a, 0.1); c.fillRect(v.X(i0 - 0.5), v.pad.t, v.X(i1 - 0.5) - v.X(i0 - 0.5), v.ph);
+  c.fillStyle = mixC(C.surf, C.b, 0.12); c.fillRect(v.X(i1 - 0.5), v.pad.t, v.X(PJ.q.length - 0.5) - v.X(i1 - 0.5), v.ph);
+  const months = []; PJ.dates.forEach((d, i) => { if (i === 0 || d.slice(5, 7) !== PJ.dates[i - 1].slice(5, 7)) months.push(i); });
+  axes(v, '', 'units/day', { sx: 1e9, sy: 50 });
+  c.save(); c.font = '10px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'center'; const narrow = v.w < 520;
+  months.forEach((i, k) => { if (narrow && (k % 2 || k === 0)) return; c.fillText(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+PJ.dates[i].slice(5, 7) - 1] + (PJ.dates[i].slice(5, 7) === '01' || k === 0 ? " '" + PJ.dates[i].slice(2, 4) : ''), v.X(i + 10), v.h - v.pad.b + 14); }); c.restore();
+  const bw = Math.max(1, v.pw / PJ.q.length - 0.6);
+  PJ.q.forEach((q, i) => { c.fillStyle = i >= i0 && i < i1 ? C.a : i >= i1 ? C.b : C.muted; c.fillRect(v.X(i) - bw / 2, v.Y(q), bw, v.Y(0) - v.Y(q)); });
+  c.save(); c.font = '600 11px ' + css('--f-body'); c.fillStyle = C.a; c.fillText('model: Jan–Jun 2011', v.X(i0) + 4, v.pad.t + 30); c.fillStyle = C.b; c.textAlign = 'right'; c.fillText('test: Jul–Dec 2011', v.w - v.pad.r - 4, v.pad.t + 30); c.restore();
+  const sd = Math.sqrt(sum(INV.tr.map(q => (q - INV.mu) ** 2)) / INV.tr.length), z = INV.tr.filter(q => q === 0).length;
+  $('#pj-dem-cap').innerHTML = `Daily units of &ldquo;REGENCY CAKESTAND 3 TIER&rdquo; on each of the shop&rsquo;s 305 trading days. Model period: ${INV.tr.length} days, mean ${tip(fmt(INV.mu, 2), `${nf(sum(INV.tr))} units / ${INV.tr.length} days`)}, standard deviation ${tip(fmt(sd, 1), 'population standard deviation of daily units, Jan–Jun 2011')}, largest ${INV.maxD}, ${z} day${z === 1 ? '' : 's'} with no sale. Test period: ${INV.te.length} days, mean ${tip(fmt(sum(INV.te) / INV.te.length, 2), `${nf(sum(INV.te))} units / ${INV.te.length} days`)}. December 2010 (grey) is left out: Christmas trade is not typical. Demand is lumpy: most days bring a few dozen, but trade customers sometimes order over a hundred at once.`;
+}
+function drawPjPol() {
+  if (!PJS) pjSolve();
+  const C = C0(), { sol, sLo, S } = PJS, M = INV.M, v = frame($('#pj-pol'), [0, M], [0, M], { l: 44, b: 30, t: 12 }), c = v.ctx;
+  axes(v, 'closing stock s', 'next morning y', { sx: 50, sy: 50 });
+  seg(v, 0, 0, M, M, C.muted, 1, [4, 4]);
+  c.save(); c.strokeStyle = C.a; c.lineWidth = 2.6; c.beginPath(); for (let s = 0; s <= M; s++) { const X = v.X(s), Y = v.Y(sol.y[s]); s ? c.lineTo(X, Y) : c.moveTo(X, Y); } c.stroke(); c.restore();
+  if (sLo >= 0) { seg(v, sLo, 0, sLo, sol.y[sLo], C.b, 1.4, [3, 3]); c.save(); c.font = '600 11px ' + css('--f-mono'); c.fillStyle = C.b; c.fillText(`s = ${sLo}`, v.X(sLo) + 4, v.Y(14)); c.fillStyle = C.a; c.fillText(`S = ${S}`, v.X(4), v.Y(S) + 15); c.restore(); }
+  $('#pj-pol-cap').innerHTML = `The optimal policy: for each closing stock s, the stock the shelf should open with next morning (order = y &minus; s). Dashed diagonal: order nothing. ${PJS.isSS && sLo >= 0 ? `It is an <b>(s, S) policy</b>: whenever stock falls to ${sLo} or below, order up to ${S}; otherwise wait. Scarf (1960) proved this shape is optimal for this kind of problem; here it simply falls out of policy iteration.` : sLo < 0 ? 'At these costs the policy never orders.' : 'At these settings the policy is not exactly of (s, S) form.'}`;
+  $('#pj-trace').innerHTML = `<thead><tr><th>round</th><th>v<sub>&pi;</sub>(empty shelf)</th><th>actions changed</th><th>time</th></tr></thead><tbody>` + sol.trace.map(t => `<tr><td>${t.it}</td><td class="num">${tip(gbp(t.v0, 2), 'exact evaluation: 251 × 251 linear system')}</td><td class="num">${t.ch}</td><td class="num">${ms(t.t)}</td></tr>`).join('') + `</tbody>`;
+}
+function drawPjBoard() {
+  if (!PJS) pjSolve();
+  const { pols } = PJS, def = isDef(), best = pols.reduce((a, P, i) => P.test.perDay > pols[a].test.perDay ? i : a, 0);
+  $('#pj-board').innerHTML = `<thead><tr><th>policy</th><th>model: (1 &minus; &gamma;) v<sub>&pi;</sub>(0)</th><th>replay, Jan&ndash;Jun</th><th>replay, Jul&ndash;Dec (test)</th><th>fill rate (test)</th><th>deliveries (test)</th>${def ? '<th>Python, test</th>' : ''}</tr></thead><tbody>` + pols.map((P, i) => `<tr${i === 0 ? ' class="win"' : ''}><td>${P.name}</td><td class="num">${tip(gbp(P.model), 'discounted value from an empty shelf under the demand model,\nconverted to a per-day amount')}</td><td class="num">${tip(gbp(P.train.perDay), 'profit per day replaying the 147 model-period days')}</td><td class="num">${tip(gbp(P.test.perDay), 'profit per day on the 138 held-out days, starting from an empty shelf')}${i === best ? ' &#9733;' : ''}</td><td class="num">${tip(pct(P.test.fill, 2), 'units sold / units demanded')}</td><td class="num">${P.test.orders}</td>${def ? `<td class="num">${gbp(PYREF.rows[i][2])}</td>` : ''}</tr>`).join('') + `</tbody>`;
+  const P = pols[PP.show], path = P.test.path, C = C0(), v = frame($('#pj-sim'), [-0.5, path.length - 0.5], [0, Math.max(INV.M, ...INV.te) * 1.04], { l: 40, b: 24, t: 10 }), c = v.ctx;
+  axes(v, '', 'units', { sx: 20, sy: 50 }); const bw = Math.max(1, v.pw / path.length - 0.6);
+  path.forEach((p, i) => { c.fillStyle = mixC(C.surf, C.muted, 0.45); c.fillRect(v.X(i) - bw / 2, v.Y(p.d), bw, v.Y(0) - v.Y(p.d)); if (p.d > p.y) { c.fillStyle = C.bad; c.fillRect(v.X(i) - bw / 2, v.Y(p.d), bw, v.Y(p.y) - v.Y(p.d)); } });
+  c.save(); c.strokeStyle = C.a; c.lineWidth = 2; c.beginPath(); path.forEach((p, i) => { const X0 = v.X(i - 0.5), X1 = v.X(i + 0.5); if (i) c.lineTo(X0, v.Y(p.y)); else c.moveTo(X0, v.Y(p.y)); c.lineTo(X1, v.Y(p.y)); }); c.stroke(); c.restore();
+  path.forEach((p, i) => { if (p.a > 0) { c.fillStyle = C.b; c.beginPath(); c.moveTo(v.X(i), v.Y(0) - 1); c.lineTo(v.X(i) - 3.5, v.Y(0) + 6); c.lineTo(v.X(i) + 3.5, v.Y(0) + 6); c.fill(); } });
+  const lost = sum(path.map(p => Math.max(p.d - p.y, 0))), short = path.filter(p => p.d > p.y).length;
+  $('#pj-sim-cap').innerHTML = `${P.name}, replayed on the 138 test days. <span style="color:var(--cA)">&#9644;</span> stock on the shelf each morning &nbsp; <span style="color:var(--muted)">&#9632;</span> demand &nbsp; <span style="color:var(--qda)">&#9632;</span> demand that could not be met (${tip(nf(lost) + ' units', 'Σ max(D − y, 0) over the test days')} on ${short} day${short === 1 ? '' : 's'}) &nbsp; <span style="color:var(--cB)">&#9650;</span> a delivery arrived.`;
+  const dp = pols[0], rt = pols[3];
+  $('#pj-rsay').innerHTML = `Under the demand model the DP policy is the best of all ${'10<sup>494.9</sup>'} (that is what optimal means), and it also wins on the 147 days it was estimated from. On the 138 test days it earns ${gbp(dp.test.perDay)} a day, ${gbp(dp.test.perDay - pols[1].test.perDay)} more than the base-stock policy that ignores the delivery charge and ${gbp(dp.test.perDay - pols[2].test.perDay)} more than daily top-ups. ${rt.test.perDay > dp.test.perDay ? `The rule of thumb does ${gbp(rt.test.perDay - dp.test.perDay)} a day better on these particular days: its model value is only ${gbp(dp.model - rt.model)} a day lower, so the two are near-equivalent policies, and demand in the second half of 2011 was lower (${fmt(sum(INV.te) / INV.te.length, 1)} a day against ${fmt(INV.mu, 1)}), so the model no longer describes it exactly. A DP solution is optimal for its model, not for the future.` : `It also beats the rule of thumb on the test days, by ${gbp(dp.test.perDay - rt.test.perDay)} a day.`}`;
+}
+function drawPJ() {
+  if (!PJS) pjSolve();
+  const { sLo, S, sol, md } = PJS;
+  ['K', 'h', 'c', 'g', 'gm'].forEach(k => { const val = { K: PP.K, h: PP.h, c: PP.cs, g: PP.g, gm: PP.gam }[k]; $('#pj-' + k + '-o').textContent = k === 'K' ? '£' + val : k === 'c' ? pct(val, 0) + ' = £' + fmt(val * PJ.price, 2) : k === 'gm' ? fmt(val, 3) : '£' + fmt(val, 2); });
+  $('#pj-ss').innerHTML = sLo >= 0 ? tip(`(${sLo}, ${S})`, 'reorder when closing stock ≤ s, up to S' + (PJS.isSS ? '' : '\n(not exactly (s, S) at these settings)')) : 'never order';
+  $('#pj-it').innerHTML = tip(String(sol.trace.length), `rounds of exact evaluation + greedy improvement\nstarting from “never order”, ${ms(PJS.tPI)} in total`);
+  $('#pj-v0').innerHTML = tip(gbp(sol.v[0], 0), `expected discounted profit from an empty shelf, γ = ${PP.gam}\n= ${gbp((1 - PP.gam) * sol.v[0])} a day in per-day terms` + (isDef() ? `\nPython: ${gbp(PYREF.v0, 6)}; browser: ${gbp(sol.v[0], 6)}` : ''));
+  $('#pj-vi-o').innerHTML = PP.vi ? tip(nf(PP.vi.k), `value iteration from v = 0 until |v − v*| ≤ 1e-6, ${ms(PP.vi.t)}`) : '–';
+  const s = 50, yy = sol.y[s], { pd, maxD } = INV; let es = 0, el = 0, eu = 0; for (let d = 0; d <= maxD; d++) if (pd[d]) { es += pd[d] * Math.min(yy, d); el += pd[d] * Math.max(yy - d, 0); eu += pd[d] * Math.max(d - yy, 0); }
+  const rb = md.p * es - md.c * (yy - s) - (yy > s ? md.K : 0) - md.h * el - md.g * eu;
+  $('#run-pj').innerHTML = `<b>Running example</b>: with ${s} units left at closing, the policy opens tomorrow with y = ${yy}${yy > s ? ` (orders ${yy - s})` : ' (orders nothing)'}. Averaged over the ${INV.tr.length} model days: expected sales ${tip(fmt(es, 2), 'Σ_D p(D) min(y, D)')}, leftovers ${tip(fmt(el, 2), 'Σ_D p(D) (y − D)⁺')}, shortfall ${tip(fmt(eu, 2), 'Σ_D p(D) (D − y)⁺')}; so r&#772; = 12.75 &times; ${fmt(es, 2)} &minus; ${fmt(md.c, 3)} &times; ${yy - s}${yy > s ? ` &minus; ${fmt(md.K, 0)}` : ''} &minus; ${fmt(md.h, 2)} &times; ${fmt(el, 2)}${md.g ? ` &minus; ${fmt(md.g, 1)} &times; ${fmt(eu, 2)}` : ''} = ${tip('<b>' + gbp(rb) + '</b>', 'expected reward of this one decision')}.${yy > s ? ' Negative today: the order is paid for now and earns its keep over the following days, which is what the &gamma;v(s&prime;) term in the Bellman equation accounts for.' : ''}`;
+  const tr = sol.trace;
+  $('#pj-say').innerHTML = `Policy iteration starts from &ldquo;never order&rdquo; (worth ${gbp(tr[0].v0, 0)} from an empty shelf) and reaches the optimum in ${tr.length} rounds, each one exact linear solve of 251 equations. ${PP.vi ? `Value iteration needed ${nf(PP.vi.k)} sweeps for the same answer: with a daily &gamma; of ${PP.gam}, information about the future has to be propagated about ${nf(1 / (1 - PP.gam))} days ahead, one sweep at a time.` : 'Press &ldquo;Also run value iteration&rdquo; to compare.'} ${PP.K === 0 ? 'With free deliveries the best policy is a pure base-stock rule: top up to the same level every day.' : `A larger delivery charge spreads s and S apart: fewer, bigger orders.`}`;
+  drawPjPol(); drawPjBoard();
+}
+let pjT = 0; const pjLater = () => { clearTimeout(pjT); PP.vi = null; pjT = setTimeout(() => { pjSolve(); drawPJ(); }, 80); };
+[['K', 'K'], ['h', 'h'], ['c', 'cs'], ['g', 'g'], ['gm', 'gam']].forEach(([id, k]) => $('#pj-' + id).addEventListener('input', e => { PP[k] = +e.target.value; pjLater(); }));
+$('#pj-vi').addEventListener('click', () => { $('#pj-vi-o').textContent = '…'; setTimeout(() => { PP.vi = invVI(PJS.md, PJS.sol.v); drawPJ(); }, 20); });
+$('#pj-def').addEventListener('click', () => { Object.assign(PP, { K: 40, h: 0.2, cs: 0.5, g: 0, gam: 0.99, vi: null }); $('#pj-K').value = 40; $('#pj-h').value = 0.2; $('#pj-c').value = 0.5; $('#pj-g').value = 0; $('#pj-gm').value = 0.99; pjSolve(); drawPJ(); });
+seg1('[data-pjp]', 'data-pjp', i => { PP.show = +i; drawPjBoard(); });
+fig($('#pj-dem'), drawPjDem); fig($('#pj-pol'), drawPjPol); fig($('#pj-sim'), drawPjBoard);
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+heroReset(false); heroStep(); gpReset(); for (let k = 0; k < 14; k++) gpStep(); drawPJ();
+redrawAll();
+window.__dpDebug = { DP, INV, PP, get PJS() { return PJS; }, invVI, pjSolve, EV, EVC: () => EVC, AS, PI, GP, RS, LP, lpSolve, CO, coSolve, rmdp, MD, IM, HERO, heroStep };
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>

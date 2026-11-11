@@ -1,0 +1,1537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on decision networks and the value of information: chance, decision and utility nodes, information arcs and action-utility tables, evaluating a network by inference, what a survey is worth, the value of perfect information and its properties, myopic and nonmyopic information-gathering agents, sensitivity analysis and robust decisions, uncertain preferences and the off-switch game, with a project that decides which heart-disease test to order first for 297 real Cleveland Clinic patients using real test costs, verified against Python.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Decision Networks &amp; the Value of Information</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.qsel { width: 100%; max-width: 100%; font: inherit; font-size: 0.86rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.qsel:focus-visible { outline: 2px solid var(--lda); outline-offset: 1px; }
+.heroplot { aspect-ratio: 16 / 11; }
+table.race tr.win td, table.pol tr.win td, #ag-tbl tr.win td { background: color-mix(in srgb, var(--cA) 12%, transparent); }
+table.race td:first-child { white-space: nowrap; }
+table.steps td { white-space: normal; font-size: 0.84rem; vertical-align: top; }
+table.steps td { line-height: 1.5; }
+table.steps tr.dim td, #ag-tbl tr.dim td { color: var(--muted); }
+#ag-tbl td, #ag-tbl th, table.pol td, table.pol th { font-size: 0.84rem; padding: 4px 8px; }
+#ag-tbl td[colspan] { white-space: normal; }
+#pj-nodes td { white-space: normal; font-size: 0.86rem; }
+#pj-nodes td:first-child { white-space: nowrap; }
+.boardplot { aspect-ratio: 2.6 / 1; }
+.twoctl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
+@media (max-width: 560px) { .heroplot { aspect-ratio: 0.92 / 1; } .boardplot { aspect-ratio: 1.4 / 1; } .twoctl { grid-template-columns: 1fr; } .plot.tall { aspect-ratio: 0.95 / 1; } }
+.syplot { aspect-ratio: 2.3 / 1; }
+@media (max-width: 560px) { .syplot { aspect-ratio: 1.2 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Decision networks <span>&middot; what is a test worth?</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#nodes">Three kinds of node</a>
+      <a href="#evaluate">Evaluating</a>
+      <a href="#survey">A survey</a>
+      <a href="#vpi">VPI</a>
+      <a href="#props">Properties</a>
+      <a href="#agent">The agent</a>
+      <a href="#ahead">Further ahead</a>
+      <a href="#robust">Robustness</a>
+      <a href="#prefs">Unknown preferences</a>
+      <a href="#project">Which-test project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Reinforcement learning &amp; decision making · chapter 3.0b · decision networks</div>
+      <h1>Decision Networks &amp; the Value of Information</h1>
+      <div class="sub">Put beliefs, choices and goals in one picture, then ask what a test is worth before you pay for it</div>
+      <p class="lead">A doctor rarely knows enough to act at once. Each test costs money and time, and a test is worth ordering only if its result could change what she does next. A <em class="term">decision network</em> holds the whole problem in one diagram: what is uncertain, what can be chosen, and what is wanted. The <em class="term">value of information</em> then puts a price on every question you could still ask. On the right is a small network fitted to 297 real patients from the Cleveland Clinic. Their interview answers are already known, and each test carries the Ontario fee-schedule price that comes with the data. <strong>Click a test to order it</strong>: its real result comes back, the belief about heart disease moves, and the remaining tests are re-priced.</p>
+      <dl class="facts">
+        <div><dt>The picture</dt><dd>Ovals for what is uncertain, rectangles for choices, diamonds for what you want</dd></div>
+        <div><dt>The question</dt><dd>How much better will my decision be, on average, once I know this?</dd></div>
+        <div><dt>The answer</dt><dd>Never negative; zero unless the result could change your mind</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot heroplot"><canvas id="hero-cv" aria-label="A decision network for one patient: interview answers, heart disease, five tests with their value of information, the treatment decision and its loss"></canvas></div>
+      <div class="btns" style="margin-top:10px"><button type="button" class="btn primary" id="hero-voi">Order the best test</button><button type="button" class="btn" id="hero-next">Another patient</button><button type="button" class="btn" id="hero-reset">Start again</button></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cA)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>11 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#nodes"><i>01</i>Three kinds of node</a></li>
+    <li><a href="#evaluate"><i>02</i>Evaluating the network</a></li>
+    <li><a href="#survey"><i>03</i>What a survey is worth</a></li>
+    <li><a href="#vpi"><i>04</i>The value of perfect information</a></li>
+    <li><a href="#props"><i>05</i>Never negative, not additive</a></li>
+    <li><a href="#agent"><i>06</i>An information-gathering agent</a></li>
+    <li><a href="#ahead"><i>07</i>Looking further ahead</a></li>
+    <li><a href="#robust"><i>08</i>Sensitivity and robust decisions</a></li>
+    <li><a href="#prefs"><i>09</i>When you don&rsquo;t know what you want</a></li>
+    <li><a href="#project"><i>10</i>Which test first?</a></li>
+    <li><a href="#summary"><i>11</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- NODES -->
+<section class="chap" id="nodes">
+  <div class="wrap">
+    <div class="tag">The picture</div>
+    <h2>Three kinds of node</h2>
+    <div class="prose">
+      <p>A Bayesian network says what you believe. A <em class="term">decision network</em> (also called an <em class="term">influence diagram</em>; Howard and Matheson, 1984) adds what you can do and what you want. It has three kinds of node. <b>Chance nodes</b> (ovals) are random variables, each with a conditional probability table, just as before. <b>Decision nodes</b> (rectangles) are choices the agent makes. <b>Utility nodes</b> (diamonds) score the outcome as a function of their parents.</p>
+      <p>The arcs mean different things depending on where they end. An arc into a chance node is probabilistic dependence, and it may come from a decision, because acting can change the world. An arc into a utility node says what the score depends on. An arc into a decision node is an <em class="term">information arc</em>: it says what will be known at the moment of choosing. Our running example is the smallest useful network. A patient may have a disease D (prior p). A test T comes back positive with probability 0.85 if she has it and 0.10 if she doesn&rsquo;t. The doctor chooses whether to treat, and the outcome is scored on a 0&ndash;100 utility scale: 100 for a healthy patient left alone, 90 for a healthy patient treated needlessly, 75 for a sick patient treated, and 20 for a sick patient sent home.</p>
+      <p>Sometimes the chance nodes between a decision and its utility are folded away. What remains is an <em class="term">action&ndash;utility table</em>: for each thing the doctor might know, the expected utility of each action. It is smaller and faster to use, but the probabilities are baked into it. If the disease becomes twice as common, the table must be rebuilt, whereas the full network only needs its prior changed. Reinforcement learning&rsquo;s Q-function, in the next chapter, is exactly such a table. <strong>Switch the information arc on and off, then collapse the network to its table.</strong></p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} EU(a \mid \mathbf e) &= \sum_{d} P(d \mid \mathbf e)\, U(d, a) \\ \#\text{policies} &= |A|^{\,m} \end{aligned} \]</div><div class="read"><b>Read it as:</b> e is everything known when the choice is made, which is exactly what the information arcs bring in. The expected utility of action a weighs each possible state d by how likely it is now, and scores it with the utility table. A <em>policy</em> picks one action for each of the m things the decision could see, so with |A| actions there are |A|<sup>m</sup> policies. Blind, m = 1 and there are 2; with the test result visible, m = 2 and there are 4.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected utility of a given the evidence is the sum over states of the probability of the state times the utility of the state and the action.&rdquo;</em></div><div class="eq-run" id="run-nd"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="nd-cv" aria-label="The running example's decision network, or its action-utility table"></canvas></div><figcaption id="nd-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Network view"><button type="button" data-ndm="blind">Decide blind</button><button type="button" data-ndm="info" aria-pressed="true">See the test first</button><button type="button" data-ndm="table">Action&ndash;utility table</button></div>
+        <div class="ctrl"><div class="top"><label for="nd-p">Prior P(disease)</label><output id="nd-p-o"></output></div><input type="range" id="nd-p" min="0.01" max="0.8" step="0.01" value="0.25"></div>
+        <div class="tbl-wrap"><table class="hand pol" id="nd-pol"></table></div>
+        <div class="stats"><div class="stat"><div class="v" id="nd-n"></div><div class="k">policies to choose from</div></div><div class="stat"><div class="v" id="nd-eu"></div><div class="k">expected utility of the best</div></div></div>
+        <p class="note" id="nd-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- EVALUATE -->
+<section class="chap" id="evaluate">
+  <div class="wrap">
+    <div class="tag">The algorithm</div>
+    <h2>Evaluating a decision network</h2>
+    <div class="prose">
+      <p>Solving a decision network takes three steps. <b>First</b>, set the evidence variables to what has been observed. <b>Second</b>, for each possible value of the decision node, fix the decision at that value, compute the posterior probabilities of the utility node&rsquo;s parents with any Bayesian-network inference method, and from them the expected utility. <b>Third</b>, return the action with the highest expected utility. No new machinery is needed: evaluating a decision network is ordinary inference, run once per action.</p>
+      <p>With one uncertain state and two actions the result can be drawn. Each action&rsquo;s expected utility is a straight line in p = P(disease | e): it runs from the action&rsquo;s utility for a healthy patient at p = 0 to its utility for a sick one at p = 1. The lines cross at a <em class="term">threshold</em> p*. Treat above it, wait below it. The test&rsquo;s only job is to move p, and the decision changes only when p crosses p*. This threshold view of clinical decisions goes back to Pauker and Kassirer (1980). <strong>Pick the evidence, then step through the evaluation.</strong></p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ P(d \mid t) = \frac{P(t \mid d)\,P(d)}{\sum_{d'} P(t \mid d')\,P(d')} \]</div><div class="read"><b>Read it as:</b> step two&rsquo;s inference, here a single use of Bayes&rsquo; rule. For a positive test, P(t | d) is the sensitivity and P(t | &not;d) is one minus the specificity.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The probability of d given t is the probability of t given d times the prior, normalised.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} a^{*} &= \arg\max_a \textstyle\sum_d P(d \mid \mathbf e)\,U(d,a) \\ p^{*} &= \frac{U_{\bar d\bar a} - U_{\bar d a}}{(U_{\bar d\bar a} - U_{\bar d a}) + (U_{da} - U_{d\bar a})} \end{aligned} \]</div><div class="read"><b>Read it as:</b> step three picks the best action. With two actions (a = treat, &#257; = don&rsquo;t) the lines cross where the harm of needless treatment, weighted by 1 &minus; p, equals the benefit of treating the sick, weighted by p.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Treat when p exceeds the harm of needless treatment divided by harm plus benefit.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-ev" style="max-width:none"></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="ev-cv" aria-label="Expected utility of treating and of not treating as straight lines in the probability of disease"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> EU(treat) &nbsp; <span style="color:var(--cB)">&#9644;</span> EU(don&rsquo;t treat) &nbsp; the dashed line is the threshold p*; the dot is the current belief.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Evidence"><button type="button" data-eve="none" aria-pressed="true">No test yet</button><button type="button" data-eve="pos">Test positive</button><button type="button" data-eve="neg">Test negative</button></div>
+        <div class="ctrl"><div class="top"><label for="ev-p">Prior P(disease)</label><output id="ev-p-o"></output></div><input type="range" id="ev-p" min="0.01" max="0.9" step="0.01" value="0.25"></div>
+        <div class="ctrl"><div class="top"><label for="ev-se">Sensitivity P(T+ | D)</label><output id="ev-se-o"></output></div><input type="range" id="ev-se" min="0.5" max="1" step="0.01" value="0.85"></div>
+        <div class="ctrl"><div class="top"><label for="ev-sp">Specificity P(T&minus; | &not;D)</label><output id="ev-sp-o"></output></div><input type="range" id="ev-sp" min="0.5" max="1" step="0.01" value="0.9"></div>
+        <div class="btns"><button type="button" class="btn primary" id="ev-step">Next step</button><button type="button" class="btn" id="ev-all">Show all steps</button></div>
+        <div class="tbl-wrap"><table class="hand steps" id="ev-steps"></table></div>
+        <p class="note" id="ev-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SURVEY -->
+<section class="chap" id="survey">
+  <div class="wrap">
+    <div class="tag">The value of information</div>
+    <h2>What is a survey worth?</h2>
+    <div class="prose">
+      <p>So far the evidence simply arrived. Usually you choose what to find out, and finding out costs something. <em class="term">Information value theory</em> (Howard, 1966) prices a question by the decisions it improves. Here is a clean case. Six plots of land are for sale. Exactly one of them sits on a mineral seam worth C = &pound;1.2m, and each plot costs C/n = &pound;200k. Buying blind, you break even on average: a 1-in-6 chance of &pound;1.2m for &pound;200k. A surveyor offers to inspect plot 1 and tell you whether the seam is there. What is her report worth to you?</p>
+      <p>If she says <b>yes</b> (probability 1/n), you buy plot 1 and make C &minus; C/n. If she says <b>no</b>, the seam is in one of the other n &minus; 1 plots, so any of them now has a 1/(n &minus; 1) chance. Buying one of them makes, on average, C/(n &minus; 1) &minus; C/n. Average the two branches and the survey is worth exactly C/n, the price of one plot. Real surveyors make mistakes, so the lab lets her be right only with probability q. At q = &frac12; her report is a coin toss and worth nothing. <strong>Vary the number of plots and the surveyor&rsquo;s accuracy</strong>, and watch which plot you would buy after each report.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{VOI} &= \tfrac{1}{n}\Big(C - \tfrac{C}{n}\Big) \\ &\quad + \tfrac{n-1}{n}\Big(\tfrac{C}{n-1} - \tfrac{C}{n}\Big) \\ &= \tfrac{C}{n} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the first term is the &ldquo;yes&rdquo; branch: chance 1/n, then a sure profit of C minus the price. The second is the &ldquo;no&rdquo; branch: chance (n &minus; 1)/n, then a better-than-blind bet on another plot. Without the survey the best you can expect is 0, so the whole average is the value of the information. It equals the plot price: a perfect survey is worth paying up to one plot&rsquo;s cost for.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The value is one over n times C minus C over n, plus n minus one over n times C over n minus one minus C over n, which is C over n.&rdquo;</em></div><div class="eq-run" id="run-sy"></div></div>
+    <div class="lab">
+      <figure><div class="plot syplot"><canvas id="sy-cv" aria-label="Plots of land shaded by the chance of the seam after each report, with the plot you would buy"></canvas></div><figcaption>Each square is a plot, shaded by its chance of holding the seam after the report: the top row after a &ldquo;yes&rdquo;, the bottom row after a &ldquo;no&rdquo;. &#9733; marks the plot you would buy (no star: buying nothing is best); the labels give each report&rsquo;s probability and the best expected profit.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="sy-n">Plots for sale, n</label><output id="sy-n-o"></output></div><input type="range" id="sy-n" min="2" max="12" step="1" value="6"></div>
+        <div class="ctrl"><div class="top"><label for="sy-q">Surveyor accuracy q</label><output id="sy-q-o"></output></div><input type="range" id="sy-q" min="0.5" max="1" step="0.01" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="sy-v"></div><div class="k">value of the survey</div></div><div class="stat"><div class="v" id="sy-r"></div><div class="k">as a share of one plot&rsquo;s price</div></div></div>
+        <p class="note" id="sy-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- VPI -->
+<section class="chap" id="vpi">
+  <div class="wrap">
+    <div class="tag">The general formula</div>
+    <h2>The value of perfect information</h2>
+    <div class="prose">
+      <p>The survey generalises. With current evidence e, the agent&rsquo;s best action &alpha; has expected utility EU(&alpha; | e). Suppose it could learn the exact value of some variable E<sub>j</sub>. After seeing E<sub>j</sub> = e<sub>jk</sub> it would choose a new best action &alpha;<sub>e<sub>jk</sub></sub>, perhaps the same one. It doesn&rsquo;t know which value will turn up, so it averages over them using its current beliefs. The <em class="term">value of perfect information</em> (VPI) is that average minus what it can get now.</p>
+      <p>When is information worth a lot? Picture two plans whose utilities you are unsure of, each belief a bell curve. If one plan is clearly better, no plausible discovery would change your mind, and the information is worth almost nothing. If the two are close and your uncertainty is wide, learning the truth will often switch your choice, and the switch can be worth a lot. If they are close but you are almost sure of both, you may well switch, but it hardly matters which you pick. Information pays when it is <b>likely to change the plan</b> and when <b>the new plan is much better</b>. For two independent bell-curve beliefs the answer even has a closed form (Clark, 1961). <strong>Try the three presets, then move the gap and the spreads.</strong></p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{VPI}_{\mathbf e}(E_j) = {} & \sum_k P(E_j{=}e_{jk} \mid \mathbf e) \\ & \times EU(\alpha_{e_{jk}} \mid \mathbf e, E_j{=}e_{jk}) \\ & - EU(\alpha \mid \mathbf e) \end{aligned} \]</div><div class="read"><b>Read it as:</b> for every value E<sub>j</sub> could take, weight it by how likely it is now, and take the expected utility of the best action once that value is known. Subtract the expected utility of the best action today. The result is how much better off, on average, knowing E<sub>j</sub> would leave you, measured in utility.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The value of perfect information about E-j is the expected utility of acting after you see E-j, minus the expected utility of acting now.&rdquo;</em></div><div class="eq-run" id="run-vp"></div></div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \text{VPI} &= \mathbb E[\max(U_A, U_B)] \\ &\quad - \max(\mu_A, \mu_B) \\ &= \theta\big(\varphi(z) - z\,\Phi(-z)\big) \\ z &= |\mu_A-\mu_B| \,/\, \theta \end{aligned} \]</div><div class="read"><b>Read it as:</b> the two plans&rsquo; utilities are independent normals U<sub>A</sub> ~ N(&mu;<sub>A</sub>, &sigma;<sub>A</sub><sup>2</sup>) and U<sub>B</sub> ~ N(&mu;<sub>B</sub>, &sigma;<sub>B</sub><sup>2</sup>), and the information reveals both exactly. Here &theta; = &radic;(&sigma;<sub>A</sub><sup>2</sup> + &sigma;<sub>B</sub><sup>2</sup>) is the spread of their difference, z is the gap measured in units of &theta;, and &phi; and &Phi; are the standard normal density and CDF. VPI grows in proportion to &theta; and dies away quickly once z exceeds about 2.</div><div class="eq-say"><b>Say it</b><em>&ldquo;VPI is theta times phi of z minus z times capital Phi of minus z, where z is the gap over theta.&rdquo;</em></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10 tall"><canvas id="vp-cv" aria-label="Beliefs about the utilities of plans A and B"></canvas></div><figcaption><span style="color:var(--cA)">&#9644;</span> belief about U<sub>A</sub> &nbsp; <span style="color:var(--cB)">&#9644;</span> belief about U<sub>B</sub>. Ticks mark the means.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="vp-curve" aria-label="VPI against the gap between the means"></canvas></div><figcaption>VPI against the gap &mu;<sub>A</sub> &minus; &mu;<sub>B</sub> at your current spreads; the ring is your setting.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Presets"><button type="button" data-vpp="clear">Clear winner</button><button type="button" data-vpp="big">Close, much at stake</button><button type="button" data-vpp="small">Close, little at stake</button></div>
+        <div class="ctrl"><div class="top"><label for="vp-g">Gap &mu;<sub>A</sub> &minus; &mu;<sub>B</sub></label><output id="vp-g-o"></output></div><input type="range" id="vp-g" min="-30" max="30" step="0.5" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="vp-sa">Spread &sigma;<sub>A</sub></label><output id="vp-sa-o"></output></div><input type="range" id="vp-sa" min="0.5" max="20" step="0.5" value="8"></div>
+        <div class="ctrl"><div class="top"><label for="vp-sb">Spread &sigma;<sub>B</sub></label><output id="vp-sb-o"></output></div><input type="range" id="vp-sb" min="0.5" max="20" step="0.5" value="6"></div>
+        <div class="stats"><div class="stat"><div class="v" id="vp-v"></div><div class="k">VPI (utility points)</div></div><div class="stat"><div class="v" id="vp-pc"></div><div class="k">chance the other plan is really better</div></div></div>
+        <p class="note" id="vp-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROPS -->
+<section class="chap" id="props">
+  <div class="wrap">
+    <div class="tag">Three properties</div>
+    <h2>Never negative, not additive, order-free</h2>
+    <div class="prose">
+      <p><b>VPI is never negative.</b> A single result can be bad news: a positive test lowers the patient&rsquo;s expected utility. But the <i>expected</i> value of looking is never below zero. The picture shows why. The best you can do at belief p is the upper envelope of the actions&rsquo; straight lines, and a maximum of straight lines is convex. Your current belief is exactly the probability-weighted average of the posteriors you might end up with. By Jensen&rsquo;s inequality, the average height of a convex curve at those posteriors is at least its height at their average. The gap is the VPI. It is zero exactly when every possible posterior leads to the same action, so that they all sit on one straight segment.</p>
+      <p><b>VPI is not additive.</b> Two tests together can be worth less than the sum of their values, when they tell you the same thing, or more, when neither alone can push p across the threshold but both together can. <b>VPI is order-independent.</b> Learning E<sub>j</sub> and then E<sub>k</sub> leaves you knowing the same as learning them the other way round, so the total value is the same either way. <strong>Load the two presets and compare the bars.</strong></p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \text{VPI}_{\mathbf e}(E_j) &= \textstyle\sum_k P_k\, f(p_k) \\ &\quad - f\big(\textstyle\sum_k P_k\, p_k\big) \ge 0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> f(p) = max<sub>a</sub> EU(a | p) is the convex envelope, p<sub>k</sub> the posterior after result k, and P<sub>k</sub> that result&rsquo;s probability. Since &Sigma; P<sub>k</sub> p<sub>k</sub> = p, the prior, Jensen&rsquo;s inequality makes the difference non-negative.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The average of f at the posteriors, minus f at their average, is never negative.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} & \text{VPI}_{\mathbf e}(E_j, E_k) \\ &\ = \text{VPI}_{\mathbf e}(E_j) \\ &\qquad + \textstyle\sum_v P(v \mid \mathbf e)\,\text{VPI}_{\mathbf e, v}(E_k) \\ &\ = \text{VPI}_{\mathbf e}(E_k) \\ &\qquad + \textstyle\sum_w P(w \mid \mathbf e)\,\text{VPI}_{\mathbf e, w}(E_j) \end{aligned} \]</div><div class="read"><b>Read it as:</b> v ranges over the values of E<sub>j</sub> and w over those of E<sub>k</sub>. The pair is worth what the first test is worth, plus the expected value of the second once the first is known, in either order. The pair need not equal VPI(E<sub>j</sub>) + VPI(E<sub>k</sub>).</div><div class="eq-say"><b>Say it</b><em>&ldquo;The value of both is the value of one plus the expected value of the other given the first, in either order.&rdquo;</em></div></div>
+    </div>
+    <div class="eq-run" id="run-pr" style="max-width:none"></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10 tall"><canvas id="pr-cv" aria-label="The convex envelope of the best expected utility, with the posteriors a test could lead to"></canvas></div><figcaption id="pr-cap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="pr-bars" aria-label="VPI of test A, of test B, their sum, and of both together"></canvas></div><figcaption>Bars: VPI(A), VPI(B), VPI(A) + VPI(B), and VPI(A, B), the value of seeing both.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Show"><button type="button" data-prs="A">Test A</button><button type="button" data-prs="B">Test B</button><button type="button" data-prs="AB" aria-pressed="true">Both</button></div>
+        <div class="seg" role="group" aria-label="Presets"><button type="button" data-prp="strong">Two strong tests</button><button type="button" data-prp="weak">Two weak tests, rare disease</button></div>
+        <div class="ctrl"><div class="top"><label for="pr-p">Prior P(disease)</label><output id="pr-p-o"></output></div><input type="range" id="pr-p" min="0.01" max="0.8" step="0.01" value="0.25"></div>
+        <div class="ctrl"><div class="top"><label for="pr-a">Test A accuracy</label><output id="pr-a-o"></output></div><input type="range" id="pr-a" min="0.5" max="0.99" step="0.01" value="0.85"></div>
+        <div class="ctrl"><div class="top"><label for="pr-b">Test B accuracy</label><output id="pr-b-o"></output></div><input type="range" id="pr-b" min="0.5" max="0.99" step="0.01" value="0.75"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pr-va"></div><div class="k">VPI(A)</div></div><div class="stat"><div class="v" id="pr-vb"></div><div class="k">VPI(B)</div></div><div class="stat"><div class="v" id="pr-vab"></div><div class="k">VPI(A, B)</div></div></div>
+        <p class="note" id="pr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- AGENT -->
+<section class="chap" id="agent">
+  <div class="wrap">
+    <div class="tag">Putting it to work</div>
+    <h2>An information-gathering agent</h2>
+    <div class="prose">
+      <p>An agent that knows the VPI of every observation it could make can decide for itself what to ask. The simplest such agent is <em class="term">myopic</em>, or greedy. At each step it prices every observation it hasn&rsquo;t made yet as if that were the last one it would ever make. It requests the most worthwhile one if the value beats the cost, updates its beliefs with the answer, and repeats. When no observation is worth its price, it acts. Two scoring rules are common: value minus cost (the net gain), or value per unit cost (the best value for money, still requesting only if value beats cost).</p>
+      <p>Here the agent works on the real heart-disease network from the hero, fitted to all 297 patients. In this network utility is counted in dollars: a missed disease costs $5,000 and a needless treatment $1,000. Those two numbers are illustrative choices, not clinical figures, and the project lets you change them. VPI is then the expected drop in the decision&rsquo;s loss. <strong>Pick a patient and step the agent.</strong></p>
+    </div>
+<pre class="code"><code>function INFORMATION-GATHERING-AGENT(percept) returns an action
+  update the belief state with percept
+  for each observation E_j not yet made:  value_j &larr; VPI(E_j)          # what seeing it would be worth now
+  j &larr; the observation with the best score   (VPI_j &minus; Cost_j,  or  VPI_j / Cost_j)
+  if VPI_j &gt; Cost_j then return REQUEST(E_j)
+  else return the action with the highest expected utility</code></pre>
+    <div class="eq"><div class="m">\[ \begin{aligned} j^{*} &= \arg\max_{j}\, \Delta_j \\ \Delta_j &= \text{VPI}_{\mathbf e}(E_j) - C(E_j) \\ \text{ask only if } & \Delta_{j^*} > 0 \end{aligned} \]</div><div class="read"><b>Read it as:</b> among the tests not yet done, pick the one with the largest net value &Delta;<sub>j</sub>, its VPI minus its cost C(E<sub>j</sub>). With losses instead of utilities, VPI is today&rsquo;s smallest expected loss minus the expected smallest loss after the result. If even the best test isn&rsquo;t worth its price, stop and act.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Pick the test with the largest value minus cost; order it only if its value beats its cost.&rdquo;</em></div><div class="eq-run" id="run-ag"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="ag-cv" aria-label="The agent's belief about heart disease after each test it orders"></canvas></div><figcaption>P(heart disease) after each step; the dashed line is the treatment threshold p* = 1,000 / (1,000 + 5,000) = 1/6. Labels show what was ordered and its price.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <label class="mini-h" for="ag-pt">Patient (row of the Cleveland file)</label><select id="ag-pt" class="qsel"></select>
+        <div class="seg" role="group" aria-label="Scoring rule"><button type="button" data-agr="net" aria-pressed="true">VPI &minus; cost</button><button type="button" data-agr="ratio">VPI &divide; cost</button></div>
+        <div class="btns"><button type="button" class="btn primary" id="ag-step">Next step</button><button type="button" class="btn" id="ag-run">Run to the end</button><button type="button" class="btn" id="ag-reset">Reset</button></div>
+        <div class="tbl-wrap"><table class="hand" id="ag-tbl"></table></div>
+        <div class="stats"><div class="stat"><div class="v" id="ag-sp"></div><div class="k">spent on tests</div></div><div class="stat"><div class="v" id="ag-p"></div><div class="k">P(heart disease)</div></div></div>
+        <p class="note" id="ag-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- AHEAD -->
+<section class="chap" id="ahead">
+  <div class="wrap">
+    <div class="tag">Beyond greed</div>
+    <h2>Looking further ahead</h2>
+    <div class="prose">
+      <p>The myopic agent asks &ldquo;is this one test worth it, if I stop straight afterwards?&rdquo; That question can mislead it. Take the two weak tests from the previous section. Neither alone can move p across the threshold, so each has VPI 0 and the greedy agent orders nothing. Yet a plan that orders A, and then orders B only if A was positive, can be worth its cost. A <em class="term">nonmyopic</em> agent plans over sequences of observations, where each later choice may depend on earlier results. Exactly, that is a dynamic program over everything that might have been observed. Its size grows exponentially with the number of tests, and in general it is a partially observable planning problem, the subject of later chapters. Greedy selection is often close to optimal in practice, and for some well-behaved objectives it has guarantees (Krause and Guestrin, 2005).</p>
+      <p>Some sequential problems do have a clean answer. You have lost your keys. They are in exactly one of five places, with probabilities p<sub>i</sub>, and looking in place i takes c<sub>i</sub> minutes. Search in which order? Looking where they are most likely, or where looking is quickest, are both myopic and both can be wrong. Compare two neighbouring places in any order. Swapping them changes only the term where one is searched first, and doing i before j is better exactly when p<sub>i</sub>/c<sub>i</sub> &gt; p<sub>j</sub>/c<sub>j</sub>. So the best order sorts the places by chance per minute. <strong>Drag the bars to change the chances, and compare the four orders.</strong></p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbb E[\text{time}] &= \sum_{k=1}^{n} c_{\sigma_k}\Big(1 - \sum_{l \lt k} p_{\sigma_l}\Big) \\ i \text{ before } j &\iff p_i / c_i > p_j / c_j \end{aligned} \]</div><div class="read"><b>Read it as:</b> &sigma; is the search order. You pay for the k-th place only if the keys were not in any of the earlier ones, which happens with probability 1 minus their total chance. Swapping neighbours i and j changes the expected time by c<sub>j</sub>p<sub>i</sub> &minus; c<sub>i</sub>p<sub>j</sub>, which gives the ratio rule.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Expected time is the sum of each place&rsquo;s cost times the chance you still haven&rsquo;t found them; search in order of chance per minute.&rdquo;</em></div><div class="eq-run" id="run-ah"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="ah-cv" aria-label="Five places with the chance the keys are there and the minutes it takes to look"></canvas></div><figcaption>Bar height is the chance the keys are there (drag a bar top; the chances are rescaled to sum to 1); the label under each bar is the minutes it takes to look. The strip at the bottom is the chosen search order.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Search order"><button type="button" data-ahm="p">Most likely first</button><button type="button" data-ahm="c">Quickest first</button><button type="button" data-ahm="r" aria-pressed="true">Best chance per minute</button><button type="button" data-ahm="all">Best of all 120</button></div>
+        <div class="btns"><button type="button" class="btn" id="ah-new">New places</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ah-e"></div><div class="k">expected minutes, this order</div></div><div class="stat"><div class="v" id="ah-b"></div><div class="k">best possible</div></div></div>
+        <p class="note" id="ah-say"></p>
+      </div></div>
+    </div>
+    <h3>The greedy trap, in numbers</h3>
+    <div class="prose"><p>Back to the clinic, with a rare disease (prior 0.06) and two weak tests, each right 70% of the time whatever the patient&rsquo;s state. Each test costs the same, measured in utility points. The tree shows the best plan found by exact dynamic programming over both tests. <strong>Raise the price of a test</strong> until even the far-sighted plan gives up.</p></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="tr-cv" aria-label="The optimal test plan as a tree"></canvas></div><figcaption>&#9633; a test is ordered; &#9671; the decision is made. Each edge shows a result and its probability; each leaf shows P(disease) and the action.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="tr-c">Cost of each test (utility points)</label><output id="tr-c-o"></output></div><input type="range" id="tr-c" min="0" max="2" step="0.02" value="0.3"></div>
+        <div class="ctrl"><div class="top"><label for="tr-a">Accuracy of each test</label><output id="tr-a-o"></output></div><input type="range" id="tr-a" min="0.55" max="0.95" step="0.01" value="0.7"></div>
+        <div class="stats"><div class="stat"><div class="v" id="tr-my"></div><div class="k">myopic agent&rsquo;s expected utility</div></div><div class="stat"><div class="v" id="tr-op"></div><div class="k">optimal plan&rsquo;s</div></div></div>
+        <p class="note" id="tr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ROBUST -->
+<section class="chap" id="robust">
+  <div class="wrap">
+    <div class="tag">How sure are the numbers?</div>
+    <h2>Sensitivity analysis and robust decisions</h2>
+    <div class="prose">
+      <p>Every number in a decision network is an estimate: the prior from a small study, the utilities from a questionnaire. <em class="term">Sensitivity analysis</em> asks how much the recommendation depends on them. Vary each number over a plausible range and see whether the best action changes. If no plausible change flips it, the decision is robust and you can stop worrying. If a small change in one number flips it, that number is worth measuring better. That is the value of information again, this time about the model itself.</p>
+      <p>When you can&rsquo;t pin the numbers down, there are two classical responses. A <em class="term">robust</em> (maximin) decision takes the action whose <i>worst</i> expected utility, over every model you consider plausible, is best. It is safe but can be very conservative. The Bayesian response puts a probability distribution over the uncertain parameters and averages. Here expected utility is linear in each parameter, so averaging just means plugging in the mean values. <strong>Widen the uncertainty and watch which bars cross zero.</strong></p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \Delta(\theta) &= EU(\text{treat}) - EU(\text{don't}) \\ &= p\,(U_{da} - U_{d\bar a}) \\ &\quad - (1-p)(U_{\bar d\bar a} - U_{\bar d a}) \\ a^{*}_{\text{robust}} &= \arg\max_a \min_{\theta \in \Theta} EU(a;\theta) \end{aligned} \]</div><div class="read"><b>Read it as:</b> &theta; collects the five numbers (the prior and four utilities). &Delta; is positive when treating is better. Sensitivity analysis moves one number at a time and records the range of &Delta;; a range that straddles 0 means that number alone can flip the choice. &Theta; is the whole box of plausible values, and the robust action maximises its worst case over the box.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Delta is p times the benefit of treating the sick minus one minus p times the harm of treating the healthy; the robust action maximises the minimum expected utility.&rdquo;</em></div><div class="eq-run" id="run-rb"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="rb-cv" aria-label="Tornado chart: the range of the treat-minus-don't difference as each number varies"></canvas></div><figcaption>Each bar is the range of &Delta; when that one number moves &plusmn; the chosen percentage (probabilities capped at 1, utilities at 100); the tick is today&rsquo;s value. <span style="color:var(--qda)">&#9644;</span> can flip the decision &nbsp; <span style="color:var(--muted)">&#9644;</span> cannot.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="rb-p">Prior P(disease)</label><output id="rb-p-o"></output></div><input type="range" id="rb-p" min="0.02" max="0.6" step="0.01" value="0.2"></div>
+        <div class="ctrl"><div class="top"><label for="rb-w">Uncertainty in every number &plusmn;</label><output id="rb-w-o"></output></div><input type="range" id="rb-w" min="0" max="0.6" step="0.01" value="0.2"></div>
+        <div class="stats"><div class="stat"><div class="v" id="rb-n"></div><div class="k">numbers that can flip it alone</div></div><div class="stat"><div class="v" id="rb-r"></div><div class="k">robust (maximin) action</div></div></div>
+        <p class="note" id="rb-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PREFS -->
+<section class="chap" id="prefs">
+  <div class="wrap">
+    <div class="tag">Whose utility?</div>
+    <h2>When you don&rsquo;t know what you want</h2>
+    <div class="prose">
+      <p>Every network so far had a known utility node. Sometimes the uncertainty is in the preferences themselves. Would you enjoy a dish you have never tasted, or a job in a city you have never visited? Uncertainty about your own utility can be handled with the tools you already have. Make the unknown taste &theta; a hidden chance node, with U<sub>&theta;</sub>(a) as the utility under each value. Expected utility then averages over &theta; exactly as it averages over the state of the world. If nothing you can do will reveal &theta;, you act on the average. If something will (a small taste first), that observation has a value of information like any other.</p>
+      <p>The same mathematics gives a striking result about machines that act for people. A robot is about to take an action whose value U to its human it doesn&rsquo;t know; its belief about U is a bell curve. It can act now (expected value &mu;), switch itself off (value 0), or defer: tell the human and let her switch it off if she wants. If she is rational she lets it go ahead exactly when U &gt; 0, so deferring is worth E[max(U, 0)], which is never less than max(&mu;, 0). A robot that is <b>uncertain about what its human wants</b> therefore has a positive reason to leave its off-switch alone. In this <em class="term">off-switch game</em> (Hadfield-Menell, Dragan, Abbeel and Russell, 2017) that reason shrinks to nothing as the robot becomes certain, and it can turn negative if the human is unreliable. <strong>Make the robot surer, then make the human sloppier.</strong></p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ EU(a) = \sum_{\theta} P(\theta)\,U_{\theta}(a) \]</div><div class="read"><b>Read it as:</b> uncertain preferences are just one more hidden variable. The utility under each possible taste &theta; is weighted by how likely that taste is. Learning &theta; before choosing is worth E<sub>&theta;</sub>[max<sub>a</sub> U<sub>&theta;</sub>(a)] &minus; max<sub>a</sub> EU(a), which is the VPI formula again.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The expected utility of a is the sum over tastes of the probability of the taste times the utility of a under it.&rdquo;</em></div><div class="eq-run" id="run-pf1"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} EU(\text{defer}) &= \mathbb E\big[\,U\,\pi_H(U)\big] \\ \pi_H(U) &= 1 / \big(1+e^{-\beta U}\big) \\ \beta\to\infty: \ \ EU &= \mathbb E[\max(U,0)] \\ &= \mu\,\Phi(\tfrac{\mu}{\sigma}) + \sigma\,\varphi(\tfrac{\mu}{\sigma}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> &pi;<sub>H</sub>(U) is the chance the human lets the action go ahead. A noisily rational human says yes more often the better the action is, with reliability &beta;. A perfectly reliable human (&beta; &rarr; &infin;) says yes exactly when U &gt; 0, which gives the closed form for U ~ N(&mu;, &sigma;<sup>2</sup>).</div><div class="eq-say"><b>Say it</b><em>&ldquo;Deferring is worth the expected value of U times the chance the human says yes; with a perfect human, the expected value of max of U and zero.&rdquo;</em></div><div class="eq-run" id="run-pf2"></div></div>
+    </div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 tall"><canvas id="pf-cv" aria-label="The robot's belief about U, the human's chance of saying yes, and the value of the three options"></canvas></div><figcaption id="pf-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pf-m">Robot&rsquo;s best guess &mu;</label><output id="pf-m-o"></output></div><input type="range" id="pf-m" min="-10" max="10" step="0.1" value="1.5"></div>
+        <div class="ctrl"><div class="top"><label for="pf-s">Robot&rsquo;s uncertainty &sigma;</label><output id="pf-s-o"></output></div><input type="range" id="pf-s" min="0.2" max="10" step="0.1" value="4"></div>
+        <div class="ctrl"><div class="top"><label for="pf-b">Human reliability &beta;</label><output id="pf-b-o"></output></div><input type="range" id="pf-b" min="0" max="1" step="0.01" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="pf-v"></div><div class="k">value of keeping the off-switch</div></div><div class="stat"><div class="v" id="pf-best"></div><div class="k">robot&rsquo;s best option</div></div></div>
+        <p class="note" id="pf-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: which test should the clinic order first?</h2>
+    <div class="prose">
+      <p>The data are the <strong>Cleveland Clinic Foundation</strong> records from the UCI Heart Disease collection (Janosi, Steinbrunn, Pfisterer and Detrano, 1988; Detrano et al., 1989), licensed <b>CC BY 4.0</b>. Each of the 303 patients had coronary angiography. The label is whether any major vessel was more than 50% narrowed. Six patients with missing values are dropped, leaving <b>297</b>, of whom 137 have heart disease. The test prices come with the dataset: Peter Turney (1995) attached costs in Canadian dollars from the Ontario Health Insurance Program&rsquo;s fee schedule, with discounts when several measurements come from one procedure. Grouping the measurements as his files do gives five procedures.</p>
+      <p>The network is <em class="term">naive Bayes</em>: heart disease is the parent of every other node, and each node is conditionally independent of the others given the disease. The four interview items (age band, sex, chest-pain type, resting blood pressure) are known at the start. Each procedure is one chance node whose value is the joint result of everything it measures. Its table is estimated by counting with Laplace smoothing. Every patient is evaluated by <b>leave-one-out</b>: the tables used for patient i are counted from the other 296. The utility is minus the dollars spent: tests, plus $L<sub>FN</sub> for a missed disease or $L<sub>FP</sub> for a needless treatment. Those two losses are a value judgement, so they are sliders.</p>
+    </div>
+    <div class="tbl-wrap block"><table class="hand" id="pj-nodes"></table></div>
+
+    <h3>1 &middot; Set the stakes</h3>
+    <div class="lab" style="grid-template-columns:1fr">
+      <div class="panel"><div class="grp twoctl">
+        <div class="ctrl"><div class="top"><label for="pj-fn">Loss for a missed disease, L<sub>FN</sub></label><output id="pj-fn-o"></output></div><input type="range" id="pj-fn" min="1000" max="20000" step="500" value="5000"></div>
+        <div class="ctrl"><div class="top"><label for="pj-fp">Loss for a needless treatment, L<sub>FP</sub></label><output id="pj-fp-o"></output></div><input type="range" id="pj-fp" min="200" max="5000" step="100" value="1000"></div>
+      </div></div>
+    </div>
+    <p class="note block" id="pj-prog" style="max-width:72ch"></p>
+
+    <h3>2 &middot; The scoreboard</h3>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-board"></table></div>
+    <p class="note block" style="max-width:72ch">&ldquo;Total&rdquo; is what each policy actually cost, averaged over the 297 patients, with each decision scored against the angiogram. &ldquo;Model&rsquo;s forecast&rdquo; is what the network expected that policy to cost: tests spent plus the expected loss of its final decision. Neither column uses the patient&rsquo;s own record in fitting its tables.</p>
+
+    <h3>3 &middot; Which test first?</h3>
+    <figure class="block" style="max-width:860px"><div class="plot boardplot"><canvas id="pj-cv" aria-label="How often each procedure is ordered first by the myopic agent and by the optimal plan"></canvas></div><figcaption><span style="color:var(--cB)">&#9644;</span> myopic agent (VPI &minus; cost) &nbsp; <span style="color:var(--cA)">&#9644;</span> optimal plan (dynamic programming). Number of patients, out of 297, for whom each procedure is ordered first; &ldquo;none&rdquo; means the interview was enough.</figcaption></figure>
+    <p class="note block" style="max-width:72ch" id="pj-say"></p>
+
+    <h3>The same evaluation in Python</h3>
+<pre class="code"><code>import json, sys, numpy as np
+from sklearn.naive_bayes import CategoricalNB
+D = json.load(open("x066-data.json")); A, y = np.array(D["X"]), np.array(D["y"]); N = len(y)
+KA = [4, 2, 4, 2, 2, 2, 3, 3, 2, 3, 3, 4, 3]          # categories per attribute: age band, sex, chest pain, BP band, chol band,
+                                                       #   fbs, restecg, max-HR band, exang, ST-depression band, slope, ca, thal
+NODES = [[0], [1], [2], [3], [4, 5], [6], [8, 9, 10], [7, 12], [11]]   # one network node per interview item or procedure
+def joint(a, at):                                      # a procedure's result = the joint value of everything it measures
+    o = 0
+    for j in at: o = o * KA[j] + a[j]
+    return o
+X = np.array([[joint(a, g) for g in NODES] for a in A]); K = [int(np.prod([KA[j] for j in g])) for g in NODES]; nF = len(K)
+INTERVIEW = [0, 1, 2, 3]                               # known before any test is ordered
+PROC = [("Blood tests", 4, 10.37), ("Resting ECG", 5, 15.50), ("Exercise ECG", 6, 89.30),
+        ("Thallium scan", 7, 103.90), ("Fluoroscopy", 8, 100.90)]    # Turney (1995) costs in CAD, group discounts applied
+LFN, LFP = (float(sys.argv[1]), float(sys.argv[2])) if len(sys.argv) &gt; 2 else (5000.0, 1000.0)
+
+cnt = np.zeros((nF, 2, max(K))); cls = np.bincount(y, minlength=2).astype(float)
+for x, d in zip(X, y): cnt[np.arange(nF), d, x] += 1
+def model(i=None):                                     # naive Bayes with Laplace smoothing, leaving patient i out
+    c, n = cnt.copy(), cls.copy()
+    if i is not None: c[np.arange(nF), y[i], X[i]] -= 1; n[y[i]] -= 1
+    return np.log(n / n.sum()), [np.log((c[j, :, :K[j]] + 1) / (n[:, None] + K[j])) for j in range(nF)]
+sig = lambda L: 1 / (1 + np.exp(-L))
+stop = lambda p: np.minimum(p * LFN, (1 - p) * LFP)    # expected loss of the better action at P(disease) = p
+treat = lambda p: p * LFN &gt; (1 - p) * LFP
+
+nb = CategoricalNB(alpha=1.0, min_categories=K).fit(X, y); lpri, lp = model()
+L = lpri[1] - lpri[0] + sum(lp[j][1, X[:, j]] - lp[j][0, X[:, j]] for j in range(nF))
+print(f"patients {N}, with disease {y.sum()}; max |P(disease | all nodes) - sklearn CategoricalNB| = {np.abs(sig(L) - nb.predict_proba(X)[:, 1]).max():.1e}")
+def mi(j):                                              # I(node; disease) in bits, from the raw counts
+    c = cnt[j, :, :K[j]] / N; px = c.sum(0); pd = cls / N
+    return sum(c[d, t] * np.log2(c[d, t] / (px[t] * pd[d])) for d in range(2) for t in range(K[j]) if c[d, t] &gt; 0)
+print("mutual information with disease (bits):", ", ".join(f"{mi(j):.3f}" for j in range(nF)))
+
+nP, nO = len(PROC), [K[f] for _, f, _ in PROC]
+def plan(L0, T):                                        # exact optimal (nonmyopic) test plan: dynamic programming over subsets
+    llr = [t[1] - t[0] for t in T]; P1 = [np.exp(t[1]) for t in T]; P0 = [np.exp(t[0]) for t in T]; V, Act = {}, {}
+    for m in sorted(range(1 &lt;&lt; nP), key=lambda m: -bin(m).count("1")):
+        S = [j for j in range(nP) if m &gt;&gt; j &amp; 1]; Lm = np.full([nO[j] for j in S], L0)
+        for a, j in enumerate(S): Lm = Lm + llr[j].reshape([-1 if b == a else 1 for b in range(len(S))])
+        p = sig(Lm); v = stop(p); act = np.full(v.shape, -1)
+        for j in range(nP):
+            if m &gt;&gt; j &amp; 1: continue
+            Vc = np.moveaxis(V[m | 1 &lt;&lt; j], sum(1 for s in S if s &lt; j), -1)
+            cont = PROC[j][2] + ((p[..., None] * P1[j] + (1 - p[..., None]) * P0[j]) * Vc).sum(-1)
+            better = cont &lt; v - 1e-9; v = np.where(better, cont, v); act = np.where(better, j, act)
+        V[m], Act[m] = v, act
+    return V, Act
+def vpi(L, T, j):                                       # expected drop in decision loss from seeing procedure j
+    p = sig(L); Po = p * np.exp(T[j][1]) + (1 - p) * np.exp(T[j][0])
+    return stop(p) - (Po * stop(sig(L + T[j][1] - T[j][0]))).sum()
+def run(x, L0, T, rule, Act=None):
+    done, L, m = [], L0, 0
+    while True:
+        left = [j for j in range(nP) if j not in done]; j = -1
+        if rule == "dp":
+            j = int(Act[m][tuple(x[PROC[s][1]] for s in range(nP) if m &gt;&gt; s &amp; 1)])
+        elif rule in ("net", "ratio") and left:
+            g = {k: vpi(L, T, k) for k in left}
+            score = {k: g[k] - PROC[k][2] if rule == "net" else g[k] / PROC[k][2] for k in left}
+            b = max(left, key=lambda k: (score[k], -k))  # ties go to the earlier procedure
+            j = b if g[b] - PROC[b][2] &gt; 1e-9 else -1
+        elif isinstance(rule, list) and rule:
+            j = rule.pop(0)
+        if j &lt; 0: return done, sum(PROC[k][2] for k in done), bool(treat(sig(L))), float(stop(sig(L)))
+        o = x[PROC[j][1]]; L = L + T[j][1][o] - T[j][0][o]; done.append(j); m |= 1 &lt;&lt; j
+
+pols = [("Interview only", lambda: []), ("All five procedures", lambda: [0, 1, 2, 3, 4])] + \
+       [(f"Only {PROC[j][0]}", (lambda j: lambda: [j])(j)) for j in range(nP)] + \
+       [("Myopic VOI, VPI - cost", "net"), ("Myopic VOI, VPI / cost", "ratio"), ("Optimal plan (DP)", "dp")]
+res = {n: [] for n, _ in pols}; expect = []
+for i in range(N):
+    lpri, lp = model(i); T = [lp[f] for _, f, _ in PROC]
+    L0 = lpri[1] - lpri[0] + sum(lp[j][1, X[i, j]] - lp[j][0, X[i, j]] for j in INTERVIEW)
+    V, Act = plan(L0, T); expect.append(float(V[0]))
+    for n, r in pols:
+        done, spent, tr, el = run(X[i], L0, T, r() if callable(r) else r, Act)
+        res[n].append((done, spent, tr, LFN if (y[i] and not tr) else LFP if (not y[i] and tr) else 0.0, spent + el))
+print(f"losses: missed disease ${LFN:,.0f}, unneeded treatment ${LFP:,.0f}; leave-one-out over {N} patients; dollars per patient")
+print(f"{'policy':24s} {'tests':&gt;7s} {'errors':&gt;7s} {'total':&gt;7s} {'+/- se':&gt;6s} {'model':&gt;7s} {'correct':&gt;7s}  FN  FP")
+for n, _ in pols:
+    R = res[n]; sp, ls = np.mean([r[1] for r in R]), np.mean([r[3] for r in R])
+    ok = np.mean([r[2] == bool(y[i]) for i, r in enumerate(R)])
+    fn = sum(y[i] and not r[2] for i, r in enumerate(R)); fp = sum((not y[i]) and r[2] for i, r in enumerate(R))
+    tot = np.array([r[1] + r[3] for r in R]); me = np.mean([r[4] for r in R])
+    print(f"{n:24s} {sp:7.2f} {ls:7.2f} {tot.mean():7.2f} {tot.std(ddof=1) / np.sqrt(N):6.2f} {me:7.2f} {ok:7.4f} {fn:3d} {fp:3d}")
+print(f"optimal plan: V(interview) averaged over patients ${np.mean(expect):.2f} (the model's own forecast)")
+for n in ("Myopic VOI, VPI - cost", "Optimal plan (DP)"):
+    first = [r[0][0] if r[0] else -1 for r in res[n]]
+    print(f"{n}, first procedure:", ", ".join(f"{'none' if j &lt; 0 else PROC[j][0]} {first.count(j)}" for j in [-1] + list(range(nP))),
+          f"| mean procedures {np.mean([len(r[0]) for r in res[n]]):.4f}")
+lpri, lp = model(); T = [lp[f] for _, f, _ in PROC]
+PT = int(sys.argv[3]) if len(sys.argv) &gt; 3 else 0
+L0 = lpri[1] - lpri[0] + sum(lp[j][1, X[PT, j]] - lp[j][0, X[PT, j]] for j in INTERVIEW)
+print(f"patient {D['ids'][PT]}, full-data model: P(disease | interview) = {sig(L0):.6f}; VPI", ", ".join(f"{PROC[j][0]} {np.round(vpi(L0, T, j), 9) + 0:.4f}" for j in range(nP)))</code></pre>
+<pre class="code out"><code>patients 297, with disease 137; max |P(disease | all nodes) - sklearn CategoricalNB| = 1.1e-15
+mutual information with disease (bits): 0.073, 0.058, 0.197, 0.012, 0.008, 0.023, 0.269, 0.280, 0.185
+losses: missed disease $5,000, unneeded treatment $1,000; leave-one-out over 297 patients; dollars per patient
+policy                     tests  errors   total +/- se   model correct  FN  FP
+Interview only              0.00  468.01  468.01  51.59  439.37  0.6397   8  99
+All five procedures       319.97  387.21  707.18  63.14  533.19  0.8013  14  45
+Only Blood tests           10.37  441.08  451.45  46.88  446.62  0.6397   6 101
+Only Resting ECG           15.50  393.94  409.44  44.09  432.98  0.6734   5  92
+Only Exercise ECG          89.30  360.27  449.57  50.98  413.30  0.7475   8  67
+Only Thallium scan        103.90  383.84  487.74  51.18  409.99  0.7239   8  74
+Only Fluoroscopy          100.90  370.37  471.27  46.40  464.16  0.7104   6  80
+Myopic VOI, VPI - cost     50.90  333.33  384.24  46.71  351.58  0.7475   6  69
+Myopic VOI, VPI / cost     50.30  350.17  400.46  49.21  348.10  0.7441   7  69
+Optimal plan (DP)          77.63  350.17  427.79  56.33  339.23  0.7845  10  54
+optimal plan: V(interview) averaged over patients $344.52 (the model's own forecast)
+Myopic VOI, VPI - cost, first procedure: none 193, Blood tests 0, Resting ECG 0, Exercise ECG 23, Thallium scan 81, Fluoroscopy 0 | mean procedures 0.5152
+Optimal plan (DP), first procedure: none 137, Blood tests 0, Resting ECG 39, Exercise ECG 0, Thallium scan 121, Fluoroscopy 0 | mean procedures 1.0000
+patient 57, full-data model: P(disease | interview) = 0.267850; VPI Blood tests 0.0000, Resting ECG 0.0000, Exercise ECG 182.5580, Thallium scan 272.7080, Fluoroscopy 143.4432</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>A decision network is a Bayesian network plus decision nodes (rectangles) and utility nodes (diamonds). Arcs into a decision say what is known when it is made.</li>
+      <li>Evaluate it by inference: set the evidence, try each action, compute the expected utility from the posterior over the utility node&rsquo;s parents, and keep the best.</li>
+      <li>The value of perfect information is the expected utility of acting after you see a variable, minus that of acting now. It is never negative, and it is zero unless some result would change your choice.</li>
+      <li>VPI is not additive but it is order-independent. A myopic agent orders the test whose value most exceeds its cost, and can miss pairs of tests that are only worth ordering together.</li>
+      <li>Check how sensitive the decision is to its numbers, and remember that the utilities may be uncertain too. A machine unsure of what you want has a reason to let you switch it off.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A test is cheap and very accurate, yet its VPI is zero. How can that be?</summary><p>Because no result could change the decision. If the patient&rsquo;s probability is far above the treatment threshold, even a negative result from an excellent test leaves it above, so you would treat either way. Information is valuable only through the decisions it changes.</p></details>
+      <details class="q"><summary>After a positive result the patient&rsquo;s expected utility went down. Doesn&rsquo;t that contradict &ldquo;VPI is never negative&rdquo;?</summary><p>No. VPI is an average over the results you might get, computed before you look. A particular result can be bad news, but the good-news branch and the better decisions it enables more than make up for it on average. The convex envelope guarantees the average is at least today&rsquo;s value.</p></details>
+      <details class="q"><summary>Two tests each have VPI 0, yet ordering both is worth it. What property is this, and which agent misses it?</summary><p>Non-additivity, here superadditivity: neither result alone can move the belief across the threshold, but two agreeing results can. The myopic agent prices each test as if it were the last, sees zero for both, and orders neither; a nonmyopic planner sees the value of the pair.</p></details>
+      <details class="q"><summary>What does an action&ndash;utility table give up compared with the full network?</summary><p>The probabilities are baked into it. If the disease prevalence or a test&rsquo;s accuracy changes, the table has to be rebuilt from scratch, whereas the network only needs one table updated. The table is smaller and faster to use, which is why reinforcement learning&rsquo;s Q-functions take this form.</p></details>
+      <details class="q"><summary>Why does a robot that is certain of its human&rsquo;s preferences gain nothing from deferring?</summary><p>If it is certain that U &gt; 0, the human would say yes anyway, so asking only costs time. If it is certain that U &lt; 0 it would switch itself off. The value of deferring is the VPI of the human&rsquo;s answer, E[max(U, 0)] &minus; max(E[U], 0), which is zero when there is no uncertainty about the sign of U.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../reinforcement-learning/">Next chapter: Reinforcement Learning &rarr;</a>
+      <a class="btn" href="../utility-theory/">&larr; Previous: Rational Decisions &amp; Utility Theory</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Russell, S. &amp; Norvig, P. (2021). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed. Pearson, ch. 16 (sections 16.5&ndash;16.7).</li>
+      <li>Howard, R. A. &amp; Matheson, J. E. (1984). Influence diagrams. In <em>Readings on the Principles and Applications of Decision Analysis</em>, vol. II. Strategic Decisions Group. Reprinted in <em>Decision Analysis</em> 2(3), 2005.</li>
+      <li>Howard, R. A. (1966). Information value theory. <em>IEEE Transactions on Systems Science and Cybernetics</em> 2(1): 22&ndash;26.</li>
+      <li>Shachter, R. D. (1986). Evaluating influence diagrams. <em>Operations Research</em> 34(6): 871&ndash;882.</li>
+      <li>Pauker, S. G. &amp; Kassirer, J. P. (1980). The threshold approach to clinical decision making. <em>New England Journal of Medicine</em> 302(20): 1109&ndash;1117.</li>
+      <li>Clark, C. E. (1961). The greatest of a finite set of random variables. <em>Operations Research</em> 9(2): 145&ndash;162.</li>
+      <li>Krause, A. &amp; Guestrin, C. (2005). Near-optimal nonmyopic value of information in graphical models. <em>Proc. UAI 2005</em>.</li>
+      <li>Hadfield-Menell, D., Dragan, A., Abbeel, P. &amp; Russell, S. (2017). The off-switch game. <em>Proc. IJCAI 2017</em>.</li>
+      <li>Turney, P. D. (1995). Cost-sensitive classification: empirical evaluation of a hybrid genetic decision tree induction algorithm. <em>Journal of Artificial Intelligence Research</em> 2: 369&ndash;409. Source of the test costs.</li>
+      <li>Detrano, R., Janosi, A., Steinbrunn, W., Pfisterer, M., Schmid, J., Sandhu, S., Guppy, K., Lee, S. &amp; Froelicher, V. (1989). International application of a new probability algorithm for the diagnosis of coronary artery disease. <em>American Journal of Cardiology</em> 64: 304&ndash;310.</li>
+      <li>Janosi, A., Steinbrunn, W., Pfisterer, M. &amp; Detrano, R. (1988). Heart Disease [dataset]. UCI Machine Learning Repository, doi:10.24432/C52P4X. CC BY 4.0.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated. Heart-disease data: Cleveland Clinic Foundation via the UCI Machine Learning Repository, CC BY 4.0; test costs from Turney (1995). A teaching model, not medical advice.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- the heart-disease decision network: naive Bayes over interview items and procedures ---------- */
+const HD = (function () {
+  const KA = [4, 2, 4, 2, 2, 2, 3, 3, 2, 3, 3, 4, 3];
+  const NODES = [[0], [1], [2], [3], [4, 5], [6], [8, 9, 10], [7, 12], [11]];
+  const PROC = [
+    { name: 'Blood tests', short: 'Bloods', f: 4, c: 10.37, what: 'cholesterol, fasting sugar' },
+    { name: 'Resting ECG', short: 'Rest ECG', f: 5, c: 15.50, what: 'resting electrocardiogram' },
+    { name: 'Exercise ECG', short: 'Exercise ECG', f: 6, c: 89.30, what: 'angina on exercise, ST depression, ST slope' },
+    { name: 'Thallium scan', short: 'Thallium', f: 7, c: 103.90, what: 'thallium defect, maximum heart rate' },
+    { name: 'Fluoroscopy', short: 'Fluoroscopy', f: 8, c: 100.90, what: 'major vessels coloured' }];
+  const nP = PROC.length, INTERVIEW = [0, 1, 2, 3];
+  let A, X, y, N, K, nF, cnt, cls, nO;
+  const joint = (a, at) => { let o = 0; for (const j of at) o = o * KA[j] + a[j]; return o; };
+  function init(D) {
+    A = D.X; y = D.y; N = y.length; X = A.map(a => NODES.map(g => joint(a, g)));
+    K = NODES.map(g => g.reduce((s, j) => s * KA[j], 1)); nF = K.length; nO = PROC.map(p => K[p.f]);
+    cnt = K.map(k => [new Float64Array(k), new Float64Array(k)]); cls = [0, 0];
+    for (let i = 0; i < N; i++) { cls[y[i]]++; for (let j = 0; j < nF; j++) cnt[j][y[i]][X[i][j]]++; }
+  }
+  // Laplace-smoothed naive Bayes; leave patient i out when i is given
+  function model(i) {
+    const n = cls.slice(); if (i != null) n[y[i]]--;
+    const lp = K.map((k, j) => [0, 1].map(d => { const r = new Float64Array(k); for (let t = 0; t < k; t++) { let c = cnt[j][d][t]; if (i != null && y[i] === d && X[i][j] === t) c--; r[t] = Math.log((c + 1) / (n[d] + k)); } return r; }));
+    const lpri = [Math.log(n[0] / (n[0] + n[1])), Math.log(n[1] / (n[0] + n[1]))];
+    const T = PROC.map(p => lp[p.f]);
+    return { lp, lpri, T, n };
+  }
+  const sig = L => 1 / (1 + Math.exp(-L));
+  const L0of = (M, x) => M.lpri[1] - M.lpri[0] + INTERVIEW.reduce((s, j) => s + M.lp[j][1][x[j]] - M.lp[j][0][x[j]], 0);
+  const stop = (p, Ls) => Math.min(p * Ls.fn, (1 - p) * Ls.fp);
+  const treat = (p, Ls) => p * Ls.fn > (1 - p) * Ls.fp;
+  function vpi(L, T, j, Ls) {
+    const p = sig(L), t = T[j]; let e = 0;
+    for (let o = 0; o < t[0].length; o++) { const P1 = Math.exp(t[1][o]), P0 = Math.exp(t[0][o]); e += (p * P1 + (1 - p) * P0) * stop(sig(L + t[1][o] - t[0][o]), Ls); }
+    return stop(p, Ls) - e;
+  }
+  // exact optimal test plan by dynamic programming over subsets of procedures (tensor axes in procedure order, last axis fastest)
+  function plan(L0, T, Ls) {
+    const llr = T.map(t => t[1].map((v, o) => v - t[0][o])), P1 = T.map(t => t[1].map(Math.exp)), P0 = T.map(t => t[0].map(Math.exp));
+    const V = new Array(1 << nP), Act = new Array(1 << nP), masks = [...Array(1 << nP).keys()].sort((a, b) => popc(b) - popc(a) || a - b);
+    for (const m of masks) {
+      const S = []; for (let j = 0; j < nP; j++) if (m >> j & 1) S.push(j);
+      const size = S.reduce((s, j) => s * nO[j], 1), v = new Float64Array(size), act = new Int8Array(size).fill(-1), Lm = new Float64Array(size);
+      const dig = new Array(S.length).fill(0);
+      for (let idx = 0; idx < size; idx++) {
+        let L = L0; for (let a = 0; a < S.length; a++) L += llr[S[a]][dig[a]];
+        Lm[idx] = L; v[idx] = stop(sig(L), Ls);
+        for (let a = S.length - 1; a >= 0; a--) { if (++dig[a] < nO[S[a]]) break; dig[a] = 0; }
+      }
+      for (let j = 0; j < nP; j++) {
+        if (m >> j & 1) continue;
+        const cm = m | 1 << j, CS = []; for (let k = 0; k < nP; k++) if (cm >> k & 1) CS.push(k);
+        const str = new Array(CS.length); { let s = 1; for (let a = CS.length - 1; a >= 0; a--) { str[a] = s; s *= nO[CS[a]]; } }
+        const sOf = {}; CS.forEach((k, a) => { sOf[k] = str[a]; });
+        const Vc = V[cm], nj = nO[j], sj = sOf[j]; dig.fill(0);
+        for (let idx = 0; idx < size; idx++) {
+          let base = 0; for (let a = 0; a < S.length; a++) base += dig[a] * sOf[S[a]];
+          const p = sig(Lm[idx]); let e = 0;
+          for (let o = 0; o < nj; o++) e += (p * P1[j][o] + (1 - p) * P0[j][o]) * Vc[base + o * sj];
+          const cont = PROC[j].c + e;
+          if (cont < v[idx] - 1e-9) { v[idx] = cont; act[idx] = j; }
+          for (let a = S.length - 1; a >= 0; a--) { if (++dig[a] < nO[S[a]]) break; dig[a] = 0; }
+        }
+      }
+      V[m] = v; Act[m] = act;
+    }
+    return { V, Act };
+  }
+  function popc(m) { let c = 0; while (m) { c += m & 1; m >>= 1; } return c; }
+  function actAt(P, m, x) { let idx = 0; for (let j = 0; j < nP; j++) if (m >> j & 1) idx = idx * nO[j] + x[PROC[j].f]; return P.Act[m][idx]; }
+  // one myopic choice: returns {j (or -1), g: VPI per procedure}
+  function myopic(L, T, done, rule, Ls) {
+    const g = PROC.map((p, k) => done.includes(k) ? null : vpi(L, T, k, Ls));
+    let b = -1, bs = -Infinity;
+    for (let k = 0; k < nP; k++) { if (g[k] == null) continue; const s = rule === 'ratio' ? g[k] / PROC[k].c : g[k] - PROC[k].c; if (s > bs) { bs = s; b = k; } }
+    return { j: b >= 0 && g[b] - PROC[b].c > 1e-9 ? b : -1, g };
+  }
+  // run a policy on one patient: rule is 'net' | 'ratio' | 'dp' | array of procedures
+  function run(x, L0, T, rule, Ls, P) {
+    const done = [], path = [{ L: L0 }]; let L = L0, m = 0; const list = Array.isArray(rule) ? rule.slice() : null;
+    for (;;) {
+      let j = -1;
+      if (rule === 'dp') j = actAt(P, m, x);
+      else if (list) j = list.length ? list.shift() : -1;
+      else if (done.length < nP) j = myopic(L, T, done, rule, Ls).j;
+      if (j < 0) break;
+      const o = x[PROC[j].f]; L += T[j][1][o] - T[j][0][o]; done.push(j); m |= 1 << j; path.push({ L, j, o });
+    }
+    const p = sig(L);
+    return { done, spent: done.reduce((s, k) => s + PROC[k].c, 0), treat: treat(p, Ls), p, el: stop(p, Ls), path };
+  }
+  // mutual information I(node; disease) in bits from the empirical joint (no smoothing)
+  function mi(j) { let s = 0; for (let t = 0; t < K[j]; t++) { const nt = cnt[j][0][t] + cnt[j][1][t]; for (let d = 0; d < 2; d++) { const c = cnt[j][d][t]; if (c > 0) s += c / N * Math.log2(c * N / (nt * cls[d])); } } return s; }
+  return { init, model, sig, L0of, stop, treat, vpi, plan, run, myopic, mi, actAt, PROC, NODES, KA, INTERVIEW, nP, get X() { return X; }, get A() { return A; }, get y() { return y; }, get N() { return N; }, get K() { return K; } };
+})();
+
+
+const DATA = {"ids":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255,256,257,258,259,260,261,262,263,264,265,266,268,269,270,271,272,273,274,275,276,277,278,279,280,281,282,283,284,285,286,287,289,290,291,292,293,294,295,296,297,298,299,300,301,302],"X":[[2,1,0,1,0,1,2,1,0,2,2,0,1],[3,1,3,1,1,0,2,0,1,1,1,3,0],[3,1,3,0,0,0,2,0,1,2,1,2,2],[0,1,2,0,1,0,0,2,0,2,2,0,0],[0,0,1,0,0,0,2,2,0,1,0,0,0],[2,1,1,0,0,0,0,2,0,1,0,0,0],[2,0,3,1,1,0,2,2,0,2,2,2,0],[2,0,3,0,1,0,0,2,1,1,0,0,0],[2,1,3,0,1,0,2,1,0,1,1,1,2],[1,1,3,1,0,1,2,1,1,2,2,0,2],[2,1,3,1,0,0,0,1,0,1,1,0,1],[2,0,1,1,1,0,2,1,0,1,1,0,0],[2,1,2,0,1,1,2,1,1,1,1,1,1],[0,1,1,0,1,0,0,2,0,0,0,0,2],[1,1,2,1,0,1,0,2,0,1,0,0,2],[2,1,2,1,0,0,0,2,0,1,0,0,0],[1,1,1,0,0,0,0,2,0,1,2,0,2],[1,1,3,1,0,0,0,2,0,1,0,0,0],[1,0,2,0,1,0,0,1,0,1,0,0,0],[1,1,1,0,1,0,0,2,0,1,0,0,0],[2,1,0,0,0,0,2,1,1,1,1,0,0],[2,0,0,1,1,1,2,2,0,1,0,0,0],[2,1,1,0,1,0,2,2,0,1,1,0,0],[2,1,2,0,0,0,2,2,0,2,0,2,2],[2,1,3,0,0,0,2,1,1,2,1,2,2],[1,0,2,0,0,0,0,1,0,1,1,0,0],[2,0,2,0,1,0,0,2,0,0,0,0,0],[3,0,0,1,0,0,0,0,0,2,2,0,0],[0,1,3,1,1,0,0,2,0,1,0,0,0],[0,1,3,0,0,0,2,0,1,2,1,0,2],[3,0,0,1,0,0,0,1,0,1,0,2,0],[2,1,3,0,0,1,0,2,1,1,0,2,2],[2,1,2,1,1,0,0,1,0,0,0,0,0],[2,1,3,0,0,0,0,2,0,1,1,0,2],[0,1,2,0,0,0,0,2,1,1,0,0,0],[0,1,3,1,0,0,0,2,0,0,0,0,0],[0,1,3,0,0,0,2,0,1,2,1,0,2],[2,1,3,1,1,0,2,0,1,1,1,1,1],[2,1,3,0,1,0,0,1,1,1,1,1,2],[2,1,2,1,1,1,0,1,1,1,1,0,0],[3,0,3,1,0,0,2,0,0,1,1,3,2],[0,1,0,1,0,0,0,2,1,1,0,0,2],[3,0,1,1,1,0,0,2,0,1,0,2,0],[2,1,2,1,0,1,0,1,0,1,0,0,0],[2,0,3,0,1,0,2,2,0,0,0,0,0],[2,1,2,0,0,0,2,2,0,2,1,1,2],[1,1,2,0,0,0,0,0,0,1,0,0,0],[1,1,3,1,1,0,2,0,0,2,1,0,2],[3,0,2,1,1,1,2,1,0,1,0,1,0],[1,1,2,0,0,1,2,1,0,1,2,0,0],[0,0,1,0,0,0,0,2,0,0,0,1,0],[3,1,3,0,0,0,0,1,0,1,0,0,2],[0,1,3,0,1,0,2,1,0,0,0,1,0],[0,1,1,0,0,0,2,2,0,0,0,0,0],[2,1,3,0,1,0,0,1,1,1,0,1,2],[1,1,3,0,1,0,2,0,1,2,1,1,2],[1,1,2,1,0,0,0,2,0,1,1,1,2],[0,1,3,0,0,0,2,1,0,0,0,0,2],[1,1,2,0,1,0,2,1,0,1,2,1,0],[1,1,0,0,0,0,2,0,1,1,0,1,0],[1,0,3,0,1,0,0,1,1,1,1,0,2],[1,0,2,1,0,0,2,2,1,1,2,0,0],[2,1,3,0,0,0,2,1,1,2,1,3,2],[1,0,2,0,1,1,0,2,0,0,0,0,0],[1,1,3,0,0,0,0,0,0,1,1,1,2],[2,1,3,1,1,0,2,1,1,2,1,2,2],[2,1,2,1,0,0,2,1,0,2,1,0,0],[1,1,2,1,0,0,2,2,0,1,0,0,2],[2,1,3,1,1,0,2,1,1,2,2,0,2],[1,1,2,1,0,0,0,1,0,2,1,0,0],[3,0,2,1,1,0,0,1,0,1,0,0,0],[3,1,3,0,1,1,0,2,0,1,1,2,2],[2,1,3,0,1,0,0,0,1,1,1,2,2],[3,1,3,0,1,0,2,1,0,1,0,2,1],[0,1,3,0,0,0,2,2,0,0,0,1,0],[3,0,2,1,1,0,2,1,0,1,0,0,0],[2,1,3,0,1,0,2,1,1,2,1,1,2],[1,0,2,1,1,0,2,1,0,1,0,1,0],[1,1,1,0,1,0,2,2,0,1,1,0,0],[2,1,3,1,1,0,2,0,1,1,0,0,2],[1,1,3,0,0,0,2,1,1,2,1,0,0],[1,0,3,0,1,0,2,1,0,1,1,0,0],[0,1,2,1,1,0,2,2,0,0,0,0,0],[3,1,2,1,1,1,2,1,1,1,1,0,2],[1,1,1,0,1,0,0,2,0,1,0,0,0],[0,1,2,1,0,0,2,2,0,0,0,0,0],[1,1,2,0,1,0,2,1,0,0,0,0,0],[1,0,3,0,0,0,2,2,0,0,0,0,0],[1,0,2,0,1,0,2,1,0,1,0,0,0],[3,1,3,0,1,0,2,1,0,1,1,0,0],[2,0,3,1,0,0,2,1,0,2,2,3,2],[2,1,2,0,0,0,0,1,0,1,1,3,2],[0,0,2,0,0,0,0,2,0,1,1,0,0],[2,0,2,0,1,0,2,2,0,0,0,0,0],[1,1,3,0,1,0,0,2,1,0,0,1,2],[2,1,3,0,0,0,2,1,1,1,1,1,2],[2,0,3,1,1,0,2,1,0,2,1,2,2],[1,1,1,0,0,0,0,1,0,1,0,1,0],[1,1,3,0,0,0,2,2,0,0,0,0,0],[1,1,3,0,1,0,2,2,0,0,0,0,0],[0,1,0,0,0,0,2,2,0,0,0,0,0],[2,0,3,0,1,0,2,1,0,0,0,1,0],[3,0,2,0,1,1,2,1,0,0,0,1,0],[1,1,2,0,0,0,0,1,0,2,1,3,2],[1,1,1,0,1,0,0,1,0,0,0,0,2],[2,1,3,1,0,0,0,2,1,0,0,1,2],[2,1,2,0,0,0,2,1,0,1,1,1,2],[2,1,3,0,1,0,0,1,1,2,1,1,2],[0,1,3,0,0,0,0,1,0,1,1,0,2],[2,0,3,1,1,0,2,1,1,1,1,0,2],[2,1,3,0,1,1,2,1,1,1,1,1,0],[1,1,0,0,0,0,2,2,0,0,1,0,1],[0,0,3,0,1,1,2,1,1,2,1,0,2],[2,0,2,0,1,0,0,0,0,1,1,1,2],[0,1,1,0,0,0,0,1,0,0,1,0,1],[2,1,2,1,0,1,2,2,0,0,0,0,0],[0,0,3,0,0,0,0,2,0,1,0,0,0],[2,1,3,0,1,1,2,1,1,1,0,3,2],[3,1,3,0,1,0,2,0,0,2,1,1,2],[1,1,3,0,1,1,2,1,1,0,0,2,2],[2,0,3,1,1,0,2,1,0,2,1,3,2],[1,1,2,0,0,0,0,1,1,1,1,0,0],[2,1,3,1,0,0,0,0,1,2,2,0,2],[3,1,0,0,1,1,2,2,0,1,1,1,0],[1,0,1,0,0,0,2,2,0,1,1,0,0],[2,0,3,1,1,1,2,1,1,2,2,2,2],[1,1,3,0,0,0,0,0,1,2,1,1,2],[0,1,1,0,0,0,0,2,0,0,0,0,0],[2,0,3,0,0,0,0,2,0,0,0,0,0],[1,1,2,0,1,0,2,1,0,1,1,0,2],[1,1,2,0,0,0,0,1,1,0,0,1,2],[0,1,1,0,0,0,2,2,0,0,0,0,0],[1,1,3,1,1,0,2,2,1,0,0,0,0],[0,0,2,0,0,0,0,2,0,1,1,0,0],[2,0,1,0,1,0,2,2,0,1,1,0,0],[3,1,3,1,0,0,0,0,1,2,2,0,2],[2,1,1,0,1,0,2,0,0,1,1,1,2],[0,1,3,0,0,0,0,1,1,1,1,0,2],[1,1,2,0,1,1,2,2,0,2,1,0,0],[2,1,1,1,0,0,0,2,1,0,0,0,0],[2,1,0,1,1,0,2,1,0,1,1,0,2],[1,1,1,0,0,1,0,2,0,0,0,0,0],[2,1,2,0,1,0,0,1,1,1,1,0,2],[2,1,2,0,1,0,2,1,1,1,1,0,2],[1,1,2,0,1,0,0,1,0,0,0,0,0],[2,1,3,1,1,1,2,0,0,1,1,3,2],[0,1,2,0,1,0,0,2,0,0,0,0,0],[1,1,1,0,1,0,2,2,0,0,0,0,0],[2,0,2,0,1,0,0,2,0,0,0,1,0],[1,1,0,1,1,1,0,2,0,1,1,0,2],[0,0,3,0,1,0,2,0,0,1,1,0,0],[3,0,2,0,1,0,2,2,0,1,1,0,2],[2,1,3,1,1,0,2,1,1,1,1,1,2],[2,1,3,0,1,0,2,0,1,2,2,1,0],[3,1,3,0,1,0,2,0,0,2,1,3,0],[1,1,3,1,1,0,0,2,1,1,0,0,2],[2,1,3,0,1,0,2,2,0,0,0,2,2],[2,1,3,1,1,0,2,2,0,1,1,2,2],[3,1,2,0,1,0,0,1,0,1,0,1,2],[1,1,1,0,0,1,0,1,0,0,0,0,2],[3,1,3,0,1,0,2,2,1,0,0,3,0],[1,0,2,0,0,0,0,1,0,1,1,0,0],[2,0,3,0,1,0,2,0,0,1,1,0,0],[1,1,2,0,1,1,0,2,0,0,0,2,0],[2,1,3,0,0,0,0,2,1,0,0,0,2],[1,0,1,0,1,1,2,1,1,0,0,1,0],[0,1,3,0,1,0,2,1,1,0,0,0,2],[1,0,1,0,0,0,0,1,0,0,1,0,0],[3,1,2,1,1,0,0,0,1,2,1,1,2],[1,1,3,1,0,0,2,0,1,0,0,0,2],[2,0,3,1,1,0,0,1,1,0,1,0,0],[2,0,3,1,1,0,2,1,0,1,1,0,0],[2,1,3,1,0,0,2,1,0,2,1,2,1],[2,1,3,1,1,0,0,0,1,1,1,1,2],[1,1,3,0,0,1,0,1,0,1,0,3,2],[2,1,3,0,0,0,2,0,1,2,1,1,1],[0,1,2,0,1,0,0,2,0,1,0,1,0],[1,1,2,0,1,1,2,2,0,0,0,3,0],[1,1,3,0,1,0,2,2,0,1,1,0,2],[2,0,3,0,1,0,2,1,1,1,1,2,2],[0,1,0,1,1,0,2,2,0,1,0,2,0],[2,1,0,1,1,0,2,1,0,2,2,0,2],[2,0,3,1,1,0,2,2,0,0,0,0,0],[2,0,1,1,0,0,0,2,0,0,0,2,0],[0,1,2,0,1,1,0,2,0,1,2,0,2],[3,1,1,1,1,0,0,0,1,0,1,3,1],[1,1,1,1,1,0,2,2,0,0,0,1,2],[3,1,2,1,1,0,2,1,0,2,1,3,2],[1,1,2,0,0,0,0,2,0,0,0,0,0],[1,1,3,1,1,0,0,0,1,2,1,3,2],[2,0,3,0,1,1,0,0,0,1,1,3,0],[3,0,2,0,0,0,2,0,0,1,1,0,0],[3,1,3,0,1,0,2,0,1,1,1,2,0],[3,1,0,1,0,1,2,1,0,1,1,1,0],[1,0,3,0,0,0,2,1,1,1,1,0,0],[1,0,1,0,1,0,0,2,0,1,0,0,0],[2,1,0,1,1,0,2,0,0,0,0,0,0],[1,0,3,0,1,0,2,1,0,0,0,0,0],[2,0,3,1,1,0,0,1,1,0,0,0,0],[2,1,2,1,0,1,0,2,0,1,0,1,2],[2,0,2,1,1,0,0,1,0,1,0,0,2],[0,1,3,0,0,0,0,2,0,0,0,0,2],[1,1,3,1,1,0,2,1,1,0,1,3,2],[2,1,3,0,1,0,2,1,1,2,1,2,2],[1,1,3,1,0,0,2,0,1,1,1,0,2],[2,1,1,0,1,0,0,1,0,0,0,0,0],[2,0,3,1,1,0,0,1,1,1,1,0,0],[0,0,2,0,0,0,0,2,0,0,0,0,0],[0,1,0,0,0,0,0,2,1,2,1,0,2],[0,1,2,0,0,0,2,2,0,2,1,0,0],[3,0,3,1,0,1,0,2,1,1,1,2,2],[1,1,3,0,0,0,0,2,0,0,0,1,0],[2,1,0,0,0,0,2,2,0,1,1,0,2],[1,0,1,0,0,0,0,2,0,0,0,0,0],[1,0,3,0,1,0,2,1,1,0,1,0,0],[2,0,3,0,1,0,0,0,0,2,1,2,0],[2,1,3,0,1,0,2,2,0,0,0,0,0],[0,0,2,0,1,0,2,2,1,0,0,0,0],[1,0,2,0,1,0,2,2,0,0,0,0,0],[0,0,2,0,0,0,0,2,0,0,0,0,0],[1,1,3,0,1,0,0,0,1,2,1,2,2],[2,0,3,0,1,0,0,2,1,1,1,2,0],[0,0,1,0,0,0,0,2,0,1,0,0,0],[1,1,3,0,0,0,0,1,0,1,0,0,0],[3,0,2,1,1,0,0,2,0,0,0,1,0],[1,1,3,0,0,0,2,0,1,0,1,1,0],[3,1,3,0,0,0,2,1,1,1,0,1,0],[1,0,2,0,0,0,2,2,0,1,1,0,0],[2,0,3,1,1,0,1,0,1,2,1,0,0],[1,1,2,0,0,0,2,0,0,1,0,3,0],[3,0,1,0,1,0,2,0,1,1,0,1,0],[1,0,2,1,0,0,0,2,0,0,0,1,0],[1,1,3,0,1,0,2,0,1,2,1,2,0],[2,1,3,0,1,1,2,0,1,1,2,0,2],[1,1,3,0,1,0,2,1,0,1,0,0,2],[1,0,1,0,1,0,0,2,0,0,1,0,0],[0,1,1,0,1,0,0,2,0,0,0,0,0],[0,1,1,0,0,0,0,1,0,0,0,0,0],[0,0,1,0,1,0,0,2,0,0,0,0,0],[1,0,3,0,1,0,0,2,0,0,0,0,0],[2,1,0,0,0,0,0,1,0,2,1,2,0],[2,0,2,0,0,1,0,0,0,0,0,0,0],[3,1,3,0,0,0,0,0,0,1,1,0,0],[2,1,3,0,0,0,0,1,0,1,0,1,2],[1,1,3,0,1,0,2,0,1,1,1,1,0],[1,1,3,0,0,0,0,2,0,1,0,2,2],[2,1,1,0,0,1,2,1,0,0,0,0,0],[2,1,3,0,0,0,0,0,1,1,1,0,1],[2,1,3,1,0,0,0,0,0,2,1,1,2],[2,1,3,0,1,0,0,0,1,1,1,1,2],[1,0,2,0,1,0,2,1,0,1,0,0,0],[0,1,3,0,1,0,0,2,0,1,1,0,0],[0,0,2,0,0,0,0,2,0,0,1,0,0],[3,0,3,0,0,0,0,1,0,1,0,2,0],[3,0,2,1,0,0,1,0,0,1,1,0,0],[3,1,1,1,1,0,2,1,0,0,0,0,0],[2,1,1,0,1,0,0,1,0,1,0,0,2],[0,0,2,0,1,0,0,1,0,1,1,1,0],[2,0,1,0,1,1,2,1,0,0,0,2,0],[2,0,0,1,1,0,0,2,0,1,0,0,0],[0,1,2,0,0,0,0,2,0,0,0,0,0],[2,1,3,0,0,0,2,0,1,2,1,1,0],[0,1,3,0,1,0,0,0,1,1,1,0,1],[2,1,2,0,0,1,0,1,0,2,1,1,1],[0,1,3,1,0,0,0,2,0,0,0,0,2],[0,1,2,0,0,0,0,1,0,0,0,0,0],[2,1,3,1,0,0,2,1,1,1,0,1,2],[3,1,3,1,0,0,2,1,0,2,0,0,1],[1,1,3,1,1,0,0,0,1,1,1,2,2],[3,0,3,0,0,0,0,0,0,1,1,0,0],[2,1,0,0,0,0,0,2,0,1,0,2,0],[2,1,0,1,0,0,2,1,0,1,1,0,2],[3,0,2,1,1,0,2,1,0,0,1,1,0],[0,0,2,0,0,0,0,1,0,0,1,0,0],[2,1,1,1,0,0,2,2,0,0,0,1,0],[2,0,3,0,0,0,0,1,0,1,1,0,0],[2,1,3,0,1,0,0,1,1,2,1,1,2],[1,1,2,0,1,0,0,2,0,0,0,0,0],[2,0,3,0,0,0,1,1,1,2,1,1,2],[0,1,1,0,0,0,0,2,0,0,0,0,0],[2,1,3,1,0,0,0,2,0,0,0,1,2],[2,1,3,0,1,0,1,1,0,2,2,3,1],[2,0,3,1,0,1,2,1,1,2,1,2,1],[2,1,1,0,0,0,2,2,0,0,0,0,2],[2,1,1,0,1,0,0,2,0,0,2,0,0],[3,1,2,1,0,0,2,1,0,1,1,0,2],[2,0,1,0,1,0,0,2,0,1,0,0,0],[0,1,3,0,0,0,0,1,1,2,2,0,1],[2,1,3,1,0,0,2,1,1,2,0,2,2],[2,0,3,0,0,0,0,1,1,0,1,0,0],[0,1,1,0,0,0,0,2,0,0,0,0,0],[2,1,3,1,0,1,2,0,0,1,1,2,1],[2,0,3,1,1,0,0,0,1,1,1,0,2],[1,1,0,0,1,0,0,1,0,1,1,0,2],[3,1,3,1,0,1,0,1,0,2,1,2,2],[2,1,3,0,0,0,0,0,1,1,1,1,2],[2,0,1,0,0,0,2,2,0,0,1,1,0]],"y":[0,1,1,0,0,0,1,0,1,1,0,0,1,0,0,0,1,0,0,0,0,0,1,1,1,0,0,0,0,1,0,1,1,0,0,0,1,1,1,0,1,0,0,0,1,1,0,1,0,0,0,0,1,0,1,1,1,1,0,0,1,0,1,0,1,1,1,0,1,1,0,1,1,1,1,0,1,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,0,0,0,1,0,1,1,1,1,1,1,0,1,1,0,0,0,1,1,1,1,0,1,1,0,1,1,0,0,0,0,0,0,0,0,1,1,1,0,0,1,0,1,0,1,1,0,0,0,0,0,0,1,1,1,1,1,1,0,0,1,0,0,0,0,0,1,0,1,0,1,0,1,1,0,1,0,0,1,1,0,0,1,0,0,1,1,1,0,1,1,0,1,0,0,0,1,0,0,0,0,0,1,1,1,0,1,0,1,0,1,1,0,0,0,0,0,0,0,0,1,1,0,0,0,1,1,0,1,1,0,0,1,1,1,0,0,0,0,0,1,0,1,1,1,1,0,0,1,0,0,0,0,0,0,0,1,0,1,0,0,1,1,1,1,0,1,0,1,0,1,0,0,0,1,0,1,0,1,0,1,1,1,0,0,1,0,1,1,1,0,1,1,1,1,1,1],"raw":[[63,145,233,150,2.3],[67,160,286,108,1.5],[67,120,229,129,2.6],[37,130,250,187,3.5],[41,130,204,172,1.4],[56,120,236,178,0.8],[62,140,268,160,3.6],[57,120,354,163,0.6],[63,130,254,147,1.4],[53,140,203,155,3.1],[57,140,192,148,0.4],[56,140,294,153,1.3],[56,130,256,142,0.6],[44,120,263,173,0.0],[52,172,199,162,0.5],[57,150,168,174,1.6],[48,110,229,168,1.0],[54,140,239,160,1.2],[48,130,275,139,0.2],[49,130,266,171,0.6],[64,110,211,144,1.8],[58,150,283,162,1.0],[58,120,284,160,1.8],[58,132,224,173,3.2],[60,130,206,132,2.4],[50,120,219,158,1.6],[58,120,340,172,0.0],[66,150,226,114,2.6],[43,150,247,171,1.5],[40,110,167,114,2.0],[69,140,239,151,1.8],[60,117,230,160,1.4],[64,140,335,158,0.0],[59,135,234,161,0.5],[44,130,233,179,0.4],[42,140,226,178,0.0],[43,120,177,120,2.5],[57,150,276,112,0.6],[55,132,353,132,1.2],[61,150,243,137,1.0],[65,150,225,114,1.0],[40,140,199,178,1.4],[71,160,302,162,0.4],[59,150,212,157,1.6],[61,130,330,169,0.0],[58,112,230,165,2.5],[51,110,175,123,0.6],[50,150,243,128,2.6],[65,140,417,157,0.8],[53,130,197,152,1.2],[41,105,198,168,0.0],[65,120,177,140,0.4],[44,112,290,153,0.0],[44,130,219,188,0.0],[60,130,253,144,1.4],[54,124,266,109,2.2],[50,140,233,163,0.6],[41,110,172,158,0.0],[54,125,273,152,0.5],[51,125,213,125,1.4],[51,130,305,142,1.2],[46,142,177,160,1.4],[58,128,216,131,2.2],[54,135,304,170,0.0],[54,120,188,113,1.4],[60,145,282,142,2.8],[60,140,185,155,3.0],[54,150,232,165,1.6],[59,170,326,140,3.4],[46,150,231,147,3.6],[65,155,269,148,0.8],[67,125,254,163,0.2],[62,120,267,99,1.8],[65,110,248,158,0.6],[44,110,197,177,0.0],[65,160,360,151,0.8],[60,125,258,141,2.8],[51,140,308,142,1.5],[48,130,245,180,0.2],[58,150,270,111,0.8],[45,104,208,148,3.0],[53,130,264,143,0.4],[39,140,321,182,0.0],[68,180,274,150,1.6],[52,120,325,172,0.2],[44,140,235,180,0.0],[47,138,257,156,0.0],[53,138,234,160,0.0],[51,130,256,149,0.5],[66,120,302,151,0.4],[62,160,164,145,6.2],[62,130,231,146,1.8],[44,108,141,175,0.6],[63,135,252,172,0.0],[52,128,255,161,0.0],[59,110,239,142,1.2],[60,150,258,157,2.6],[52,134,201,158,0.8],[48,122,222,186,0.0],[45,115,260,185,0.0],[34,118,182,174,0.0],[57,128,303,159,0.0],[71,110,265,130,0.0],[49,120,188,139,2.0],[54,108,309,156,0.0],[59,140,177,162,0.0],[57,128,229,150,0.4],[61,120,260,140,3.6],[39,118,219,140,1.2],[61,145,307,146,1.0],[56,125,249,144,1.2],[52,118,186,190,0.0],[43,132,341,136,3.0],[62,130,263,97,1.2],[41,135,203,132,0.0],[58,140,211,165,0.0],[35,138,183,182,1.4],[63,130,330,132,1.8],[65,135,254,127,2.8],[48,130,256,150,0.0],[63,150,407,154,4.0],[51,100,222,143,1.2],[55,140,217,111,5.6],[65,138,282,174,1.4],[45,130,234,175,0.6],[56,200,288,133,4.0],[54,110,239,126,2.8],[44,120,220,170,0.0],[62,124,209,163,0.0],[54,120,258,147,0.4],[51,94,227,154,0.0],[29,130,204,202,0.0],[51,140,261,186,0.0],[43,122,213,165,0.2],[55,135,250,161,1.4],[70,145,174,125,2.6],[62,120,281,103,1.4],[35,120,198,130,1.6],[51,125,245,166,2.4],[59,140,221,164,0.0],[59,170,288,159,0.2],[52,128,205,184,0.0],[64,125,309,131,1.8],[58,105,240,154,0.6],[47,108,243,152,0.0],[57,165,289,124,1.0],[41,112,250,179,0.0],[45,128,308,170,0.0],[60,102,318,160,0.0],[52,152,298,178,1.2],[42,102,265,122,0.6],[67,115,564,160,1.6],[55,160,289,145,0.8],[64,120,246,96,2.2],[70,130,322,109,2.4],[51,140,299,173,1.6],[58,125,300,171,0.0],[60,140,293,170,1.2],[68,118,277,151,1.0],[46,101,197,156,0.0],[77,125,304,162,0.0],[54,110,214,158,1.6],[58,100,248,122,1.0],[48,124,255,175,0.0],[57,132,207,168,0.0],[54,132,288,159,0.0],[35,126,282,156,0.0],[45,112,160,138,0.0],[70,160,269,112,2.9],[53,142,226,111,0.0],[59,174,249,143,0.0],[62,140,394,157,1.2],[64,145,212,132,2.0],[57,152,274,88,1.2],[52,108,233,147,0.1],[56,132,184,105,2.1],[43,130,315,162,1.9],[53,130,246,173,0.0],[48,124,274,166,0.5],[56,134,409,150,1.9],[42,148,244,178,0.8],[59,178,270,145,4.2],[60,158,305,161,0.0],[63,140,195,179,0.0],[42,120,240,194,0.8],[66,160,246,120,0.0],[54,192,283,195,0.0],[69,140,254,146,2.0],[50,129,196,163,0.0],[51,140,298,122,4.2],[62,138,294,106,1.9],[68,120,211,115,1.5],[67,100,299,125,0.9],[69,160,234,131,0.1],[45,138,236,152,0.2],[50,120,244,162,1.1],[59,160,273,125,0.0],[50,110,254,159,0.0],[64,180,325,154,0.0],[57,150,126,173,0.2],[64,140,313,133,0.2],[43,110,211,161,0.0],[45,142,309,147,0.0],[58,128,259,130,3.0],[50,144,200,126,0.9],[55,130,262,155,0.0],[62,150,244,154,1.4],[37,120,215,170,0.0],[38,120,231,182,3.8],[41,130,214,168,2.0],[66,178,228,165,1.0],[52,112,230,160,0.0],[56,120,193,162,1.9],[46,105,204,172,0.0],[46,138,243,152,0.0],[64,130,303,122,2.0],[59,138,271,182,0.0],[41,112,268,172,0.0],[54,108,267,167,0.0],[39,94,199,179,0.0],[53,123,282,95,2.0],[63,108,269,169,1.8],[34,118,210,192,0.7],[47,112,204,143,0.1],[67,152,277,172,0.0],[54,110,206,108,0.0],[66,112,212,132,0.1],[52,136,196,169,0.1],[55,180,327,117,3.4],[49,118,149,126,0.8],[74,120,269,121,0.2],[54,160,201,163,0.0],[54,122,286,116,3.2],[56,130,283,103,1.6],[46,120,249,144,0.8],[49,134,271,162,0.0],[42,120,295,162,0.0],[41,110,235,153,0.0],[41,126,306,163,0.0],[49,130,269,163,0.0],[61,134,234,145,2.6],[60,120,178,96,0.0],[67,120,237,71,1.0],[58,100,234,156,0.1],[47,110,275,118,1.0],[52,125,212,168,1.0],[62,128,208,140,0.0],[57,110,201,126,1.5],[58,146,218,105,2.0],[64,128,263,105,0.2],[51,120,295,157,0.6],[43,115,303,181,1.2],[42,120,209,173,0.0],[67,106,223,142,0.3],[76,140,197,116,1.1],[70,156,245,143,0.0],[57,124,261,141,0.3],[44,118,242,149,0.3],[58,136,319,152,0.0],[60,150,240,171,0.9],[44,120,226,169,0.0],[61,138,166,125,3.6],[42,136,315,125,1.8],[59,126,218,134,2.2],[40,152,223,181,0.0],[42,130,180,150,0.0],[61,140,207,138,1.9],[66,160,228,138,2.3],[46,140,311,120,1.8],[71,112,149,125,1.6],[59,134,204,162,0.8],[64,170,227,155,0.6],[66,146,278,152,0.0],[39,138,220,152,0.0],[57,154,232,164,0.0],[58,130,197,131,0.6],[57,110,335,143,3.0],[47,130,253,179,0.0],[55,128,205,130,2.0],[35,122,192,174,0.0],[61,148,203,161,0.0],[58,114,318,140,4.4],[58,170,225,146,2.8],[56,130,221,163,0.0],[56,120,240,169,0.0],[67,152,212,150,0.8],[55,132,342,166,1.2],[44,120,169,144,2.8],[63,140,187,144,4.0],[63,124,197,136,0.0],[41,120,157,182,0.0],[59,164,176,90,1.0],[57,140,241,123,0.2],[45,110,264,132,1.2],[68,144,193,141,3.4],[57,130,131,115,1.2],[57,130,236,174,0.0]]};
+HD.init(DATA);
+const C0 = () => ({ a: css('--cA'), b: css('--cB'), c: css('--cC'), q: css('--ink'), lda: css('--lda'), bad: css('--qda'), muted: css('--muted'), surf: css('--surface'), line: css('--line'), soft: css('--soft') });
+const pct = (p, d) => fmt(p * 100, d == null ? 1 : d) + '%';
+const sum = a => a.reduce((s, v) => s + v, 0);
+const usd = (v, d) => '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d });
+const P3 = v => fmt(v, 3);
+function fitText(ctx, s, w) { if (ctx.measureText(s).width <= w) return s; let lo = 0, hi = s.length; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (ctx.measureText(s.slice(0, m) + '…').width <= w) lo = m; else hi = m - 1; } return s.slice(0, lo) + '…'; }
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function arrow(c, x0, y0, x1, y1, col, lw, dash) { c.save(); c.strokeStyle = col; c.fillStyle = col; c.lineWidth = lw || 1.4; if (dash) c.setLineDash(dash); c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); c.setLineDash([]); const an = Math.atan2(y1 - y0, x1 - x0); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x1 - 8 * Math.cos(an - .38), y1 - 8 * Math.sin(an - .38)); c.lineTo(x1 - 8 * Math.cos(an + .38), y1 - 8 * Math.sin(an + .38)); c.closePath(); c.fill(); c.restore(); }
+// point on the boundary of an ellipse / box / diamond centred at (cx, cy) in the direction of (tx, ty)
+function edge(n, tx, ty) { const dx = tx - n.x, dy = ty - n.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L; let t;
+  if (n.k === 'box') t = Math.min(Math.abs(n.rx / (ux || 1e-9)), Math.abs(n.ry / (uy || 1e-9)));
+  else if (n.k === 'dia') t = 1 / (Math.abs(ux) / n.rx + Math.abs(uy) / n.ry);
+  else t = 1 / Math.sqrt(ux * ux / (n.rx * n.rx) + uy * uy / (n.ry * n.ry));
+  return [n.x + ux * (t + 2), n.y + uy * (t + 2)]; }
+function link(c, a, b, col, lw, dash) { const [x0, y0] = edge(a, b.x, b.y), [x1, y1] = edge(b, a.x, a.y); arrow(c, x0, y0, x1, y1, col, lw, dash); }
+// draw one node: k = 'ell' (chance), 'box' (decision), 'dia' (utility); lines of text
+function node(c, n, lines, o) {
+  o = o || {}; const C = C0(); c.save();
+  c.beginPath();
+  if (n.k === 'box') rrect(c, n.x - n.rx, n.y - n.ry, 2 * n.rx, 2 * n.ry, 6);
+  else if (n.k === 'dia') { c.moveTo(n.x, n.y - n.ry); c.lineTo(n.x + n.rx, n.y); c.lineTo(n.x, n.y + n.ry); c.lineTo(n.x - n.rx, n.y); c.closePath(); }
+  else c.ellipse(n.x, n.y, n.rx, n.ry, 0, 0, 7);
+  c.fillStyle = o.fill || C.surf; c.fill(); c.lineWidth = o.lw || 1.5; c.strokeStyle = o.stroke || C.muted; c.stroke();
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  const fs = o.fs || 12, lh = fs * 1.22, y0 = n.y - (lines.length - 1) * lh / 2;
+  lines.forEach((s, k) => { c.font = (k === 0 ? '600 ' : '') + (k === 0 ? fs : fs - 1) + 'px ' + css('--f-body'); c.fillStyle = k === 0 ? C.q : (o.sub || C.muted); c.fillText(fitText(c, s, n.rx * (n.k === 'ell' ? 1.75 : n.k === 'dia' ? 1.2 : 1.9)), n.x, y0 + k * lh); });
+  c.restore();
+}
+
+/* ---------- normal distribution ---------- */
+const SQ2PI = Math.sqrt(2 * Math.PI), phi = z => Math.exp(-z * z / 2) / SQ2PI;
+function erfc(x) { const z = Math.abs(x), t = 1 / (1 + 0.5 * z), r = t * Math.exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277))))))))); return x >= 0 ? r : 2 - r; }
+const Phi = z => 0.5 * erfc(-z / Math.SQRT2);
+
+/* ---------- the running example: one disease, one test, treat or not ---------- */
+const U = { td: 75, th: 90, nd: 20, nh: 100 };
+const euT = (p, u) => (u = u || U, p * u.td + (1 - p) * u.th), euN = (p, u) => (u = u || U, p * u.nd + (1 - p) * u.nh);
+const bestEU = (p, u) => Math.max(euT(p, u), euN(p, u)), doTreat = (p, u) => euT(p, u) > euN(p, u);
+const pstar = u => (u = u || U, (u.nh - u.th) / ((u.nh - u.th) + (u.td - u.nd)));
+const postT = (p, se, sp, pos) => pos ? se * p / (se * p + (1 - sp) * (1 - p)) : (1 - se) * p / ((1 - se) * p + sp * (1 - p));
+const pPos = (p, se, sp) => se * p + (1 - sp) * (1 - p);
+const actName = t => t ? 'treat' : 'don&rsquo;t treat';
+const ND_SE = 0.85, ND_SP = 0.90;
+
+/* ---------- heart-disease network shared by hero and agent ---------- */
+const LS = { fn: 5000, fp: 1000 };
+const MFULL = HD.model();
+const ATT = { cp: ['typical angina', 'atypical angina', 'non-anginal pain', 'no chest pain'], ecg: ['normal', 'ST-T abnormality', 'LV hypertrophy'], slope: ['upsloping', 'flat', 'downsloping'], thal: ['normal', 'fixed defect', 'reversible defect'] };
+function facts(i) { const a = HD.A[i], r = DATA.raw[i]; return { age: r[0], bp: r[1], chol: r[2], hr: r[3], st: r[4], sex: a[1] ? 'male' : 'female', cp: ATT.cp[a[2]], fbs: a[5], ecg: ATT.ecg[a[6]], ex: a[8], slope: ATT.slope[a[10]], ca: a[11], thal: ATT.thal[a[12]] }; }
+function result(i, j) { const f = facts(i); return [
+  [`chol ${f.chol}`, f.fbs ? 'sugar high' : 'sugar normal'], [f.ecg], [f.ex ? 'angina' : 'no angina', `ST ↓${fmt(f.st, 1)}, ${f.slope}`],
+  [f.thal, `max HR ${f.hr}`], [`${f.ca} vessel${f.ca === 1 ? '' : 's'}`]][j]; }
+function resultText(i, j) { return result(i, j).join(', '); }
+const ptLabel = i => { const f = facts(i); return `Row ${DATA.ids[i]}: ${f.age}-year-old ${f.sex}, ${f.cp}`; };
+const L0full = i => HD.L0of(MFULL, HD.X[i]);
+function Lafter(i, done) { const x = HD.X[i]; let L = L0full(i); done.forEach(j => { const o = x[HD.PROC[j].f]; L += MFULL.T[j][1][o] - MFULL.T[j][0][o]; }); return L; }
+
+/* ---------- hero ---------- */
+const HERO_PTS = [27, 81, 16, 111, 151, 186, 3, 46, 205, 22];
+const H = { k: 0, done: [], nodes: null };
+function heroLay(w, h) {
+  const narrow = w < 560, P = [], I = [];
+  const prx = Math.min(70, w / 10 - 3), pry = narrow ? 36 : 30, iw = narrow ? w : w * 0.78, irx = Math.min(66, iw / 8 - 3), iry = narrow ? 21 : 23;
+  for (let k = 0; k < 4; k++) I.push({ k: 'ell', x: iw * (k + 0.5) / 4, y: iry + 6, rx: irx, ry: iry });
+  for (let k = 0; k < 5; k++) P.push({ k: 'ell', x: w * (k + 0.5) / 5, y: h - pry - 6, rx: prx, ry: pry });
+  const D = { k: 'ell', x: narrow ? w * 0.3 : w * 0.37, y: h * 0.47, rx: Math.min(92, w / 6.4), ry: narrow ? 30 : 34 };
+  const A = { k: 'box', x: narrow ? w * 0.77 : w * 0.8, y: h * 0.5, rx: Math.min(80, w / 7.8), ry: narrow ? 24 : 27 };
+  const Ut = { k: 'dia', x: narrow ? w * 0.77 : w * 0.895, y: narrow ? h * 0.3 : h * 0.22, rx: Math.min(56, w / 9.5), ry: narrow ? 24 : 27 };
+  return { I, P, D, A, Ut, narrow };
+}
+function heroState() {
+  const i = HERO_PTS[H.k], L = Lafter(i, H.done), p = HD.sig(L), my = HD.myopic(L, MFULL.T, H.done, 'net', LS);
+  return { i, L, p, my, tr: HD.treat(p, LS), spent: sum(H.done.map(j => HD.PROC[j].c)) };
+}
+function drawHero() {
+  const cv = $('#hero-cv'), r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, r.width, r.height);
+  const C = C0(), Lay = H.nodes = heroLay(r.width, r.height), S = heroState(), f = facts(S.i), fs = Lay.narrow ? 10.5 : 12;
+  // arcs
+  Lay.I.forEach(n => link(c, Lay.D, n, C.muted, 1.2));
+  Lay.P.forEach(n => link(c, Lay.D, n, C.muted, 1.2));
+  link(c, Lay.D, Lay.Ut, C.muted, 1.2); link(c, Lay.A, Lay.Ut, C.muted, 1.2);
+  H.done.forEach(j => link(c, Lay.P[j], Lay.A, C.lda, 1.4, [5, 4]));
+  // interview nodes (observed)
+  const cpS = ['typical', 'atypical', 'non-anginal', 'none'][HD.A[S.i][2]];
+  const iv = [['Age', String(f.age)], ['Sex', f.sex], ['Chest pain', Lay.narrow ? cpS : f.cp], ['Resting BP', f.bp + (Lay.narrow ? '' : ' mm Hg')]];
+  Lay.I.forEach((n, k) => node(c, n, iv[k], { fill: `color-mix(in srgb, ${C.lda} 14%, ${C.surf})`, stroke: C.lda, fs }));
+  // procedures
+  const net = S.my.g.map((g, j) => g == null ? null : g - HD.PROC[j].c), SH = ['Bloods', 'Rest ECG', 'Ex. ECG', 'Thallium', 'Fluoro'];
+  Lay.P.forEach((n, j) => {
+    const done = H.done.includes(j), best = !done && S.my.j === j, P = HD.PROC[j], nm = Lay.narrow ? SH[j] : P.short;
+    const lines = done ? [nm].concat(result(S.i, j)) : Lay.narrow ? [nm, usd(P.c, 0), 'VOI', usd(S.my.g[j], 0)] : [nm, usd(P.c), `VOI ${usd(S.my.g[j], 0)}`];
+    node(c, n, lines, { fill: done ? `color-mix(in srgb, ${C.lda} 14%, ${C.surf})` : C.surf, stroke: best ? C.a : done ? C.lda : C.muted, lw: best ? 3 : 1.5, fs, sub: !done && net[j] > 0 ? C.a : C.muted });
+  });
+  // disease node with a belief bar
+  node(c, Lay.D, ['Heart disease', `P = ${fmt(S.p, 3)}`], { fs: fs + 1 });
+  { const bw = Lay.D.rx * 1.1, bx = Lay.D.x - bw / 2, by = Lay.D.y + Lay.D.ry * 0.52; c.fillStyle = C.line; c.fillRect(bx, by, bw, 5); c.fillStyle = C.bad; c.fillRect(bx, by, bw * S.p, 5); c.fillStyle = C.q; c.fillRect(bx + bw / 6 - 0.5, by - 3, 1.5, 11); }
+  node(c, Lay.A, ['Treat?', S.tr ? 'treat' : 'don’t treat'], { stroke: C.a, lw: 2, fs: fs + 1, sub: C.a });
+  node(c, Lay.Ut, ['Loss', usd(HD.stop(S.p, LS) + S.spent, 0)], { fs, stroke: C.c });
+  // caption
+  const stopNow = S.my.j < 0, truth = HD.y[S.i] ? 'had heart disease' : 'did not have heart disease', right = S.tr === !!HD.y[S.i];
+  const nextTxt = stopNow ? `No remaining test is worth its price, so the network <b>${S.tr ? 'treats' : 'does not treat'}</b>. The angiogram showed this patient ${truth}: ${right ? 'the right call' : 'a wrong call, which happens: the decision was right on average, not for every patient'}.`
+    : `The best buy now is the <b>${HD.PROC[S.my.j].name}</b>: ${tip('VOI ' + usd(S.my.g[S.my.j]), `VPI = min(p·5000, (1−p)·1000) now − its expected value after the result\n= ${usd(HD.stop(S.p, LS))} − ${usd(HD.stop(S.p, LS) - S.my.g[S.my.j])}`)} against a price of ${usd(HD.PROC[S.my.j].c)} (green ring).`;
+  const res = H.done.length ? ' Results: ' + H.done.map(j => `${HD.PROC[j].name}, ${resultText(S.i, j)}`).join('; ') + '.' : '';
+  $('#hero-cap').innerHTML = `${ptLabel(S.i)}.${res} Belief in heart disease ${tip(fmt(S.p, 3), `naive Bayes on all 297 patients:\nprior × the likelihood of the interview answers${H.done.length ? ' and ' + H.done.length + ' result(s)' : ''}`)} (the tick on the bar is the treatment threshold 1/6). Spent ${usd(S.spent)} so far; the diamond is the spend plus the expected loss of the best decision. ${nextTxt}`;
+}
+$('#hero-cv').addEventListener('click', e => { if (!H.nodes) return; const [px, py] = evPos($('#hero-cv'), e); H.nodes.P.forEach((n, j) => { if (((px - n.x) / n.rx) ** 2 + ((py - n.y) / n.ry) ** 2 <= 1.15 && !H.done.includes(j)) H.done.push(j); }); drawHero(); });
+$('#hero-cv').addEventListener('pointermove', e => { if (!H.nodes) return; const [px, py] = evPos($('#hero-cv'), e); $('#hero-cv').style.cursor = H.nodes.P.some((n, j) => !H.done.includes(j) && ((px - n.x) / n.rx) ** 2 + ((py - n.y) / n.ry) ** 2 <= 1.15) ? 'pointer' : 'default'; });
+$('#hero-voi').addEventListener('click', () => { const S = heroState(); if (S.my.j >= 0) H.done.push(S.my.j); drawHero(); });
+$('#hero-next').addEventListener('click', () => { H.k = (H.k + 1) % HERO_PTS.length; H.done = []; drawHero(); });
+$('#hero-reset').addEventListener('click', () => { H.done = []; drawHero(); });
+fig($('#hero-cv'), drawHero);
+
+/* ---------- 1 · three kinds of node ---------- */
+const ND = { m: 'info', p: 0.25 };
+function ndPolicies(p) {
+  const P1 = pPos(p, ND_SE, ND_SP), q1 = postT(p, ND_SE, ND_SP, true), q0 = postT(p, ND_SE, ND_SP, false);
+  const eu = (aP, aN) => P1 * (aP ? euT(q1) : euN(q1)) + (1 - P1) * (aN ? euT(q0) : euN(q0));
+  return { P1, q1, q0, info: [['Always treat', eu(1, 1), 1, 1], ['Never treat', eu(0, 0), 0, 0], ['Treat if positive', eu(1, 0), 1, 0], ['Treat if negative', eu(0, 1), 0, 1]], blind: [['Treat', euT(p), 1], ['Don’t treat', euN(p), 0]] };
+}
+function drawND() {
+  const C = C0(), cv = $('#nd-cv'), r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, r.width, r.height);
+  const w = r.width, h = r.height, narrow = w < 520, fs = narrow ? 10.5 : 12, p = ND.p, Q = ndPolicies(p);
+  $('#nd-p-o').textContent = fmt(p, 2);
+  const tx = (s, x, y, al, col, f) => { c.font = (f || '') + (fs - 0.5) + 'px ' + css('--f-mono'); c.fillStyle = col || C.muted; c.textAlign = al || 'left'; c.textBaseline = 'middle'; c.fillText(s, x, y); };
+  if (ND.m !== 'table') {
+    const Dn = { k: 'ell', x: w * 0.2, y: h * 0.22, rx: Math.min(80, w / 6.6), ry: 26 }, Tn = { k: 'ell', x: w * 0.2, y: h * 0.7, rx: Math.min(80, w / 6.6), ry: 26 };
+    const An = { k: 'box', x: w * 0.56, y: h * 0.7, rx: Math.min(78, w / 7.2), ry: 24 }, Un = { k: 'dia', x: w * 0.56, y: h * 0.22, rx: Math.min(62, w / 9), ry: 30 };
+    link(c, Dn, Tn, C.muted, 1.4); link(c, Dn, Un, C.muted, 1.4); link(c, An, Un, C.muted, 1.4);
+    if (ND.m === 'info') link(c, Tn, An, C.lda, 2, [6, 4]);
+    node(c, Dn, ['Disease D', 'chance'], { fs }); node(c, Tn, ['Test result T', 'chance'], { fs, fill: ND.m === 'info' ? `color-mix(in srgb, ${C.lda} 14%, ${C.surf})` : C.surf, stroke: ND.m === 'info' ? C.lda : C.muted });
+    node(c, An, ['Treat?', 'decision'], { fs, stroke: C.a, lw: 2 }); node(c, Un, ['U', 'utility'], { fs, stroke: C.c });
+    tx(`P(D) = ${fmt(p, 2)}`, Dn.x, Dn.y - Dn.ry - 12, 'center');
+    tx(`P(T+ | D) = ${ND_SE}`, Tn.x, Tn.y + 42, 'center'); tx(`P(T+ | ¬D) = ${fmt(1 - ND_SP, 2)}`, Tn.x, Tn.y + 42 + fs * 1.35, 'center');
+    const ux = Un.x + Un.rx + 8, uy = Un.y - fs * 1.35; tx('       sick healthy', ux, uy); tx(`treat   ${U.td}    ${U.th}`, ux, uy + fs * 1.35); tx(`don't   ${U.nd}   ${U.nh}`, ux, uy + 2 * fs * 1.35);
+    const ly = narrow ? Tn.y - Tn.ry - 12 : Tn.y - 14;
+    if (ND.m === 'info') tx('information arc', (Tn.x + An.x) / 2, ly, 'center', C.lda);
+    else tx('no arc: decided blind', (Tn.x + An.x) / 2, ly, 'center', C.muted);
+  } else {
+    const Tn = { k: 'ell', x: w * 0.17, y: h * 0.24, rx: Math.min(72, w / 7.5), ry: 24 }, An = { k: 'box', x: w * 0.5, y: h * 0.24, rx: Math.min(66, w / 8), ry: 22 }, Un = { k: 'dia', x: w * 0.83, y: h * 0.24, rx: Math.min(64, w / 8.5), ry: 30 };
+    link(c, Tn, An, C.lda, 2, [6, 4]); link(c, An, Un, C.muted, 1.4); link(c, Tn, Un, C.muted, 1.4);
+    node(c, Tn, ['Test result T', 'chance'], { fs, fill: `color-mix(in srgb, ${C.lda} 14%, ${C.surf})`, stroke: C.lda }); node(c, An, ['Treat?', 'decision'], { fs, stroke: C.a, lw: 2 }); node(c, Un, ['Q(t, a)', 'action-utility'], { fs, stroke: C.c });
+    // the table
+    const x0 = w * 0.5, y0 = h * 0.52, cw = Math.min(150, w * 0.3), rh = Math.min(34, h * 0.1);
+    c.font = '600 ' + fs + 'px ' + css('--f-body'); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = C.muted;
+    c.fillText('treat', x0, y0); c.fillText('don’t treat', x0 + cw, y0);
+    [['T = +', Q.q1], ['T = −', Q.q0]].forEach(([lab, q], k) => {
+      const y = y0 + (k + 1) * rh, tT = euT(q), tN = euN(q);
+      c.fillStyle = C.muted; c.textAlign = 'right'; c.fillText(lab, x0 - cw * 0.55, y);
+      [[tT, x0], [tN, x0 + cw]].forEach(([v, x]) => { const win = v === Math.max(tT, tN); c.fillStyle = win ? `color-mix(in srgb, ${C.a} 16%, ${C.surf})` : C.surf; c.strokeStyle = C.line; c.fillRect(x - cw * 0.45, y - rh * 0.42, cw * 0.9, rh * 0.84); c.strokeRect(x - cw * 0.45, y - rh * 0.42, cw * 0.9, rh * 0.84); c.fillStyle = C.q; c.textAlign = 'center'; c.font = (win ? '600 ' : '') + (fs + 1) + 'px ' + css('--f-mono'); c.fillText(fmt(v, 2), x, y); });
+      c.font = '600 ' + fs + 'px ' + css('--f-body');
+    });
+    tx(`every entry already has P(D) = ${fmt(p, 2)} baked in`, w / 2, y0 + 3.2 * rh, 'center');
+  }
+  // policy table and stats
+  const list = ND.m === 'blind' ? Q.blind : Q.info, bi = list.reduce((b, r, k) => r[1] > list[b][1] ? k : b, 0);
+  $('#nd-pol').innerHTML = '<thead><tr><th>policy</th><th>expected utility</th></tr></thead><tbody>' + list.map((r, k) => `<tr${k === bi ? ' class="win"' : ''}><td>${r[0]}</td><td class="num">${tip(fmt(r[1], 2), ND.m === 'blind' ? `${fmt(p, 2)}×${r[2] ? U.td : U.nd} + ${fmt(1 - p, 2)}×${r[2] ? U.th : U.nh}` : `P(T+)·EU(${r[2] ? 'treat' : 'don’t'} | +) + P(T−)·EU(${r[3] ? 'treat' : 'don’t'} | −)\n= ${fmt(Q.P1, 4)}×${fmt(r[2] ? euT(Q.q1) : euN(Q.q1), 2)} + ${fmt(1 - Q.P1, 4)}×${fmt(r[3] ? euT(Q.q0) : euN(Q.q0), 2)}`)}</td></tr>`).join('') + '</tbody>';
+  $('#nd-n').innerHTML = ND.m === 'blind' ? tip('2', '|A|^m = 2^1') : tip('4', '|A|^m = 2^2: one action for each test result');
+  const best = list[bi], blindBest = Math.max(euT(p), euN(p));
+  $('#nd-eu').innerHTML = tip(fmt(best[1], 2), best[0]);
+  const gain = Math.max(...Q.info.map(r => r[1])) - blindBest;
+  $('#nd-say').innerHTML = ND.m === 'blind' ? `Without the information arc the doctor commits before the result exists: the best she can do is <b>${best[0].toLowerCase()}</b> (${fmt(best[1], 2)}). Turn the arc on to see what the result is worth.`
+    : ND.m === 'info' ? (gain > 1e-9 ? `With the result visible, the best policy is <b>${best[0].toLowerCase()}</b>, worth ${fmt(best[1], 2)} against ${fmt(blindBest, 2)} blind. The ${tip(fmt(gain, 2), `${fmt(best[1], 2)} − ${fmt(blindBest, 2)}`)}-point difference is the value of seeing the test, the subject of the rest of this chapter.`
+      : `At this prior the best policy is <b>${best[0].toLowerCase()}</b>, the same as deciding blind: the result can&rsquo;t change the choice, so seeing it is worth nothing. Move the prior towards the threshold, 0.15.`)
+    : `The network has been folded into four numbers. They are exactly the expected utilities of each action after each result, and they reproduce the &ldquo;see the test first&rdquo; policy. Move the prior: <b>every entry changes</b>, because the prior was baked into all of them.`;
+  $('#nd-cap').innerHTML = ND.m === 'table' ? 'The disease node has been summed out: Q(t, a) = &Sigma;<sub>d</sub> P(d | t) U(d, a). Shaded cells are the best action for each result.' : 'Ovals are chance nodes, the rectangle is the decision and the diamond the utility. The dashed blue arc is the information arc: the result is known when the doctor chooses.';
+  const pol = Q.info[2];
+  $('#run-nd').innerHTML = `<b>Running example</b>: after a positive test P(D | +) = ${tip(fmt(Q.q1, 4), `0.85×${fmt(p, 2)} / (0.85×${fmt(p, 2)} + 0.10×${fmt(1 - p, 2)})`)}, so EU(treat | +) = ${fmt(Q.q1, 4)}×75 + ${fmt(1 - Q.q1, 4)}×90 = ${tip(fmt(euT(Q.q1), 2), 'the action-utility entry Q(+, treat)')} and EU(don&rsquo;t | +) = ${fmt(Q.q1, 4)}×20 + ${fmt(1 - Q.q1, 4)}×100 = ${fmt(euN(Q.q1), 2)}. The policy &ldquo;treat if positive&rdquo; averages the two results: ${fmt(Q.P1, 4)}×${fmt(euT(Q.q1), 2)} + ${fmt(1 - Q.P1, 4)}×${fmt(euN(Q.q0), 2)} = ${tip(fmt(pol[1], 2), 'P(T+)·EU(treat | +) + P(T−)·EU(don’t | −)')}.`;
+}
+seg1('[data-ndm]', 'data-ndm', m => { ND.m = m; drawND(); });
+$('#nd-p').addEventListener('input', e => { ND.p = +e.target.value; drawND(); });
+fig($('#nd-cv'), drawND);
+
+/* ---------- 2 · evaluating ---------- */
+const EV = { e: 'none', p: 0.25, se: 0.85, sp: 0.9, step: 1 };
+function drawEV() {
+  const C = C0(), { p, se, sp } = EV, q = EV.e === 'none' ? p : postT(p, se, sp, EV.e === 'pos'), ps = pstar(), tr = doTreat(q);
+  ['p', 'se', 'sp'].forEach(k => { $('#ev-' + k + '-o').textContent = fmt(EV[k], 2); });
+  const v = frame($('#ev-cv'), [0, 1], [10, 100], { l: 40, b: 30 }); axes(v, 'P(disease | evidence)', 'expected utility', { sx: 0.2, sy: 20 }); clip(v);
+  { const c = v.ctx; c.save(); c.fillStyle = C.a; c.globalAlpha = 0.07; c.fillRect(v.X(ps), v.pad.t, v.X(1) - v.X(ps), v.ph); c.restore(); }
+  seg(v, ps, 10, ps, 100, C.q, 1.3, [5, 4]);
+  curve(v, x => euN(x), C.b, 2.4); curve(v, x => euT(x), C.a, 2.4);
+  if (EV.e !== 'none') { seg(v, p, 12, p, 98, C.muted, 1, [2, 3]); dot(v, p, bestEU(p), C.muted, 4, true); arrow(v.ctx, v.X(p), v.Y(14), v.X(q), v.Y(14), C.lda, 1.6); }
+  dot(v, q, euT(q), C.a, 5); dot(v, q, euN(q), C.b, 5); seg(v, q, 10, q, Math.max(euT(q), euN(q)), C.q, 1.2);
+  const c = v.ctx; c.font = '11px ' + css('--f-mono'); c.fillStyle = C.q; c.textAlign = ps > 0.5 ? 'right' : 'left'; c.fillText(`p* = ${fmt(ps, 3)}`, v.X(ps) + (ps > 0.5 ? -6 : 6), v.Y(95));
+  c.textAlign = 'right'; c.fillStyle = C.a; c.fillText('treat zone →', v.X(1) - 6, v.Y(95)); v.ctx.restore();
+  // steps
+  const evid = EV.e === 'none' ? 'no test result: e is empty' : `T = ${EV.e === 'pos' ? '+ (positive)' : '− (negative)'}`;
+  const post = EV.e === 'none' ? `P(D | e) = P(D) = ${fmt(p, 3)}` : EV.e === 'pos' ? `P(D | +) = ${fmt(se, 2)}×${fmt(p, 2)} / (${fmt(se, 2)}×${fmt(p, 2)} + ${fmt(1 - sp, 2)}×${fmt(1 - p, 2)}) = <b>${fmt(q, 4)}</b>` : `P(D | −) = ${fmt(1 - se, 2)}×${fmt(p, 2)} / (${fmt(1 - se, 2)}×${fmt(p, 2)} + ${fmt(sp, 2)}×${fmt(1 - p, 2)}) = <b>${fmt(q, 4)}</b>`;
+  const rows = [['1 · Set the evidence', evid], ['2 · Infer P(D | e)', post], ['3 · Expected utility of each action', `treat: ${fmt(q, 4)}×75 + ${fmt(1 - q, 4)}×90 = <b>${fmt(euT(q), 2)}</b><br>don&rsquo;t: ${fmt(q, 4)}×20 + ${fmt(1 - q, 4)}×100 = <b>${fmt(euN(q), 2)}</b>`], ['4 · Choose', `<b>${actName(tr)}</b>, because P(D | e) = ${fmt(q, 3)} is ${tr ? 'above' : 'below'} p* = ${fmt(ps, 3)}`]];
+  $('#ev-steps').innerHTML = '<tbody>' + rows.map((r, k) => `<tr class="${k < EV.step ? '' : 'dim'}"><td><b>${r[0]}</b><br>${k < EV.step ? r[1] : '&hellip;'}</td></tr>`).join('') + '</tbody>';
+  $('#ev-step').textContent = EV.step >= 4 ? 'Start again' : 'Next step';
+  const qp = postT(p, se, sp, true), qn = postT(p, se, sp, false), flip = doTreat(qp) !== doTreat(qn);
+  $('#ev-say').innerHTML = (EV.e === 'none' ? `With no result, the belief is the prior ${fmt(p, 2)}, ${p > ps ? 'above' : 'below'} the threshold: <b>${actName(doTreat(p))}</b>. ` : `The ${EV.e === 'pos' ? 'positive' : 'negative'} result moved the belief from ${fmt(p, 2)} to ${fmt(q, 3)} (arrow): <b>${actName(tr)}</b>. `)
+    + (flip ? `Here the two possible results land on <b>opposite sides</b> of p* (${fmt(qn, 3)} and ${fmt(qp, 3)}), so the test can change the decision.` : `Both possible results (${fmt(qn, 3)} and ${fmt(qp, 3)}) land on the <b>same side</b> of p*, so the test cannot change what the doctor does.`);
+  $('#run-ev').innerHTML = `<b>Running example</b>: p* = (100 &minus; 90) / ((100 &minus; 90) + (75 &minus; 20)) = 10/65 = ${tip(fmt(ps, 4), 'harm of needless treatment / (harm + benefit of treating the sick)')}. ${EV.e === 'none' ? `With no evidence the belief is the prior, ${fmt(p, 2)}` : `With the evidence, ${post.replace(/<\/?b>/g, '')}`}; EU(treat) = ${tip(fmt(euT(q), 2), `${fmt(q, 4)}×75 + ${fmt(1 - q, 4)}×90`)} versus EU(don&rsquo;t) = ${tip(fmt(euN(q), 2), `${fmt(q, 4)}×20 + ${fmt(1 - q, 4)}×100`)}, so a* = ${actName(tr)}.`;
+}
+seg1('[data-eve]', 'data-eve', m => { EV.e = m; drawEV(); });
+['p', 'se', 'sp'].forEach(k => $('#ev-' + k).addEventListener('input', e => { EV[k] = +e.target.value; drawEV(); }));
+$('#ev-step').addEventListener('click', () => { EV.step = EV.step >= 4 ? 1 : EV.step + 1; drawEV(); });
+$('#ev-all').addEventListener('click', () => { EV.step = 4; drawEV(); });
+fig($('#ev-cv'), drawEV);
+
+/* ---------- 3 · what is a survey worth ---------- */
+const SY = { n: 6, q: 1, C: 1200 };
+function syCalc(n, q, C) {
+  const price = C / n, Py = q / n + (1 - q) * (n - 1) / n, Pn = 1 - Py;
+  const br = (P, s1) => { const so = (1 - s1) / (n - 1), o = [['nothing', 0], ['plot 1', C * s1 - price], ['another plot', C * so - price]]; const b = o.reduce((m, x) => x[1] > m[1] + 1e-12 ? x : m, o[0]); return { P, s1, so, b, o }; };
+  const yes = br(Py, Py > 0 ? (q / n) / Py : 0), no = br(Pn, Pn > 0 ? ((1 - q) / n) / Pn : 0);
+  return { price, yes, no, voi: Py * yes.b[1] + Pn * no.b[1] };
+}
+function drawSY() {
+  const C = C0(), { n, q } = SY, R = syCalc(n, q, SY.C);
+  $('#sy-n-o').textContent = n; $('#sy-q-o').textContent = fmt(q, 2);
+  const cv = $('#sy-cv'), r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, r.width, r.height);
+  const w = r.width, h = r.height, narrow = w < 520, lw = narrow ? 0 : 150, top = narrow ? 34 : 18, gap = 18, rowH = (h - top * 2 - gap) / 2;
+  [['yes', R.yes], ['no', R.no]].forEach(([lab, B], k) => {
+    const y0 = top + k * (rowH + gap) + (narrow ? 14 * k : 0), tsz = Math.min((w - lw - 16) / n - 6, rowH - 26), x0 = lw + 8;
+    c.font = '600 12px ' + css('--f-body'); c.fillStyle = C.q; c.textAlign = 'left'; c.textBaseline = 'top';
+    const head = `Report “${lab}”  ·  P = ${fmt(B.P, 3)}`;
+    if (narrow) c.fillText(head, 8, y0 - 18); else { c.fillText(`Report “${lab}”`, 8, y0 + 4); c.font = '12px ' + css('--f-mono'); c.fillStyle = C.muted; c.fillText(`P = ${fmt(B.P, 3)}`, 8, y0 + 22); c.fillText(B.b[0] === 'nothing' ? 'buy nothing: £0' : `buy ${B.b[0]}:`, 8, y0 + 40); if (B.b[0] !== 'nothing') c.fillText(`+£${Math.round(B.b[1]).toLocaleString("en-GB")}k expected`, 8, y0 + 56); }
+    for (let i = 0; i < n; i++) {
+      const s = i === 0 ? B.s1 : B.so, x = x0 + i * (tsz + 6);
+      c.fillStyle = C.surf; c.fillRect(x, y0, tsz, tsz); c.save(); c.globalAlpha = 0.08 + 0.85 * s; c.fillStyle = C.c; c.fillRect(x, y0, tsz, tsz); c.restore();
+      c.strokeStyle = i === 0 ? C.q : C.line; c.lineWidth = i === 0 ? 2 : 1; c.strokeRect(x + 0.5, y0 + 0.5, tsz - 1, tsz - 1);
+      c.font = (tsz < 40 ? 9 : 11) + 'px ' + css('--f-mono'); c.fillStyle = s > 0.55 ? C.surf : C.q; c.textAlign = 'center'; c.textBaseline = 'middle';
+      if (tsz >= 30) c.fillText(pct(s, s < 0.1 ? 1 : 0), x + tsz / 2, y0 + tsz / 2 + (tsz > 50 ? 6 : 0));
+      if (tsz > 50) { c.fillStyle = s > 0.55 ? C.surf : C.muted; c.fillText('plot ' + (i + 1), x + tsz / 2, y0 + 13); }
+      const buy = (B.b[0] === 'plot 1' && i === 0) || (B.b[0] === 'another plot' && i === 1);
+      if (buy) { const v0 = { X: z => z, Y: z => z, ctx: c }; star(v0, x + tsz - 10, y0 + 10, C.a, Math.min(9, tsz / 5)); }
+    }
+    if (narrow) { c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText(B.b[0] === 'nothing' ? 'buy nothing: £0' : `buy ${B.b[0]}: +£${Math.round(B.b[1]).toLocaleString("en-GB")}k expected`, 8, y0 + tsz + 4); }
+  });
+  $('#sy-v').innerHTML = tip('£' + fmt(R.voi, 1) + 'k', `P(yes)·best(yes) + P(no)·best(no) − 0\n= ${fmt(R.yes.P, 4)}×${fmt(R.yes.b[1], 2)} + ${fmt(R.no.P, 4)}×${fmt(R.no.b[1], 2)}`);
+  $('#sy-r').innerHTML = tip(pct(R.voi / R.price, 1), `${fmt(R.voi, 2)} / plot price ${fmt(R.price, 2)}`);
+  $('#sy-say').innerHTML = q >= 0.999 ? `A perfect survey is worth exactly one plot&rsquo;s price, £${fmt(R.price, 1)}k = C/${n}. The &ldquo;no&rdquo; report is useful too: it lifts every other plot from 1/${n} to 1/${n - 1}. With more plots each survey is worth less, because it is less likely to find the seam.`
+    : q <= 0.501 ? 'A surveyor who is right half the time tells you nothing: every plot keeps its 1-in-n chance, no decision changes and the report is worth £0.'
+    : `An error-prone surveyor is worth ${pct(R.voi / R.price, 0)} of a perfect one. After &ldquo;yes&rdquo; plot 1 has a ${pct(R.yes.s1, 0)} chance, not certainty, but buying it still pays; after &ldquo;no&rdquo; plot 1 keeps a ${pct(R.no.s1, 1)} chance, so the other plots gain less.`;
+  $('#run-sy').innerHTML = q >= 0.999 ? `<b>Running example</b>: n = ${n}, C = £1,200k, so a plot costs £${fmt(R.price, 1)}k. VOI = (1/${n})(1200 &minus; ${fmt(R.price, 1)}) + (${n - 1}/${n})(1200/${n - 1} &minus; ${fmt(R.price, 1)}) = ${fmt(1 / n * (1200 - R.price), 2)} + ${fmt((n - 1) / n * (1200 / (n - 1) - R.price), 2)} = ${tip('£' + fmt(R.voi, 2) + 'k', 'equals C/n')}.`
+    : `<b>Running example</b> (imperfect survey, q = ${fmt(q, 2)}): P(yes) = q/n + (1 &minus; q)(n &minus; 1)/n = ${fmt(R.yes.P, 4)}. After &ldquo;yes&rdquo; plot 1 has P = ${fmt(R.yes.s1, 4)} and the best move (${R.yes.b[0]}) is worth £${fmt(R.yes.b[1], 2)}k; after &ldquo;no&rdquo; the best (${R.no.b[0]}) is worth £${fmt(R.no.b[1], 2)}k. VOI = ${fmt(R.yes.P, 4)}×${fmt(R.yes.b[1], 2)} + ${fmt(R.no.P, 4)}×${fmt(R.no.b[1], 2)} = ${tip('£' + fmt(R.voi, 2) + 'k', 'without the survey every option is worth 0')}.`;
+}
+$('#sy-n').addEventListener('input', e => { SY.n = +e.target.value; drawSY(); });
+$('#sy-q').addEventListener('input', e => { SY.q = +e.target.value; drawSY(); });
+fig($('#sy-cv'), drawSY);
+
+/* ---------- 4 · VPI with two uncertain plans ---------- */
+const VP = { g: 4, sa: 8, sb: 6 };
+const vpiN = (g, sa, sb) => { const th = Math.hypot(sa, sb), z = Math.abs(g) / th; return { th, z, v: th * (phi(z) - z * Phi(-z)), pc: Phi(-z) }; };
+function vpMC(g, sa, sb) { const r = mulberry32(2026), n = 20000; let s = 0; for (let k = 0; k < n; k++) { const a = 50 + g + sa * gaussOf(r), b = 50 + sb * gaussOf(r); s += Math.max(a, b); } return s / n - Math.max(50 + g, 50); }
+function drawVP() {
+  const C = C0(), { g, sa, sb } = VP, mA = 50 + g, mB = 50, R = vpiN(g, sa, sb), mc = vpMC(g, sa, sb);
+  $('#vp-g-o').textContent = (g > 0 ? '+' : '') + fmt(g, 1); $('#vp-sa-o').textContent = fmt(sa, 1); $('#vp-sb-o').textContent = fmt(sb, 1);
+  const lo = Math.min(mA - 3.5 * sa, mB - 3.5 * sb), hi = Math.max(mA + 3.5 * sa, mB + 3.5 * sb), top = Math.max(phi(0) / sa, phi(0) / sb) * 1.12;
+  const v = frame($('#vp-cv'), [lo, hi], [0, top], { l: 18, b: 30 }); axes(v, 'utility', '', { ny: 1, fy: () => '' }); clip(v);
+  const dens = (m, s) => x => phi((x - m) / s) / s;
+  [[mB, sb, C.b], [mA, sa, C.a]].forEach(([m, s, col]) => { const c = v.ctx; c.save(); c.globalAlpha = 0.14; c.fillStyle = col; c.beginPath(); c.moveTo(v.X(lo), v.Y(0)); for (let i = 0; i <= 200; i++) { const x = lo + (hi - lo) * i / 200; c.lineTo(v.X(x), v.Y(dens(m, s)(x))); } c.lineTo(v.X(hi), v.Y(0)); c.fill(); c.restore(); curve(v, dens(m, s), col, 2.4); seg(v, m, 0, m, dens(m, s)(m), col, 1.4, [4, 3]); });
+  const c = v.ctx; c.font = '600 12px ' + css('--f-body'); c.textAlign = 'center'; c.fillStyle = C.a; c.fillText('A', v.X(mA), v.Y(dens(mA, sa)(mA)) - 8); c.fillStyle = C.b; c.fillText('B', v.X(mB), v.Y(dens(mB, sb)(mB)) - 8); v.ctx.restore();
+  // VPI against the gap
+  const w = frame($('#vp-curve'), [-30, 30], [0, Math.max(0.5, vpiN(0, sa, sb).v * 1.15)], { l: 40, b: 26 }); axes(w, 'μA − μB', 'VPI', { sx: 10 }); clip(w);
+  curve(w, x => vpiN(x, sa, sb).v, C.lda, 2.4); dot(w, g, R.v, C.lda, 5.5, true); w.ctx.restore();
+  $('#vp-v').innerHTML = tip(fmt(R.v, 3), `θ(φ(z) − zΦ(−z)) with θ = ${fmt(R.th, 3)}, z = ${fmt(R.z, 3)}\nMonte Carlo, 20,000 draws: ${fmt(mc, 3)}`);
+  $('#vp-pc').innerHTML = tip(pct(R.pc, 1), `Φ(−z) = Φ(−${fmt(R.z, 3)})`);
+  const lead = g >= 0 ? 'A' : 'B';
+  $('#vp-say').innerHTML = R.z > 2 ? `Plan ${lead} is the <b>clear winner</b>: the gap is ${fmt(R.z, 1)} spreads wide and there is only a ${pct(R.pc, 1)} chance that the other plan is really better. Learning the truth would almost never change your choice, so it is worth just ${fmt(R.v, 3)} points.`
+    : R.th < 4 ? `The plans are close, but you are fairly sure of both (spread of the difference ${fmt(R.th, 1)}). You might well switch after learning the truth (${pct(R.pc, 0)} chance), but the plan you switch to is <b>only slightly better</b>, so the information is worth just ${fmt(R.v, 2)}.`
+    : `The plans are close and you are <b>very unsure</b>: a ${pct(R.pc, 0)} chance the other plan is better, and if it is, it may be much better. Information is worth ${fmt(R.v, 2)} points here, ${fmt(R.v / R.th * 100, 0)}% of the spread &theta;.`;
+  $('#run-vp').innerHTML = `<b>Running example</b>: today you pick plan ${lead}, with EU = max(${fmt(mA, 1)}, ${fmt(mB, 1)}) = ${fmt(Math.max(mA, mB), 1)}. Knowing both utilities, you would pick whichever is higher, worth E[max(U<sub>A</sub>, U<sub>B</sub>)] = ${tip(fmt(Math.max(mA, mB) + R.v, 3), `max(μ) + θ(φ(z) − zΦ(−z))\nMonte Carlo: ${fmt(Math.max(mA, mB) + mc, 3)}`)}. With &theta; = &radic;(${fmt(sa, 1)}&sup2; + ${fmt(sb, 1)}&sup2;) = ${fmt(R.th, 3)} and z = ${fmt(Math.abs(g), 1)}/${fmt(R.th, 3)} = ${fmt(R.z, 3)}, VPI = ${fmt(R.th, 3)}&times;(${fmt(phi(R.z), 4)} &minus; ${fmt(R.z, 3)}&times;${fmt(Phi(-R.z), 4)}) = ${tip(fmt(R.v, 3), 'utility points')}.`;
+}
+const VP_PRE = { clear: [25, 4, 4], big: [2, 15, 15], small: [2, 1, 1] };
+seg1('[data-vpp]', 'data-vpp', k => { [VP.g, VP.sa, VP.sb] = VP_PRE[k]; $('#vp-g').value = VP.g; $('#vp-sa').value = VP.sa; $('#vp-sb').value = VP.sb; drawVP(); });
+[['g', 'g'], ['sa', 'sa'], ['sb', 'sb']].forEach(([id, k]) => $('#vp-' + id).addEventListener('input', e => { VP[k] = +e.target.value; $$('[data-vpp]').forEach(b => b.setAttribute('aria-pressed', 'false')); drawVP(); }));
+fig($('#vp-cv'), drawVP); fig($('#vp-curve'), drawVP);
+
+/* ---------- 5 · properties ---------- */
+const PR = { s: 'AB', p: 0.25, a: 0.85, b: 0.75 };
+function prOut(p, accs) { // all joint results of the given tests (each accuracy a: se = sp = a)
+  let out = [{ l1: 1, l0: 1, lab: '' }];
+  accs.forEach(a => { out = [].concat(...out.map(o => [{ l1: o.l1 * a, l0: o.l0 * (1 - a), lab: o.lab + '+' }, { l1: o.l1 * (1 - a), l0: o.l0 * a, lab: o.lab + '−' }])); });
+  return out.map(o => { const P = p * o.l1 + (1 - p) * o.l0; return { P, q: p * o.l1 / P, lab: o.lab }; });
+}
+const r9 = x => Math.round(x * 1e9) / 1e9;
+const vpiT = (p, accs) => r9(sum(prOut(p, accs).map(o => o.P * bestEU(o.q))) - bestEU(p));
+function drawPR() {
+  const C = C0(), { p, a, b } = PR; $('#pr-p-o').textContent = fmt(p, 2); $('#pr-a-o').textContent = fmt(a, 2); $('#pr-b-o').textContent = fmt(b, 2);
+  const vA = vpiT(p, [a]), vB = vpiT(p, [b]), vAB = vpiT(p, [a, b]);
+  const accs = PR.s === 'A' ? [a] : PR.s === 'B' ? [b] : [a, b], O = prOut(p, accs), avg = sum(O.map(o => o.P * bestEU(o.q))), ps = pstar();
+  const v = frame($('#pr-cv'), [0, 1], [15, 100], { l: 40, b: 30 }); axes(v, 'P(disease)', 'f(p)', { sx: 0.2, sy: 20 }); clip(v);
+  curve(v, x => euT(x), C.a, 1.2, [4, 4]); curve(v, x => euN(x), C.b, 1.2, [4, 4]); curve(v, x => bestEU(x), C.q, 2.6);
+  seg(v, ps, 15, ps, 100, C.muted, 1, [2, 3]);
+  if (O.length === 2) seg(v, O[0].q, bestEU(O[0].q), O[1].q, bestEU(O[1].q), C.lda, 1.6, [6, 4]);
+  else { const srt = O.slice().sort((x, y) => x.q - y.q); for (let k = 0; k < srt.length - 1; k++) seg(v, srt[k].q, bestEU(srt[k].q), srt[k + 1].q, bestEU(srt[k + 1].q), C.lda, 1.2, [3, 4]); }
+  O.forEach(o => { dot(v, o.q, bestEU(o.q), C.lda, 3 + 7 * Math.sqrt(o.P)); });
+  seg(v, p, bestEU(p), p, avg, C.c, 3); dot(v, p, bestEU(p), C.q, 5); star(v, p, avg, C.c, 8);
+  const c = v.ctx; c.font = '11px ' + css('--f-mono'); c.fillStyle = C.c; c.textAlign = p > 0.6 ? 'right' : 'left'; c.fillText(`VPI = ${fmt(avg - bestEU(p), 3)}`, v.X(p) + (p > 0.6 ? -10 : 10), v.Y((avg + bestEU(p)) / 2) + 14);
+  O.forEach(o => { c.fillStyle = C.lda; c.textAlign = 'center'; c.fillText(o.lab, v.X(o.q), v.Y(bestEU(o.q)) - 10 - 7 * Math.sqrt(o.P)); });
+  v.ctx.restore();
+  // bars
+  const bars = [['VPI(A)', vA, C.a], ['VPI(B)', vB, C.b], ['VPI(A)+VPI(B)', vA + vB, C.muted], ['VPI(A, B)', vAB, C.c]], mx = Math.max(0.5, ...bars.map(x => x[1])) * 1.18;
+  const w = frame($('#pr-bars'), [0, 4], [0, mx], { l: 40, b: 26 }); axes(w, '', 'utility', { sx: 1, fx: () => '' });
+  const cw = w.ctx; bars.forEach(([lab, val, col], k) => { cw.fillStyle = col; cw.globalAlpha = 0.85; cw.fillRect(w.X(k + 0.18), w.Y(val), w.X(k + 0.82) - w.X(k + 0.18), w.Y(0) - w.Y(val)); cw.globalAlpha = 1; cw.font = '11px ' + css('--f-mono'); cw.fillStyle = C.q; cw.textAlign = 'center'; cw.textBaseline = 'bottom'; cw.fillText(fmt(val, 2), w.X(k + 0.5), w.Y(val) - 2); cw.textBaseline = 'top'; cw.fillStyle = C.muted; cw.font = (w.w < 420 ? 9 : 11) + 'px ' + css('--f-body'); cw.fillText(lab, w.X(k + 0.5), w.h - w.pad.b + 6); });
+  const hw = (v0, acc) => `Σ P(result)·f(posterior) − f(prior), over ${acc} result(s)\nf = max(EU(treat), EU(don't))`;
+  $('#pr-va').innerHTML = tip(fmt(vA, 3), hw(vA, 2)); $('#pr-vb').innerHTML = tip(fmt(vB, 3), hw(vB, 2)); $('#pr-vab').innerHTML = tip(fmt(vAB, 3), hw(vAB, 4));
+  // order independence
+  const oA = prOut(p, [a]), oB = prOut(p, [b]), condB = sum(oA.map(o => o.P * vpiT(o.q, [b]))), condA = sum(oB.map(o => o.P * vpiT(o.q, [a])));
+  const rel = vAB > vA + vB + 1e-9 ? 'super' : vAB < vA + vB - 1e-9 ? 'sub' : 'add';
+  $('#pr-say').innerHTML = (vA < 1e-9 && vB < 1e-9 && vAB > 1e-9) ? `Neither test is worth anything alone: one positive result moves p only to ${fmt(prOut(p, [a])[0].q, 3)}, still below p* = ${fmt(ps, 3)}. Together they are worth <b>${fmt(vAB, 2)}</b>: two positives reach ${fmt(prOut(p, [a, b])[0].q, 3)}, across the threshold. This is <b>superadditivity</b>, the trap that catches the myopic agent.`
+    : rel === 'sub' ? `<b>Subadditive</b>: together the tests are worth ${fmt(vAB, 2)}, less than the ${fmt(vA + vB, 2)} you get by adding their separate values. Both inform the same decision, so once one has spoken the other has less to add.`
+    : rel === 'super' ? `<b>Superadditive</b>: together ${fmt(vAB, 2)}, more than ${fmt(vA, 2)} + ${fmt(vB, 2)}. Agreeing results push the belief further than either test can alone.`
+    : `All three values are zero: at this prior no combination of results crosses the threshold p* = ${fmt(ps, 3)}, so looking can&rsquo;t change the decision.`;
+  $('#pr-cap').innerHTML = `The black curve f(p) is the best expected utility at each belief: convex, because it is the upper envelope of two straight lines. Blue dots are the posteriors ${PR.s === 'AB' ? 'after both tests' : 'after test ' + PR.s} (size &prop; probability); the star is their probability-weighted average height, and the orange gap above the prior is the VPI.`;
+  $('#run-pr').innerHTML = `<b>Running example</b> (${PR.s === 'AB' ? 'both tests' : 'test ' + PR.s}): ${O.map(o => `${fmt(o.P, 3)}&times;f(${fmt(o.q, 3)})`).join(' + ')} = ${tip(fmt(avg, 3), O.map(o => `${fmt(o.P, 4)} × ${fmt(bestEU(o.q), 3)}`).join('\n'))}, minus f(${fmt(p, 2)}) = ${fmt(bestEU(p), 3)}, gives VPI = ${fmt(avg - bestEU(p), 3)} &ge; 0. Order: VPI(A) + E[VPI(B | A)] = ${fmt(vA, 3)} + ${tip(fmt(condB, 3), oA.map(o => `P(A${o.lab}) = ${fmt(o.P, 4)}, VPI of B then = ${fmt(vpiT(o.q, [b]), 4)}`).join('\n'))} = ${fmt(r9(vA + condB), 3)}; VPI(B) + E[VPI(A | B)] = ${fmt(vB, 3)} + ${fmt(condA, 3)} = ${fmt(r9(vB + condA), 3)}; both equal VPI(A, B) = ${fmt(vAB, 3)}.`;
+}
+seg1('[data-prs]', 'data-prs', s => { PR.s = s; drawPR(); });
+const PR_PRE = { strong: [0.25, 0.85, 0.75], weak: [0.06, 0.7, 0.7] };
+seg1('[data-prp]', 'data-prp', k => { [PR.p, PR.a, PR.b] = PR_PRE[k]; $('#pr-p').value = PR.p; $('#pr-a').value = PR.a; $('#pr-b').value = PR.b; drawPR(); });
+['p', 'a', 'b'].forEach(k => $('#pr-' + k).addEventListener('input', e => { PR[k] = +e.target.value; $$('[data-prp]').forEach(b => b.setAttribute('aria-pressed', 'false')); drawPR(); }));
+fig($('#pr-cv'), drawPR); fig($('#pr-bars'), drawPR);
+
+/* ---------- 6 · the information-gathering agent ---------- */
+const AG = { i: 81, rule: 'net', done: [], fin: false };
+{ const sel = $('#ag-pt'); sel.innerHTML = DATA.ids.map((id, i) => `<option value="${i}">${ptLabel(i)}</option>`).join(''); sel.value = AG.i; }
+function agState() { const L = Lafter(AG.i, AG.done), my = HD.myopic(L, MFULL.T, AG.done, AG.rule, LS); return { L, p: HD.sig(L), my }; }
+function drawAG() {
+  const C = C0(), S = agState(), spent = sum(AG.done.map(j => HD.PROC[j].c)), i = AG.i;
+  const ps = [HD.sig(L0full(i))]; AG.done.forEach((_, k) => ps.push(HD.sig(Lafter(i, AG.done.slice(0, k + 1)))));
+  const yt = Math.min(1, Math.max(0.5, Math.max(...ps) + 0.15)), v = frame($('#ag-cv'), [-0.4, 5.4], [0, yt], { l: 42, b: 30 }); axes(v, 'tests ordered', 'P(disease)', { sx: 1, sy: 0.2, fx: x => x >= 0 && x <= 5 ? fmt(x, 0) : '' }); clip(v);
+  { const c = v.ctx; c.save(); c.fillStyle = C.a; c.globalAlpha = 0.07; c.fillRect(v.pad.l, v.Y(1), v.pw, v.Y(1 / 6) - v.Y(1)); c.restore(); }
+  seg(v, -0.4, 1 / 6, 5.4, 1 / 6, C.q, 1.2, [5, 4]);
+  for (let k = 1; k < ps.length; k++) seg(v, k - 1, ps[k - 1], k, ps[k], C.lda, 2.2);
+  const c = v.ctx; c.font = '11px ' + css('--f-body');
+  ps.forEach((q, k) => { dot(v, k, q, k ? C.lda : C.muted, 5.5); const lab = k ? `${HD.PROC[AG.done[k - 1]].short} ${usd(HD.PROC[AG.done[k - 1]].c, 0)}` : 'interview'; c.fillStyle = C.q; c.textAlign = k === 0 ? 'left' : k >= 4 ? 'right' : 'center'; c.fillText(lab, v.X(k) + (k === 0 ? 8 : 0), v.Y(q) + (q > yt * 0.85 ? 18 : -10)); });
+  c.fillStyle = C.a; c.textAlign = 'right'; c.fillText('treat', v.X(5.4) - 6, v.Y(yt * 0.95)); c.fillStyle = C.b; c.fillText('don’t treat', v.X(5.4) - 6, v.Y(0.06)); v.ctx.restore();
+  // table
+  $('#ag-tbl').innerHTML = `<thead><tr><th>test</th><th>cost</th><th>VPI</th><th>${AG.rule === 'net' ? 'net' : 'ratio'}</th></tr></thead><tbody>` + HD.PROC.map((P, j) => {
+    if (AG.done.includes(j)) return `<tr class="dim"><td>${P.short}</td><td class="num">${usd(P.c)}</td><td colspan="2">done: ${resultText(i, j)}</td></tr>`;
+    const g = S.my.g[j], sc = AG.rule === 'net' ? g - P.c : g / P.c;
+    return `<tr${S.my.j === j && !AG.fin ? ' class="win"' : ''}><td>${P.short}</td><td class="num">${usd(P.c)}</td><td class="num">${tip(usd(g), `min(p·5000, (1−p)·1000) now = ${usd(HD.stop(S.p, LS))}\nminus its expected value after the result = ${usd(HD.stop(S.p, LS) - g)}`)}</td><td class="num">${AG.rule === 'net' ? (sc < 0 ? '&minus;' : '') + usd(sc, 0) : fmt(sc, 2)}</td></tr>`;
+  }).join('') + '</tbody>';
+  $('#ag-sp').innerHTML = tip(usd(spent), AG.done.length ? AG.done.map(j => `${HD.PROC[j].name} ${usd(HD.PROC[j].c)}`).join('\n') : 'nothing ordered yet');
+  $('#ag-p').innerHTML = tip(fmt(S.p, 3), 'naive Bayes posterior given the interview and the results so far');
+  const tr = HD.treat(S.p, LS), truth = HD.y[i];
+  $('#ag-say').innerHTML = AG.fin || S.my.j < 0 ? `${AG.done.length ? `After ${AG.done.length} test${AG.done.length > 1 ? 's' : ''} (${usd(spent)})` : 'Straight after the interview'} ${AG.done.length === 5 ? 'there is nothing left to order' : 'no remaining test is worth its price'}, so the agent stops and <b>${tr ? 'treats' : 'does not treat'}</b> (P = ${fmt(S.p, 3)} is ${tr ? 'above' : 'below'} 1/6). The angiogram showed ${truth ? 'heart disease' : 'no heart disease'}: ${tr === !!truth ? 'a correct decision.' : 'a wrong decision this time. VOI optimises the average over patients like this one, not each case.'}`
+    : `Next the agent would order the <b>${HD.PROC[S.my.j].name}</b>: its VPI of ${usd(S.my.g[S.my.j])} beats its ${usd(HD.PROC[S.my.j].c)} cost${AG.rule === 'ratio' ? `, and it gives the most value per dollar (${fmt(S.my.g[S.my.j] / HD.PROC[S.my.j].c, 2)} per $1)` : ` by the widest margin, ${usd(S.my.g[S.my.j] - HD.PROC[S.my.j].c)}`}.${HD.PROC.some((P, j) => !AG.done.includes(j) && S.my.g[j] === 0) ? ' Tests with VPI $0 could not move the belief across the threshold whatever they showed.' : ''}`;
+  const j = S.my.j >= 0 ? S.my.j : HD.PROC.findIndex((_, k) => !AG.done.includes(k));
+  if (j >= 0) { const t = MFULL.T[j], terms = []; let e = 0; for (let o = 0; o < t[0].length; o++) { const Po = S.p * Math.exp(t[1][o]) + (1 - S.p) * Math.exp(t[0][o]), qo = HD.sig(S.L + t[1][o] - t[0][o]); e += Po * HD.stop(qo, LS); terms.push(`P(result ${o + 1}) = ${fmt(Po, 4)}, then P(D) = ${fmt(qo, 4)}, loss ${usd(HD.stop(qo, LS))}`); }
+    $('#run-ag').innerHTML = `<b>Running example</b> (${HD.PROC[j].name}, patient row ${DATA.ids[i]}): now p = ${fmt(S.p, 4)}, so the better action&rsquo;s expected loss is min(${fmt(S.p, 4)}&times;5,000, ${fmt(1 - S.p, 4)}&times;1,000) = ${usd(HD.stop(S.p, LS))}. Averaged over its ${t[0].length} possible results, the expected loss after the test is ${tip(usd(e), terms.join('\n'))}, so VPI = ${usd(HD.stop(S.p, LS))} &minus; ${usd(e)} = ${usd(HD.stop(S.p, LS) - e)} against a cost of ${usd(HD.PROC[j].c)}.`; }
+  else $('#run-ag').innerHTML = '<b>Running example</b>: every procedure has been done; nothing is left to price.';
+  $('#ag-step').disabled = AG.fin || S.my.j < 0; $('#ag-run').disabled = AG.fin || S.my.j < 0;
+}
+function agStep() { const S = agState(); if (S.my.j < 0) AG.fin = true; else AG.done.push(S.my.j); drawAG(); }
+$('#ag-step').addEventListener('click', agStep);
+$('#ag-run').addEventListener('click', () => { for (let k = 0; k < 6 && !AG.fin; k++) { const S = agState(); if (S.my.j < 0) AG.fin = true; else AG.done.push(S.my.j); } drawAG(); });
+$('#ag-reset').addEventListener('click', () => { AG.done = []; AG.fin = false; drawAG(); });
+$('#ag-pt').addEventListener('change', e => { AG.i = +e.target.value; AG.done = []; AG.fin = false; drawAG(); });
+seg1('[data-agr]', 'data-agr', r => { AG.rule = r; AG.done = []; AG.fin = false; drawAG(); });
+fig($('#ag-cv'), drawAG);
+
+/* ---------- 7a · searching for the keys ---------- */
+const PLACES = ['Coat', 'Desk', 'Car', 'Kitchen', 'Bag'];
+const AH = { p: [0.34, 0.26, 0.2, 0.12, 0.08], c: [9, 2, 6, 1, 3], m: 'r', seed: 7 };
+const ahCost = (o, p, c) => { let s = 0, left = 1; o.forEach(i => { s += c[i] * left; left -= p[i]; }); return s; };
+function perms(a) { if (a.length <= 1) return [a]; return [].concat(...a.map((x, k) => perms(a.slice(0, k).concat(a.slice(k + 1))).map(r => [x].concat(r)))); }
+const ALLP = perms([0, 1, 2, 3, 4]);
+function ahOrder(m, p, c) {
+  const ix = [0, 1, 2, 3, 4];
+  if (m === 'p') return ix.sort((a, b) => p[b] - p[a] || a - b);
+  if (m === 'c') return ix.sort((a, b) => c[a] - c[b] || a - b);
+  if (m === 'r') return ix.sort((a, b) => p[b] / c[b] - p[a] / c[a] || a - b);
+  let best = null, bc = Infinity; ALLP.forEach(o => { const v = ahCost(o, p, c); if (v < bc - 1e-12) { bc = v; best = o; } }); return best.slice();
+}
+let ahV = null, ahDrag = -1;
+function drawAH() {
+  const C = C0(), { p, c } = AH, o = ahOrder(AH.m, p, c), e = ahCost(o, p, c), ob = ahOrder('all', p, c), eb = ahCost(ob, p, c);
+  const v = ahV = frame($('#ah-cv'), [-0.5, 4.5], [-0.22, 0.7], { l: 40, b: 30 }); const cx = v.ctx;
+  axes(v, '', 'chance the keys are here', { sx: 1, sy: 0.2, fx: () => '', fy: y => y >= 0 ? fmt(y, 1) : '' });
+  const bw = (v.X(1) - v.X(0)) * 0.56;
+  p.forEach((pi, i) => { const x = v.X(i); cx.fillStyle = C.lda; cx.globalAlpha = 0.8; cx.fillRect(x - bw / 2, v.Y(pi), bw, v.Y(0) - v.Y(pi)); cx.globalAlpha = 1; cx.fillStyle = C.q; cx.fillRect(x - bw / 2, v.Y(pi) - 2, bw, 4);
+    const nr = v.w < 460, fm = (nr ? 9.5 : 11) + 'px ' + css('--f-mono');
+    cx.font = fm; cx.textAlign = 'center'; cx.textBaseline = 'bottom'; cx.fillText(fmt(pi, 2), x, v.Y(pi) - 5);
+    cx.textBaseline = 'top'; cx.font = '600 ' + (nr ? 10.5 : 12) + 'px ' + css('--f-body'); cx.fillText(PLACES[i], x, v.Y(0) + 4); cx.font = fm; cx.fillStyle = C.muted; cx.fillText(`${c[i]} min`, x, v.Y(0) + 19); cx.fillText(nr ? fmt(pi / c[i], 3) : `p/c ${fmt(pi / c[i], 3)}`, x, v.Y(0) + 32); });
+  // order strip
+  const y0 = v.Y(-0.15), sw = (v.pw - 16) / 5;
+  o.forEach((i, k) => { const x = v.pad.l + 8 + k * sw; cx.fillStyle = k === 0 ? C.a : C.soft; cx.globalAlpha = k === 0 ? 0.25 : 1; cx.fillRect(x + 2, y0, sw - 8, 24); cx.globalAlpha = 1; cx.strokeStyle = C.line; cx.strokeRect(x + 2.5, y0 + 0.5, sw - 9, 23); cx.fillStyle = C.q; cx.font = '11px ' + css('--f-body'); cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText(fitText(cx, v.w < 460 ? PLACES[i] : `${k + 1}. ${PLACES[i]}`, sw - 12), x + sw / 2 - 2, y0 + 12); if (k < 4) arrow(cx, x + sw - 6, y0 + 12, x + sw + 2, y0 + 12, C.muted, 1); });
+  $('#ah-e').innerHTML = tip(fmt(e, 2) + ' min', o.map((i, k) => `${PLACES[i]}: ${c[i]} × ${fmt(1 - sum(o.slice(0, k).map(j => p[j])), 3)}`).join('\n'));
+  $('#ah-b').innerHTML = tip(fmt(eb, 2) + ' min', 'smallest of all 120 orders: ' + ob.map(i => PLACES[i]).join(' → '));
+  const same = Math.abs(e - eb) < 1e-9, ratioSame = Math.abs(ahCost(ahOrder('r', p, c), p, c) - eb) < 1e-9;
+  $('#ah-say').innerHTML = AH.m === 'r' ? `Sorting by chance per minute gives ${fmt(e, 2)} minutes, ${ratioSame ? '<b>exactly the best of all 120 orders</b>, as the swap argument promises' : 'which should be the best possible'}. Searching where the keys are most likely would take ${fmt(ahCost(ahOrder('p', p, c), p, c), 2)}, and quickest first ${fmt(ahCost(ahOrder('c', p, c), p, c), 2)}.`
+    : AH.m === 'all' ? `Trying all 120 orders finds ${fmt(eb, 2)} minutes: ${ob.map(i => PLACES[i]).join(' &rarr; ')}. It is the chance-per-minute order${ratioSame ? '' : ' (up to ties)'}: the brute force confirms the rule.`
+    : same ? `This time the ${AH.m === 'p' ? 'most-likely' : 'quickest'}-first order happens to be optimal (${fmt(e, 2)} minutes): it coincides with the chance-per-minute order. Press <b>New places</b> or drag a bar to break it.`
+    : `${AH.m === 'p' ? 'Most likely first' : 'Quickest first'} takes ${fmt(e, 2)} minutes on average, ${tip(pct(e / eb - 1, 0), `${fmt(e, 2)} / ${fmt(eb, 2)} − 1`)} more than the best order. ${AH.m === 'p' ? 'It ignores how long each look takes.' : 'It ignores how likely each place is.'}`;
+  $('#run-ah').innerHTML = `<b>Running example</b>: E[time] = ${o.map((i, k) => `${c[i]}&times;${fmt(1 - sum(o.slice(0, k).map(j => p[j])), 2)}`).join(' + ')} = ${tip(fmt(e, 3), 'each place’s minutes × the chance the keys weren’t in the earlier places')} minutes. Swap test for the first two places, ${PLACES[o[0]]} then ${PLACES[o[1]]}: c<sub>2</sub>p<sub>1</sub> &minus; c<sub>1</sub>p<sub>2</sub> = ${c[o[1]]}&times;${fmt(p[o[0]], 2)} &minus; ${c[o[0]]}&times;${fmt(p[o[1]], 2)} = ${tip(fmt(c[o[1]] * p[o[0]] - c[o[0]] * p[o[1]], 3), 'positive: the current order is better than the swap')}.`;
+}
+{ const cv = $('#ah-cv');
+  const hit = (px, py) => { if (!ahV) return -1; for (let i = 0; i < 5; i++) { const x = ahV.X(i), bw = (ahV.X(1) - ahV.X(0)) * 0.3; if (Math.abs(px - x) < bw && py > ahV.Y(0.7) - 6 && py < ahV.Y(0)) return i; } return -1; };
+  cv.addEventListener('pointerdown', e => { const [px, py] = evPos(cv, e), i = hit(px, py); if (i >= 0) { ahDrag = i; cv.setPointerCapture(e.pointerId); e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const [px, py] = evPos(cv, e); if (ahDrag < 0) { cv.style.cursor = hit(px, py) >= 0 ? 'ns-resize' : 'default'; return; }
+    const h = clamp(ahV.iY(py), 0.02, 0.66), rest = 1 - AH.p[ahDrag], k = (1 - h) / (rest || 1); AH.p = AH.p.map((q, i) => i === ahDrag ? h : Math.max(1e-4, q * k)); const s = sum(AH.p); AH.p = AH.p.map(q => q / s); drawAH(); });
+  const up = () => { ahDrag = -1; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); }
+$('#ah-new').addEventListener('click', () => { const r = mulberry32(AH.seed++ * 7919); const w = PLACES.map(() => -Math.log(r() + 1e-9)), s = sum(w); AH.p = w.map(x => x / s); AH.c = PLACES.map(() => 1 + Math.floor(r() * 10)); drawAH(); });
+seg1('[data-ahm]', 'data-ahm', m => { AH.m = m; drawAH(); });
+fig($('#ah-cv'), drawAH);
+
+/* ---------- 7b · the greedy trap ---------- */
+const TR = { c: 0.3, a: 0.7, p: 0.06 };
+// optimal value with k identical tests left (accuracy a, cost c); returns {v, test, kids}
+function trOpt(p, k, a, c) { const f = bestEU(p); if (!k) return { v: f, test: false, p }; const O = prOut(p, [a]); const kids = O.map(o => Object.assign(trOpt(o.q, k - 1, a, c), { P: o.P, lab: o.lab })); const cont = -c + sum(kids.map(x => x.P * x.v)); return cont > f + 1e-9 ? { v: cont, test: true, p, kids } : { v: f, test: false, p }; }
+function trMyo(p, k, a, c) { const f = bestEU(p); if (!k) return f; const g = vpiT(p, [a]); if (g - c <= 1e-9) return f; return -c + sum(prOut(p, [a]).map(o => o.P * trMyo(o.q, k - 1, a, c))); }
+function drawTR() {
+  const C = C0(), { c: cost, a, p } = TR; $('#tr-c-o').textContent = fmt(cost, 2); $('#tr-a-o').textContent = fmt(a, 2);
+  const T = trOpt(p, 2, a, cost), my = trMyo(p, 2, a, cost), blind = bestEU(p);
+  const cv = $('#tr-cv'), r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, r.width, r.height);
+  const w = r.width, h = r.height, fs = w < 520 ? 10 : 12, L = [], E = [];
+  (function place(t, x0, x1, depth) { const x = (x0 + x1) / 2, y = 30 + depth * (h - 70) / 2; L.push({ t, x, y }); if (t.test) t.kids.forEach((k, i) => { const cx0 = x0 + (x1 - x0) * i / 2, cx1 = x0 + (x1 - x0) * (i + 1) / 2; const ch = place(k, cx0, cx1, depth + 1); E.push([x, y, ch.x, ch.y, k]); }); return { x, y }; })(T, 0, w, 0);
+  E.forEach(([x0, y0, x1, y1, k]) => { arrow(c, x0, y0 + 16, x1, y1 - 18, C.muted, 1.3); c.font = fs + 'px ' + css('--f-mono'); c.fillStyle = C.lda; c.textAlign = 'center'; c.textAlign = x1 < x0 ? 'right' : 'left'; c.fillText(`${k.lab} (${fmt(k.P, 2)})`, (x0 + x1) / 2 + (x1 < x0 ? -10 : 10), (y0 + y1) / 2); });
+  L.forEach(({ t, x, y }, k) => { const n = t.test ? { k: 'box', x, y, rx: Math.min(64, w / 9), ry: 16 } : { k: 'dia', x, y, rx: Math.min(66, w / 8.5), ry: 22 };
+    const nw = w < 520; node(c, n, t.test ? [k === 0 ? 'Test A' : 'Test B', nw ? fmt(t.p, 3) : `P(D) = ${fmt(t.p, 3)}`] : [doTreat(t.p) ? 'treat' : nw ? 'don’t' : 'don’t treat', nw ? fmt(t.p, 3) : `P(D) = ${fmt(t.p, 3)}`], { fs, stroke: t.test ? C.lda : doTreat(t.p) ? C.a : C.b, lw: 2 }); });
+  $('#tr-my').innerHTML = tip(fmt(my, 3), `VPI(A) = ${fmt(vpiT(p, [a]), 3)} ${vpiT(p, [a]) - cost > 1e-9 ? '>' : '≤'} cost ${fmt(cost, 2)}\nso the greedy agent ${vpiT(p, [a]) - cost > 1e-9 ? 'orders it' : 'stops and decides at once'}`);
+  $('#tr-op').innerHTML = tip(fmt(T.v, 3), 'exact dynamic programming over both tests\n(the root value of the tree)');
+  $('#tr-say').innerHTML = T.test && my < T.v - 1e-9 ? `The greedy agent sees VPI(A) = ${fmt(vpiT(p, [a]), 3)} and orders nothing (${fmt(my, 2)}). The far-sighted plan orders A, and orders B only if A is positive. It is worth ${tip(fmt(T.v - my, 3), `${fmt(T.v, 3)} − ${fmt(my, 3)}`)} more, even after paying for the tests.`
+    : T.test ? `Here greed and planning agree: both order the tests shown and reach ${fmt(T.v, 2)}.`
+    : `At a cost of ${fmt(cost, 2)} per test even the optimal plan stops at once and decides blind (${fmt(blind, 2)}): the pair of tests is no longer worth its price.`;
+}
+$('#tr-c').addEventListener('input', e => { TR.c = +e.target.value; drawTR(); });
+$('#tr-a').addEventListener('input', e => { TR.a = +e.target.value; drawTR(); });
+fig($('#tr-cv'), drawTR);
+
+/* ---------- 8 · sensitivity analysis ---------- */
+const RB = { p: 0.2, w: 0.2 };
+const PARS = [['p', 'prior P(disease)', 1], ['td', 'U(sick, treated) = 75', 100], ['th', 'U(healthy, treated) = 90', 100], ['nd', 'U(sick, untreated) = 20', 100], ['nh', 'U(healthy, untreated) = 100', 100]];
+const delta = t => t.p * (t.td - t.nd) - (1 - t.p) * (t.nh - t.th);
+function drawRB() {
+  const C = C0(), { p, w } = RB; $('#rb-p-o').textContent = fmt(p, 2); $('#rb-w-o').textContent = pct(w, 0);
+  const base = Object.assign({ p }, U), d0 = delta(base);
+  const rows = PARS.map(([k, lab, cap]) => { const lo = base[k] * (1 - w), hi = Math.min(cap, base[k] * (1 + w)); const a = delta(Object.assign({}, base, { [k]: lo })), b = delta(Object.assign({}, base, { [k]: hi })); return { k, lab, lo, hi, a, b, mn: Math.min(a, b), mx: Math.max(a, b) }; }).sort((x, y) => (y.mx - y.mn) - (x.mx - x.mn));
+  const ext = Math.max(5, ...rows.map(r => Math.max(Math.abs(r.mn), Math.abs(r.mx)))) * 1.1;
+  const narrow = $('#rb-cv').getBoundingClientRect().width < 520, v = frame($('#rb-cv'), [-ext, ext], [0, 5], { l: narrow ? 12 : 190, b: 30, t: narrow ? 14 : 14 }); axes(v, 'Δ = EU(treat) − EU(don’t)', '', { ny: 1, fy: () => '' });
+  const cx = v.ctx; seg(v, 0, 0, 0, 5, C.q, 1.4);
+  rows.forEach((r, k) => { const y = 4.5 - k, flip = r.mn < 0 && r.mx > 0, hgt = (v.Y(0) - v.Y(1)) * (narrow ? 0.34 : 0.55);
+    cx.fillStyle = flip ? C.bad : C.muted; cx.globalAlpha = flip ? 0.8 : 0.55; cx.fillRect(v.X(r.mn), v.Y(y) - hgt / 2 + (narrow ? 8 : 0), Math.max(2, v.X(r.mx) - v.X(r.mn)), hgt); cx.globalAlpha = 1;
+    cx.fillStyle = C.q; cx.fillRect(v.X(d0) - 1, v.Y(y) - hgt / 2 - 3 + (narrow ? 8 : 0), 2, hgt + 6);
+    cx.font = '12px ' + css('--f-body'); cx.fillStyle = C.q; cx.textBaseline = 'middle';
+    if (narrow) { cx.textAlign = 'left'; cx.fillText(r.lab, v.pad.l + 2, v.Y(y) - hgt / 2 - 4); } else { cx.textAlign = 'right'; cx.fillText(r.lab, v.pad.l - 8, v.Y(y)); }
+    cx.font = '10px ' + css('--f-mono'); cx.fillStyle = C.muted; const dg = r.k === 'p' ? 3 : 1, tl = `${fmt(r.lo, dg)}–${fmt(r.hi, dg)}`, xr = v.X(r.mx) + 5; cx.textAlign = xr + cx.measureText(tl).width > v.w - 4 ? 'right' : 'left'; cx.fillText(tl, cx.textAlign === 'right' ? v.X(r.mn) - 5 : xr, v.Y(y) + (narrow ? 8 : 0)); });
+  const T = rows.filter(r => r.mn < 0 && r.mx > 0);
+  // maximin over the whole box
+  const box = k => { const cap = PARS.find(x => x[0] === k)[2]; return [base[k] * (1 - w), Math.min(cap, base[k] * (1 + w))]; };
+  let mT = Infinity, mN = Infinity;
+  box('p').forEach(pp => { box('td').forEach(a => box('th').forEach(b => { mT = Math.min(mT, pp * a + (1 - pp) * b); })); box('nd').forEach(a => box('nh').forEach(b => { mN = Math.min(mN, pp * a + (1 - pp) * b); })); });
+  const nom = d0 > 0, rob = mT > mN;
+  $('#rb-n').innerHTML = tip(`${T.length} of 5`, T.length ? T.map(r => r.lab).join('\n') : 'no single number can flip the choice');
+  $('#rb-r').innerHTML = tip(rob ? 'treat' : 'don’t treat', `worst-case EU over the box:\ntreat ${fmt(mT, 2)}, don't ${fmt(mN, 2)}`);
+  $('#rb-say').innerHTML = `At the best estimates the doctor should <b>${actName(nom)}</b> (&Delta; = ${fmt(d0, 2)}). ` + (T.length ? `With &plusmn;${pct(w, 0)} uncertainty, ${T.length === 1 ? 'one number' : T.length + ' numbers'} alone can flip that: <b>${T.map(r => r.lab.replace(/ = .*/, '')).join(', ')}</b>. ${T.length === 1 ? 'It is' : 'They are'} worth measuring better before committing.` : `No single number varied by &plusmn;${pct(w, 0)} can flip it: the decision is <b>robust</b> to these one-at-a-time changes.`) + ` Taking the worst case over all five at once, the maximin choice is to <b>${rob ? 'treat' : 'not treat'}</b>${rob === nom ? ', the same' : ', different from the best-estimate choice: maximin is the cautious answer'}.`;
+  $('#run-rb').innerHTML = `<b>Running example</b>: &Delta; = ${fmt(p, 2)}&times;(75 &minus; 20) &minus; ${fmt(1 - p, 2)}&times;(100 &minus; 90) = ${tip(fmt(d0, 2), `${fmt(p * 55, 2)} − ${fmt((1 - p) * 10, 2)}`)}. Over the box (every number &plusmn;${pct(w, 0)}), the worst EU of treating is ${tip(fmt(mT, 2), 'minimum over the corners of (p, U(sick, treated), U(healthy, treated))')} and of not treating ${tip(fmt(mN, 2), 'minimum over the corners of (p, U(sick, untreated), U(healthy, untreated))')}, so the robust choice is ${rob ? 'treat' : 'don&rsquo;t treat'}.`;
+}
+$('#rb-p').addEventListener('input', e => { RB.p = +e.target.value; drawRB(); });
+$('#rb-w').addEventListener('input', e => { RB.w = +e.target.value; drawRB(); });
+fig($('#rb-cv'), drawRB);
+
+/* ---------- 9 · the off-switch game ---------- */
+const PF = { m: 1.5, s: 4, r: 1 };
+const pfBeta = r => r >= 0.999 ? Infinity : 0.02 * Math.pow(1000, r);
+const piH = (u, b) => b === Infinity ? (u > 0 ? 1 : 0) : 1 / (1 + Math.exp(-b * u));
+function pfDefer(m, s, b) { if (b === Infinity) return m * Phi(m / s) + s * phi(m / s); const n = 2000, lo = m - 9 * s, hi = m + 9 * s, hh = (hi - lo) / n; let t = 0; for (let k = 0; k <= n; k++) { const u = lo + k * hh, f = u * piH(u, b) * phi((u - m) / s) / s; t += f * (k === 0 || k === n ? 1 : k % 2 ? 4 : 2); } return t * hh / 3; }
+function drawPF() {
+  const C = C0(), { m, s, r } = PF, b = pfBeta(r), dV = pfDefer(m, s, b), rat = m * Phi(m / s) + s * phi(m / s);
+  $('#pf-m-o').textContent = fmt(m, 1); $('#pf-s-o').textContent = fmt(s, 1); $('#pf-b-o').textContent = b === Infinity ? '∞ (perfect)' : fmt(b, b < 1 ? 2 : 1);
+  const lo = Math.min(-12, m - 3.5 * s), hi = Math.max(12, m + 3.5 * s), top = phi(0) / s * 1.15;
+  const cv = $('#pf-cv'), H0 = cv.getBoundingClientRect().height, bh = Math.min(120, H0 * 0.36);
+  const v = frame(cv, [lo, hi], [0, top], { l: 30, b: bh + 30, r: 14 }); axes(v, 'true value U', '', { ny: 1, fy: () => '' }); clip(v);
+  const c = v.ctx, step = (hi - lo) / 240;
+  for (let k = 0; k < 240; k++) { const u = lo + (k + 0.5) * step, dn = phi((u - m) / s) / s, y = piH(u, b); c.fillStyle = C.a; c.globalAlpha = 0.12 + 0.5 * y; const x0b = Math.floor(v.X(u - step / 2)), wb = Math.ceil(v.X(u + step / 2)) - x0b; c.fillRect(x0b, v.Y(dn), wb, v.Y(0) - v.Y(dn)); c.fillStyle = C.bad; c.globalAlpha = 0.5 * (1 - y); c.fillRect(x0b, v.Y(dn), wb, v.Y(0) - v.Y(dn)); }
+  c.globalAlpha = 1; curve(v, u => phi((u - m) / s) / s, C.q, 2); curve(v, u => piH(u, b) * top * 0.92, C.lda, 1.6, [6, 4]); seg(v, 0, 0, 0, top, C.muted, 1, [2, 3]); seg(v, m, 0, m, phi(0) / s, C.q, 1.2, [3, 3]);
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = C.lda; c.textAlign = 'right'; c.fillText('P(human says yes)', v.X(hi) - 6, v.Y(top * 0.92) + 14); v.ctx.restore();
+  // option bars underneath
+  const opts = [['Act now', m], ['Switch off', 0], ['Defer to the human', dV]], ext = Math.max(2, ...opts.map(o => Math.abs(o[1]))) * 1.15, x0 = v.pad.l + v.pw * 0.5, sc = v.pw * 0.45 / ext, by0 = v.h - bh + 8, rh = (bh - 20) / 3;
+  const bi = opts.reduce((bb, o, k) => o[1] > opts[bb][1] + 1e-9 ? k : bb, 0);
+  c.strokeStyle = C.line; c.beginPath(); c.moveTo(x0 + 0.5, by0 - 4); c.lineTo(x0 + 0.5, by0 + 3 * rh); c.stroke();
+  opts.forEach(([lab, val], k) => { const y = by0 + k * rh; c.fillStyle = k === bi ? C.a : C.muted; c.globalAlpha = k === bi ? 0.85 : 0.5; c.fillRect(val >= 0 ? x0 : x0 + val * sc, y + 3, Math.max(2, Math.abs(val) * sc), rh - 8); c.globalAlpha = 1;
+    c.font = (k === bi ? '600 ' : '') + '12px ' + css('--f-body'); c.fillStyle = C.q; c.textBaseline = 'middle'; c.textAlign = val >= 0 ? 'right' : 'left'; c.fillText(lab, val >= 0 ? x0 - 8 : x0 + 8, y + rh / 2 - 1);
+    c.font = '11px ' + css('--f-mono'); c.textAlign = val >= 0 ? 'left' : 'right'; c.fillText(fmt(val, 3), val >= 0 ? x0 + Math.max(2, val * sc) + 5 : x0 + val * sc - 5, y + rh / 2 - 1); });
+  const gain = dV - Math.max(m, 0);
+  $('#pf-v').innerHTML = tip(fmt(gain, 3), `EU(defer) − max(EU(act), EU(off))\n= ${fmt(dV, 3)} − ${fmt(Math.max(m, 0), 3)}`);
+  $('#pf-best').textContent = opts[bi][0];
+  $('#pf-say').innerHTML = gain > 1e-6 ? (b === Infinity ? `The robot is unsure whether the action helps (P(U &lt; 0) = ${pct(Phi(-m / s), 0)}), so asking is worth ${fmt(gain, 3)} more than its best solo option: the human will veto exactly the bad cases (red). <b>Shrink &sigma;</b> and the advantage melts away.` : `Even with an imperfect human (&beta; = ${fmt(b, 2)}), deferring still beats acting alone by ${fmt(gain, 3)}: her mistakes cost less than her vetoes of bad actions save.`)
+    : b === Infinity ? `The robot is now so sure about the sign of U that the human&rsquo;s answer is predictable: deferring is worth only ${fmt(gain, 4)} more. A certain robot has no reason to keep the off-switch.`
+    : `With a human this unreliable (&beta; = ${fmt(b, 2)}), deferring is <b>worse</b> than the robot&rsquo;s own best option by ${fmt(-gain, 3)}: she often vetoes good actions and lets bad ones through. The incentive to defer depends on the human being reasonably rational.`;
+  $('#pf-cap').innerHTML = `The curve is the robot&rsquo;s belief about U, N(${fmt(m, 1)}, ${fmt(s, 1)}&sup2;). Shading shows what the human would do: <span style="color:var(--cA)">teal</span> where she lets it act, <span style="color:var(--qda)">red</span> where she switches it off; the dashed blue curve is &pi;<sub>H</sub>(U). Bars: the expected value of each option.`;
+  $('#run-pf1').innerHTML = `<b>Running example</b>: read U as your enjoyment of a new dish, with belief N(${fmt(m, 1)}, ${fmt(s, 1)}&sup2;) and &ldquo;skip it&rdquo; worth 0. Ordering blind is worth max(${fmt(m, 1)}, 0) = ${fmt(Math.max(m, 0), 2)}. A free taste first is worth E[max(U, 0)] = ${tip(fmt(rat, 3), `μΦ(μ/σ) + σφ(μ/σ)\n= ${fmt(m, 2)}×${fmt(Phi(m / s), 4)} + ${fmt(s, 2)}×${fmt(phi(m / s), 4)}`)}, so learning your own taste is worth ${fmt(rat - Math.max(m, 0), 3)}.`;
+  $('#run-pf2').innerHTML = `<b>Running example</b>: with &beta; = ${b === Infinity ? '&infin;' : fmt(b, 3)}, EU(defer) = ${tip(fmt(dV, 3), b === Infinity ? 'closed form μΦ(μ/σ) + σφ(μ/σ)' : 'Simpson’s rule, 2,000 intervals over μ ± 9σ')}${b === Infinity ? '' : `, against ${fmt(rat, 3)} with a perfect human`}; acting now is worth &mu; = ${fmt(m, 2)} and switching off 0.`;
+}
+[['m', 'm'], ['s', 's'], ['b', 'r']].forEach(([id, k]) => $('#pf-' + id).addEventListener('input', e => { PF[k] = +e.target.value; drawPF(); }));
+fig($('#pf-cv'), drawPF);
+
+/* ---------- project ---------- */
+const PJ = { fn: 5000, fp: 1000, R: null, models: null, t: 0 };
+const PY = { tot: [468.01, 707.18, 451.45, 409.44, 449.57, 487.74, 471.27, 384.24, 400.46, 427.79] };
+const POLS = [['Interview only', []], ['All five procedures', [0, 1, 2, 3, 4]]].concat(HD.PROC.map((P, j) => ['Only ' + P.name.replace(/^./, ch => ch.toLowerCase()), [j]])).concat([['Myopic VOI, VPI &minus; cost', 'net'], ['Myopic VOI, VPI &divide; cost', 'ratio'], ['Optimal plan (DP)', 'dp']]);
+function pjNodes() {
+  const meas = ['age in years, banded &lt;45, 45&ndash;54, 55&ndash;64, 65+', 'male or female', 'typical angina, atypical angina, non-anginal pain, no chest pain', 'resting blood pressure, &lt;140 or &ge;140 mm Hg'].concat(HD.PROC.map(P => P.what));
+  const outs = [4, 2, 4, 2].concat(HD.PROC.map(P => HD.K[P.f]));
+  const names = ['Age', 'Sex', 'Chest-pain type', 'Resting BP'].concat(HD.PROC.map(P => P.name));
+  const bins = { 4: 'chol &lt;240 or &ge;240 mg/dl &times; fasting sugar &gt;120 mg/dl or not', 6: 'angina yes/no &times; ST depression 0, under 2, 2+ &times; slope', 7: 'normal, fixed or reversible defect &times; max HR &lt;130, 130&ndash;159, 160+', 5: 'normal, ST-T abnormality, LV hypertrophy', 8: '0, 1, 2 or 3 vessels' };
+  $('#pj-nodes').innerHTML = '<thead><tr><th>node</th><th>what it records</th><th>results</th><th>cost (CAD)</th><th>I(node; disease)</th></tr></thead><tbody>' + names.map((n, j) => `<tr><td><b>${n}</b></td><td>${j >= 4 ? bins[j] : meas[j]}</td><td class="num">${outs[j]}</td><td class="num">${j < 4 ? 'known' : usd(HD.PROC[j - 4].c)}</td><td class="num">${tip(fmt(HD.mi(j), 3) + ' bits', 'mutual information from the 297-patient counts\nΣ P(x, d) log₂ [P(x, d) / P(x)P(d)]')}</td></tr>`).join('') + '</tbody>';
+}
+function pjEval() {
+  const t0 = performance.now(), Ls = { fn: PJ.fn, fp: PJ.fp }, N = HD.N;
+  if (!PJ.models) PJ.models = DATA.y.map((_, i) => { const M = HD.model(i); return { T: M.T, L0: HD.L0of(M, HD.X[i]) }; });
+  const R = POLS.map(() => ({ sp: 0, ls: 0, tot: [], mod: 0, ok: 0, fn: 0, fp: 0, first: new Array(6).fill(0) }));
+  for (let i = 0; i < N; i++) {
+    const M = PJ.models[i], x = HD.X[i], P = HD.plan(M.L0, M.T, Ls);
+    POLS.forEach(([, rule], k) => { const r = HD.run(x, M.L0, M.T, rule, Ls, P), y = DATA.y[i], loss = y && !r.treat ? Ls.fn : !y && r.treat ? Ls.fp : 0, o = R[k];
+      o.sp += r.spent / N; o.ls += loss / N; o.tot.push(r.spent + loss); o.mod += (r.spent + r.el) / N; o.ok += (r.treat === !!y) / N; o.fn += y && !r.treat ? 1 : 0; o.fp += !y && r.treat ? 1 : 0; o.first[r.done.length ? r.done[0] + 1 : 0]++; });
+  }
+  R.forEach(o => { const m = sum(o.tot) / N; o.mean = m; o.se = Math.sqrt(sum(o.tot.map(v => (v - m) ** 2)) / (N - 1) / N); });
+  PJ.R = R; PJ.t = performance.now() - t0; pjDraw();
+}
+function pjDraw() {
+  const R = PJ.R; if (!R) return; const C = C0(), def = PJ.fn === 5000 && PJ.fp === 1000, bi = R.reduce((b, o, k) => o.mean < R[b].mean ? k : b, 0), bm = R.reduce((b, o, k) => o.mod < R[b].mod ? k : b, 0);
+  $('#pj-board').innerHTML = '<thead><tr><th>policy</th><th>tests</th><th>errors</th><th>total</th><th>model&rsquo;s forecast</th><th>correct</th><th>missed</th><th>needless</th></tr></thead><tbody>' + R.map((o, k) => `<tr${k === bi ? ' class="win"' : ''}><td>${POLS[k][0]}</td><td class="num">${usd(o.sp)}</td><td class="num">${usd(o.ls)}</td><td class="num">${tip('<b>' + usd(o.mean) + '</b>', `mean over 297 patients of tests + loss\n± ${usd(o.se)} standard error${def ? `\nPython: $${PY.tot[k].toFixed(2)}` : ''}`)}</td><td class="num">${tip(usd(o.mod), 'mean of tests spent + the model’s expected loss of the final decision')}</td><td class="num">${pct(o.ok, 1)}</td><td class="num">${o.fn}</td><td class="num">${o.fp}</td></tr>`).join('') + '</tbody>';
+  // first test chart
+  const my = R[7].first, dp = R[9].first, labs = ['none'].concat(HD.PROC.map(P => P.short)), mx = Math.max(...my, ...dp) * 1.15;
+  const v = frame($('#pj-cv'), [0, 6], [0, mx], { l: 40, b: 28 }); axes(v, '', 'patients', { sx: 1, fx: () => '' }); const c = v.ctx, nar = v.w < 480;
+  labs.forEach((lab, k) => { [[my[k], C.b, 0.14], [dp[k], C.a, 0.5]].forEach(([val, col, off]) => { c.fillStyle = col; c.globalAlpha = 0.85; c.fillRect(v.X(k + off), v.Y(val), v.X(k + off + 0.34) - v.X(k + off), v.Y(0) - v.Y(val)); c.globalAlpha = 1; c.fillStyle = C.q; c.font = (nar ? 9 : 11) + 'px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillText(val, v.X(k + off + 0.17), v.Y(val) - 2); });
+    c.fillStyle = C.muted; c.textBaseline = 'top'; c.font = (nar ? 9 : 11) + 'px ' + css('--f-body'); c.fillText(fitText(c, lab, v.X(1) - v.X(0) - 2), v.X(k + 0.5), v.h - v.pad.b + 6); });
+  const topF = (f) => { let b = 1; for (let k = 2; k < 6; k++) if (f[k] > f[b]) b = k; return b; }, fm = topF(my), fd = topF(dp);
+  const io = R[0], al = R[1], mo = R[7], op = R[9];
+  $('#pj-prog').innerHTML = `Evaluated 297 patients &times; 10 policies (including the exact plan for each patient) in ${fmt(PJ.t, 0)} ms. Treatment threshold p* = L<sub>FP</sub> / (L<sub>FP</sub> + L<sub>FN</sub>) = ${fmt(PJ.fp / (PJ.fp + PJ.fn), 3)}.`;
+  $('#pj-say').innerHTML = `With these stakes the cheapest policy in practice is <b>${POLS[bi][0]}</b> at ${usd(R[bi].mean)} per patient (&plusmn; ${usd(R[bi].se)}), against ${usd(io.mean)} for deciding from the interview alone and ${usd(al.mean)} for ordering everything. When a test is ordered first, the myopic agent most often picks the <b>${HD.PROC[fm - 1].name}</b> (${my[fm]} patients) and the optimal plan the <b>${HD.PROC[fd - 1].name}</b> (${dp[fd]}); for ${my[0]} and ${dp[0]} patients respectively the interview is enough. ` +
+    `By its own forecast the optimal plan is the best policy (${usd(op.mod)}), as it must be, since it is optimal within the model. In reality it costs ${usd(op.mean)}${op.mean > mo.mean ? `, more than the myopic agent&rsquo;s ${usd(mo.mean)}` : ''}. ${op.mean - op.mod > 30 ? `The gap between forecast and reality is the naive-Bayes assumption at work: treating the tests as independent given the disease makes the network over-confident, so it buys too much certainty. Any plan is only as good as its model, the point of the sensitivity section.` : 'Here forecast and reality are close.'} Differences of less than about two standard errors, ${usd(2 * mo.se, 0)}, are within the noise of 297 patients.`;
+  $('#pj-fn-o').textContent = usd(PJ.fn, 0); $('#pj-fp-o').textContent = usd(PJ.fp, 0);
+}
+let pjT = 0;
+['fn', 'fp'].forEach(k => $('#pj-' + k).addEventListener('input', e => { PJ[k] = +e.target.value; $('#pj-' + k + '-o').textContent = usd(PJ[k], 0); $('#pj-prog').textContent = 'Re-planning for all 297 patients…'; clearTimeout(pjT); pjT = setTimeout(pjEval, 180); }));
+fig($('#pj-cv'), pjDraw);
+pjNodes();
+$('#pj-honest').innerHTML = 'The browser&rsquo;s network is a separate JavaScript implementation of the same recipe. Its naive-Bayes tables, VPIs and dynamic-programming plans reproduce the Python run above: every row of the default scoreboard matches to the cent, including the counts of which procedure is ordered first. Python also confirms the posterior against scikit-learn&rsquo;s CategoricalNB to about 10<sup>&minus;15</sup>. Three honest caveats. The two losses are illustrative value judgements, not clinical figures, so the &ldquo;best&rdquo; policy moves when you move them. Turney&rsquo;s prices come from one province&rsquo;s fee schedule of the mid-1990s, and they leave out risk, delay and discomfort. And naive Bayes ignores the correlations between tests, which is why its forecasts are too optimistic. This is a teaching model, not a diagnostic tool.';
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+
+redrawAll();
+setTimeout(pjEval, 60);
+window.__x066 = { HD, PJ, pjEval, AG, H, vpiT, vpiN, syCalc, trOpt, trMyo, pfDefer, ahOrder, ahCost, AH };
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
