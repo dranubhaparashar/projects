@@ -594,6 +594,32 @@ export const tracks: Track[] = [
 				],
 			},
 			{
+				num: "1.4 lab",
+				title: "The Sorting Machine: LDA & QDA, Hands-On",
+				summary:
+					"A hands-on companion to chapter 1.4 built around the classic salmon-versus-sea-bass sorting machine: place your own cut and count the mistakes, watch two prior-weighted bell curves decide, shape a Gaussian cloud and read its covariance, drag clouds to see why shared shapes give a straight border and different shapes a curve, follow a worked calculation where LDA and QDA disagree about one 65 cm fish, race both methods on tiny catches, find Fisher’s angle, then deploy a sorter with confusion matrices and a self-contained Python script. Presenter notes on every section.",
+				topics: [
+					"Bayes’ rule and class priors",
+					"Covariance and the shape of a cloud",
+					"Linear vs quadratic borders",
+					"Bias–variance and Fisher’s direction",
+				],
+				href: "/lectures/sorting-machine/",
+				length: "~35 min",
+				index: [
+					["cut", "Where would you cut?"],
+					["bet", "Bet on the likelier fish"],
+					["shapes", "Clouds and their shapes"],
+					["lda", "LDA: same shape, straight border"],
+					["qda", "QDA: own shapes, curved border"],
+					["byhand", "One fish, two opinions, by hand"],
+					["race", "Small catch, big surprise"],
+					["fisher", "Fisher’s angle"],
+					["project", "Project: build the machine"],
+					["summary", "What to carry home"],
+				],
+			},
+			{
 				num: "1.4a",
 				title: "Basis Expansions: Splines & Wavelets",
 				summary:
