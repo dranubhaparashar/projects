@@ -3,645 +3,1269 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Interactive classroom show: teach LDA and QDA by sorting salmon from sea bass. Click-through scenes with a Say this script for the presenter.">
+<meta name="description" content="Hands-on companion to the LDA &amp; QDA chapter: teach a computer to sort salmon from sea bass. Click-to-cut, weighted bell curves, draggable clouds, a worked calculation where LDA and QDA disagree, a small-sample race, Fisher's angle, and a runnable Python project.">
 <style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
 <title>The Sorting Machine</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
 <style>
-/* Layout: full-screen scene player. One idea per screen: words and buttons on the left, a live picture on the right. Fish-factory world: salmon orange, sea-bass blue, the border in signal amber. */
-:root{
-  --bg:#0C1330; --panel:#141D44; --panel2:#1C2858; --ink:#EEF1FF; --muted:#A3ABD2; --line:#2B3972;
-  --salmon:#FF8A65; --bass:#4CC3E6; --cut:#F7C14B; --on-cut:#1A1400; --good:#5FD39A; --bad:#FF6B81;
-  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
-  --body:"Inter","Segoe UI",system-ui,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
-  color-scheme:dark;
+/* Layout: the lecture notebook used across this site. One reading column (~68ch), figures that widen to the 1120px frame, a sticky section bar on top. Salmon and sea bass are the two classes; LDA blue and QDA red are the two methods, as in the parent chapter. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --sal: #D9612C;
+  --bass: #1B7F9E;
+  --cut: #A86B00;
+  --good: #0F8278;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
 }
-@media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){
-    --bg:#F3F5FB; --panel:#FFFFFF; --panel2:#E8ECF8; --ink:#121836; --muted:#535C88; --line:#D2D8EE;
-    --salmon:#D9572F; --bass:#137FA8; --cut:#A86B00; --on-cut:#FFFFFF; --good:#1E8A57; --bad:#C8344C;
-    color-scheme:light;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --sal: #FF8F5E; --bass: #4CC3E6; --cut: #F0C24B; --good: #38C0B1;
+    color-scheme: dark;
   }
 }
-:root[data-theme="light"]{
-  --bg:#F3F5FB; --panel:#FFFFFF; --panel2:#E8ECF8; --ink:#121836; --muted:#535C88; --line:#D2D8EE;
-  --salmon:#D9572F; --bass:#137FA8; --cut:#A86B00; --on-cut:#FFFFFF; --good:#1E8A57; --bad:#C8344C;
-  color-scheme:light;
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --sal: #FF8F5E; --bass: #4CC3E6; --cut: #F0C24B; --good: #38C0B1;
+  color-scheme: dark;
 }
-html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--body);overflow:hidden}
-.show{position:fixed;inset:0;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-.top,.nav,.saybar{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.top{display:flex;align-items:center;gap:14px;padding-block:10px;border-bottom:1px solid var(--line)}
-.brand{font:800 18px/1 var(--display);letter-spacing:-.01em;white-space:nowrap}
-.brand small{font:500 11px var(--mono);color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-left:8px}
-.dots{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
-.dot{width:11px;height:11px;border-radius:50%;background:var(--line);border:0;padding:0;cursor:pointer}
-.dot.on{background:var(--cut)}
-.saybtn{font:600 14px var(--body);padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;white-space:nowrap}
-.saybtn[aria-pressed="true"]{background:var(--cut);color:var(--on-cut);border-color:transparent}
-.stage{position:relative;flex:1;min-height:0}
-.scene{position:absolute;inset:0;overflow-y:auto;opacity:0;visibility:hidden;transform:translateY(12px);transition:opacity .35s ease,transform .35s ease,visibility .35s}
-.scene.on{opacity:1;visibility:visible;transform:none}
-.wrap{box-sizing:border-box;min-height:100%;max-width:1260px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:clamp(20px,4vw,56px);align-items:center;padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.wrap.one{grid-template-columns:minmax(0,1fr);max-width:1000px;align-content:center}
-@media (max-width:860px){.wrap{grid-template-columns:minmax(0,1fr);align-items:start}}
-.copy{display:flex;flex-direction:column;gap:14px;min-width:0}
-.eyebrow{font:600 12px/1.2 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cut)}
-h1,h2{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:-.02em}
-h1{font-size:clamp(44px,7vw,92px);line-height:.95;font-weight:800}
-h2{font-size:clamp(28px,3.6vw,48px);line-height:1.03;font-weight:800}
-.lead{font-size:clamp(16px,1.45vw,19px);color:var(--muted);max-width:48ch;margin:0}
-.lead b{color:var(--ink);font-weight:600}
-.note{font-size:14.5px;color:var(--muted);max-width:52ch;margin:0;border-left:3px solid var(--line);padding-left:12px}
-.ctrls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.b{font:600 15px/1.2 var(--body);padding:11px 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer}
-.b:hover{border-color:var(--muted)}
-.b.primary{background:var(--cut);color:var(--on-cut);border-color:transparent}
-.b.big{font-size:18px;padding:15px 22px}
-button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--cut);outline-offset:2px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.seg button{font:600 14px var(--body);padding:9px 13px;border:0;background:var(--panel);color:var(--muted);cursor:pointer}
-.seg button+button{border-left:1px solid var(--line)}
-.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
-.slider{display:flex;flex-direction:column;gap:4px;min-width:0}
-.slider label{font-size:14px;color:var(--muted);display:flex;justify-content:space-between;gap:10px}
-.slider label output{font-family:var(--mono);color:var(--ink);font-variant-numeric:tabular-nums}
-input[type=range]{width:100%;accent-color:var(--cut)}
-.readout{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
-.readout .num{font:800 clamp(40px,5vw,64px)/1 var(--display);font-variant-numeric:tabular-nums}
-.readout .lbl{color:var(--muted)}
-.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.key{display:flex;gap:16px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
-.key span{display:inline-flex;align-items:center;gap:6px}
-.sw{width:11px;height:11px;border-radius:50%;display:inline-block}
-.sw.s{background:var(--salmon)} .sw.b{background:var(--bass)}
-.sw.c{background:var(--cut);border-radius:2px;height:4px;width:16px}
-details.math{border:1px solid var(--line);border-radius:10px;padding:8px 14px;background:var(--panel);max-width:56ch}
-details.math summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--muted)}
-details.math p{margin:8px 0 4px;font-size:14.5px}
-details.math code{font-family:var(--mono);font-size:13.5px;background:var(--panel2);padding:2px 6px;border-radius:5px}
-.viz{min-width:0;display:flex;flex-direction:column;gap:10px;align-items:center}
-.viz canvas{display:block;max-width:100%;border-radius:14px;background:var(--panel);border:1px solid var(--line);touch-action:none}
-canvas.sq{width:min(100%,60vh);aspect-ratio:1}
-canvas.wide{width:min(100%,700px,100vh);aspect-ratio:16/10}
-canvas.sq-sm{width:min(100%,46vh);aspect-ratio:1}
-canvas.strip{width:min(100%,46vh);height:84px}
-canvas.grab{cursor:grab}
-.hint{font-size:13.5px;color:var(--muted);text-align:center}
-.bars{display:grid;gap:8px;width:100%;max-width:520px}
-.barrow{display:grid;grid-template-columns:86px minmax(0,1fr) 54px;gap:10px;align-items:center;font-size:14px}
-.bar{height:16px;background:var(--panel2);border-radius:8px;overflow:hidden}
-.bar span{display:block;height:100%;border-radius:8px;transition:width .15s}
-.verdict{font:700 20px var(--display)}
-.pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;width:min(100%,100vh)}
-.pair figure{margin:0;display:flex;flex-direction:column;gap:6px;min-width:0}
-.pair figcaption{display:flex;justify-content:space-between;gap:8px;font-size:14px;flex-wrap:wrap}
-.pair figcaption b{font-family:var(--display);font-size:17px}
-.pair canvas{width:100%;aspect-ratio:1}
-.board{display:grid;grid-template-columns:auto auto auto;gap:4px 18px;font-size:15px;align-items:baseline}
-.board .h{color:var(--muted);font-size:12.5px;text-transform:uppercase;letter-spacing:.08em}
-.board .lead-win{color:var(--good);font-weight:700}
-.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%}
-@media (max-width:760px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:460px){.cards{grid-template-columns:minmax(0,1fr)}}
-.card{min-height:150px;text-align:left;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:16px;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:8px}
-.card .yr{font:600 12px var(--mono);color:var(--cut);letter-spacing:.08em}
-.card .t{font:700 20px/1.15 var(--display)}
-.card .tap{font-size:13px;color:var(--muted);margin-top:auto}
-.card .back{display:none;font-size:14.5px;line-height:1.45}
-.card.flipped{background:var(--panel2)}
-.card.flipped .front{display:none}
-.card.flipped .back{display:block;animation:pop .3s ease}
-@keyframes pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
-.reveals{display:grid;gap:10px}
-.reveal{display:grid;grid-template-columns:44px minmax(0,1fr);gap:14px;align-items:center;text-align:left;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:14px 16px;font:inherit;cursor:pointer}
-.reveal .n{font:800 30px/1 var(--display);color:var(--cut)}
-.reveal .txt{display:none;font-size:clamp(16px,1.6vw,20px)}
-.reveal .hid{color:var(--muted)}
-.reveal.shown .txt{display:block;animation:pop .3s ease}
-.reveal.shown .hid{display:none}
-pre.code{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow-x:auto;font:13.5px/1.6 var(--mono);color:var(--ink)}
-pre.code .c{color:var(--muted)}
-.saybar{border-top:1px solid var(--line);background:var(--panel);padding-block:12px;display:flex;gap:12px;align-items:flex-start}
-.saybar .tag{font:600 11px/1.9 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--cut);white-space:nowrap}
-.saybar p{margin:0;font-size:clamp(15px,1.5vw,19px);max-width:110ch}
-.nav{display:flex;align-items:center;gap:12px;padding-block:10px;border-top:1px solid var(--line)}
-.nav .count{margin:0 auto;font:600 14px var(--mono);color:var(--muted)}
-.nav .b:disabled{opacity:.35;cursor:default}
-@media (prefers-reduced-motion: reduce){.scene,.bar span{transition:none}.card.flipped .back,.reveal.shown .txt{animation:none}}
+
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--sal), var(--bass)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+strong { font-weight: 600; }
+.lda-c { color: var(--lda); } .qda-c { color: var(--qda); } .sal-c { color: var(--sal); } .bass-c { color: var(--bass); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* nav */
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 14px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
+.notes-btn .short { display: none; }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.notes-btn { font: inherit; font-size: 0.82rem; white-space: nowrap; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 6px 10px; border-radius: 999px; cursor: pointer; }
+.notes-btn[aria-pressed="true"] { background: var(--cut); border-color: var(--cut); color: #fff; }
+:root[data-theme="dark"] .notes-btn[aria-pressed="true"] { color: #1a1400; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .notes-btn[aria-pressed="true"] { color: #1a1400; } }
+
+/* presenter notes (hidden until toggled) */
+.say { display: none; margin-top: 18px; max-width: 68ch; border-left: 3px solid var(--cut); background: color-mix(in srgb, var(--cut) 8%, var(--surface)); padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 0.98rem; }
+.say b { display: block; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cut); font-weight: 700; margin-bottom: 4px; }
+body.notes .say { display: block; }
+
+/* hero */
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 48px; align-items: center; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(3rem, 8vw, 5.6rem); line-height: 0.98; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 46ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+.dl-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+.dl-row a { text-decoration: none; }
+
+/* figures */
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; }
+.plot.drag canvas { touch-action: none; cursor: grab; }
+.plot.drag canvas.grabbing { cursor: grabbing; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-4x3 { aspect-ratio: 4 / 3; } .ar-3x1 { aspect-ratio: 3.2 / 1; } .ar-1x1 { aspect-ratio: 1; } .ar-strip { aspect-ratio: 6 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.sw.dash { background: repeating-linear-gradient(90deg, var(--muted) 0 3px, transparent 3px 6px); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.hint { font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
+
+/* sections */
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.tag.lda { color: var(--lda); } .tag.qda { color: var(--qda); }
+.tag.both::before { background: linear-gradient(90deg, var(--lda) 50%, var(--qda) 50%); }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab.wide-panel { grid-template-columns: minmax(0, 1fr) 340px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.pair figcaption { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.pair figcaption b { font-family: var(--f-display); font-size: 1.1rem; color: var(--ink); }
+.hero-grid > *, .lab > *, .two > *, .pair > *, .ex-grid > *, .fisher-grid > *, .code-grid > *, .cms > *, .verdict > *, .panel > * { min-width: 0; }
+
+/* panel controls */
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.readout { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.readout .big { font-family: var(--f-display); font-size: 2.6rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.readout .lbl { color: var(--muted); font-size: 0.92rem; }
+.readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.readouts div { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.readouts div:nth-child(odd) { padding-right: 12px; }
+.readouts dt { font-size: 0.76rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.readouts dd { margin: 2px 0 0; font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.bars { display: grid; gap: 12px; min-width: 0; }
+.bar-row { display: grid; grid-template-columns: 74px minmax(0, 1fr) 56px; gap: 12px; align-items: center; font-size: 0.92rem; }
+.bar-track { height: 14px; background: var(--soft); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 3px; transition: width .2s ease; }
+.verdict-line { font-family: var(--f-display); font-size: 1.35rem; margin-top: 6px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.board { display: grid; grid-template-columns: auto auto auto; gap: 4px 18px; font-size: 0.95rem; align-items: baseline; border-top: 1px solid var(--line); padding-top: 10px; }
+.board .h { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+.board .win { color: var(--good); font-weight: 600; }
+
+/* equations */
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq .lbl { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+
+/* covariance matrix display */
+.mtx { border-collapse: separate; border-spacing: 6px; margin: 0; }
+.mtx td { border: 0; padding: 0; }
+.mtx .cell { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 1.05rem; text-align: center; padding: 10px 6px; border-radius: 6px; min-width: 78px; }
+.mtx .diag { background: color-mix(in srgb, var(--good) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 40%, var(--line)); }
+.mtx .off { background: color-mix(in srgb, var(--lda) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--lda) 35%, var(--line)); }
+.mtx .lbl2 { font-size: 0.72rem; color: var(--muted); font-family: var(--f-mono); text-align: center; padding: 2px; }
+
+/* worked example */
+.ex-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; margin-top: 24px; align-items: start; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.data-tbl td { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.calc-steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.calc-steps li { padding: 12px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.calc-steps .h { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.calc-steps .m { overflow-x: auto; overflow-y: hidden; }
+details.how { margin-top: 8px; }
+details.how summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--lda); font-weight: 700; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); width: 12px; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { font-family: var(--f-mono); font-size: 0.82rem; color: var(--ink); background: color-mix(in srgb, var(--lda) 6%, var(--surface)); border: 1px solid color-mix(in srgb, var(--lda) 20%, var(--line)); padding: 9px 12px; border-radius: 6px; margin-top: 6px; overflow-x: auto; line-height: 1.8; }
+.verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 24px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.verdict > div { padding: 18px 20px; }
+.verdict > div + div { border-left: 1px solid var(--line); }
+.verdict .who { font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+.verdict .sayv { font-family: var(--f-display); font-size: 1.6rem; margin-top: 4px; line-height: 1.2; }
+.verdict .p { font-family: var(--f-mono); font-size: 0.9rem; color: var(--muted); margin-top: 4px; }
+
+/* fisher */
+.fisher-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; margin-top: 22px; }
+
+/* use cases */
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.92rem; color: var(--muted); line-height: 1.5; }
+.uses .when { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cut); }
+
+/* project */
+.brief { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 26px; border-top: 2px solid var(--ink); }
+.brief > div { padding: 14px 18px 14px 0; }
+.brief > div + div { padding-left: 18px; border-left: 1px solid var(--line); }
+.brief dt { font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.brief dd { margin: 6px 0 0; font-size: 0.98rem; line-height: 1.5; }
+.pipeline { list-style: none; counter-reset: p; padding: 0; margin: 26px 0 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; }
+.pipeline li { counter-increment: p; padding: 14px 14px 0 0; border-top: 1px solid var(--line); position: relative; font-size: 0.9rem; line-height: 1.45; }
+.pipeline li::before { content: "Step " counter(p); display: block; font-family: var(--f-mono); font-size: 0.72rem; color: var(--muted); margin-bottom: 4px; }
+.pipeline li::after { content: ""; position: absolute; top: -4px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+.pipeline b { display: block; font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-top: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
+.tiles > div { padding: 16px 18px; }
+.tiles > div + div { border-left: 1px solid var(--line); }
+.tiles .v { font-family: var(--f-display); font-size: 2.1rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tiles .k { font-size: 0.82rem; color: var(--muted); }
+.tiles .who { font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+.cms { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 18px; }
+.cm { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.cm td, .cm th { text-align: center; padding: 8px 6px; }
+.cm th { font-family: var(--f-body); text-transform: none; letter-spacing: 0; font-size: 0.8rem; }
+.cm td.hit { background: var(--soft); font-weight: 500; }
+.cm td.miss { box-shadow: inset 0 0 0 2px var(--qda); font-weight: 600; color: var(--qda); }
+.cm caption { caption-side: top; text-align: left; font-weight: 600; padding-bottom: 6px; font-size: 0.95rem; }
+.status { font-size: 0.92rem; padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.prob-row { display: grid; grid-template-columns: 86px minmax(0, 1fr) 62px; gap: 10px; align-items: center; font-size: 0.88rem; margin-top: 6px; }
+.prob-row.win { font-weight: 600; }
+pre.code { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; overflow-x: auto; font-family: var(--f-mono); font-size: 0.84rem; line-height: 1.6; color: var(--ink); }
+pre.code .c { color: var(--muted); }
+pre.code .k { color: var(--lda); }
+pre.code .s { color: var(--good); }
+.code-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px; }
+.code-head span { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; }
+.code-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; margin-top: 18px; }
+
+/* summary */
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); }
+.take li { padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 1.05rem; }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+
+@media (max-width: 920px) {
+  .hero-grid, .ex-grid, .lab, .lab.wide-panel, .fisher-grid, .code-grid { grid-template-columns: minmax(0, 1fr); }
+  .pipeline { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 18px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tiles > div:nth-child(3) { border-left: 0; }
+  .tiles > div:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .brief, .cms, .verdict { grid-template-columns: minmax(0, 1fr); }
+  .brief > div + div, .verdict > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .verdict > div + div { padding-left: 20px; }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .uses { grid-template-columns: minmax(0, 1fr); }
+  .pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ar-16x10 { aspect-ratio: 4 / 3.4; }
+  .ar-3x1 { aspect-ratio: 2 / 1; }
+  .brand span { display: none; }
+  .brand { font-size: 1.05rem; }
+  .topbar .wrap { gap: 8px; }
+  .navlinks { display: none; }
+  .notes-btn .long { display: none; }
+  .notes-btn .short { display: inline; }
+  .lx a { font-size: 0.84rem; }
+}
+@media (prefers-reduced-motion: reduce) { .bar-fill, .lx a { transition: none; } }
 </style>
 </head>
 <body>
-<div class="show">
-  <header class="top">
-    <div class="brand">The Sorting Machine<small>LDA &amp; QDA</small></div>
-    <nav class="dots" id="dots" aria-label="Scenes"></nav>
-    <button class="saybtn" id="sayBtn" aria-pressed="false" title="Show what to say (S)">Say this</button>
-  </header>
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">The Sorting Machine <span>&middot; LDA &amp; QDA, hands-on</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#cut">Cut</a>
+      <a href="#bet">Bet</a>
+      <a href="#shapes">Shapes</a>
+      <a href="#lda">LDA</a>
+      <a href="#qda">QDA</a>
+      <a href="#byhand">By hand</a>
+      <a href="#race">Race</a>
+      <a href="#fisher">Fisher</a>
+      <a href="#project">Project</a>
+      <a href="#summary">Summary</a>
+    </div>
+    <button type="button" class="notes-btn" id="notes-btn" aria-pressed="false" title="Show what to say to the class on each section (S)"><span class="long">Presenter notes</span><span class="short">Notes</span></button>
+  </div>
+</nav>
 
-  <main class="stage">
-
-    <!-- 0 START -->
-    <section class="scene" data-say="Imagine a fish factory. Fish come down a belt, salmon and sea bass, and a machine has to push each one into the right bin. It can only measure simple things like length and brightness. Today we build the brain of that machine, just by clicking. The two methods we'll meet are called LDA and QDA.">
-      <div class="wrap">
-        <div class="copy">
-          <div class="eyebrow">Machine learning · classification</div>
-          <h1>The Sorting Machine</h1>
-          <p class="lead">A fish factory gets thousands of fish a day: <b>salmon</b> and <b>sea bass</b>. A camera measures each one. Today we teach a computer to sort them, and on the way you'll meet <b>LDA</b> and <b>QDA</b>.</p>
-          <div class="ctrls"><button class="b primary big" id="startBtn">Start the conveyor →</button></div>
-          <p class="note">Move with the › button or the → key. Press <b>Say this</b> (or S) to see what to tell the class on each screen.</p>
-        </div>
-        <div class="viz"><canvas class="wide" id="cvBelt" aria-label="Fish moving down a conveyor belt into salmon and sea bass bins"></canvas></div>
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Supervised classification &middot; hands-on companion to <a href="../lda-qda/">LDA &amp; QDA</a></div>
+      <h1>The Sorting Machine</h1>
+      <div class="sub">Teaching a computer to tell salmon from sea bass</div>
+      <p class="lead">A fish factory gets thousands of fish a day on one conveyor belt. A camera measures each one, and a machine has to push it into the right bin. Building that machine is the whole of discriminant analysis: this page builds it one click at a time, from a single cut to a runnable Python project.</p>
+      <dl class="facts">
+        <div><dt>Setting</dt><dd>Duda, Hart &amp; Stork's classic fish example</dd></div>
+        <div><dt>You will build</dt><dd>A two-feature classifier, LDA and QDA</dd></div>
+        <div><dt>Goes with</dt><dd><a href="../lda-qda/">Chapter 1.4, LDA &amp; QDA</a>, which has the full theory</dd></div>
+      </dl>
+      <div class="dl-row">
+        <a class="btn primary" href="#cut">Start at the first cut &darr;</a>
+        <a class="btn" href="#project">Skip to the project</a>
+        <a class="btn" href="../lda-qda/">Full LDA &amp; QDA chapter &rarr;</a>
       </div>
-    </section>
+    </div>
+    <figure>
+      <div class="fig-head">
+        <div class="legend"><span><i class="sw dot" style="background:var(--sal)"></i>salmon</span><span><i class="sw dot" style="background:var(--bass)"></i>sea bass</span></div>
+        <button type="button" class="btn" id="belt-btn" aria-pressed="true">Pause the belt</button>
+      </div>
+      <div class="plot ar-16x10"><canvas id="belt-cv" aria-label="Fish moving along a conveyor belt through a sorter and into two bins"></canvas></div>
+      <figcaption>The sorter in the middle sees two numbers per fish, length and brightness, and must decide. Everything below is about what rule it should use.</figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--bass)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#cut"><i>01</i>Where would you cut?</a></li>
+    <li><a href="#bet"><i>02</i>Bet on the likelier fish</a></li>
+    <li><a href="#shapes"><i>03</i>Clouds and their shapes</a></li>
+    <li><a href="#lda"><i>04</i>LDA: same shape, straight border</a></li>
+    <li><a href="#qda"><i>05</i>QDA: own shapes, curved border</a></li>
+    <li><a href="#byhand"><i>06</i>One fish, two opinions, by hand</a></li>
+    <li><a href="#race"><i>07</i>Small catch, big surprise</a></li>
+    <li><a href="#fisher"><i>08</i>Fisher's angle</a></li>
+    <li><a href="#project"><i>09</i>Project: build the machine</a></li>
+    <li><a href="#summary"><i>10</i>What to carry home</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
 
-    <!-- 1 CUT -->
-    <section class="scene" data-say="Call one student up. Ask them to click where they'd separate the two colours. Read out the mistakes counter. Then press 'Show the best cut'. Point out that even the best cut makes some mistakes, because some salmon are long and some sea bass are short. The groups overlap, and a machine has to live with that.">
-      <div class="wrap">
-        <div class="copy">
-          <div class="eyebrow">Step 1 · You are the machine</div>
-          <h2>Where would you cut?</h2>
-          <p class="lead">Each dot is one fish, placed by its <b>length</b>. Click anywhere on the picture to put your cut. Everything left of it gets called salmon, everything right gets called sea bass.</p>
-          <div class="key"><span><i class="sw s"></i>salmon</span><span><i class="sw b"></i>sea bass</span><span>red ring = sorted wrong</span></div>
-          <div class="readout"><span class="num" id="rdCut">0</span><span class="lbl" id="rdCutOf">mistakes</span></div>
-          <div class="ctrls">
-            <button class="b primary" id="bestCut">Show the best cut</button>
-            <button class="b" id="newCatch">New catch of fish</button>
-          </div>
-          <p class="note" id="bestNote">No cut gets zero mistakes, because the two groups overlap. Every method today is about handling that overlap well.</p>
+<main>
+<!-- 01 CUT -->
+<section class="chap" id="cut">
+  <div class="wrap">
+    <div class="tag">Step 01 &middot; you are the machine</div>
+    <h2>Where would you cut?</h2>
+    <div class="prose">
+      <p>Start with one measurement: <strong>length</strong>. Each dot below is a fish from this morning's catch of 40, placed by its length. Salmon tend to be shorter, sea bass longer, but the two groups overlap. The simplest machine is a single <em class="term">cut</em>: everything left of it goes in the salmon bin, everything right goes in the sea bass bin.</p>
+      <p>Click on the plot to place your cut. Fish with a red ring are the ones your rule gets wrong.</p>
+    </div>
+    <aside class="say"><b>Say this</b>Call one student up. Ask them to click where they'd separate the two colours, and read out the mistakes counter. Then press "Show the best cut". Point out that even the best cut makes mistakes, because some salmon are long and some sea bass are short. The groups overlap, and a machine has to live with that.</aside>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-3x1"><canvas id="cut-cv" aria-label="Dot plot of 40 fish lengths with a movable cut line"></canvas></div>
+        <p class="hint">Click or drag on the plot to move your cut. <span class="mono" id="cut-pos"></span></p>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="readout"><span class="big num" id="cut-wrong">0</span><span class="lbl" id="cut-of">mistakes out of 40</span></div>
         </div>
-        <div class="viz">
-          <canvas class="wide grab" id="cvCut" aria-label="Dot plot of fish lengths with a movable cut line"></canvas>
-          <div class="hint">Click or drag on the picture to move your cut</div>
+        <div class="grp">
+          <div class="btns">
+            <button type="button" class="btn primary" id="cut-best">Show the best cut</button>
+            <button type="button" class="btn" id="cut-new">New catch of fish</button>
+          </div>
+          <p class="note" id="cut-note">No cut gets zero mistakes on an overlapping catch. The error you cannot remove by moving the cut is called the <strong>Bayes error</strong>; every method on this page is about getting as close to it as possible.</p>
         </div>
       </div>
-    </section>
+    </div>
+  </div>
+</section>
 
-    <!-- 2 BET -->
-    <section class="scene" data-say="Drag the slider slowly from left to right and watch the chance bars flip from salmon to sea bass. Where they are 50-50 is the border. Now press '80% salmon'. If most fish are salmon anyway, the border moves right: we need more proof before we call something a sea bass. Finally press 'Sea bass vary more'. Now there are two borders! Remember this, because it is the reason QDA exists.">
-      <div class="wrap">
-        <div class="copy">
-          <div class="eyebrow">Step 2 · Bet on the likelier one</div>
-          <h2>Turn counts into chances</h2>
-          <p class="lead">Smooth the dots into two hills. For a new fish, compare the hills at its length: <b>the taller hill is the better bet</b>. That's Bayes' rule, and it's all LDA and QDA really do.</p>
-          <div class="slider">
-            <label for="len">New fish length <output id="lenV">62 cm</output></label>
-            <input type="range" id="len" min="30" max="100" step="0.5" value="62">
-          </div>
+<!-- 02 BET -->
+<section class="chap" id="bet">
+  <div class="wrap">
+    <div class="tag both">Step 02 &middot; Bayes' rule</div>
+    <h2>Bet on the likelier fish</h2>
+    <div class="prose">
+      <p>A cut is a rule, but it is not a reason. Here is the reason. Smooth each group's dots into a bell-shaped hill: the <strong>normal distribution</strong> of lengths for that fish, with a mean \(\mu\) (where the hill sits) and a standard deviation \(\sigma\) (how wide it spreads). Then scale each hill by how common that fish is, its <strong>prior</strong> \(\pi\). For a new fish of length \(x\), compare the two scaled hills at \(x\) and <strong>pick the taller one</strong>.</p>
+      <p>That is Bayes' rule, and it is all LDA and QDA ever do. The border between the bins is simply where the two scaled hills cross.</p>
+    </div>
+    <div class="eq">
+      <div class="lbl">Bayes' rule for classification</div>
+      <div class="m">\[ P(\text{salmon}\mid x) \;=\; \frac{\pi_{\text{s}}\, f_{\text{s}}(x)}{\pi_{\text{s}}\, f_{\text{s}}(x) + \pi_{\text{b}}\, f_{\text{b}}(x)} \]</div>
+      <div class="read"><b>Read it as:</b> the chance it is salmon = (how common salmon are) &times; (how typical this length is for a salmon), divided by the same thing summed over both fish so the two chances add to one. \(f_{\text{s}}\) is the salmon hill, a normal density with its own \(\mu\) and \(\sigma\).</div>
+    </div>
+    <aside class="say"><b>Say this</b>Drag the slider slowly from left to right and watch the chance bars flip from salmon to sea bass. Where they are 50-50 is the border. Now press "80% salmon". The salmon hill gets taller, so the border moves right: when most fish are salmon anyway, a fish needs to be longer before we call it a sea bass. Finally press "Sea bass vary more". Now there are two borders. Remember this one, because it is the reason QDA exists.</aside>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10"><canvas id="bet-cv" aria-label="Two bell curves, scaled by priors, with the decision border and a movable new fish"></canvas></div>
+        <div class="legend" style="margin-top:10px"><span><i class="sw" style="background:var(--sal)"></i>salmon hill, \(\pi_s f_s\)</span><span><i class="sw" style="background:var(--bass)"></i>sea bass hill, \(\pi_b f_b\)</span><span><i class="sw" style="background:var(--cut)"></i>border</span></div>
+        <p class="note" id="bet-border" style="margin-top:8px" aria-live="polite"></p>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="bet-x">New fish length</label><output id="bet-x-o">62 cm</output></div><input type="range" id="bet-x" min="30" max="100" step="0.5" value="62"></div>
           <div class="bars">
-            <div class="barrow"><span>Salmon</span><div class="bar"><span id="barS" style="background:var(--salmon)"></span></div><span class="mono" id="pS">0%</span></div>
-            <div class="barrow"><span>Sea bass</span><div class="bar"><span id="barB" style="background:var(--bass)"></span></div><span class="mono" id="pB">0%</span></div>
+            <div class="bar-row"><b class="sal-c">Salmon</b><div class="bar-track"><div class="bar-fill" id="bet-ps-bar" style="background:var(--sal)"></div></div><span class="num" id="bet-ps">0%</span></div>
+            <div class="bar-row"><b class="bass-c">Sea bass</b><div class="bar-track"><div class="bar-fill" id="bet-pb-bar" style="background:var(--bass)"></div></div><span class="num" id="bet-pb">0%</span></div>
           </div>
-          <div class="verdict" id="verdict">→ Call it salmon</div>
-          <div class="ctrls">
-            <div class="seg" role="group" aria-label="How common is each fish">
-              <button id="pr50" aria-pressed="true">Equal catch</button>
-              <button id="pr80" aria-pressed="false">80% salmon</button>
-            </div>
-            <button class="b" id="wideBtn" aria-pressed="false">Sea bass vary more</button>
-          </div>
-          <p class="note" id="betBorder">Border at 63.5 cm</p>
-          <details class="math"><summary>The math, if a student asks</summary>
-            <p><code>P(salmon | length) = P(length | salmon) × P(salmon) / P(length)</code></p>
-            <p>“How typical is this length for salmon” × “how common are salmon”. Do the same for sea bass and pick the bigger one. The bottom part, P(length), is the same for both, so you can ignore it.</p>
-          </details>
+          <div class="verdict-line" id="bet-verdict"></div>
         </div>
-        <div class="viz">
-          <canvas class="wide" id="cvBet" aria-label="Two bell curves for salmon and sea bass lengths with the decision border"></canvas>
-          <div class="key"><span><i class="sw s"></i>salmon hill</span><span><i class="sw b"></i>sea bass hill</span><span><i class="sw c"></i>border</span></div>
+        <div class="grp">
+          <h4>How common is each fish?</h4>
+          <div class="seg" role="group" aria-label="Priors"><button type="button" id="bet-p50" aria-pressed="true">Equal catch</button><button type="button" id="bet-p80" aria-pressed="false">80% salmon</button></div>
+        </div>
+        <div class="grp">
+          <h4>How much do sea bass vary?</h4>
+          <div class="seg" role="group" aria-label="Sea bass spread"><button type="button" id="bet-same" aria-pressed="true">Same as salmon, &sigma; = 7</button><button type="button" id="bet-wide" aria-pressed="false">Twice as much, &sigma; = 14</button></div>
+          <p class="note">Same spread &rarr; one border, and this is LDA in one dimension. Different spreads &rarr; the hills cross twice, and this is QDA.</p>
         </div>
       </div>
-    </section>
+    </div>
+  </div>
+</section>
 
-    <!-- 3 LINE (LDA) -->
-    <section class="scene" data-say="Drag the orange dot around. The yellow border always stays a straight line. It just moves and turns. Now turn the tilt dial: both clouds tilt together and the border leans to match them. The ringed fish are the mistakes. That's LDA: when both groups have the same shape, the best border is a straight line.">
-      <div class="wrap">
-        <div class="copy">
-          <div class="eyebrow">Step 3 · Two measurements → LDA</div>
-          <h2>Same shapes make a straight border</h2>
-          <p class="lead">Now the camera also measures <b>brightness</b>, so each group becomes a cloud. When both clouds have the <b>same shape</b>, the best border is always a straight line. That's <b>Linear Discriminant Analysis</b>.</p>
-          <div class="slider">
-            <label for="tilt">Tilt both clouds <output id="tiltV">35°</output></label>
-            <input type="range" id="tilt" min="0" max="180" step="1" value="35">
-          </div>
-          <div class="readout"><span class="num" id="rdLine">0</span><span class="lbl">of 120 fish sorted right</span></div>
-          <div class="ctrls"><button class="b" id="resetLine">Reset</button></div>
-          <p class="note">Look closely: the border doesn't just cut halfway between the two big dots at a right angle. It leans with the shape of the clouds.</p>
-          <details class="math"><summary>The math, if a student asks</summary>
-            <p><code>δₖ(x) = xᵀΣ⁻¹μₖ − ½ μₖᵀΣ⁻¹μₖ + log πₖ</code></p>
-            <p>μ is a cloud's centre, Σ its shape (shared by both), π how common it is. Because both groups share Σ, the x-squared parts cancel and what's left is a straight line.</p>
-          </details>
+<!-- 03 SHAPES -->
+<section class="chap" id="shapes">
+  <div class="wrap">
+    <div class="tag">Step 03 &middot; two measurements</div>
+    <h2>Clouds and their shapes</h2>
+    <div class="prose">
+      <p>Now the camera also measures <strong>brightness</strong>. Each fish becomes a point on a plane, and each group becomes a <em class="term">cloud</em>. A normal cloud in two dimensions is described by two things: its <strong>centre</strong> \(\mu\), a pair of means, and its <strong>shape</strong> \(\Sigma\), the <strong>covariance matrix</strong>. The matrix holds three numbers: how much length varies, how much brightness varies, and whether they move together (the <em class="term">tilt</em>).</p>
+      <p>Play with the sliders. Watch the off-diagonal number: it is zero when the cloud is upright and grows as you tilt it, because long fish then tend to be bright fish too.</p>
+    </div>
+    <aside class="say"><b>Say this</b>Make the cloud wide, then tall, then tilt it. Point at the matrix each time: the top-left number is the spread in length, the bottom-right is the spread in brightness, and the two matching off-diagonal numbers say whether the two go together. Everything LDA and QDA argue about is whether two clouds share this matrix.</aside>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-4x3"><canvas id="cov-cv" aria-label="One cloud of 150 points with its one and two standard deviation ellipses"></canvas></div>
+        <figcaption>150 fish from one normal cloud. The inner ellipse holds about 39% of them (one standard deviation), the outer about 86% (two).</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="cov-sx">Spread in length</label><output id="cov-sx-o">1.6</output></div><input type="range" id="cov-sx" min="0.3" max="2.5" step="0.05" value="1.6"></div>
+          <div class="ctrl"><div class="top"><label for="cov-sy">Spread in brightness</label><output id="cov-sy-o">0.7</output></div><input type="range" id="cov-sy" min="0.3" max="2.5" step="0.05" value="0.7"></div>
+          <div class="ctrl"><div class="top"><label for="cov-rot">Tilt</label><output id="cov-rot-o">30&deg;</output></div><input type="range" id="cov-rot" min="0" max="179" step="1" value="30"></div>
         </div>
-        <div class="viz">
-          <canvas class="sq grab" id="cvLine" aria-label="Two point clouds with a straight LDA border; drag the centres"></canvas>
-          <div class="hint">Drag the two big dots · x = length, y = brightness</div>
+        <div class="grp">
+          <h4>Covariance matrix &Sigma;</h4>
+          <table class="mtx" aria-label="Covariance matrix">
+            <tr><td></td><td class="lbl2">length</td><td class="lbl2">brightness</td></tr>
+            <tr><td class="lbl2">length</td><td class="cell diag" id="cov-11">0</td><td class="cell off" id="cov-12">0</td></tr>
+            <tr><td class="lbl2">brightness</td><td class="cell off" id="cov-21">0</td><td class="cell diag" id="cov-22">0</td></tr>
+          </table>
+          <p class="note" id="cov-note"></p>
         </div>
       </div>
-    </section>
+    </div>
+    <div class="eq">
+      <div class="lbl">The normal cloud in two dimensions</div>
+      <div class="m">\[ f(x) = \frac{1}{2\pi\sqrt{|\Sigma|}}\; \exp\!\Big(-\tfrac12\,(x-\mu)^\top \Sigma^{-1} (x-\mu)\Big) \]</div>
+      <div class="read"><b>Read it as:</b> height falls off with the <b>Mahalanobis distance</b> from the centre, a distance that counts steps in units of the cloud's own spread in that direction. \(|\Sigma|\) is the determinant: a measure of the cloud's area.</div>
+    </div>
+  </div>
+</section>
 
-    <!-- 4 CURVE (QDA) -->
-    <section class="scene" data-say="Make the blue cloud wide and the orange one small. The border bends around the orange group. Now press 'Make an island'. The salmon end up inside a closed loop, and a straight line can never do that. Compare the two scores: QDA wins here. Press 'Same shapes again' and the curve flattens back into LDA's straight line.">
-      <div class="wrap">
-        <div class="copy">
-          <div class="eyebrow">Step 4 · Different shapes → QDA</div>
-          <h2>Different shapes bend the border</h2>
-          <p class="lead">Real groups rarely share a shape. Give each cloud its own spread and the best border <b>curves</b>. That's <b>Quadratic Discriminant Analysis</b>. The faint dotted line is what LDA would still draw.</p>
-          <div class="slider">
-            <label for="s1">Salmon spread <output id="s1V">0.70</output></label>
-            <input type="range" id="s1" min="0.3" max="2.4" step="0.05" value="0.7">
-          </div>
-          <div class="slider">
-            <label for="s2">Sea bass spread <output id="s2V">1.60</output></label>
-            <input type="range" id="s2" min="0.3" max="2.4" step="0.05" value="1.6">
-          </div>
-          <div class="ctrls">
-            <button class="b primary" id="island">Make an island</button>
-            <button class="b" id="sameShape">Same shapes again</button>
-            <button class="b" id="showL" aria-pressed="true">Hide LDA's line</button>
-          </div>
+<!-- 04 LDA -->
+<section class="chap" id="lda">
+  <div class="wrap">
+    <div class="tag lda">Step 04 &middot; Linear Discriminant Analysis</div>
+    <h2>Same shape, straight border</h2>
+    <div class="prose">
+      <p>Suppose both clouds have the <strong>same shape</strong> \(\Sigma\) and differ only in where they sit. Apply Bayes' rule to the two clouds and something pleasant happens: the border between the bins is always a <strong>straight line</strong>. This is <strong class="lda-c">Linear Discriminant Analysis</strong>.</p>
+      <p>Drag the two big dots to move the clouds. The border moves and turns but never bends. Then change the tilt: both clouds tilt together, and the line leans to follow them. It is not the perpendicular bisector of the two centres; it respects the shape.</p>
+    </div>
+    <aside class="say"><b>Say this</b>Drag the orange dot around. The border always stays a straight line; it just moves and turns. Now turn the tilt dial: both clouds tilt together and the border leans to match them. The ringed fish are the mistakes. That is LDA: when both groups have the same shape, the best border is a straight line.</aside>
+    <div class="lab">
+      <figure>
+        <div class="plot drag ar-1x1"><canvas id="lda-cv" aria-label="Two point clouds of the same shape with the straight LDA border; drag the centres"></canvas></div>
+        <p class="hint">Drag the two large dots. Horizontal axis: length. Vertical: brightness.</p>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="readout"><span class="big num" id="lda-ok">0</span><span class="lbl">of 120 fish sorted right</span></div>
+        </div>
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="lda-rot">Tilt of both clouds</label><output id="lda-rot-o">35&deg;</output></div><input type="range" id="lda-rot" min="0" max="179" step="1" value="35"></div>
+          <button type="button" class="btn" id="lda-reset">Reset</button>
+        </div>
+      </div>
+    </div>
+    <div class="eq">
+      <div class="lbl">LDA score for class k</div>
+      <div class="m">\[ \delta_k(x) = x^\top \Sigma^{-1}\mu_k \;-\; \tfrac12\,\mu_k^\top \Sigma^{-1}\mu_k \;+\; \log \pi_k \]</div>
+      <div class="read"><b>Read it as:</b> a score that is <b>linear in \(x\)</b>. Compute it for salmon and for sea bass and pick the bigger. The term \(x^\top\Sigma^{-1}x\) appears in both scores, because both share \(\Sigma\), so it cancels when you compare them. That cancellation is why the border is straight.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 QDA -->
+<section class="chap" id="qda">
+  <div class="wrap">
+    <div class="tag qda">Step 05 &middot; Quadratic Discriminant Analysis</div>
+    <h2>Own shapes, curved border</h2>
+    <div class="prose">
+      <p>Real groups rarely share a shape. Salmon might be a tight cloud and sea bass a wide one. Give each cloud its <strong>own</strong> \(\Sigma_k\), apply Bayes' rule again, and the \(x^\top\Sigma_k^{-1}x\) terms no longer cancel. The border becomes a <strong>curve</strong>: an ellipse, a parabola or a hyperbola. This is <strong class="qda-c">Quadratic Discriminant Analysis</strong>.</p>
+      <p>Make the sea bass cloud wide and the salmon cloud tight. The border bends around the tight group. Press "Make an island" and the salmon end up inside a closed loop, which no straight line could ever draw. The faint dotted line is what LDA would still insist on.</p>
+    </div>
+    <aside class="say"><b>Say this</b>Make the blue cloud wide and the orange one small. The border bends around the orange group. Now press "Make an island": the salmon are inside a closed loop, and a straight line can never do that. Compare the two scores; QDA wins here. Press "Same shapes again" and the curve flattens back into LDA's straight line.</aside>
+    <div class="lab">
+      <figure>
+        <div class="plot drag ar-1x1"><canvas id="qda-cv" aria-label="Two point clouds of different shapes with the curved QDA border and the faint LDA line; drag the centres"></canvas></div>
+        <div class="legend" style="margin-top:10px"><span><i class="sw" style="background:var(--qda)"></i>QDA border</span><span><i class="sw dash"></i>LDA border, for comparison</span></div>
+      </figure>
+      <div class="panel">
+        <div class="grp">
           <div class="board" aria-live="polite">
             <span class="h">Method</span><span class="h">Border</span><span class="h">Sorted right</span>
-            <span id="qName">QDA</span><span>curved</span><span class="mono" id="rdQ">0 / 120</span>
-            <span id="lName">LDA</span><span>straight</span><span class="mono" id="rdL">0 / 120</span>
+            <span id="qda-qn" class="qda-c">QDA</span><span>curved</span><span class="num" id="qda-okq">0 / 120</span>
+            <span id="qda-ln" class="lda-c">LDA</span><span>straight</span><span class="num" id="qda-okl">0 / 120</span>
           </div>
-          <details class="math"><summary>The math, if a student asks</summary>
-            <p><code>δₖ(x) = −½ log|Σₖ| − ½ (x − μₖ)ᵀ Σₖ⁻¹ (x − μₖ) + log πₖ</code></p>
-            <p>Now every group k has its own shape Σₖ. The x-squared part no longer cancels, so the border can be a curve: an ellipse, a parabola or a hyperbola.</p>
-          </details>
         </div>
-        <div class="viz">
-          <canvas class="sq grab" id="cvCurve" aria-label="Two point clouds with a curved QDA border; drag the centres"></canvas>
-          <div class="hint">Drag the big dots · solid = QDA border, faint dots = LDA border</div>
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="qda-s1">Salmon spread</label><output id="qda-s1-o">0.70</output></div><input type="range" id="qda-s1" min="0.3" max="2.4" step="0.05" value="0.7"></div>
+          <div class="ctrl"><div class="top"><label for="qda-s2">Sea bass spread</label><output id="qda-s2-o">1.60</output></div><input type="range" id="qda-s2" min="0.3" max="2.4" step="0.05" value="1.6"></div>
+        </div>
+        <div class="grp">
+          <div class="btns">
+            <button type="button" class="btn primary" id="qda-island">Make an island</button>
+            <button type="button" class="btn" id="qda-same">Same shapes again</button>
+            <button type="button" class="btn" id="qda-showl" aria-pressed="true">Hide LDA's line</button>
+          </div>
         </div>
       </div>
-    </section>
+    </div>
+    <div class="eq">
+      <div class="lbl">QDA score for class k</div>
+      <div class="m">\[ \delta_k(x) = -\tfrac12 \log|\Sigma_k| \;-\; \tfrac12\,(x-\mu_k)^\top \Sigma_k^{-1}(x-\mu_k) \;+\; \log \pi_k \]</div>
+      <div class="read"><b>Read it as:</b> a penalty for a big cloud (the log-determinant), minus half the squared Mahalanobis distance to that cloud's centre, plus the prior. Nothing cancels between classes, so the border is <b>quadratic in \(x\)</b>.</div>
+    </div>
+  </div>
+</section>
 
-    <!-- 5 RACE -->
-    <section class="scene" data-say="Start with 10 fish and same shapes. Press 'Catch 30 times'. Look how QDA's border jumps around wildly: it's guessing shapes from tiny data. LDA stays calm and wins more often. Now switch to 200 fish and different shapes and run it again. Now QDA wins. The lesson: with little data, the simple method wins. With lots of data and different shapes, the flexible one wins. This is called the bias-variance trade-off.">
-      <div class="wrap">
-        <div class="copy">
-          <div class="eyebrow">Step 5 · Is curvier always better?</div>
-          <h2>Small catch, big surprise</h2>
-          <p class="lead">QDA has more knobs to set than LDA (10 numbers versus 7 here), so it needs more fish to set them well. Catch a batch, train both, then test each on <b>1,600 new fish</b>.</p>
-          <div class="ctrls">
-            <div class="seg" role="group" aria-label="Fish per catch">
-              <button id="n10" aria-pressed="true">10 fish</button>
-              <button id="n200" aria-pressed="false">200 fish</button>
-            </div>
-            <div class="seg" role="group" aria-label="The real fish">
-              <button id="tSame" aria-pressed="true">Same shapes</button>
-              <button id="tDiff" aria-pressed="false">Different shapes</button>
-            </div>
+<!-- 06 BY HAND -->
+<section class="chap" id="byhand">
+  <div class="wrap">
+    <div class="tag both">Step 06 &middot; worked calculation</div>
+    <h2>One fish, two opinions, by hand</h2>
+    <div class="prose">
+      <p>Back to one measurement so the arithmetic fits on a napkin. We have measured four salmon and four sea bass. A new fish arrives at <strong>65 cm</strong>. LDA and QDA will disagree about it, and the numbers show exactly why. (The <a href="../lda-qda/#example">parent chapter</a> does the same calculation with two features and full matrices.)</p>
+    </div>
+    <aside class="say"><b>Say this</b>Walk the class through the steps in order, opening "how exactly?" wherever someone looks lost. The punchline: LDA uses one averaged spread for both fish and just asks which centre is nearer. QDA notices that 65 cm is nearly two of the salmon's own standard deviations away but under one of the sea bass's. Same fish, two reasonable answers.</aside>
+    <div class="ex-grid">
+      <div>
+        <div class="tbl-wrap">
+          <table class="data-tbl">
+            <thead><tr><th>Fish</th><th>Lengths measured (cm)</th></tr></thead>
+            <tbody>
+              <tr><td class="sal-c">salmon</td><td>50 &nbsp;54 &nbsp;58 &nbsp;62</td></tr>
+              <tr><td class="bass-c">sea bass</td><td>60 &nbsp;70 &nbsp;80 &nbsp;90</td></tr>
+              <tr><td>new</td><td>x* = 65</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ol class="calc-steps" style="margin-top:18px">
+          <li><div class="h">1 &middot; Priors and means</div><div class="m">\( \pi_s=\pi_b=0.5,\qquad \hat\mu_s = 56,\qquad \hat\mu_b = 75 \)</div>
+<details class="how"><summary>how exactly?</summary><div>priors: 4 salmon out of 8 fish &rarr; 4/8 = 0.5, same for sea bass<br>&mu;&#770;_s = (50+54+58+62)/4 = 224/4 = <b>56</b><br>&mu;&#770;_b = (60+70+80+90)/4 = 300/4 = <b>75</b></div></details></li>
+          <li><div class="h">2 &middot; Each fish's own variance</div><div class="m">\( \hat\sigma_s^2 = 26.67 \;(\sigma_s = 5.2),\qquad \hat\sigma_b^2 = 166.67 \;(\sigma_b = 12.9) \)</div><p class="note">Sea bass vary more than six times as much as salmon.</p>
+<details class="how"><summary>how exactly?</summary><div>variance = &Sigma;(value &minus; mean)&sup2; / (n &minus; 1)<br>salmon: deviations &minus;6, &minus;2, +2, +6 &rarr; (36+4+4+36)/3 = 80/3 = <b>26.67</b><br>sea bass: deviations &minus;15, &minus;5, +5, +15 &rarr; (225+25+25+225)/3 = 500/3 = <b>166.67</b></div></details></li>
+          <li><div class="h lda-c">3 &middot; LDA pools them into one spread</div><div class="m">\( \hat\sigma^2 = \dfrac{3(26.67)+3(166.67)}{8-2} = 96.67 \)</div>
+<details class="how"><summary>how exactly?</summary><div>pooled = (sum of both squared-deviation totals) / (n &minus; K) = (80 + 500) / (8 &minus; 2) = 580/6 = <b>96.67</b></div></details></li>
+          <li><div class="h lda-c">4 &middot; LDA scores at x* = 65</div><div class="m">\( \delta_s = \dfrac{65\cdot 56}{96.67} - \dfrac{56^2}{2\cdot 96.67} = 21.43,\qquad \delta_b = \dfrac{65\cdot 75}{96.67} - \dfrac{75^2}{2\cdot 96.67} = 21.34 \)</div><p class="note">Equal priors, so the \(\log 0.5\) terms match and drop out. With one shared \(\sigma\) and equal priors, LDA's border is just the midpoint of the means: 65.5 cm.</p>
+<details class="how"><summary>how exactly?</summary><div>&delta;_s = 3640/96.67 &minus; 3136/193.33 = 37.66 &minus; 16.22 = <b>21.43</b><br>&delta;_b = 4875/96.67 &minus; 5625/193.33 = 50.43 &minus; 29.10 = <b>21.34</b><br>gap = 0.10 in favour of salmon &rarr; P(salmon) = 1/(1+e<sup>&minus;0.10</sup>) = <b>0.525</b></div></details></li>
+          <li><div class="h qda-c">5 &middot; QDA scores at x* = 65</div><div class="m">\( \delta_s = -\tfrac12\ln 26.67 - \dfrac{(65-56)^2}{2\cdot 26.67} = -1.64 - 1.52 = -3.16 \)</div><div class="m">\( \delta_b = -\tfrac12\ln 166.67 - \dfrac{(65-75)^2}{2\cdot 166.67} = -2.56 - 0.30 = -2.86 \)</div>
+<details class="how"><summary>how exactly?</summary><div>spread penalties: &minus;&frac12; ln 26.67 = <b>&minus;1.64</b> &middot; &minus;&frac12; ln 166.67 = <b>&minus;2.56</b> (the wide fish pays more)<br>distances: salmon (65&minus;56)&sup2; = 81 &rarr; 81/53.33 = <b>1.52</b> &middot; sea bass (65&minus;75)&sup2; = 100 &rarr; 100/333.33 = <b>0.30</b><br>gap = &minus;2.86 &minus; (&minus;3.16) = 0.30 in favour of sea bass &rarr; P(sea bass) = 1/(1+e<sup>&minus;0.30</sup>) = <b>0.575</b></div></details></li>
+        </ol>
+      </div>
+      <figure>
+        <div class="plot ar-4x3"><canvas id="ex-cv" aria-label="The two fitted hills with LDA's single border and QDA's two borders, and the new fish at 65 cm"></canvas></div>
+        <div class="legend" style="margin-top:10px"><span><i class="sw" style="background:var(--lda)"></i>LDA border: 65.5 cm</span><span><i class="sw" style="background:var(--qda)"></i>QDA borders: 40.5 and 64.2 cm</span><span><i class="sw dot" style="background:var(--ink)"></i>x* = 65</span></div>
+        <div class="verdict">
+          <div><div class="who lda-c">LDA says</div><div class="sayv">Salmon</div><div class="p">P(salmon) = 0.525</div></div>
+          <div><div class="who qda-c">QDA says</div><div class="sayv">Sea bass</div><div class="p">P(sea bass) = 0.575</div></div>
+        </div>
+        <div class="prose" style="margin-top:16px">
+          <p><strong>Why they disagree.</strong> 65 cm is 9 cm from the salmon centre and 10 cm from the sea bass centre, so LDA, which measures both with the same pooled spread, leans salmon. But 9 cm is 1.7 of the salmon's own standard deviations, an unusual salmon, while 10 cm is only 0.8 of a sea bass standard deviation, an ordinary sea bass. QDA counts distance in each fish's own units and leans sea bass.</p>
+          <p><strong>The second border.</strong> QDA also calls anything under 40.5 cm a sea bass. The salmon hill is so narrow that a 38 cm fish is almost impossible as a salmon but merely unusual as a sea bass. That is the two-crossing picture from <a href="#bet">step 02</a>, now with numbers.</p>
+          <p class="note">scikit-learn divides by \(n\) rather than \(n-1\) when estimating variances, so its probabilities are slightly more confident. The decisions are the same.</p>
+        </div>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- 07 RACE -->
+<section class="chap" id="race">
+  <div class="wrap">
+    <div class="tag both">Step 07 &middot; the bias&ndash;variance trade-off</div>
+    <h2>Small catch, big surprise</h2>
+    <div class="prose">
+      <p>If QDA can draw every border LDA can and more, why not always use it? Because flexibility has a price. With two measurements, LDA learns 7 numbers (two centres and one shared shape) and QDA learns 10 (two centres and two shapes). Those extra numbers have to be <strong>estimated from the catch</strong>, and a small catch estimates them badly.</p>
+      <p>The experiment: catch a few fish, fit both methods, then test each one on 1,600 new fish from the same population. Repeat. Each run draws a different catch, so you see how much each method's border jumps around.</p>
+    </div>
+    <aside class="say"><b>Say this</b>Start with 10 fish and same shapes. Press "Catch 30 times". Watch QDA's border jump around wildly: it is guessing shapes from tiny data. LDA stays calm and wins more often. Now switch to 200 fish and different shapes and run it again. Now QDA wins. The lesson: with little data, the simple method wins. With lots of data and genuinely different shapes, the flexible one wins. That is the bias-variance trade-off.</aside>
+    <div class="lab wide-panel">
+      <figure>
+        <div class="pair">
+          <figure><div class="plot ar-1x1"><canvas id="race-l" aria-label="LDA border fitted to the latest catch"></canvas></div><figcaption><b class="lda-c">LDA</b><span class="num" id="race-rl">&ndash;</span></figcaption></figure>
+          <figure><div class="plot ar-1x1"><canvas id="race-q" aria-label="QDA border fitted to the latest catch"></canvas></div><figcaption><b class="qda-c">QDA</b><span class="num" id="race-rq">&ndash;</span></figcaption></figure>
+        </div>
+        <p class="hint">Dots: the fish caught this time. Shading: what each method would call a fish landing there.</p>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>Fish per catch</h4>
+          <div class="seg" role="group" aria-label="Fish per catch"><button type="button" id="race-n10" aria-pressed="true">10 fish</button><button type="button" id="race-n200" aria-pressed="false">200 fish</button></div>
+          <h4>The real population</h4>
+          <div class="seg" role="group" aria-label="The real fish"><button type="button" id="race-same" aria-pressed="true">Same shapes</button><button type="button" id="race-diff" aria-pressed="false">Different shapes</button></div>
+        </div>
+        <div class="grp">
+          <div class="btns">
+            <button type="button" class="btn primary" id="race-one">Catch new fish</button>
+            <button type="button" class="btn" id="race-30">Catch 30 times</button>
           </div>
-          <div class="ctrls">
-            <button class="b primary" id="catch1">Catch new fish</button>
-            <button class="b" id="catch30">Catch 30 times</button>
-          </div>
+        </div>
+        <div class="grp">
           <div class="board" aria-live="polite">
-            <span class="h">Method</span><span class="h">Catches won</span><span class="h">Average score</span>
-            <span id="bLn">LDA</span><span class="mono" id="wL">0</span><span class="mono" id="aL">–</span>
-            <span id="bQn">QDA</span><span class="mono" id="wQ">0</span><span class="mono" id="aQ">–</span>
-            <span>Best possible</span><span></span><span class="mono" id="aB">–</span>
+            <span class="h">Method</span><span class="h">Catches won</span><span class="h">Average accuracy</span>
+            <span id="race-ln" class="lda-c">LDA</span><span class="num" id="race-wl">0</span><span class="num" id="race-al">&ndash;</span>
+            <span id="race-qn" class="qda-c">QDA</span><span class="num" id="race-wq">0</span><span class="num" id="race-aq">&ndash;</span>
+            <span>Best possible</span><span></span><span class="num" id="race-ab">&ndash;</span>
           </div>
-          <p class="note" id="raceNote">After 0 catches.</p>
-          <details class="math"><summary>Why does QDA need more data?</summary>
-            <p>With p measurements and K groups, LDA learns K·p centre numbers plus one shared shape of p(p+1)/2 numbers. QDA learns a shape for every group: K·p(p+1)/2. With 100 measurements and 2 groups that's 5,050 shape numbers for LDA and 10,100 for QDA.</p>
-          </details>
-        </div>
-        <div class="viz">
-          <div class="pair">
-            <figure><figcaption><b>LDA</b><span class="mono" id="rL">–</span></figcaption><canvas id="cvL" aria-label="LDA border trained on the latest catch"></canvas></figure>
-            <figure><figcaption><b>QDA</b><span class="mono" id="rQ">–</span></figcaption><canvas id="cvQ" aria-label="QDA border trained on the latest catch"></canvas></figure>
-          </div>
-          <div class="hint">Dots = the fish caught this time · shading = what each method would call them</div>
+          <p class="note" id="race-note">No catches yet.</p>
         </div>
       </div>
-    </section>
+    </div>
+    <div class="prose block">
+      <p><strong>In general.</strong> With \(p\) measurements and \(K\) classes, LDA estimates one shared shape of \(p(p+1)/2\) numbers; QDA estimates \(K\) of them. For 30 tumour measurements and two classes, as in the <a href="../lda-qda/#project">parent chapter's project</a>, that is 465 shape numbers for LDA and 930 for QDA. The rule of thumb: LDA when the catch is small or the shapes look alike; QDA when the catch is large and the shapes clearly differ.</p>
+    </div>
+  </div>
+</section>
 
-    <!-- 6 FISHER -->
-    <section class="scene" data-say="Turn the dial and watch the shadows in the strip below the picture. At most angles orange and blue pile up together. Press 'Connect the centres', the obvious guess. There's still a lot of overlap, because the clouds are stretched. Now press 'Ask Fisher'. His formula finds the angle where the groups separate best. That one direction is what LDA uses, and it's also a way to shrink big data down to a few useful numbers.">
-      <div class="wrap">
-        <div class="copy">
-          <div class="eyebrow">Step 6 · Fisher's trick, 1936</div>
-          <h2>Find the best angle to look from</h2>
-          <p class="lead">Squash the picture onto one line, like a shadow. From most angles the two groups' shadows <b>pile on top of each other</b>. From the right angle they split apart. Ronald Fisher found a formula for that angle.</p>
-          <div class="slider">
-            <label for="ang">Viewing angle <output id="angV">90°</output></label>
-            <input type="range" id="ang" min="0" max="179" step="1" value="90">
+<!-- 08 FISHER -->
+<section class="chap" id="fisher">
+  <div class="wrap">
+    <div class="tag lda">Step 08 &middot; Fisher's trick, 1936</div>
+    <h2>Fisher's angle</h2>
+    <div class="prose">
+      <p>Here is a different way to think about LDA, and the way Ronald Fisher first found it. Squash the whole picture onto one line, like casting a shadow. From most angles the two groups' shadows <strong>pile on top of each other</strong>. From the right angle they split cleanly apart. Fisher asked for the angle that makes the shadows' centres far apart <em>relative to</em> how spread out each shadow is, and found it has a formula.</p>
+      <p>The obvious guess, the line joining the two centres, is usually wrong when the clouds are stretched. Fisher's direction leans away from the long axis of the clouds. It is exactly the direction perpendicular to LDA's border, and it is also a way to compress many measurements down to the few that matter for telling classes apart.</p>
+    </div>
+    <aside class="say"><b>Say this</b>Turn the dial and watch the shadows in the strip under the picture. At most angles orange and blue pile up together. Press "Connect the centres", the obvious guess. There is still overlap, because the clouds are stretched. Now press "Ask Fisher". His formula finds the angle where the groups separate best. That one direction is what LDA uses.</aside>
+    <div class="fisher-grid">
+      <figure>
+        <div class="plot ar-4x3"><canvas id="fish-cv" aria-label="Two stretched clouds with their shadows projected onto a rotating line"></canvas></div>
+        <div class="plot ar-strip" style="margin-top:10px"><canvas id="fish-strip" aria-label="Histogram of the projected shadows along the line"></canvas></div>
+        <figcaption>Top: the fish and their shadows on the amber line. Bottom: the shadows piled into a histogram, with the best single cut along the line.</figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="fish-ang">Viewing angle</label><output id="fish-ang-o">90&deg;</output></div><input type="range" id="fish-ang" min="0" max="179" step="1" value="90"></div>
+          <div class="btns">
+            <button type="button" class="btn" id="fish-centres">Connect the centres</button>
+            <button type="button" class="btn primary" id="fish-ask">Ask Fisher</button>
           </div>
-          <div class="ctrls">
-            <button class="b" id="centres">Connect the centres</button>
-            <button class="b primary" id="askFisher">Ask Fisher</button>
-          </div>
-          <div class="board" aria-live="polite">
-            <span class="h">Separation score</span><span class="h">Best cut on this line</span><span></span>
-            <span class="mono" id="fJ">0</span><span class="mono" id="fMiss">0 mistakes of 140</span><span></span>
-          </div>
-          <p class="note">Separation score = how far apart the two shadow centres are, compared with how spread out each shadow is. Higher is better.</p>
-          <details class="math"><summary>The math, if a student asks</summary>
-            <p><code>J(w) = (wᵀ(μ₁ − μ₂))² / (wᵀ S_W w)</code> &nbsp;is largest at&nbsp; <code>w ∝ S_W⁻¹ (μ₁ − μ₂)</code></p>
-            <p>S_W is the within-group spread. Dividing by it steers the direction away from the long, stretched side of the clouds.</p>
-          </details>
         </div>
-        <div class="viz">
-          <canvas class="sq-sm" id="cvF" aria-label="Points projected onto a rotating line"></canvas>
-          <canvas class="strip" id="cvStrip" aria-label="Histogram of the projected shadows"></canvas>
-          <div class="hint">Top: the fish and their shadows on the yellow line · Bottom: the shadows piled up</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 7 WORLD -->
-    <section class="scene" data-say="Ask a student to pick a card, click it and read it aloud. Do three or four. Point out that every one is the same problem as our fish: a few measurements in, one of two groups out.">
-      <div class="wrap one">
-        <div class="copy">
-          <div class="eyebrow">Step 7 · Out in the world</div>
-          <h2>Same idea, real jobs</h2>
-          <p class="lead">Click a card to flip it.</p>
-          <div class="cards">
-            <button class="card"><span class="front"><span class="yr">1936</span><br><span class="t">Iris flowers</span></span><span class="back">Ronald Fisher invented this method to tell three kinds of iris flower apart from petal and sepal sizes. His 150 flowers are still in every machine learning course.</span><span class="tap">Click to flip</span></button>
-            <button class="card"><span class="front"><span class="yr">1968</span><br><span class="t">Bankruptcy warning</span></span><span class="back">Edward Altman's Z-score predicts whether a company will go bankrupt. It is a discriminant analysis on five money ratios, and lenders still use it.</span><span class="tap">Click to flip</span></button>
-            <button class="card"><span class="front"><span class="yr">1997</span><br><span class="t">Fisherfaces</span></span><span class="back">A face recognition method that used Fisher's trick to find the directions that tell one person from another, even when the lighting changes.</span><span class="tap">Click to flip</span></button>
-            <button class="card"><span class="front"><span class="yr">Today</span><br><span class="t">Reading brain signals</span></span><span class="back">Brain-computer interfaces use LDA on EEG signals to tell "imagine moving your left hand" from "right hand". It's fast and works with little data.</span><span class="tap">Click to flip</span></button>
-            <button class="card"><span class="front"><span class="yr">Today</span><br><span class="t">Medical tests</span></span><span class="back">Healthy or not, from a few blood readings. QDA helps when the sick group varies much more than the healthy group, like our wide sea bass.</span><span class="tap">Click to flip</span></button>
-            <button class="card"><span class="front"><span class="yr">Today</span><br><span class="t">Factory quality checks</span></span><span class="back">Good part or faulty part, from size and weight sensors on a production line. That is exactly our fish machine.</span><span class="tap">Click to flip</span></button>
-          </div>
+        <div class="grp">
+          <dl class="readouts">
+            <div><dt>Separation score J</dt><dd id="fish-j">0</dd></div>
+            <div><dt>Best cut on this line</dt><dd id="fish-miss">0 wrong</dd></div>
+          </dl>
+          <p class="note">J = (distance between shadow centres)&sup2; &divide; (sum of the shadows' variances). Higher is better.</p>
         </div>
       </div>
-    </section>
+    </div>
+    <div class="eq">
+      <div class="lbl">Fisher's criterion and its maximiser</div>
+      <div class="m">\[ J(w) = \frac{\big(w^\top(\mu_s - \mu_b)\big)^2}{w^\top S_W\, w}, \qquad w^\star \propto S_W^{-1}(\mu_s - \mu_b) \]</div>
+      <div class="read"><b>Read it as:</b> \(S_W\) is the within-group spread (the pooled covariance). Dividing by it steers the direction away from the stretched side of the clouds. The same \(\Sigma^{-1}(\mu_s-\mu_b)\) appears in the LDA score of <a href="#lda">step 04</a>: Fisher's angle and LDA's border are one idea seen from two sides.</div>
+    </div>
+  </div>
+</section>
 
-    <!-- 8 TAKEAWAY -->
-    <section class="scene" data-say="Click each one to reveal it, and ask the class to say it back in their own words. Then show the code: in Python it's really just these lines. Finish by asking: where in your life do you sort things into two groups using a couple of measurements?">
-      <div class="wrap one">
-        <div class="copy">
-          <div class="eyebrow">Take it home</div>
-          <h2>Three things to remember</h2>
-          <div class="reveals">
-            <button class="reveal" aria-expanded="false"><span class="n">1</span><span><span class="hid">Click to reveal</span><span class="txt"><b>Bet on the likelier group.</b> Multiply “how common is this group” by “how typical is this fish for it”, and pick the bigger one.</span></span></button>
-            <button class="reveal" aria-expanded="false"><span class="n">2</span><span><span class="hid">Click to reveal</span><span class="txt"><b>Same shapes → straight border (LDA).</b> Different shapes → curved border (QDA).</span></span></button>
-            <button class="reveal" aria-expanded="false"><span class="n">3</span><span><span class="hid">Click to reveal</span><span class="txt"><b>Little data → choose the simple one.</b> And Fisher's angle shows where the groups split best.</span></span></button>
+<!-- 09 PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag both">Step 09 &middot; project</div>
+    <h2>Project: build the sorting machine</h2>
+    <div class="prose">
+      <p>Everything above, assembled. The machine below was trained on 200 measured fish and is tested on 400 it has never seen. Feed it a fish of your own, read both methods' opinions, and then build the same thing in a dozen lines of Python. The Python script is complete: copy it, run it, and you will see the output shown.</p>
+    </div>
+    <dl class="brief">
+      <div><dt>Goal</dt><dd>Sort salmon from sea bass by length and brightness, with a calibrated probability for each decision.</dd></div>
+      <div><dt>Data</dt><dd>Simulated fish from two normal clouds with different shapes: a tight, slightly tilted salmon cloud and a wide, oppositely tilted sea bass cloud.</dd></div>
+      <div><dt>Deliverable</dt><dd>Two fitted classifiers, their confusion matrices on new fish, and a small-sample experiment showing when each wins.</dd></div>
+    </dl>
+    <ol class="pipeline">
+      <li><b>Catch</b>Measure 100 of each fish for training; 200 of each for testing.</li>
+      <li><b>Fit</b>LDA: two centres, one pooled shape. QDA: two centres, two shapes.</li>
+      <li><b>Test</b>Predict the 400 unseen fish; count the four kinds of outcome.</li>
+      <li><b>Explain</b>Ask both about one fish and compare their probabilities.</li>
+      <li><b>Stress</b>Retrain on 5 fish of each kind, 200 times, and see who wins.</li>
+    </ol>
+    <aside class="say"><b>Say this</b>Move the two sliders to invent a fish and watch the black diamond move across the borders. Near the border the two methods give different probabilities for the same fish; that is the whole page in one picture. Then show the Python: it is the same machine, and students can run it tonight.</aside>
+
+    <h3>Deploy: sort a fish</h3>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-4x3"><canvas id="pr-cv" aria-label="Training fish with LDA and QDA borders and your fish as a black diamond"></canvas></div>
+        <div class="legend" style="margin-top:10px"><span><i class="sw dot" style="background:var(--sal)"></i>salmon (training)</span><span><i class="sw dot" style="background:var(--bass)"></i>sea bass (training)</span><span><i class="sw" style="background:var(--lda)"></i>LDA border</span><span><i class="sw" style="background:var(--qda)"></i>QDA border</span></div>
+        <div class="status" id="pr-status" style="margin-top:14px" aria-live="polite"></div>
+        <div class="two" style="margin-top:16px">
+          <div><h4 style="margin:0 0 6px;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase" class="lda-c">LDA &middot; P(salmon)</h4><div id="pr-pl"></div></div>
+          <div><h4 style="margin:0 0 6px;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase" class="qda-c">QDA &middot; P(salmon)</h4><div id="pr-pq"></div></div>
+        </div>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <h4>Your fish</h4>
+          <div class="ctrl"><div class="top"><label for="pr-len">Length</label><output id="pr-len-o">65 cm</output></div><input type="range" id="pr-len" min="30" max="110" step="0.5" value="65"></div>
+          <div class="ctrl"><div class="top"><label for="pr-bri">Brightness</label><output id="pr-bri-o">55</output></div><input type="range" id="pr-bri" min="0" max="100" step="0.5" value="55"></div>
+          <div class="btns">
+            <button type="button" class="btn" id="pr-random">Random test fish</button>
+            <button type="button" class="btn" id="pr-typs">Typical salmon</button>
+            <button type="button" class="btn" id="pr-typb">Typical sea bass</button>
           </div>
-<pre class="code"><span class="c"># the whole lecture, in Python (scikit-learn)</span>
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
+        </div>
+        <div class="grp">
+          <h4>On 400 unseen fish</h4>
+          <div class="board">
+            <span class="h">Method</span><span class="h">Accuracy</span><span class="h">Wrong</span>
+            <span class="lda-c">LDA</span><span class="num" id="pr-accl">&ndash;</span><span class="num" id="pr-wrl">&ndash;</span>
+            <span class="qda-c">QDA</span><span class="num" id="pr-accq">&ndash;</span><span class="num" id="pr-wrq">&ndash;</span>
+            <span>Best possible</span><span class="num" id="pr-accb">&ndash;</span><span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cms">
+      <table class="cm" id="pr-cml"><caption class="lda-c">LDA confusion matrix (400 test fish)</caption><thead><tr><th></th><th>called salmon</th><th>called sea bass</th></tr></thead><tbody></tbody></table>
+      <table class="cm" id="pr-cmq"><caption class="qda-c">QDA confusion matrix (400 test fish)</caption><thead><tr><th></th><th>called salmon</th><th>called sea bass</th></tr></thead><tbody></tbody></table>
+    </div>
+    <p class="note" style="margin-top:10px">Rows are the truth, columns are the machine's call. The outlined cells are mistakes. QDA's edge here comes from the two clouds genuinely having different shapes and the catch being large enough to see that.</p>
+
+    <h3>Build it yourself in Python</h3>
+    <div class="prose">
+      <p>This script is self-contained: it makes its own fish, so there is nothing to download. It needs <code>numpy</code> and <code>scikit-learn</code> (<code>pip install numpy scikit-learn</code>). The last loop runs the small-catch race of <a href="#race">step 07</a> for both kinds of population. Change the seed, the cloud shapes or the catch sizes and run it again.</p>
+    </div>
+    <div class="code-grid">
+      <div>
+        <div class="code-head"><span>sorting_machine.py</span><button type="button" class="btn" id="copy-code">Copy code</button></div>
+<pre class="code" id="py-code"><span class="k">import</span> numpy <span class="k">as</span> np
+<span class="k">from</span> sklearn.discriminant_analysis <span class="k">import</span> (LinearDiscriminantAnalysis,
+                                           QuadraticDiscriminantAnalysis)
+<span class="k">from</span> sklearn.metrics <span class="k">import</span> confusion_matrix
+
+rng = np.random.default_rng(7)
+
+<span class="c"># The "true" fish. Measurements: length (cm), brightness (0-100).</span>
+MU = {<span class="s">"salmon"</span>: [56, 62], <span class="s">"sea bass"</span>: [75, 45]}
+COV = {<span class="s">"salmon"</span>:   [[30,   8], [  8,  40]],      <span class="c"># tight, slightly tilted</span>
+       <span class="s">"sea bass"</span>: [[170, -40], [-40, 120]]}     <span class="c"># wide, tilted the other way</span>
+
+<span class="k">def</span> catch(n_each, same_shapes=<span class="k">False</span>):
+    <span class="s">"""n_each fish of each kind. Label 0 = salmon, 1 = sea bass."""</span>
+    cov = dict(COV)
+    <span class="k">if</span> same_shapes:
+        cov[<span class="s">"sea bass"</span>] = cov[<span class="s">"salmon"</span>]
+    X = np.vstack([rng.multivariate_normal(MU[k], cov[k], n_each) <span class="k">for</span> k <span class="k">in</span> MU])
+    y = np.repeat([0, 1], n_each)
+    <span class="k">return</span> X, y
+
+<span class="c"># 1. Train on 200 fish, test on 4,000 new ones</span>
+X_train, y_train = catch(100)
+X_test, y_test = catch(2000)
 
 lda = LinearDiscriminantAnalysis().fit(X_train, y_train)
 qda = QuadraticDiscriminantAnalysis().fit(X_train, y_train)
-print(lda.score(X_test, y_test), qda.score(X_test, y_test))</pre>
-        </div>
+<span class="k">for</span> name, model <span class="k">in</span> [(<span class="s">"LDA"</span>, lda), (<span class="s">"QDA"</span>, qda)]:
+    pred = model.predict(X_test)
+    print(name, <span class="s">"accuracy:"</span>, round((pred == y_test).mean(), 3))
+    print(confusion_matrix(y_test, pred))        <span class="c"># rows: salmon, sea bass</span>
+
+<span class="c"># 2. One fish, two opinions</span>
+fish = [[65, 55]]                                <span class="c"># 65 cm, brightness 55</span>
+print(<span class="s">"P(salmon) for a 65 cm fish  LDA:"</span>, lda.predict_proba(fish)[0, 0].round(3),
+      <span class="s">" QDA:"</span>, qda.predict_proba(fish)[0, 0].round(3))
+
+<span class="c"># 3. Small catch, big surprise: train on 5 fish of each kind, 200 times</span>
+<span class="k">for</span> same <span class="k">in</span> (<span class="k">False</span>, <span class="k">True</span>):
+    X_big, y_big = catch(2000, same)
+    wins = {<span class="s">"LDA"</span>: 0, <span class="s">"QDA"</span>: 0}
+    <span class="k">for</span> _ <span class="k">in</span> range(200):
+        X_small, y_small = catch(5, same)
+        a = LinearDiscriminantAnalysis().fit(X_small, y_small).score(X_big, y_big)
+        b = QuadraticDiscriminantAnalysis(reg_param=1e-3).fit(X_small, y_small).score(X_big, y_big)
+        wins[<span class="s">"LDA"</span> <span class="k">if</span> a &gt; b <span class="k">else</span> <span class="s">"QDA"</span>] += 1
+    print(<span class="s">"same shapes:"</span> <span class="k">if</span> same <span class="k">else</span> <span class="s">"different shapes:"</span>, wins)</pre>
       </div>
-    </section>
+      <div>
+        <div class="code-head"><span>Output</span></div>
+<pre class="code" id="py-out">LDA accuracy: 0.908
+[[1992    8]
+ [ 359 1641]]
+QDA accuracy: 0.928
+[[1893  107]
+ [ 180 1820]]
+P(salmon) for a 65 cm fish  LDA: 0.609  QDA: 0.176
+different shapes: {'LDA': 105, 'QDA': 95}
+same shapes: {'LDA': 171, 'QDA': 29}</pre>
+        <p class="note" style="margin-top:12px">Read the last two lines together. When the shapes really are the same, LDA wins 171 of 200 small catches. When they differ, QDA is the right model, yet five fish per class cannot pin down two shapes, so it only breaks even. <code>reg_param=1e-3</code> adds a hair of width to each estimated cloud so QDA can still invert a shape estimated from five fish; with the full catch it is not needed.</p>
+      </div>
+    </div>
 
-  </main>
+    <h3>Where the same machine runs today</h3>
+    <div class="uses">
+      <div><span class="when">1936</span><h4>Iris flowers</h4><p>Fisher invented the method to tell three kinds of iris apart from petal and sepal sizes. His 150 flowers are still in every machine learning course.</p></div>
+      <div><span class="when">1968</span><h4>Bankruptcy warning</h4><p>Altman's Z-score predicts whether a company will fail from five money ratios. It is a discriminant analysis, and lenders still use it.</p></div>
+      <div><span class="when">1997</span><h4>Fisherfaces</h4><p>Face recognition that uses Fisher's angle to find the directions that tell one person from another despite changes in lighting.</p></div>
+      <div><span class="when">today</span><h4>Brain&ndash;computer interfaces</h4><p>LDA on EEG signals tells "imagine moving the left hand" from "right hand" in real time, with little training data.</p></div>
+      <div><span class="when">today</span><h4>Medical screening</h4><p>Healthy or not from a few lab values. QDA helps when the sick group varies far more than the healthy one, like our wide sea bass.</p></div>
+      <div><span class="when">today</span><h4>Factory quality checks</h4><p>Good part or faulty part from size and weight sensors on a production line. That is this fish machine, with bolts.</p></div>
+    </div>
+  </div>
+</section>
 
-  <div class="saybar" id="sayBar" hidden><span class="tag">Say this</span><p id="sayText"></p></div>
-  <footer class="nav">
-    <button class="b" id="prev" aria-label="Previous scene">‹ Back</button>
-    <span class="count" id="count">1 / 9</span>
-    <button class="b primary" id="next" aria-label="Next scene">Next ›</button>
-  </footer>
-</div>
+<!-- 10 SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag both">Wrap-up</div>
+    <h2>What to carry home</h2>
+    <ul class="take">
+      <li><strong>Bet on the likelier fish.</strong> Multiply how common a class is by how typical the measurement is for it, and pick the bigger product. That is Bayes' rule, and it is the whole engine.</li>
+      <li><strong class="lda-c">Same shape &rarr; straight border (LDA).</strong> Sharing one covariance makes the squared terms cancel.</li>
+      <li><strong class="qda-c">Own shapes &rarr; curved border (QDA).</strong> Nothing cancels; the border can even close into an island.</li>
+      <li><strong>Little data &rarr; prefer the simple one.</strong> QDA's extra shape numbers are estimated badly from a small catch and its border swings. This is the bias&ndash;variance trade-off.</li>
+      <li><strong>Fisher's angle is LDA seen sideways.</strong> The direction that best separates the shadows is \(\Sigma^{-1}(\mu_s-\mu_b)\), the same vector that sets LDA's border.</li>
+    </ul>
+
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>In step 02, why did the border move right when you said 80% of the catch is salmon?</summary><p>Because the salmon hill is scaled by its prior. A taller salmon hill crosses the sea bass hill further to the right, so a fish needs to be longer before sea bass becomes the better bet. In the LDA score this is the \(\log\pi_k\) term.</p></details>
+      <details class="q"><summary>Two kinds of fish have the same average length and brightness, but one varies far more. Which method can separate them?</summary><p>QDA. LDA's border depends only on the difference between centres, so with equal centres it has nothing to work with. QDA uses the different shapes and draws a closed curve around the tight group, like the island in step 05.</p></details>
+      <details class="q"><summary>In the worked calculation, why did QDA call a 38 cm fish a sea bass even though it is nearer the salmon centre?</summary><p>Because 38 cm is 3.5 of the salmon's own standard deviations away, an almost impossible salmon, but only 2.9 of the sea bass's much larger standard deviations, merely an unusual sea bass. QDA measures distance in each class's own units.</p></details>
+      <details class="q"><summary>You have 20 measurements and 15 fish of each kind. Which method is safer?</summary><p>LDA. QDA would need to estimate a 20 &times; 20 shape (210 numbers) for each class from 15 points; with \(n_k \le p\) the matrix cannot even be inverted. LDA pools all 30 fish into one estimate.</p></details>
+    </div>
+
+    <h3>Keep going</h3>
+    <div class="dl-row" style="margin-top:14px">
+      <a class="btn primary" href="../lda-qda/">Full chapter: LDA &amp; QDA, with the theory and a real tumour-screening project &rarr;</a>
+      <a class="btn" href="../reinforcement-learning/">Companion lecture: Reinforcement Learning</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+
+    <h3>References</h3>
+    <ol class="refs">
+      <li>Duda, R. O., Hart, P. E. &amp; Stork, D. G. (2001). <em>Pattern Classification</em>, 2nd ed., Chapter 1. The salmon and sea bass sorting machine is this book's opening example.</li>
+      <li>James, Witten, Hastie &amp; Tibshirani. <a href="https://www.statlearning.com/" target="_blank" rel="noopener">An Introduction to Statistical Learning</a>, Chapter 4.</li>
+      <li>Hastie, Tibshirani &amp; Friedman. <em>The Elements of Statistical Learning</em>, Section 4.3.</li>
+      <li>Fisher, R. A. (1936). The use of multiple measurements in taxonomic problems. <em>Annals of Eugenics</em>, 7(2), 179&ndash;188.</li>
+      <li>Altman, E. I. (1968). Financial ratios, discriminant analysis and the prediction of corporate bankruptcy. <em>Journal of Finance</em>, 23(4), 589&ndash;609.</li>
+      <li>Belhumeur, Hespanha &amp; Kriegman (1997). Eigenfaces vs. Fisherfaces. <em>IEEE TPAMI</em>, 19(7), 711&ndash;720.</li>
+      <li><a href="https://scikit-learn.org/stable/modules/lda_qda.html" target="_blank" rel="noopener">scikit-learn: Linear and Quadratic Discriminant Analysis</a>.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections, and <span class="mono">S</span> to show or hide the presenter notes.</div>
+</footer>
 
 <script>
-(function(){
-"use strict";
-const $=s=>document.querySelector(s);
-const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
-const tok=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-function P(){return{bg:tok("--bg"),panel:tok("--panel"),ink:tok("--ink"),muted:tok("--muted"),line:tok("--line"),sal:tok("--salmon"),bas:tok("--bass"),cut:tok("--cut"),bad:tok("--bad"),good:tok("--good"),mono:tok("--mono")}}
-function rgba(hex,a){hex=hex.replace("#","");if(hex.length===3)hex=hex.split("").map(c=>c+c).join("");const n=parseInt(hex,16);return"rgba("+(n>>16&255)+","+(n>>8&255)+","+(n&255)+","+a+")"}
-function fit(cv){const r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;const W=Math.max(1,Math.round(r.width*d)),H=Math.max(1,Math.round(r.height*d));if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}const ctx=cv.getContext("2d");ctx.setTransform(d,0,0,d,0,0);ctx.clearRect(0,0,r.width,r.height);return{ctx,w:r.width,h:r.height}}
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const pct=v=>(v*100).toFixed(1)+"%";
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const P = () => ({ bg: css('--bg'), surface: css('--surface'), ink: css('--ink'), muted: css('--muted'), line: css('--line'), soft: css('--soft'), lda: css('--lda'), qda: css('--qda'), sal: css('--sal'), bass: css('--bass'), cut: css('--cut'), good: css('--good'), mono: css('--f-mono') });
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const pct = v => (v * 100).toFixed(1) + '%';
+function rgba(hex, a) { hex = hex.replace('#', ''); if (hex.length === 3) hex = hex.split('').map(c => c + c).join(''); const n = parseInt(hex, 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
 
-/* random numbers (seeded so the page opens the same way every time) */
-let _s=20261104;
-function rnd(){_s|=0;_s=_s+0x6D2B79F5|0;let t=Math.imul(_s^_s>>>15,1|_s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}
-function randn(){let u=0;while(u===0)u=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*rnd())}
-const zs=n=>Array.from({length:n},()=>[randn(),randn()]);
+/* ---------- random numbers (seeded, so the page opens the same way every time) ---------- */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = mulberry32(20261104);
+function randn() { let u = 0; while (u === 0) u = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd()); }
+const zs = n => Array.from({ length: n }, () => [randn(), randn()]);
 
-/* 2x2 Gaussian helpers; covariance stored as [xx, xy, yy] */
-function cov(s1,s2,deg){const t=deg*Math.PI/180,c=Math.cos(t),s=Math.sin(t),a=s1*s1,b=s2*s2;return[a*c*c+b*s*s,(a-b)*c*s,a*s*s+b*c*c]}
-function chol(S){const l11=Math.sqrt(S[0]),l21=S[1]/l11,l22=Math.sqrt(Math.max(1e-9,S[2]-l21*l21));return[l11,l21,l22]}
-const place=(mu,L,z)=>[mu[0]+L[0]*z[0],mu[1]+L[1]*z[0]+L[2]*z[1]];
-function lp(x,y,mu,S){const dx=x-mu[0],dy=y-mu[1],det=S[0]*S[2]-S[1]*S[1];return-0.5*(S[2]*dx*dx-2*S[1]*dx*dy+S[0]*dy*dy)/det-0.5*Math.log(det)}
-function gOf(m1,S1,m2,S2,pr1){pr1=pr1||0.5;const a=Math.log(pr1),b=Math.log(1-pr1);return(x,y)=>lp(x,y,m1,S1)+a-lp(x,y,m2,S2)-b}
-const pdf=(x,m,s)=>Math.exp(-0.5*((x-m)/s)**2)/(s*Math.sqrt(2*Math.PI));
+/* ---------- 2x2 Gaussian helpers; covariance stored as [xx, xy, yy] ---------- */
+function cov(s1, s2, deg) { const t = deg * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), a = s1 * s1, b = s2 * s2; return [a * c * c + b * s * s, (a - b) * c * s, a * s * s + b * c * c]; }
+function chol(S) { const l11 = Math.sqrt(S[0]), l21 = S[1] / l11, l22 = Math.sqrt(Math.max(1e-9, S[2] - l21 * l21)); return [l11, l21, l22]; }
+const place = (mu, L, z) => [mu[0] + L[0] * z[0], mu[1] + L[1] * z[0] + L[2] * z[1]];
+function lp(x, y, mu, S) { const dx = x - mu[0], dy = y - mu[1], det = S[0] * S[2] - S[1] * S[1]; return -0.5 * (S[2] * dx * dx - 2 * S[1] * dx * dy + S[0] * dy * dy) / det - 0.5 * Math.log(det); }
+function gOf(m1, S1, m2, S2, pr1 = 0.5) { const a = Math.log(pr1), b = Math.log(1 - pr1); return (x, y) => lp(x, y, m1, S1) + a - lp(x, y, m2, S2) - b; }
+const pdf = (x, m, s) => Math.exp(-0.5 * ((x - m) / s) ** 2) / (s * Math.sqrt(2 * Math.PI));
+function stats(pts) { const n = pts.length; let mx = 0, my = 0; pts.forEach(q => { mx += q[0]; my += q[1]; }); mx /= n; my /= n; let a = 0, b = 0, c = 0; pts.forEach(q => { const dx = q[0] - mx, dy = q[1] - my; a += dx * dx; b += dx * dy; c += dy * dy; }); const d = Math.max(1, n - 1); return { m: [mx, my], S: [a / d, b / d, c / d], n }; }
+function fitModels(a, b, r = 0) {
+  const A = stats(a), B = stats(b), k = A.n + B.n - 2;
+  const SA = [A.S[0] + r, A.S[1], A.S[2] + r], SB = [B.S[0] + r, B.S[1], B.S[2] + r];
+  const Sp = [((A.n - 1) * A.S[0] + (B.n - 1) * B.S[0]) / k + r, ((A.n - 1) * A.S[1] + (B.n - 1) * B.S[1]) / k, ((A.n - 1) * A.S[2] + (B.n - 1) * B.S[2]) / k + r];
+  return { L: gOf(A.m, Sp, B.m, Sp), Q: gOf(A.m, SA, B.m, SB), muA: A.m, muB: B.m };
+}
+function acc(g, t) { let ok = 0; t[0].forEach(q => { if (g(q[0], q[1]) > 0) ok++; }); t[1].forEach(q => { if (g(q[0], q[1]) <= 0) ok++; }); return ok / (t[0].length + t[1].length); }
 
-/* world is 0..10 on both axes */
-function field(ctx,w,h,g,o){o=o||{};const p=P(),cell=o.cell||4,dot=o.dot||2.6;const nx=Math.ceil(w/cell),ny=Math.ceil(h/cell),s=new Int8Array(nx*ny);
-  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const x=(i+.5)*cell/w*10,y=(h-(j+.5)*cell)/h*10;s[j*nx+i]=g(x,y)>0?1:-1}
-  if(o.fill!==false){[[1,p.sal],[-1,p.bas]].forEach(([k,c])=>{ctx.fillStyle=rgba(c,.15);for(let j=0;j<ny;j++){let run=-1;for(let i=0;i<=nx;i++){const on=i<nx&&s[j*nx+i]===k;if(on&&run<0)run=i;if(!on&&run>=0){ctx.fillRect(run*cell,j*cell,(i-run)*cell,cell);run=-1}}}})}
-  ctx.fillStyle=o.color||p.cut;
-  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const v=s[j*nx+i];if((i+1<nx&&s[j*nx+i+1]!==v)||(j+1<ny&&s[(j+1)*nx+i]!==v))ctx.fillRect((i+1)*cell-dot/2,(j+1)*cell-dot/2,dot,dot)}}
-function dot(ctx,w,h,q,col,r){ctx.beginPath();ctx.arc(q[0]/10*w,h-q[1]/10*h,r,0,7);ctx.fillStyle=col;ctx.fill()}
-function ring(ctx,w,h,q,col,r){ctx.beginPath();ctx.arc(q[0]/10*w,h-q[1]/10*h,r,0,7);ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke()}
-function handle(ctx,w,h,mu,col){const p=P(),x=mu[0]/10*w,y=h-mu[1]/10*h;ctx.beginPath();ctx.arc(x,y,13,0,7);ctx.fillStyle=col;ctx.fill();ctx.lineWidth=3;ctx.strokeStyle=p.ink;ctx.stroke();ctx.beginPath();ctx.arc(x,y,4,0,7);ctx.fillStyle=p.ink;ctx.fill()}
-function dragger(cv,handles,onmove){let act=null;
-  const pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)/r.width*10,(r.height-(e.clientY-r.top))/r.height*10,r]};
-  cv.addEventListener("pointerdown",e=>{const[x,y,r]=pos(e);let best=null,bd=1e9;handles().forEach(m=>{const d=Math.hypot((m[0]-x)/10*r.width,(m[1]-y)/10*r.height);if(d<bd){bd=d;best=m}});if(best&&bd<44){act=best;cv.setPointerCapture(e.pointerId);cv.style.cursor="grabbing";e.preventDefault()}});
-  cv.addEventListener("pointermove",e=>{if(!act)return;const[x,y]=pos(e);act[0]=clamp(x,.4,9.6);act[1]=clamp(y,.4,9.6);onmove()});
-  ["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,()=>{act=null;cv.style.cursor=""}))}
+/* ---------- canvas plumbing ---------- */
+function prep(cv) {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  const W = Math.max(1, Math.round(r.width * d)), H = Math.max(1, Math.round(r.height * d));
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0); ctx.clearRect(0, 0, r.width, r.height);
+  return { ctx, w: r.width, h: r.height };
+}
+/* a world-to-pixel map for 2-D plots */
+function mapper(w, h, xl, yl) { return { X: x => (x - xl[0]) / (xl[1] - xl[0]) * w, Y: y => h - (y - yl[0]) / (yl[1] - yl[0]) * h, ix: px => xl[0] + px / w * (xl[1] - xl[0]), iy: py => yl[0] + (h - py) / h * (yl[1] - yl[0]) }; }
+/* decision regions + boundary dots for a sign function g(x,y) in world coords */
+function field(ctx, w, h, g, M, o = {}) {
+  const p = P(), cell = o.cell || 4, dotw = o.dot || 2.6, nx = Math.ceil(w / cell), ny = Math.ceil(h / cell), s = new Int8Array(nx * ny);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) s[j * nx + i] = g(M.ix((i + .5) * cell), M.iy((j + .5) * cell)) > 0 ? 1 : -1;
+  if (o.fill !== false) {
+    [[1, o.cA || p.sal], [-1, o.cB || p.bass]].forEach(([k, c]) => { ctx.fillStyle = rgba(c, o.alpha || .13); for (let j = 0; j < ny; j++) { let run = -1; for (let i = 0; i <= nx; i++) { const on = i < nx && s[j * nx + i] === k; if (on && run < 0) run = i; if (!on && run >= 0) { ctx.fillRect(run * cell, j * cell, (i - run) * cell, cell); run = -1; } } } });
+  }
+  ctx.fillStyle = o.color || p.ink;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const v = s[j * nx + i]; if ((i + 1 < nx && s[j * nx + i + 1] !== v) || (j + 1 < ny && s[(j + 1) * nx + i] !== v)) ctx.fillRect((i + 1) * cell - dotw / 2, (j + 1) * cell - dotw / 2, dotw, dotw); }
+}
+function dot(ctx, M, q, col, r) { ctx.beginPath(); ctx.arc(M.X(q[0]), M.Y(q[1]), r, 0, 7); ctx.fillStyle = col; ctx.fill(); }
+function ring(ctx, M, q, col, r) { ctx.beginPath(); ctx.arc(M.X(q[0]), M.Y(q[1]), r, 0, 7); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke(); }
+function handle(ctx, M, mu, col) { const p = P(), x = M.X(mu[0]), y = M.Y(mu[1]); ctx.beginPath(); ctx.arc(x, y, 12, 0, 7); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = p.surface; ctx.stroke(); ctx.beginPath(); ctx.arc(x, y, 3.5, 0, 7); ctx.fillStyle = p.surface; ctx.fill(); }
+function axes(ctx, w, h, xlab, ylab) { const p = P(); ctx.fillStyle = p.muted; ctx.font = `12px ${p.mono}`; ctx.textAlign = 'right'; ctx.fillText(xlab + ' →', w - 10, h - 10); ctx.save(); ctx.translate(14, 10); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'right'; ctx.fillText(ylab + ' →', 0, 0); ctx.restore(); }
+function dragger(cv, xl, yl, handles, onmove) {
+  let act = null;
+  const pos = e => { const r = cv.getBoundingClientRect(), M = mapper(r.width, r.height, xl, yl); return [M.ix(e.clientX - r.left), M.iy(e.clientY - r.top), r, M]; };
+  cv.addEventListener('pointerdown', e => { const [x, y, , M] = pos(e); let best = null, bd = 1e9; handles().forEach(m => { const d = Math.hypot(M.X(m[0]) - M.X(x), M.Y(m[1]) - M.Y(y)); if (d < bd) { bd = d; best = m; } }); if (best && bd < 40) { act = best; cv.setPointerCapture(e.pointerId); cv.classList.add('grabbing'); e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { if (!act) return; const [x, y] = pos(e); act[0] = clamp(x, xl[0] + .4, xl[1] - .4); act[1] = clamp(y, yl[0] + .4, yl[1] - .4); onmove(); });
+  ['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, () => { act = null; cv.classList.remove('grabbing'); }));
+}
 
-/* ---------- 0. conveyor belt ---------- */
-const BELT={fish:[],acc:0,last:0,cnt:[0,0],raf:0};
-function fishShape(ctx,x,y,s,col,eye){ctx.save();ctx.translate(x,y);ctx.fillStyle=col;ctx.beginPath();ctx.ellipse(0,0,14*s,6.5*s,0,0,7);ctx.fill();ctx.beginPath();ctx.moveTo(-11*s,0);ctx.lineTo(-21*s,-7*s);ctx.lineTo(-21*s,7*s);ctx.closePath();ctx.fill();ctx.fillStyle=eye;ctx.beginPath();ctx.arc(7.5*s,-1.6*s,1.7*s,0,7);ctx.fill();ctx.restore()}
-function drawBelt(){const{ctx,w,h}=fit($("#cvBelt")),p=P(),s=w/600,by=h*.58,bx0=w*.04,bx1=w*.64;
-  ctx.fillStyle=p.panel;ctx.fillRect(0,0,w,h);
-  ctx.fillStyle=p.line;ctx.beginPath();ctx.roundRect(bx0,by,bx1-bx0,16*s,8*s);ctx.fill();
-  ctx.fillStyle=p.muted;for(let x=bx0+12*s;x<bx1;x+=34*s){ctx.beginPath();ctx.arc(x,by+8*s,4*s,0,7);ctx.fill()}
-  // sorter
-  ctx.strokeStyle=p.cut;ctx.lineWidth=2.5;ctx.beginPath();ctx.roundRect(bx1-6*s,by-62*s,58*s,84*s,10*s);ctx.stroke();
-  ctx.fillStyle=p.cut;ctx.font="700 "+Math.round(15*s)+"px "+p.mono;ctx.textAlign="center";ctx.fillText("LDA",bx1+23*s,by-28*s);ctx.font=Math.round(11*s)+"px "+p.mono;ctx.fillText("QDA",bx1+23*s,by-10*s);
-  // bins
-  const bins=[[w*.87,h*.2,p.sal,"salmon"],[w*.87,h*.84,p.bas,"sea bass"]];
-  bins.forEach(([x,y,c,t],k)=>{ctx.strokeStyle=c;ctx.lineWidth=2.5;ctx.beginPath();ctx.roundRect(x-48*s,y-26*s,96*s,52*s,10*s);ctx.stroke();ctx.fillStyle=c;ctx.font="600 "+Math.round(12*s)+"px "+p.mono;ctx.fillText(t,x,y-6*s);ctx.font="800 "+Math.round(18*s)+"px "+p.mono;ctx.fillText(String(BELT.cnt[k]),x,y+16*s)});
-  BELT.fish.forEach(f=>{let x,y;const sx=bx1+23*s,sy=by-12*s;if(f.x<.64){x=f.x*w;y=by-12*s}else{const q=clamp((f.x-.64)/.26,0,1),e=q*q*(3-2*q),b=bins[f.k-1];x=sx+(b[0]-sx)*e;y=sy+(b[1]-sy)*e}fishShape(ctx,x,y,s,f.k===1?p.sal:p.bas,p.panel)})}
-function beltFrame(now){if(cur!==0){BELT.raf=0;return}const dt=BELT.last?Math.min(.05,(now-BELT.last)/1000):0;BELT.last=now;BELT.acc+=dt;
-  if(BELT.acc>.62){BELT.acc=0;BELT.fish.push({x:-.03,k:rnd()<.5?1:2})}
-  BELT.fish.forEach(f=>f.x+=dt*.15);
-  BELT.fish=BELT.fish.filter(f=>{if(f.x>.9){BELT.cnt[f.k-1]++;return false}return true});
-  drawBelt();BELT.raf=requestAnimationFrame(beltFrame)}
-function startBelt(){if(reduce){if(!BELT.fish.length)for(let i=0;i<7;i++)BELT.fish.push({x:.06+i*.085,k:rnd()<.5?1:2});drawBelt();return}if(!BELT.raf){BELT.last=0;BELT.raf=requestAnimationFrame(beltFrame)}}
+/* ---------- hero: the conveyor belt ---------- */
+const BELT = { fish: [], acc: 0, last: 0, cnt: [0, 0], raf: 0, on: true, visible: true };
+function fishShape(ctx, x, y, s, col, eye) { ctx.save(); ctx.translate(x, y); ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, 0, 14 * s, 6.5 * s, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(-11 * s, 0); ctx.lineTo(-21 * s, -7 * s); ctx.lineTo(-21 * s, 7 * s); ctx.closePath(); ctx.fill(); ctx.fillStyle = eye; ctx.beginPath(); ctx.arc(7.5 * s, -1.6 * s, 1.7 * s, 0, 7); ctx.fill(); ctx.restore(); }
+function drawBelt() {
+  const { ctx, w, h } = prep($('#belt-cv')), p = P(), s = w / 600, by = h * .58, bx0 = w * .04, bx1 = w * .62;
+  ctx.fillStyle = p.soft; ctx.beginPath(); ctx.roundRect(bx0, by, bx1 - bx0, 16 * s, 8 * s); ctx.fill();
+  ctx.fillStyle = p.line; for (let x = bx0 + 12 * s; x < bx1; x += 34 * s) { ctx.beginPath(); ctx.arc(x, by + 8 * s, 4 * s, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = p.cut; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.roundRect(bx1 - 6 * s, by - 62 * s, 60 * s, 84 * s, 10 * s); ctx.stroke();
+  ctx.fillStyle = p.cut; ctx.font = `600 ${Math.round(12 * s)}px ${p.mono}`; ctx.textAlign = 'center'; ctx.fillText('sorter', bx1 + 24 * s, by - 36 * s);
+  ctx.fillStyle = p.muted; ctx.font = `${Math.round(10 * s)}px ${p.mono}`; ctx.fillText('length', bx1 + 24 * s, by - 18 * s); ctx.fillText('brightness', bx1 + 24 * s, by - 5 * s);
+  const bins = [[w * .87, h * .2, p.sal, 'salmon'], [w * .87, h * .84, p.bass, 'sea bass']];
+  bins.forEach(([x, y, c, t], k) => { ctx.strokeStyle = c; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.roundRect(x - 48 * s, y - 26 * s, 96 * s, 52 * s, 10 * s); ctx.stroke(); ctx.fillStyle = c; ctx.font = `600 ${Math.round(12 * s)}px ${p.mono}`; ctx.fillText(t, x, y - 6 * s); ctx.font = `600 ${Math.round(18 * s)}px ${p.mono}`; ctx.fillText(String(BELT.cnt[k]), x, y + 16 * s); });
+  BELT.fish.forEach(f => { let x, y; const sx = bx1 + 24 * s, sy = by - 12 * s; if (f.x < .62) { x = f.x * w; y = by - 12 * s; } else { const q = clamp((f.x - .62) / .28, 0, 1), e = q * q * (3 - 2 * q), b = bins[f.k - 1]; x = sx + (b[0] - sx) * e; y = sy + (b[1] - sy) * e; } fishShape(ctx, x, y, s, f.k === 1 ? p.sal : p.bass, p.surface); });
+}
+function beltFrame(now) {
+  if (!BELT.on || !BELT.visible) { BELT.raf = 0; return; }
+  const dt = BELT.last ? Math.min(.05, (now - BELT.last) / 1000) : 0; BELT.last = now; BELT.acc += dt;
+  if (BELT.acc > .62) { BELT.acc = 0; BELT.fish.push({ x: -.03, k: rnd() < .5 ? 1 : 2 }); }
+  BELT.fish.forEach(f => f.x += dt * .15);
+  BELT.fish = BELT.fish.filter(f => { if (f.x > .9) { BELT.cnt[f.k - 1]++; return false; } return true; });
+  drawBelt(); BELT.raf = requestAnimationFrame(beltFrame);
+}
+function beltStart() { if (reduceMotion) { if (!BELT.fish.length) for (let i = 0; i < 7; i++) BELT.fish.push({ x: .06 + i * .085, k: rnd() < .5 ? 1 : 2 }); drawBelt(); return; } if (!BELT.raf && BELT.on && BELT.visible) { BELT.last = 0; BELT.raf = requestAnimationFrame(beltFrame); } }
+$('#belt-btn').addEventListener('click', e => { BELT.on = !BELT.on; e.currentTarget.setAttribute('aria-pressed', BELT.on); e.currentTarget.textContent = BELT.on ? 'Pause the belt' : 'Run the belt'; beltStart(); });
+if ('IntersectionObserver' in window) new IntersectionObserver(es => { es.forEach(e => { BELT.visible = e.isIntersecting; beltStart(); }); }).observe($('#belt-cv'));
 
-/* ---------- 1. where would you cut ---------- */
-const CUT={all:[],x:58,best:null,g:null};
-function newCatch(){const a=[];for(let i=0;i<20;i++)a.push([55+7*randn(),1]);for(let i=0;i<20;i++)a.push([72+7*randn(),2]);
-  for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]]}
-  CUT.all=a.map(([v,k])=>[clamp(Math.round(v/2)*2,32,96),k]);CUT.best=null;$("#bestNote").textContent="No cut gets zero mistakes, because the two groups overlap. Every method today is about handling that overlap well."}
-const cutMistakes=c=>CUT.all.reduce((m,[v,k])=>m+((k===1&&v>c)||(k===2&&v<=c)?1:0),0);
-function findBest(){const vs=[...new Set(CUT.all.map(a=>a[0]))].sort((a,b)=>a-b);let best=null,bm=1e9;for(let i=0;i<vs.length-1;i++){const c=(vs[i]+vs[i+1])/2,m=cutMistakes(c);if(m<bm){bm=m;best=c}}return[best,bm]}
-function drawCut(){const cv=$("#cvCut"),{ctx,w,h}=fit(cv),p=P(),L=26,R=w-26,base=h-40,lo=30,hi=98;CUT.g={L,R,lo,hi};
-  const X=v=>L+(v-lo)/(hi-lo)*(R-L),cx=X(CUT.x);
-  ctx.fillStyle=rgba(p.sal,.09);ctx.fillRect(0,0,cx,base);ctx.fillStyle=rgba(p.bas,.09);ctx.fillRect(cx,0,w-cx,base);
-  ctx.strokeStyle=p.muted;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(L,base+.5);ctx.lineTo(R,base+.5);ctx.stroke();
-  ctx.fillStyle=p.muted;ctx.font="12px "+p.mono;ctx.textAlign="center";for(let v=30;v<=90;v+=10){const x=X(v);ctx.fillRect(x,base,1,5);ctx.fillText(v+" cm",x,base+20)}
-  const rr=clamp((X(lo+2)-X(lo))/2-.8,2.5,8),st={};let wrong=0;
-  CUT.all.forEach(([v,k])=>{const n=st[v]=(st[v]||0)+1,x=X(v),y=base-rr-2-(n-1)*(2*rr+2),bad=(k===1&&v>CUT.x)||(k===2&&v<=CUT.x);if(bad)wrong++;
-    ctx.beginPath();ctx.arc(x,y,rr,0,7);ctx.fillStyle=k===1?p.sal:p.bas;ctx.fill();if(bad){ctx.beginPath();ctx.arc(x,y,rr+3,0,7);ctx.strokeStyle=p.bad;ctx.lineWidth=2;ctx.stroke()}});
-  if(CUT.best!==null){const bx=X(CUT.best);ctx.setLineDash([3,4]);ctx.strokeStyle=p.good;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(bx,24);ctx.lineTo(bx,base);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=p.good;ctx.font="600 12px "+p.mono;ctx.fillText("best",bx,56)}
-  ctx.setLineDash([7,5]);ctx.strokeStyle=p.cut;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(cx,22);ctx.lineTo(cx,base);ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle=p.cut;ctx.font="700 13px "+p.mono;ctx.fillText("your cut "+CUT.x.toFixed(1)+" cm",clamp(cx,80,w-80),16);
-  ctx.font="600 12px "+p.mono;ctx.textAlign="left";ctx.fillStyle=p.sal;ctx.fillText("◀ called salmon",L,38);ctx.textAlign="right";ctx.fillStyle=p.bas;ctx.fillText("called sea bass ▶",R,38);
-  $("#rdCut").textContent=wrong;$("#rdCutOf").textContent=(wrong===1?"mistake":"mistakes")+" out of "+CUT.all.length+" fish"}
-(function(){const cv=$("#cvCut");let down=false;const set=e=>{const r=cv.getBoundingClientRect(),g=CUT.g;if(!g)return;CUT.x=clamp(g.lo+(e.clientX-r.left-g.L)/(g.R-g.L)*(g.hi-g.lo),32,96);drawCut()};
-  cv.addEventListener("pointerdown",e=>{down=true;cv.setPointerCapture(e.pointerId);set(e)});cv.addEventListener("pointermove",e=>{if(down)set(e)});["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,()=>down=false))})();
-$("#bestCut").addEventListener("click",()=>{const[c,m]=findBest();CUT.best=c;$("#bestNote").textContent="The best possible cut is at "+c.toFixed(0)+" cm, and it still makes "+m+(m===1?" mistake":" mistakes")+". No straight cut can do better on this catch.";drawCut()});
-$("#newCatch").addEventListener("click",()=>{newCatch();drawCut()});
+/* ---------- 01 where would you cut ---------- */
+const CUT = { all: [], x: 58, best: null, g: null };
+function cutNew() {
+  const a = []; for (let i = 0; i < 20; i++) a.push([55 + 7 * randn(), 1]); for (let i = 0; i < 20; i++) a.push([72 + 7 * randn(), 2]);
+  CUT.all = a.map(([v, k]) => [clamp(Math.round(v / 2) * 2, 32, 96), k]); CUT.best = null;
+  $('#cut-note').innerHTML = 'No cut gets zero mistakes on an overlapping catch. The error you cannot remove by moving the cut is called the <strong>Bayes error</strong>; every method on this page is about getting as close to it as possible.';
+}
+const cutWrong = c => CUT.all.reduce((m, [v, k]) => m + ((k === 1 && v > c) || (k === 2 && v <= c) ? 1 : 0), 0);
+function cutBest() { const vs = [...new Set(CUT.all.map(a => a[0]))].sort((a, b) => a - b); let best = null, bm = 1e9; for (let i = 0; i < vs.length - 1; i++) { const c = (vs[i] + vs[i + 1]) / 2, m = cutWrong(c); if (m < bm) { bm = m; best = c; } } return [best, bm]; }
+function drawCut() {
+  const cv = $('#cut-cv'), { ctx, w, h } = prep(cv), p = P(), L = 30, R = w - 30, base = h - 36, lo = 30, hi = 98; CUT.g = { L, R, lo, hi };
+  const X = v => L + (v - lo) / (hi - lo) * (R - L), cx = X(CUT.x);
+  ctx.fillStyle = rgba(p.sal, .08); ctx.fillRect(0, 0, cx, base); ctx.fillStyle = rgba(p.bass, .08); ctx.fillRect(cx, 0, w - cx, base);
+  ctx.strokeStyle = p.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, base + .5); ctx.lineTo(R, base + .5); ctx.stroke();
+  ctx.fillStyle = p.muted; ctx.font = `12px ${p.mono}`; ctx.textAlign = 'center'; for (let v = 30; v <= 90; v += 10) { const x = X(v); ctx.fillRect(x, base, 1, 5); ctx.fillText(v + ' cm', x, base + 20); }
+  const rr = clamp((X(lo + 2) - X(lo)) / 2 - 1, 2.5, 8), st = {}; let wrong = 0;
+  CUT.all.forEach(([v, k]) => { const n = st[v] = (st[v] || 0) + 1, x = X(v), y = base - rr - 2 - (n - 1) * (2 * rr + 2), bad = (k === 1 && v > CUT.x) || (k === 2 && v <= CUT.x); if (bad) wrong++; ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fillStyle = k === 1 ? p.sal : p.bass; ctx.fill(); if (bad) { ctx.beginPath(); ctx.arc(x, y, rr + 3, 0, 7); ctx.strokeStyle = p.qda; ctx.lineWidth = 2; ctx.stroke(); } });
+  if (CUT.best !== null) { const bx = X(CUT.best); ctx.setLineDash([3, 4]); ctx.strokeStyle = p.good; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, 30); ctx.lineTo(bx, base); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = p.good; ctx.font = `600 12px ${p.mono}`; ctx.fillText('best', bx, 24); }
+  ctx.setLineDash([7, 5]); ctx.strokeStyle = p.cut; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, 8); ctx.lineTo(cx, base); ctx.stroke(); ctx.setLineDash([]);
+  ctx.font = `600 12px ${p.mono}`; ctx.textAlign = 'left'; ctx.fillStyle = p.sal; ctx.fillText('◀ called salmon', L, 14); ctx.textAlign = 'right'; ctx.fillStyle = p.bass; ctx.fillText('called sea bass ▶', R, 14);
+  $('#cut-wrong').textContent = wrong; $('#cut-of').textContent = (wrong === 1 ? 'mistake' : 'mistakes') + ' out of ' + CUT.all.length; $('#cut-pos').textContent = 'Your cut: ' + CUT.x.toFixed(1) + ' cm';
+}
+{ const cv = $('#cut-cv'); let down = false; const set = e => { const r = cv.getBoundingClientRect(), g = CUT.g; if (!g) return; CUT.x = clamp(g.lo + (e.clientX - r.left - g.L) / (g.R - g.L) * (g.hi - g.lo), 32, 96); drawCut(); };
+  cv.addEventListener('pointerdown', e => { down = true; cv.setPointerCapture(e.pointerId); set(e); }); cv.addEventListener('pointermove', e => { if (down) set(e); }); ['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, () => down = false)); }
+$('#cut-best').addEventListener('click', () => { const [c, m] = cutBest(); CUT.best = c; $('#cut-note').textContent = `The best possible cut on this catch is at ${c.toFixed(0)} cm, and it still makes ${m} ${m === 1 ? 'mistake' : 'mistakes'}. No single cut can do better here.`; drawCut(); });
+$('#cut-new').addEventListener('click', () => { cutNew(); drawCut(); });
 
-/* ---------- 2. bet on the likelier one ---------- */
-const BET={x:62,prior:.5,wide:false};
-function drawBet(){const{ctx,w,h}=fit($("#cvBet")),p=P(),lo=30,hi=100,L=26,R=w-26,base=h-40,top=34;
-  const sb=BET.wide?14:7,f1=x=>BET.prior*pdf(x,55,7),f2=x=>(1-BET.prior)*pdf(x,72,sb);
-  let ym=0;for(let x=lo;x<=hi;x+=.5)ym=Math.max(ym,f1(x),f2(x));
-  const X=v=>L+(v-lo)/(hi-lo)*(R-L),Y=v=>base-v/ym*(base-top);
-  [[f1,p.sal],[f2,p.bas]].forEach(([f,c])=>{ctx.beginPath();ctx.moveTo(X(lo),base);for(let x=lo;x<=hi;x+=.25)ctx.lineTo(X(x),Y(f(x)));ctx.lineTo(X(hi),base);ctx.closePath();ctx.fillStyle=rgba(c,.2);ctx.fill();
-    ctx.beginPath();for(let x=lo;x<=hi;x+=.25){const yy=Y(f(x));x===lo?ctx.moveTo(X(x),yy):ctx.lineTo(X(x),yy)}ctx.strokeStyle=c;ctx.lineWidth=2.5;ctx.stroke()});
-  const bs=[];let prev=f1(lo)-f2(lo);for(let x=lo+.02;x<=hi;x+=.02){const d=f1(x)-f2(x);if((d>0)!==(prev>0))bs.push(x);prev=d}
-  ctx.font="600 12px "+p.mono;ctx.textAlign="center";
-  bs.forEach(b=>{const bx=X(b);ctx.setLineDash([6,5]);ctx.strokeStyle=p.cut;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(bx,top-12);ctx.lineTo(bx,base);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=p.cut;ctx.fillText(b.toFixed(1)+" cm",clamp(bx,40,w-40),top-16)});
-  ctx.strokeStyle=p.muted;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(L,base+.5);ctx.lineTo(R,base+.5);ctx.stroke();ctx.fillStyle=p.muted;ctx.font="12px "+p.mono;
-  for(let v=30;v<=100;v+=10){const x=X(v);ctx.fillRect(x,base,1,5);ctx.fillText(v+" cm",x,base+20)}
-  const x0=BET.x,a=f1(x0),b=f2(x0),mx=X(x0);
-  ctx.strokeStyle=p.ink;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(mx,top);ctx.lineTo(mx,base);ctx.stroke();
-  [[a,p.sal],[b,p.bas]].forEach(([v,c])=>{ctx.beginPath();ctx.arc(mx,Y(v),6.5,0,7);ctx.fillStyle=c;ctx.fill();ctx.strokeStyle=p.ink;ctx.lineWidth=2;ctx.stroke()});
-  fishShape(ctx,mx,base-12,.9,p.ink,p.panel);
-  const ps=a/(a+b);$("#barS").style.width=(ps*100)+"%";$("#barB").style.width=((1-ps)*100)+"%";$("#pS").textContent=Math.round(ps*100)+"%";$("#pB").textContent=Math.round((1-ps)*100)+"%";
-  const v=$("#verdict");v.textContent=ps>=.5?"→ Call it salmon":"→ Call it sea bass";v.style.color=ps>=.5?"var(--salmon)":"var(--bass)";
-  $("#betBorder").textContent=bs.length===1?"Border at "+bs[0].toFixed(1)+" cm."+(BET.prior>.5?" It moved right: with mostly salmon around, a fish needs to be longer before we call it sea bass.":""):bs.length===2?"Two borders: "+bs[0].toFixed(1)+" cm and "+bs[1].toFixed(1)+" cm. Very short and very long fish are both called sea bass! One straight cut can't do this.":"No border: one group wins everywhere."}
-$("#len").addEventListener("input",e=>{BET.x=+e.target.value;$("#lenV").textContent=BET.x.toFixed(1).replace(".0","")+" cm";drawBet()});
-function setPrior(v){BET.prior=v;$("#pr50").setAttribute("aria-pressed",v===.5);$("#pr80").setAttribute("aria-pressed",v===.8);drawBet()}
-$("#pr50").addEventListener("click",()=>setPrior(.5));$("#pr80").addEventListener("click",()=>setPrior(.8));
-$("#wideBtn").addEventListener("click",e=>{BET.wide=!BET.wide;e.currentTarget.setAttribute("aria-pressed",BET.wide);e.currentTarget.textContent=BET.wide?"Sea bass vary less":"Sea bass vary more";drawBet()});
+/* ---------- 02 bet on the likelier fish ---------- */
+const BET = { x: 62, prior: .5, wide: false };
+function drawBet() {
+  const { ctx, w, h } = prep($('#bet-cv')), p = P(), lo = 30, hi = 100, L = 30, R = w - 30, base = h - 36, top = 40;
+  const sb = BET.wide ? 14 : 7, f1 = x => BET.prior * pdf(x, 55, 7), f2 = x => (1 - BET.prior) * pdf(x, 72, sb);
+  let ym = 0; for (let x = lo; x <= hi; x += .5) ym = Math.max(ym, f1(x), f2(x));
+  const X = v => L + (v - lo) / (hi - lo) * (R - L), Y = v => base - v / ym * (base - top);
+  [[f1, p.sal], [f2, p.bass]].forEach(([f, c]) => { ctx.beginPath(); ctx.moveTo(X(lo), base); for (let x = lo; x <= hi; x += .25) ctx.lineTo(X(x), Y(f(x))); ctx.lineTo(X(hi), base); ctx.closePath(); ctx.fillStyle = rgba(c, .18); ctx.fill(); ctx.beginPath(); for (let x = lo; x <= hi; x += .25) { const yy = Y(f(x)); x === lo ? ctx.moveTo(X(x), yy) : ctx.lineTo(X(x), yy); } ctx.strokeStyle = c; ctx.lineWidth = 2.5; ctx.stroke(); });
+  const bs = []; let prev = f1(lo) - f2(lo); for (let x = lo + .02; x <= hi; x += .02) { const d = f1(x) - f2(x); if ((d > 0) !== (prev > 0)) bs.push(x); prev = d; }
+  ctx.font = `600 12px ${p.mono}`; ctx.textAlign = 'center';
+  bs.forEach(b => { const bx = X(b); ctx.setLineDash([6, 5]); ctx.strokeStyle = p.cut; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(bx, top - 14); ctx.lineTo(bx, base); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = p.cut; ctx.fillText(b.toFixed(1) + ' cm', clamp(bx, 36, w - 36), top - 20); });
+  ctx.strokeStyle = p.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, base + .5); ctx.lineTo(R, base + .5); ctx.stroke(); ctx.fillStyle = p.muted; ctx.font = `12px ${p.mono}`;
+  for (let v = 30; v <= 100; v += 10) { const x = X(v); ctx.fillRect(x, base, 1, 5); ctx.fillText(v + ' cm', x, base + 20); }
+  const x0 = BET.x, a = f1(x0), b = f2(x0), mx = X(x0);
+  ctx.strokeStyle = p.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(mx, top); ctx.lineTo(mx, base); ctx.stroke();
+  [[a, p.sal], [b, p.bass]].forEach(([v, c]) => { ctx.beginPath(); ctx.arc(mx, Y(v), 6.5, 0, 7); ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = p.surface; ctx.lineWidth = 2; ctx.stroke(); });
+  fishShape(ctx, mx, base - 12, .9, p.ink, p.surface);
+  const ps = a / (a + b);
+  $('#bet-ps-bar').style.width = (ps * 100) + '%'; $('#bet-pb-bar').style.width = ((1 - ps) * 100) + '%'; $('#bet-ps').textContent = Math.round(ps * 100) + '%'; $('#bet-pb').textContent = Math.round((1 - ps) * 100) + '%';
+  const v = $('#bet-verdict'); v.textContent = ps >= .5 ? '→ Call it salmon' : '→ Call it sea bass'; v.style.color = ps >= .5 ? 'var(--sal)' : 'var(--bass)';
+  $('#bet-border').textContent = bs.length === 1 ? `Border at ${bs[0].toFixed(1)} cm.` + (BET.prior > .5 ? ' It moved right: with mostly salmon about, a fish must be longer before sea bass is the better bet.' : ' With equal priors and equal spreads, it sits halfway between the two means.') : bs.length === 2 ? `Two borders: ${bs[0].toFixed(1)} cm and ${bs[1].toFixed(1)} cm. Very short and very long fish are both called sea bass. One cut cannot do this; two spreads can.` : 'One hill is taller everywhere, so every fish gets the same call.';
+}
+$('#bet-x').addEventListener('input', e => { BET.x = +e.target.value; $('#bet-x-o').textContent = (BET.x % 1 ? BET.x.toFixed(1) : BET.x) + ' cm'; drawBet(); });
+function seg(onId, offId, on) { $(onId).setAttribute('aria-pressed', on); $(offId).setAttribute('aria-pressed', !on); }
+$('#bet-p50').addEventListener('click', () => { BET.prior = .5; seg('#bet-p50', '#bet-p80', true); drawBet(); });
+$('#bet-p80').addEventListener('click', () => { BET.prior = .8; seg('#bet-p50', '#bet-p80', false); drawBet(); });
+$('#bet-same').addEventListener('click', () => { BET.wide = false; seg('#bet-same', '#bet-wide', true); drawBet(); });
+$('#bet-wide').addEventListener('click', () => { BET.wide = true; seg('#bet-same', '#bet-wide', false); drawBet(); });
 
-/* ---------- 3. LDA ---------- */
-const LD={m1:[4,5.9],m2:[6,4.1],tilt:35,z1:zs(60),z2:zs(60)};
-function drawLine(){const{ctx,w,h}=fit($("#cvLine")),p=P(),S=cov(1.25,.5,LD.tilt),L=chol(S),g=gOf(LD.m1,S,LD.m2,S);
-  field(ctx,w,h,g);let ok=0;
-  const p1=LD.z1.map(z=>place(LD.m1,L,z)),p2=LD.z2.map(z=>place(LD.m2,L,z));
-  p1.forEach(q=>{dot(ctx,w,h,q,p.sal,4);if(g(q[0],q[1])>0)ok++;else ring(ctx,w,h,q,p.bad,7)});
-  p2.forEach(q=>{dot(ctx,w,h,q,p.bas,4);if(g(q[0],q[1])<=0)ok++;else ring(ctx,w,h,q,p.bad,7)});
-  handle(ctx,w,h,LD.m1,p.sal);handle(ctx,w,h,LD.m2,p.bas);$("#rdLine").textContent=ok}
-dragger($("#cvLine"),()=>[LD.m1,LD.m2],drawLine);
-$("#tilt").addEventListener("input",e=>{LD.tilt=+e.target.value;$("#tiltV").textContent=LD.tilt+"°";drawLine()});
-$("#resetLine").addEventListener("click",()=>{LD.m1[0]=4;LD.m1[1]=5.9;LD.m2[0]=6;LD.m2[1]=4.1;LD.tilt=35;$("#tilt").value=35;$("#tiltV").textContent="35°";drawLine()});
+/* ---------- 03 clouds and their shapes ---------- */
+const COVL = { sx: 1.6, sy: .7, rot: 30, z: zs(150) };
+function drawCov() {
+  const { ctx, w, h } = prep($('#cov-cv')), p = P(), M = mapper(w, h, [0, 10], [0, 7.5]), S = cov(COVL.sx, COVL.sy, COVL.rot), L = chol(S), mu = [5, 3.75];
+  axes(ctx, w, h, 'length', 'brightness');
+  const t = COVL.rot * Math.PI / 180;
+  [2, 1].forEach((k, i) => { ctx.beginPath(); ctx.ellipse(M.X(mu[0]), M.Y(mu[1]), COVL.sx * k * w / 10, COVL.sy * k * h / 7.5, -t, 0, 7); ctx.fillStyle = rgba(p.sal, i ? .22 : .10); ctx.fill(); ctx.strokeStyle = rgba(p.sal, .9); ctx.lineWidth = i ? 2 : 1.5; ctx.stroke(); });
+  COVL.z.forEach(z => dot(ctx, M, place(mu, L, z), p.sal, 3.2));
+  handle(ctx, M, mu, p.ink);
+  ctx.fillStyle = p.muted; ctx.font = `12px ${p.mono}`; ctx.textAlign = 'left'; ctx.fillText('μ = centre', M.X(mu[0]) + 16, M.Y(mu[1]) + 4);
+  const f = v => (Math.round(v * 100) / 100).toFixed(2);
+  $('#cov-11').textContent = f(S[0]); $('#cov-22').textContent = f(S[2]); $('#cov-12').textContent = $('#cov-21').textContent = f(S[1]);
+  const r = S[1] / Math.sqrt(S[0] * S[2]);
+  $('#cov-note').textContent = Math.abs(r) < .08 ? 'Off-diagonal near zero: length and brightness vary independently. The cloud is upright.' : (r > 0 ? `Positive off-diagonal (correlation ${r.toFixed(2)}): longer fish tend to be brighter. The cloud leans up to the right.` : `Negative off-diagonal (correlation ${r.toFixed(2)}): longer fish tend to be darker. The cloud leans down to the right.`);
+}
+['sx', 'sy', 'rot'].forEach(k => { const el = $('#cov-' + k); el.addEventListener('input', () => { COVL[k] = +el.value; $('#cov-' + k + '-o').textContent = k === 'rot' ? el.value + '°' : (+el.value).toFixed(2).replace(/0$/, ''); drawCov(); }); });
 
-/* ---------- 4. QDA ---------- */
-const QD={m1:[4.2,5.6],m2:[6,4.4],s1:.7,s2:1.6,showL:true,z1:zs(60),z2:zs(60)};
-function drawCurve(){const{ctx,w,h}=fit($("#cvCurve")),p=P(),S1=cov(QD.s1,QD.s1,0),S2=cov(QD.s2,QD.s2,0),Sp=[(S1[0]+S2[0])/2,(S1[1]+S2[1])/2,(S1[2]+S2[2])/2];
-  const g=gOf(QD.m1,S1,QD.m2,S2),gL=gOf(QD.m1,Sp,QD.m2,Sp);
-  field(ctx,w,h,g);if(QD.showL)field(ctx,w,h,gL,{fill:false,color:rgba(p.ink,.5),dot:1.8,cell:7});
-  const L1=chol(S1),L2=chol(S2);let okQ=0,okL=0;
-  const p1=QD.z1.map(z=>place(QD.m1,L1,z)),p2=QD.z2.map(z=>place(QD.m2,L2,z));
-  p1.forEach(q=>{const r=g(q[0],q[1])>0;dot(ctx,w,h,q,p.sal,4);if(r)okQ++;else ring(ctx,w,h,q,p.bad,7);if(gL(q[0],q[1])>0)okL++});
-  p2.forEach(q=>{const r=g(q[0],q[1])<=0;dot(ctx,w,h,q,p.bas,4);if(r)okQ++;else ring(ctx,w,h,q,p.bad,7);if(gL(q[0],q[1])<=0)okL++});
-  handle(ctx,w,h,QD.m1,p.sal);handle(ctx,w,h,QD.m2,p.bas);
-  $("#rdQ").textContent=okQ+" / 120";$("#rdL").textContent=okL+" / 120";
-  $("#qName").className=okQ>okL?"lead-win":"";$("#lName").className=okL>okQ?"lead-win":""}
-dragger($("#cvCurve"),()=>[QD.m1,QD.m2],drawCurve);
-function syncQ(){$("#s1").value=QD.s1;$("#s2").value=QD.s2;$("#s1V").textContent=QD.s1.toFixed(2);$("#s2V").textContent=QD.s2.toFixed(2);drawCurve()}
-$("#s1").addEventListener("input",e=>{QD.s1=+e.target.value;syncQ()});$("#s2").addEventListener("input",e=>{QD.s2=+e.target.value;syncQ()});
-$("#island").addEventListener("click",()=>{QD.m1[0]=5;QD.m1[1]=5.2;QD.m2[0]=5.6;QD.m2[1]=4.8;QD.s1=.5;QD.s2=2;syncQ()});
-$("#sameShape").addEventListener("click",()=>{QD.s1=1.1;QD.s2=1.1;QD.m1[0]=4;QD.m1[1]=5.8;QD.m2[0]=6;QD.m2[1]=4.2;syncQ()});
-$("#showL").addEventListener("click",e=>{QD.showL=!QD.showL;e.currentTarget.setAttribute("aria-pressed",QD.showL);e.currentTarget.textContent=QD.showL?"Hide LDA's line":"Show LDA's line";drawCurve()});
+/* ---------- 04 LDA ---------- */
+const LD = { m1: [4, 5.9], m2: [6, 4.1], rot: 35, z1: zs(60), z2: zs(60) };
+function drawLDA() {
+  const { ctx, w, h } = prep($('#lda-cv')), p = P(), M = mapper(w, h, [0, 10], [0, 10]), S = cov(1.25, .5, LD.rot), L = chol(S), g = gOf(LD.m1, S, LD.m2, S);
+  field(ctx, w, h, g, M, { color: p.lda, dot: 2.8 }); axes(ctx, w, h, 'length', 'brightness');
+  let ok = 0;
+  LD.z1.map(z => place(LD.m1, L, z)).forEach(q => { dot(ctx, M, q, p.sal, 4); if (g(q[0], q[1]) > 0) ok++; else ring(ctx, M, q, p.qda, 7); });
+  LD.z2.map(z => place(LD.m2, L, z)).forEach(q => { dot(ctx, M, q, p.bass, 4); if (g(q[0], q[1]) <= 0) ok++; else ring(ctx, M, q, p.qda, 7); });
+  handle(ctx, M, LD.m1, p.sal); handle(ctx, M, LD.m2, p.bass); $('#lda-ok').textContent = ok;
+}
+dragger($('#lda-cv'), [0, 10], [0, 10], () => [LD.m1, LD.m2], drawLDA);
+$('#lda-rot').addEventListener('input', e => { LD.rot = +e.target.value; $('#lda-rot-o').textContent = LD.rot + '°'; drawLDA(); });
+$('#lda-reset').addEventListener('click', () => { LD.m1[0] = 4; LD.m1[1] = 5.9; LD.m2[0] = 6; LD.m2[1] = 4.1; LD.rot = 35; $('#lda-rot').value = 35; $('#lda-rot-o').textContent = '35°'; drawLDA(); });
 
-/* ---------- 5. small catch race ---------- */
-const TRUTH={same:{m1:[3.9,6.1],S1:cov(1.4,.7,30),m2:[6.1,3.9],S2:cov(1.4,.7,30)},diff:{m1:[4.7,5.3],S1:cov(.55,.55,0),m2:[5.4,4.6],S2:cov(2.1,1.3,20)}};
-const R={truth:"same",n:10,test:null,bayes:0,train:null,mL:null,mQ:null,rounds:0,sL:0,sQ:0,wL:0,wQ:0,last:null,timer:null};
-function sampleT(t,n){const T=TRUTH[t],L1=chol(T.S1),L2=chol(T.S2),a=[],b=[];for(let i=0;i<n;i++){a.push(place(T.m1,L1,[randn(),randn()]));b.push(place(T.m2,L2,[randn(),randn()]))}return[a,b]}
-function stats(pts){const n=pts.length;let mx=0,my=0;pts.forEach(q=>{mx+=q[0];my+=q[1]});mx/=n;my/=n;let a=0,b=0,c=0;pts.forEach(q=>{const dx=q[0]-mx,dy=q[1]-my;a+=dx*dx;b+=dx*dy;c+=dy*dy});const d=Math.max(1,n-1);return{m:[mx,my],S:[a/d,b/d,c/d],n}}
-function fitModels(a,b){const A=stats(a),B=stats(b),r=.04,k=A.n+B.n-2;
-  const SA=[A.S[0]+r,A.S[1],A.S[2]+r],SB=[B.S[0]+r,B.S[1],B.S[2]+r];
-  const Sp=[((A.n-1)*A.S[0]+(B.n-1)*B.S[0])/k+r,((A.n-1)*A.S[1]+(B.n-1)*B.S[1])/k,((A.n-1)*A.S[2]+(B.n-1)*B.S[2])/k+r];
-  return{L:gOf(A.m,Sp,B.m,Sp),Q:gOf(A.m,SA,B.m,SB)}}
-function acc(g,t){let ok=0;t[0].forEach(q=>{if(g(q[0],q[1])>0)ok++});t[1].forEach(q=>{if(g(q[0],q[1])<=0)ok++});return ok/(t[0].length+t[1].length)}
-function resetRace(){if(R.timer){clearInterval(R.timer);R.timer=null}R.test=sampleT(R.truth,800);const T=TRUTH[R.truth];R.bayes=acc(gOf(T.m1,T.S1,T.m2,T.S2),R.test);R.rounds=R.sL=R.sQ=R.wL=R.wQ=0;R.last=null;round()}
-function round(){R.train=sampleT(R.truth,R.n/2);const m=fitModels(R.train[0],R.train[1]);R.mL=m.L;R.mQ=m.Q;const aL=acc(m.L,R.test),aQ=acc(m.Q,R.test);
-  R.rounds++;R.sL+=aL;R.sQ+=aQ;if(aL>aQ)R.wL++;else if(aQ>aL)R.wQ++;R.last=[aL,aQ];drawRace()}
-function drawRace(){const p=P(),rad=R.n>50?2.6:5.5;
-  [["#cvL",R.mL],["#cvQ",R.mQ]].forEach(([id,g])=>{const{ctx,w,h}=fit($(id));if(g)field(ctx,w,h,g,{cell:4,dot:2.4});
-    if(R.train){R.train[0].forEach(q=>dot(ctx,w,h,q,p.sal,rad));R.train[1].forEach(q=>dot(ctx,w,h,q,p.bas,rad))}});
-  if(!R.last)return;
-  $("#rL").textContent="this catch: "+pct(R.last[0]);$("#rQ").textContent="this catch: "+pct(R.last[1]);
-  const avL=R.sL/R.rounds,avQ=R.sQ/R.rounds;
-  $("#wL").textContent=R.wL;$("#wQ").textContent=R.wQ;$("#aL").textContent=pct(avL);$("#aQ").textContent=pct(avQ);$("#aB").textContent=pct(R.bayes);
-  $("#bLn").className=avL>avQ?"lead-win":"";$("#bQn").className=avQ>avL?"lead-win":"";
-  const ties=R.rounds-R.wL-R.wQ;
-  $("#raceNote").textContent="After "+R.rounds+(R.rounds===1?" catch":" catches")+" of "+R.n+" fish"+(ties?" ("+ties+(ties===1?" tie)":" ties)"):"")+". "+(R.rounds<5?"Catch more to see a pattern.":avL>avQ?"LDA is ahead: the simple method wins.":"QDA is ahead: the flexible method wins.")}
-function seg(a,b,on){$(a).setAttribute("aria-pressed",on);$(b).setAttribute("aria-pressed",!on)}
-$("#n10").addEventListener("click",()=>{R.n=10;seg("#n10","#n200",true);resetRace()});
-$("#n200").addEventListener("click",()=>{R.n=200;seg("#n10","#n200",false);resetRace()});
-$("#tSame").addEventListener("click",()=>{R.truth="same";seg("#tSame","#tDiff",true);resetRace()});
-$("#tDiff").addEventListener("click",()=>{R.truth="diff";seg("#tSame","#tDiff",false);resetRace()});
-$("#catch1").addEventListener("click",()=>{if(!R.timer)round()});
-$("#catch30").addEventListener("click",()=>{if(R.timer)return;if(reduce){for(let i=0;i<30;i++)round();return}let k=0;R.timer=setInterval(()=>{round();if(++k>=30){clearInterval(R.timer);R.timer=null}},70)});
+/* ---------- 05 QDA ---------- */
+const QD = { m1: [4.2, 5.6], m2: [6, 4.4], s1: .7, s2: 1.6, showL: true, z1: zs(60), z2: zs(60) };
+function drawQDA() {
+  const { ctx, w, h } = prep($('#qda-cv')), p = P(), M = mapper(w, h, [0, 10], [0, 10]), S1 = cov(QD.s1, QD.s1, 0), S2 = cov(QD.s2, QD.s2, 0), Sp = [(S1[0] + S2[0]) / 2, 0, (S1[2] + S2[2]) / 2];
+  const g = gOf(QD.m1, S1, QD.m2, S2), gL = gOf(QD.m1, Sp, QD.m2, Sp);
+  field(ctx, w, h, g, M, { color: p.qda, dot: 2.8 }); if (QD.showL) field(ctx, w, h, gL, M, { fill: false, color: rgba(p.ink, .45), dot: 1.8, cell: 7 });
+  axes(ctx, w, h, 'length', 'brightness');
+  const L1 = chol(S1), L2 = chol(S2); let okQ = 0, okL = 0;
+  QD.z1.map(z => place(QD.m1, L1, z)).forEach(q => { const r = g(q[0], q[1]) > 0; dot(ctx, M, q, p.sal, 4); if (r) okQ++; else ring(ctx, M, q, p.qda, 7); if (gL(q[0], q[1]) > 0) okL++; });
+  QD.z2.map(z => place(QD.m2, L2, z)).forEach(q => { const r = g(q[0], q[1]) <= 0; dot(ctx, M, q, p.bass, 4); if (r) okQ++; else ring(ctx, M, q, p.qda, 7); if (gL(q[0], q[1]) <= 0) okL++; });
+  handle(ctx, M, QD.m1, p.sal); handle(ctx, M, QD.m2, p.bass);
+  $('#qda-okq').textContent = okQ + ' / 120'; $('#qda-okl').textContent = okL + ' / 120';
+  $('#qda-qn').className = 'qda-c' + (okQ > okL ? ' win' : ''); $('#qda-ln').className = 'lda-c' + (okL > okQ ? ' win' : '');
+}
+dragger($('#qda-cv'), [0, 10], [0, 10], () => [QD.m1, QD.m2], drawQDA);
+function syncQ() { $('#qda-s1').value = QD.s1; $('#qda-s2').value = QD.s2; $('#qda-s1-o').textContent = QD.s1.toFixed(2); $('#qda-s2-o').textContent = QD.s2.toFixed(2); drawQDA(); }
+$('#qda-s1').addEventListener('input', e => { QD.s1 = +e.target.value; syncQ(); }); $('#qda-s2').addEventListener('input', e => { QD.s2 = +e.target.value; syncQ(); });
+$('#qda-island').addEventListener('click', () => { QD.m1[0] = 5; QD.m1[1] = 5.2; QD.m2[0] = 5.6; QD.m2[1] = 4.8; QD.s1 = .5; QD.s2 = 2; syncQ(); });
+$('#qda-same').addEventListener('click', () => { QD.s1 = 1.1; QD.s2 = 1.1; QD.m1[0] = 4; QD.m1[1] = 5.8; QD.m2[0] = 6; QD.m2[1] = 4.2; syncQ(); });
+$('#qda-showl').addEventListener('click', e => { QD.showL = !QD.showL; e.currentTarget.setAttribute('aria-pressed', QD.showL); e.currentTarget.textContent = QD.showL ? "Hide LDA's line" : "Show LDA's line"; drawQDA(); });
 
-/* ---------- 6. Fisher ---------- */
-const FS={S:cov(1.75,.3,45),m1:[3.9,5.25],m2:[6.1,4.75],z1:zs(70),z2:zs(70),ang:90,raf:0,p1:null,p2:null};
-(function(){const L=chol(FS.S);FS.p1=FS.z1.map(z=>place(FS.m1,L,z));FS.p2=FS.z2.map(z=>place(FS.m2,L,z))})();
-function drawFisher(){const{ctx,w,h}=fit($("#cvF")),p=P(),a=FS.ang*Math.PI/180,u=[Math.cos(a),Math.sin(a)],c=[5,5];
-  const X=x=>x/10*w,Y=y=>h-y/10*h,proj=[],feet=[];
-  ctx.strokeStyle=p.cut;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(X(c[0]-12*u[0]),Y(c[1]-12*u[1]));ctx.lineTo(X(c[0]+12*u[0]),Y(c[1]+12*u[1]));ctx.stroke();
-  [[FS.p1,p.sal,1],[FS.p2,p.bas,2]].forEach(([arr,col,k])=>arr.forEach(q=>{const t=(q[0]-c[0])*u[0]+(q[1]-c[1])*u[1],f=[c[0]+t*u[0],c[1]+t*u[1]];proj.push([t,k]);feet.push([f,col]);
-    ctx.strokeStyle=rgba(col,.16);ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(X(q[0]),Y(q[1]));ctx.lineTo(X(f[0]),Y(f[1]));ctx.stroke()}));
-  FS.p1.forEach(q=>dot(ctx,w,h,q,p.sal,3.4));FS.p2.forEach(q=>dot(ctx,w,h,q,p.bas,3.4));
-  feet.forEach(([f,col])=>dot(ctx,w,h,f,rgba(col,.85),2.6));
-  // stats
-  let n1=0,n2=0,s1=0,s2=0;proj.forEach(([t,k])=>{if(k===1){n1++;s1+=t}else{n2++;s2+=t}});const m1=s1/n1,m2=s2/n2;let v1=0,v2=0;proj.forEach(([t,k])=>{if(k===1)v1+=(t-m1)**2;else v2+=(t-m2)**2});v1/=n1;v2/=n2;
-  const J=(m1-m2)**2/(v1+v2);
-  const so=proj.slice().sort((x,y)=>x[0]-y[0]);let l1=0,l2=0,bm=1e9,bt=0;for(let i=0;i<=so.length;i++){const a1=l2+(n1-l1),a2=l1+(n2-l2),m=Math.min(a1,a2);if(m<bm){bm=m;bt=i===0?so[0][0]-.1:i===so.length?so[i-1][0]+.1:(so[i-1][0]+so[i][0])/2}if(i<so.length){if(so[i][1]===1)l1++;else l2++}}
-  $("#fJ").textContent=J.toFixed(1);$("#fMiss").textContent=bm+(bm===1?" mistake":" mistakes")+" of "+proj.length;
-  // strip
-  const S=fit($("#cvStrip")),sc=S.ctx,sw=S.w,sh=S.h,lo=-5,hi=5,nb=50,bw=sw/nb,h1=new Array(nb).fill(0),h2=new Array(nb).fill(0);
-  proj.forEach(([t,k])=>{const i=clamp(Math.floor((t-lo)/(hi-lo)*nb),0,nb-1);(k===1?h1:h2)[i]++});
-  const mx=Math.max(1,...h1,...h2),base=sh-12;
-  [[h1,p.sal],[h2,p.bas]].forEach(([hh,col])=>{sc.fillStyle=rgba(col,.6);hh.forEach((v,i)=>{if(v)sc.fillRect(i*bw+1,base-v/mx*(base-8),bw-2,v/mx*(base-8))})});
-  sc.fillStyle=p.cut;sc.fillRect(0,base,sw,2);
-  const cx=(bt-lo)/(hi-lo)*sw;sc.setLineDash([3,3]);sc.strokeStyle=p.good;sc.lineWidth=2;sc.beginPath();sc.moveTo(cx,4);sc.lineTo(cx,base);sc.stroke();sc.setLineDash([])}
-function syncF(){$("#ang").value=Math.round(FS.ang);$("#angV").textContent=Math.round(FS.ang)+"°";drawFisher()}
-function animAng(target){cancelAnimationFrame(FS.raf);target=((target%180)+180)%180;const from=FS.ang,d=(((target-from)%180)+270)%180-90;
-  if(reduce){FS.ang=target;syncF();return}const t0=performance.now();
-  const step=now=>{const k=Math.min(1,(now-t0)/900),e=1-Math.pow(1-k,3);FS.ang=(((from+d*e)%180)+180)%180;syncF();if(k<1)FS.raf=requestAnimationFrame(step)};FS.raf=requestAnimationFrame(step)}
-$("#ang").addEventListener("input",e=>{cancelAnimationFrame(FS.raf);FS.ang=+e.target.value;syncF()});
-$("#centres").addEventListener("click",()=>{const dx=FS.m2[0]-FS.m1[0],dy=FS.m2[1]-FS.m1[1];animAng(Math.atan2(dy,dx)*180/Math.PI)});
-$("#askFisher").addEventListener("click",()=>{const S=FS.S,det=S[0]*S[2]-S[1]*S[1],dx=FS.m1[0]-FS.m2[0],dy=FS.m1[1]-FS.m2[1];const wx=(S[2]*dx-S[1]*dy)/det,wy=(-S[1]*dx+S[0]*dy)/det;animAng(Math.atan2(wy,wx)*180/Math.PI)});
+/* ---------- 06 worked example figure ---------- */
+function drawEx() {
+  const { ctx, w, h } = prep($('#ex-cv')), p = P(), lo = 25, hi = 110, L = 30, R = w - 30, base = h - 36, top = 44;
+  const mS = 56, mB = 75, sS = Math.sqrt(80 / 3), sB = Math.sqrt(500 / 3), f1 = x => .5 * pdf(x, mS, sS), f2 = x => .5 * pdf(x, mB, sB);
+  let ym = 0; for (let x = lo; x <= hi; x += .5) ym = Math.max(ym, f1(x), f2(x));
+  const X = v => L + (v - lo) / (hi - lo) * (R - L), Y = v => base - v / ym * (base - top);
+  [[f1, p.sal], [f2, p.bass]].forEach(([f, c]) => { ctx.beginPath(); ctx.moveTo(X(lo), base); for (let x = lo; x <= hi; x += .25) ctx.lineTo(X(x), Y(f(x))); ctx.lineTo(X(hi), base); ctx.closePath(); ctx.fillStyle = rgba(c, .16); ctx.fill(); ctx.beginPath(); for (let x = lo; x <= hi; x += .25) { const yy = Y(f(x)); x === lo ? ctx.moveTo(X(x), yy) : ctx.lineTo(X(x), yy); } ctx.strokeStyle = c; ctx.lineWidth = 2.2; ctx.stroke(); });
+  [[50, 1], [54, 1], [58, 1], [62, 1], [60, 2], [70, 2], [80, 2], [90, 2]].forEach(([v, k]) => { ctx.beginPath(); ctx.arc(X(v), base - 7, 5, 0, 7); ctx.fillStyle = k === 1 ? p.sal : p.bass; ctx.fill(); ctx.strokeStyle = p.surface; ctx.lineWidth = 1.5; ctx.stroke(); });
+  ctx.strokeStyle = p.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, base + .5); ctx.lineTo(R, base + .5); ctx.stroke(); ctx.fillStyle = p.muted; ctx.font = `12px ${p.mono}`; ctx.textAlign = 'center';
+  for (let v = 30; v <= 110; v += 10) { const x = X(v); ctx.fillRect(x, base, 1, 5); ctx.fillText(v, x, base + 20); }
+  ctx.fillText('length (cm)', (L + R) / 2, h - 2);
+  const mark = (v, col, lab, dy) => { const x = X(v); ctx.setLineDash([6, 5]); ctx.strokeStyle = col; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(x, top - 8); ctx.lineTo(x, base); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = col; ctx.font = `600 12px ${p.mono}`; ctx.textAlign = 'center'; ctx.fillText(lab, clamp(x, 40, w - 40), top - 12 - dy); };
+  mark(65.5, p.lda, 'LDA 65.5', 14); mark(64.21, p.qda, 'QDA 64.2', 0); mark(40.55, p.qda, 'QDA 40.5', 0);
+  const xs = X(65); ctx.beginPath(); ctx.moveTo(xs, Y(0) - 26); ctx.lineTo(xs + 7, Y(0) - 19); ctx.lineTo(xs, Y(0) - 12); ctx.lineTo(xs - 7, Y(0) - 19); ctx.closePath(); ctx.fillStyle = p.ink; ctx.fill();
+  ctx.fillStyle = p.ink; ctx.font = `600 12px ${p.mono}`; ctx.textAlign = 'left'; ctx.fillText('x* = 65', xs + 11, Y(0) - 16);
+}
 
-/* ---------- cards + reveals ---------- */
-document.querySelectorAll(".card").forEach(c=>c.addEventListener("click",()=>{c.classList.toggle("flipped");c.querySelector(".tap").textContent=c.classList.contains("flipped")?"Click to flip back":"Click to flip"}));
-document.querySelectorAll(".reveal").forEach(b=>b.addEventListener("click",()=>{b.classList.add("shown");b.setAttribute("aria-expanded","true")}));
+/* ---------- 07 race ---------- */
+const TRUTH = { same: { m1: [3.9, 6.1], S1: cov(1.4, .7, 30), m2: [6.1, 3.9], S2: cov(1.4, .7, 30) }, diff: { m1: [4.7, 5.3], S1: cov(.55, .55, 0), m2: [5.4, 4.6], S2: cov(2.1, 1.3, 20) } };
+const RC = { truth: 'same', n: 10, test: null, bayes: 0, train: null, mL: null, mQ: null, rounds: 0, sL: 0, sQ: 0, wL: 0, wQ: 0, last: null, timer: null };
+function sampleT(t, n) { const T = TRUTH[t], L1 = chol(T.S1), L2 = chol(T.S2), a = [], b = []; for (let i = 0; i < n; i++) { a.push(place(T.m1, L1, [randn(), randn()])); b.push(place(T.m2, L2, [randn(), randn()])); } return [a, b]; }
+function raceReset() { if (RC.timer) { clearInterval(RC.timer); RC.timer = null; } RC.test = sampleT(RC.truth, 800); const T = TRUTH[RC.truth]; RC.bayes = acc(gOf(T.m1, T.S1, T.m2, T.S2), RC.test); RC.rounds = RC.sL = RC.sQ = RC.wL = RC.wQ = 0; RC.last = null; raceRound(); }
+function raceRound() { RC.train = sampleT(RC.truth, RC.n / 2); const m = fitModels(RC.train[0], RC.train[1], .04); RC.mL = m.L; RC.mQ = m.Q; const aL = acc(m.L, RC.test), aQ = acc(m.Q, RC.test); RC.rounds++; RC.sL += aL; RC.sQ += aQ; if (aL > aQ) RC.wL++; else if (aQ > aL) RC.wQ++; RC.last = [aL, aQ]; drawRace(); }
+function drawRace() {
+  const p = P(), rad = RC.n > 50 ? 2.6 : 5;
+  [['#race-l', RC.mL, p.lda], ['#race-q', RC.mQ, p.qda]].forEach(([id, g, col]) => { const { ctx, w, h } = prep($(id)), M = mapper(w, h, [0, 10], [0, 10]); if (g) field(ctx, w, h, g, M, { cell: 4, dot: 2.4, color: col }); if (RC.train) { RC.train[0].forEach(q => dot(ctx, M, q, p.sal, rad)); RC.train[1].forEach(q => dot(ctx, M, q, p.bass, rad)); } });
+  if (!RC.last) return;
+  $('#race-rl').textContent = 'this catch: ' + pct(RC.last[0]); $('#race-rq').textContent = 'this catch: ' + pct(RC.last[1]);
+  const avL = RC.sL / RC.rounds, avQ = RC.sQ / RC.rounds;
+  $('#race-wl').textContent = RC.wL; $('#race-wq').textContent = RC.wQ; $('#race-al').textContent = pct(avL); $('#race-aq').textContent = pct(avQ); $('#race-ab').textContent = pct(RC.bayes);
+  $('#race-ln').className = 'lda-c' + (avL > avQ ? ' win' : ''); $('#race-qn').className = 'qda-c' + (avQ > avL ? ' win' : '');
+  const ties = RC.rounds - RC.wL - RC.wQ;
+  $('#race-note').textContent = `After ${RC.rounds} ${RC.rounds === 1 ? 'catch' : 'catches'} of ${RC.n} fish${ties ? ` (${ties} ${ties === 1 ? 'tie' : 'ties'})` : ''}. ` + (RC.rounds < 5 ? 'Catch more to see a pattern.' : avL > avQ ? 'LDA is ahead: the simple method wins here.' : 'QDA is ahead: the flexible method wins here.');
+}
+$('#race-n10').addEventListener('click', () => { RC.n = 10; seg('#race-n10', '#race-n200', true); raceReset(); });
+$('#race-n200').addEventListener('click', () => { RC.n = 200; seg('#race-n10', '#race-n200', false); raceReset(); });
+$('#race-same').addEventListener('click', () => { RC.truth = 'same'; seg('#race-same', '#race-diff', true); raceReset(); });
+$('#race-diff').addEventListener('click', () => { RC.truth = 'diff'; seg('#race-same', '#race-diff', false); raceReset(); });
+$('#race-one').addEventListener('click', () => { if (!RC.timer) raceRound(); });
+$('#race-30').addEventListener('click', () => { if (RC.timer) return; if (reduceMotion) { for (let i = 0; i < 30; i++) raceRound(); return; } let k = 0; RC.timer = setInterval(() => { raceRound(); if (++k >= 30) { clearInterval(RC.timer); RC.timer = null; } }, 70); });
 
-/* ---------- scene player ---------- */
-const scenes=[...document.querySelectorAll(".scene")];
-const HASH=["start","cut","bet","line","curve","race","fisher","world","takeaway"];
-const DRAW=[startBelt,drawCut,drawBet,drawLine,drawCurve,drawRace,drawFisher,null,null];
-let cur=-1;
-const dots=$("#dots");scenes.forEach((s,i)=>{const b=document.createElement("button");b.className="dot";b.setAttribute("aria-label","Scene "+(i+1));b.addEventListener("click",()=>go(i));dots.appendChild(b)});
-function go(i){i=clamp(i,0,scenes.length-1);if(i===cur)return;cur=i;
-  scenes.forEach((s,j)=>{s.classList.toggle("on",j===cur);s.setAttribute("aria-hidden",j!==cur?"true":"false")});
-  [...dots.children].forEach((d,j)=>{d.classList.toggle("on",j===cur);if(j===cur)d.setAttribute("aria-current","step");else d.removeAttribute("aria-current")});
-  $("#count").textContent=(cur+1)+" / "+scenes.length;$("#prev").disabled=cur===0;$("#next").disabled=cur===scenes.length-1;
-  $("#sayText").textContent=scenes[cur].dataset.say||"";
-  if(location.hash!=="#"+HASH[cur])location.hash=HASH[cur];
-  scenes[cur].scrollTop=0;if(DRAW[cur])DRAW[cur]()}
-function drawAll(){DRAW.forEach((f,i)=>{if(f&&i!==0)f()});if(cur===0)drawBelt()}
-$("#prev").addEventListener("click",()=>go(cur-1));$("#next").addEventListener("click",()=>go(cur+1));$("#startBtn").addEventListener("click",()=>go(1));
-const sayBtn=$("#sayBtn");function toggleSay(){const on=sayBtn.getAttribute("aria-pressed")!=="true";sayBtn.setAttribute("aria-pressed",on);$("#sayBar").hidden=!on}
-sayBtn.addEventListener("click",toggleSay);
-document.addEventListener("keydown",e=>{const t=e.target.tagName;if(t==="INPUT"||t==="TEXTAREA"||e.metaKey||e.ctrlKey||e.altKey)return;
-  if(e.key==="ArrowRight"||e.key==="PageDown"){e.preventDefault();go(cur+1)}else if(e.key==="ArrowLeft"||e.key==="PageUp"){e.preventDefault();go(cur-1)}else if(e.key==="s"||e.key==="S")toggleSay()});
-window.addEventListener("hashchange",()=>{const i=HASH.indexOf(location.hash.slice(1));if(i>=0)go(i)});
-let rt=0;window.addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(drawAll,120)});
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change",drawAll);
-new MutationObserver(drawAll).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+/* ---------- 08 Fisher ---------- */
+const FS = { S: cov(1.75, .3, 45), m1: [3.9, 5.25], m2: [6.1, 4.75], ang: 90, raf: 0, p1: null, p2: null };
+{ const L = chol(FS.S); FS.p1 = zs(70).map(z => place(FS.m1, L, z)); FS.p2 = zs(70).map(z => place(FS.m2, L, z)); }
+function drawFisher() {
+  const { ctx, w, h } = prep($('#fish-cv')), p = P(), M = mapper(w, h, [0, 10], [0, 7.5]), a = FS.ang * Math.PI / 180, u = [Math.cos(a), Math.sin(a)], c = [5, 3.75], proj = [], feet = [];
+  ctx.strokeStyle = p.cut; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(M.X(c[0] - 14 * u[0]), M.Y(c[1] - 14 * u[1])); ctx.lineTo(M.X(c[0] + 14 * u[0]), M.Y(c[1] + 14 * u[1])); ctx.stroke();
+  [[FS.p1, p.sal, 1], [FS.p2, p.bass, 2]].forEach(([arr, col, k]) => arr.forEach(q => { const t = (q[0] - c[0]) * u[0] + (q[1] - c[1]) * u[1], f = [c[0] + t * u[0], c[1] + t * u[1]]; proj.push([t, k]); feet.push([f, col]); ctx.strokeStyle = rgba(col, .16); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(M.X(q[0]), M.Y(q[1])); ctx.lineTo(M.X(f[0]), M.Y(f[1])); ctx.stroke(); }));
+  FS.p1.forEach(q => dot(ctx, M, q, p.sal, 3.4)); FS.p2.forEach(q => dot(ctx, M, q, p.bass, 3.4)); feet.forEach(([f, col]) => dot(ctx, M, f, rgba(col, .85), 2.6));
+  axes(ctx, w, h, 'length', 'brightness');
+  let n1 = 0, n2 = 0, s1 = 0, s2 = 0; proj.forEach(([t, k]) => { if (k === 1) { n1++; s1 += t; } else { n2++; s2 += t; } }); const m1 = s1 / n1, m2 = s2 / n2; let v1 = 0, v2 = 0; proj.forEach(([t, k]) => { if (k === 1) v1 += (t - m1) ** 2; else v2 += (t - m2) ** 2; }); v1 /= n1; v2 /= n2;
+  const J = (m1 - m2) ** 2 / (v1 + v2);
+  const so = proj.slice().sort((x, y) => x[0] - y[0]); let l1 = 0, l2 = 0, bm = 1e9, bt = 0;
+  for (let i = 0; i <= so.length; i++) { const a1 = l2 + (n1 - l1), a2 = l1 + (n2 - l2), m = Math.min(a1, a2); if (m < bm) { bm = m; bt = i === 0 ? so[0][0] - .1 : i === so.length ? so[i - 1][0] + .1 : (so[i - 1][0] + so[i][0]) / 2; } if (i < so.length) { if (so[i][1] === 1) l1++; else l2++; } }
+  $('#fish-j').textContent = J.toFixed(1); $('#fish-miss').textContent = `${bm} wrong of ${proj.length}`;
+  const S = prep($('#fish-strip')), sc = S.ctx, sw = S.w, sh = S.h, lo = -5, hi = 5, nb = 50, bw = sw / nb, h1 = new Array(nb).fill(0), h2 = new Array(nb).fill(0);
+  proj.forEach(([t, k]) => { const i = clamp(Math.floor((t - lo) / (hi - lo) * nb), 0, nb - 1); (k === 1 ? h1 : h2)[i]++; });
+  const mx = Math.max(1, ...h1, ...h2), base = sh - 10;
+  [[h1, p.sal], [h2, p.bass]].forEach(([hh, col]) => { sc.fillStyle = rgba(col, .6); hh.forEach((v, i) => { if (v) sc.fillRect(i * bw + 1, base - v / mx * (base - 8), bw - 2, v / mx * (base - 8)); }); });
+  sc.fillStyle = p.cut; sc.fillRect(0, base, sw, 2);
+  const cx = (bt - lo) / (hi - lo) * sw; sc.setLineDash([3, 3]); sc.strokeStyle = p.good; sc.lineWidth = 2; sc.beginPath(); sc.moveTo(cx, 4); sc.lineTo(cx, base); sc.stroke(); sc.setLineDash([]);
+}
+function syncF() { $('#fish-ang').value = Math.round(FS.ang); $('#fish-ang-o').textContent = Math.round(FS.ang) + '°'; drawFisher(); }
+function animAng(target) {
+  cancelAnimationFrame(FS.raf); target = ((target % 180) + 180) % 180; const from = FS.ang, d = (((target - from) % 180) + 270) % 180 - 90;
+  if (reduceMotion) { FS.ang = target; syncF(); return; }
+  const t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / 900), e = 1 - Math.pow(1 - k, 3); FS.ang = (((from + d * e) % 180) + 180) % 180; syncF(); if (k < 1) FS.raf = requestAnimationFrame(step); }; FS.raf = requestAnimationFrame(step);
+}
+$('#fish-ang').addEventListener('input', e => { cancelAnimationFrame(FS.raf); FS.ang = +e.target.value; syncF(); });
+$('#fish-centres').addEventListener('click', () => { const dx = FS.m2[0] - FS.m1[0], dy = FS.m2[1] - FS.m1[1]; animAng(Math.atan2(dy, dx) * 180 / Math.PI); });
+$('#fish-ask').addEventListener('click', () => { const S = FS.S, det = S[0] * S[2] - S[1] * S[1], dx = FS.m1[0] - FS.m2[0], dy = FS.m1[1] - FS.m2[1]; const wx = (S[2] * dx - S[1] * dy) / det, wy = (-S[1] * dx + S[0] * dy) / det; animAng(Math.atan2(wy, wx) * 180 / Math.PI); });
 
-newCatch();R.test=null;resetRace();
-const start=HASH.indexOf(location.hash.slice(1));go(start>=0?start:0);drawAll();
-if(document.fonts&&document.fonts.ready)document.fonts.ready.then(drawAll);
+/* ---------- 09 project: the deployed machine ---------- */
+const PR = { xl: [30, 110], yl: [0, 100], mu: { s: [56, 62], b: [75, 45] }, S: { s: [30, 8, 40], b: [170, -40, 120] }, fish: [65, 55], train: null, test: null, m: null, bayes: 0 };
+function prSample(n) { const Ls = chol(PR.S.s), Lb = chol(PR.S.b), a = [], b = []; for (let i = 0; i < n; i++) { a.push(place(PR.mu.s, Ls, [randn(), randn()])); b.push(place(PR.mu.b, Lb, [randn(), randn()])); } return [a, b]; }
+function prInit() {
+  PR.train = prSample(100); PR.test = prSample(200); PR.m = fitModels(PR.train[0], PR.train[1]); PR.bayes = acc(gOf(PR.mu.s, PR.S.s, PR.mu.b, PR.S.b), PR.test);
+  const cm = g => { const c = [[0, 0], [0, 0]]; PR.test[0].forEach(q => c[0][g(q[0], q[1]) > 0 ? 0 : 1]++); PR.test[1].forEach(q => c[1][g(q[0], q[1]) > 0 ? 0 : 1]++); return c; };
+  [['#pr-cml', PR.m.L, '#pr-accl', '#pr-wrl'], ['#pr-cmq', PR.m.Q, '#pr-accq', '#pr-wrq']].forEach(([id, g, accId, wrId]) => {
+    const c = cm(g), tb = $(id + ' tbody'); tb.innerHTML = '';
+    [['salmon', c[0], 0], ['sea bass', c[1], 1]].forEach(([lab, row, k]) => { const tr = document.createElement('tr'); tr.innerHTML = `<th scope="row">true ${lab}</th>` + row.map((v, j) => `<td class="${j === k ? 'hit' : (v ? 'miss' : 'zero')}">${v}</td>`).join(''); tb.appendChild(tr); });
+    const right = c[0][0] + c[1][1]; $(accId).textContent = pct(right / 400); $(wrId).textContent = (400 - right) + ' of 400';
+  });
+  $('#pr-accb').textContent = pct(PR.bayes);
+}
+function probBar(id, pS, col) { const win = pS >= .5; $(id).innerHTML = `<div class="prob-row${win ? ' win' : ''}"><span class="sal-c">salmon</span><div class="bar-track"><div class="bar-fill" style="width:${pS * 100}%;background:var(--sal)"></div></div><span class="num">${(pS * 100).toFixed(1)}%</span></div><div class="prob-row${win ? '' : ' win'}"><span class="bass-c">sea bass</span><div class="bar-track"><div class="bar-fill" style="width:${(1 - pS) * 100}%;background:var(--bass)"></div></div><span class="num">${((1 - pS) * 100).toFixed(1)}%</span></div>`; }
+function drawPr() {
+  const { ctx, w, h } = prep($('#pr-cv')), p = P(), M = mapper(w, h, PR.xl, PR.yl);
+  field(ctx, w, h, PR.m.L, M, { fill: false, color: p.lda, dot: 2.6, cell: 4 }); field(ctx, w, h, PR.m.Q, M, { fill: false, color: p.qda, dot: 2.6, cell: 4 });
+  ctx.fillStyle = p.muted; ctx.font = `12px ${p.mono}`; ctx.textAlign = 'center'; for (let v = 40; v <= 100; v += 20) ctx.fillText(v + ' cm', M.X(v), h - 8); ctx.save(); ctx.translate(14, h / 2); ctx.rotate(-Math.PI / 2); ctx.fillText('brightness 0–100', 0, 0); ctx.restore();
+  PR.train[0].forEach(q => dot(ctx, M, q, rgba(p.sal, .75), 3)); PR.train[1].forEach(q => dot(ctx, M, q, rgba(p.bass, .75), 3));
+  const fx = M.X(PR.fish[0]), fy = M.Y(PR.fish[1]); ctx.beginPath(); ctx.moveTo(fx, fy - 11); ctx.lineTo(fx + 11, fy); ctx.lineTo(fx, fy + 11); ctx.lineTo(fx - 11, fy); ctx.closePath(); ctx.fillStyle = p.ink; ctx.fill(); ctx.strokeStyle = p.surface; ctx.lineWidth = 2; ctx.stroke();
+  const sig = v => 1 / (1 + Math.exp(-v)), pL = sig(PR.m.L(PR.fish[0], PR.fish[1])), pQ = sig(PR.m.Q(PR.fish[0], PR.fish[1]));
+  probBar('#pr-pl', pL, p.lda); probBar('#pr-pq', pQ, p.qda);
+  const callL = pL >= .5 ? 'salmon' : 'sea bass', callQ = pQ >= .5 ? 'salmon' : 'sea bass';
+  $('#pr-status').innerHTML = `A ${PR.fish[0]} cm fish with brightness ${PR.fish[1]}. <b class="lda-c">LDA</b> calls it <b>${callL}</b>; <b class="qda-c">QDA</b> calls it <b>${callQ}</b>.` + (callL !== callQ ? ' <strong>They disagree</strong>: this fish sits between the straight border and the curved one.' : (Math.abs(pL - pQ) > .15 ? ' Same call, but with different confidence.' : ''));
+}
+function prSet(x, y, msg) { PR.fish = [Math.round(x * 2) / 2, Math.round(y * 2) / 2]; $('#pr-len').value = PR.fish[0]; $('#pr-bri').value = PR.fish[1]; $('#pr-len-o').textContent = PR.fish[0] + ' cm'; $('#pr-bri-o').textContent = PR.fish[1]; drawPr(); if (msg) $('#pr-status').innerHTML += ' ' + msg; }
+$('#pr-len').addEventListener('input', e => prSet(+e.target.value, PR.fish[1]));
+$('#pr-bri').addEventListener('input', e => prSet(PR.fish[0], +e.target.value));
+$('#pr-random').addEventListener('click', () => { const k = rnd() < .5 ? 0 : 1, arr = PR.test[k], q = arr[Math.floor(rnd() * arr.length)]; prSet(clamp(q[0], 30, 110), clamp(q[1], 0, 100), `<span class="note">Truth: it is a <b>${k ? 'sea bass' : 'salmon'}</b> from the test set.</span>`); });
+$('#pr-typs').addEventListener('click', () => prSet(PR.mu.s[0], PR.mu.s[1], '<span class="note">The average salmon.</span>'));
+$('#pr-typb').addEventListener('click', () => prSet(PR.mu.b[0], PR.mu.b[1], '<span class="note">The average sea bass.</span>'));
+
+/* ---------- copy code ---------- */
+$('#copy-code').addEventListener('click', e => {
+  const txt = $('#py-code').innerText, btn = e.currentTarget;
+  const sel = () => { const r = document.createRange(); r.selectNodeContents($('#py-code')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Selected: press Ctrl+C'; };
+  try { navigator.clipboard.writeText(txt).then(() => { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy code'; }, 1600); }, sel); } catch (_) { sel(); }
+});
+
+/* ---------- presenter notes ---------- */
+const notesBtn = $('#notes-btn');
+function setNotes(on) { document.body.classList.toggle('notes', on); notesBtn.setAttribute('aria-pressed', on); notesBtn.querySelector('.long').textContent = on ? 'Hide notes' : 'Presenter notes'; try { localStorage.setItem('sm-notes', on ? '1' : '0'); } catch (_) {} }
+notesBtn.addEventListener('click', () => setNotes(!document.body.classList.contains('notes')));
+try { if (localStorage.getItem('sm-notes') === '1') setNotes(true); } catch (_) {}
+
+/* ---------- nav highlight + J/K + S ---------- */
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, button, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 's') { setNotes(!document.body.classList.contains('notes')); return; }
+  if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+/* reading progress bar */
+{ const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr); const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; }; addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd(); }
+
+/* ---------- boot + redraw on resize / theme ---------- */
+function redrawAll() { drawBelt(); drawCut(); drawBet(); drawCov(); drawLDA(); drawQDA(); drawEx(); drawRace(); drawFisher(); drawPr(); }
+cutNew(); raceReset(); prInit(); redrawAll(); beltStart();
+let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(redrawAll, 120); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(redrawAll);
 })();
 </script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
 </body>
 </html>
