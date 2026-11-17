@@ -1,0 +1,1513 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on Bayesian networks with the rain, sprinkler and wet grass example: why full joint tables explode, directed acyclic graphs, factorising the joint, conditional probability tables, a worked calculation by hand, ancestral sampling, a lab comparing exact and simulated answers, noisy-OR, and a complete Python example.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Bayesian Networks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+.qsel { width: 100%; max-width: 100%; font: inherit; font-size: 0.86rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.qsel:focus-visible { outline: 2px solid var(--lda); outline-offset: 1px; }
+.heroplot { aspect-ratio: 0.92 / 1; }
+.sigplot { aspect-ratio: 1.22 / 1; max-width: 760px; }
+.cm { max-width: 520px; }
+.cm td { font-size: 1.05rem; text-align: center; }
+.cm td.ok { background: color-mix(in srgb, var(--cA) 12%, transparent); }
+.cm td.bad { background: color-mix(in srgb, var(--qda) 10%, transparent); }
+.cm th { white-space: nowrap; font-size: 0.82rem; }
+table.race tr.win td { background: color-mix(in srgb, var(--cA) 10%, transparent); }
+table.race td:first-child, table.race td:nth-child(5), table.race td:nth-child(6) { white-space: nowrap; }
+#pj-cross th, #pj-card td:first-child { font-size: 0.84rem; }
+#pj-card td { white-space: normal; }
+.stat .v .kk { display: block; font-family: var(--f-body); font-size: 0.74rem; font-weight: 500; color: var(--muted); line-height: 1.3; margin-top: 2px; }
+.sents { display: grid; gap: 4px; margin-top: 4px; }
+.sent { display: grid; grid-template-columns: 8px 1fr auto; gap: 10px; align-items: start; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 0.86rem; line-height: 1.45; }
+.sent .lb { width: 8px; align-self: stretch; border-radius: 4px; }
+.sent .sc { font-family: var(--f-mono); font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+.sent.flag { border-color: color-mix(in srgb, var(--qda) 55%, var(--line)); }
+.sent.flag .sc { color: var(--qda); font-weight: 600; }
+@media (max-width: 560px) { .heroplot { aspect-ratio: 0.6 / 1; } .sigplot { aspect-ratio: 1 / 1; } .sent { font-size: 0.82rem; padding: 6px 8px; gap: 8px; } }
+@media (max-width: 560px) { .plot.tall { aspect-ratio: 0.95 / 1; } .plot.mtall { aspect-ratio: 1.1 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+
+/* bayesian networks */
+.heroplot { aspect-ratio: 4 / 3; }
+.hero h1 { font-size: clamp(2.6rem, 6vw, 4.2rem); }
+.evrow { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.evrow .ev { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.evrow .ev b { font-weight: 600; }
+.seg.sm button { padding: 4px 9px; font-size: 0.8rem; }
+#dg-pairs > div { display: grid; gap: 4px; }
+.fterms { list-style: none; margin: 14px 0 0; padding: 0; display: grid; border-top: 1px solid var(--line); }
+.fterms li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.fterms .f { font-family: var(--f-display); font-size: 1.3rem; }
+.fterms del { color: var(--muted); text-decoration-color: var(--qda); text-decoration-thickness: 2px; }
+.bd { font-size: 0.78rem; padding: 2px 10px; border-radius: 999px; font-weight: 500; }
+.bd.ok { color: var(--cA); background: color-mix(in srgb, var(--cA) 12%, transparent); }
+.bd.no { color: var(--qda); background: color-mix(in srgb, var(--qda) 10%, transparent); }
+td.r, th.r { text-align: right; }
+.tf { font-family: var(--f-mono); font-weight: 600; text-align: center; }
+.tf.t { color: var(--cA); } .tf.f { color: var(--muted); }
+.jt th, .jt td { padding: 6px 8px; }
+.jt td { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.jt tr.hl td { background: color-mix(in srgb, var(--lda) 8%, var(--surface)); }
+.jt td.hf { box-shadow: inset 0 0 0 2px var(--lda); font-weight: 600; }
+.jt .jb { width: 110px; min-width: 70px; }
+.jt .jb i { display: block; height: 10px; border-radius: 3px; background: var(--lda); opacity: .75; }
+.cpts { gap: 14px; }
+.cpt-node { display: grid; gap: 8px; }
+.cpt-node .mini-h { display: flex; align-items: center; gap: 8px; margin: 0; }
+.cpt-node .ctrl .top label { font-family: var(--f-mono); font-size: 0.78rem; }
+.verdict { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 24px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); max-width: 900px; }
+.verdict > div { padding: 16px 20px; min-width: 0; }
+.verdict > div + div { border-left: 1px solid var(--line); }
+.verdict .who { font-size: 0.76rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+.verdict .say { font-family: var(--f-display); font-size: 2rem; margin-top: 4px; line-height: 1.15; }
+.verdict .p { font-family: var(--f-mono); font-size: 0.86rem; color: var(--muted); margin-top: 4px; }
+.steps .m { overflow-x: auto; overflow-y: hidden; }
+.eq-run .rp-row { overflow-x: auto; white-space: nowrap; }
+.stats4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.hist { font-size: 0.84rem; line-height: 1.6; min-height: 6.5em; }
+.plot.tallish { aspect-ratio: 2.6 / 1; }
+.code-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; max-width: 860px; }
+.code-head > span { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; font-family: var(--f-mono); }
+#hd-in { font: inherit; font-family: var(--f-mono); padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+input[type="range"]:disabled { opacity: .4; }
+@media (max-width: 640px) {
+  .verdict { grid-template-columns: minmax(0, 1fr); }
+  .verdict > div + div { border-left: 0; border-top: 1px solid var(--line); }
+  .stats4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fterms .f { font-size: 1.15rem; }
+}
+@media (max-width: 460px) { .eq .m, .steps .m { font-size: 0.9rem; } .eq { padding: 14px 14px 12px; } .topbar .wrap { gap: 10px; } .brand { font-size: 0.98rem; } .back { padding: 5px 9px; } }
+@media (max-width: 560px) { .heroplot, .plot.net { aspect-ratio: 1 / 1; } .plot.tallish { aspect-ratio: 1.7 / 1; } }
+
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Bayesian Networks <span>&middot; structure in probability</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#why">Why</a>
+      <a href="#dag">DAGs</a>
+      <a href="#factor">Factors</a>
+      <a href="#cpt">CPTs</a>
+      <a href="#hand">By hand</a>
+      <a href="#sample">Sampling</a>
+      <a href="#lab">Lab</a>
+      <a href="#noisyor">Noisy-OR</a>
+      <a href="#python">Python</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Probabilistic models &middot; chapter 6.1 &middot; graphical models</div>
+      <h1>Bayesian Networks</h1>
+      <div class="sub">Draw the causes as arrows, and one huge table becomes a few small ones.</div>
+      <p class="lead">You walk outside and the grass is wet. Did it rain, or did the sprinkler run? A Bayesian network answers questions like this with two things: a graph of who influences whom, and a small table of probabilities for each node. On the right is the network this whole chapter uses. <strong>Click a node, or set what you have seen, and watch every other belief update.</strong></p>
+      <dl class="facts">
+        <div><dt>Type</dt><dd>Directed graphical model</dd></div>
+        <div><dt>Built on</dt><dd>The chain rule plus conditional independence</dd></div>
+        <div><dt>Origin</dt><dd>Judea Pearl, 1985&ndash;1988</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="evrow" id="hero-ev" aria-label="Evidence"></div>
+      <div class="plot heroplot" style="margin-top:10px"><canvas id="hero-cv" aria-label="The rain, sprinkler and wet grass network with the current probability of each variable"></canvas></div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--lda)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>10 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#why"><i>01</i>Why structure: the table that explodes</a></li>
+    <li><a href="#dag"><i>02</i>Directed acyclic graphs</a></li>
+    <li><a href="#factor"><i>03</i>Factorising the joint</a></li>
+    <li><a href="#cpt"><i>04</i>Conditional probability tables</a></li>
+    <li><a href="#hand"><i>05</i>The calculation, by hand</a></li>
+    <li><a href="#sample"><i>06</i>Ancestral sampling</a></li>
+    <li><a href="#lab"><i>07</i>Lab: exact versus simulated</a></li>
+    <li><a href="#noisyor"><i>08</i>Noisy-OR: a CPT in k+1 numbers</a></li>
+    <li><a href="#python"><i>09</i>The whole network in Python</a></li>
+    <li><a href="#summary"><i>10</i>What to carry home</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+<main>
+<!-- WHY -->
+<section class="chap" id="why">
+  <div class="wrap">
+    <div class="tag">The problem</div>
+    <h2>Why structure: the table that explodes</h2>
+    <div class="prose">
+      <p>To reason about rain, the sprinkler and wet grass together, we need their <em class="term">joint distribution</em> P(R, S, G): a probability for every combination of values. With three yes/no variables there are 2<sup>3</sup> = 8 combinations. The eight probabilities must add up to 1, so 7 of them are free. That is easy to write down.</p>
+      <p>Now try a real problem. The ALARM network, built to monitor patients in intensive care, has 37 variables. Even if every one of them were yes/no, the joint table would have 2<sup>37</sup> &asymp; 137 billion rows. The Bayesian network that doctors actually built needs 509 numbers. <strong>Move the sliders to see how fast the full table grows, and how slowly a network grows.</strong></p>
+    </div>
+    <div class="eq"><div class="m">\[ \underbrace{2^{n} - 1}_{\text{full joint table}} \qquad\text{versus}\qquad \underbrace{\sum_{i=1}^{n} 2^{\,|\mathrm{pa}(i)|}}_{\text{Bayesian network}} \;\le\; n\,2^{k} \]</div><div class="read"><b>Read it as:</b> n binary variables. The full table has one number per combination, minus one because they sum to 1. In a network, variable i has a parent set pa(i) and needs one number for each combination of its parents&rsquo; values. If no variable has more than k parents, the total is at most n &middot; 2<sup>k</sup>.</div><div class="eq-say"><b>In words</b><em>The full table grows exponentially in the number of variables; a network grows exponentially only in the number of parents.</em></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="wy-cv" aria-label="Number of probabilities needed by the full joint table and by a Bayesian network, against the number of variables, on a log scale"></canvas></div><figcaption id="wy-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="wy-n">Variables n</label><output id="wy-n-o">10</output></div><input type="range" id="wy-n" min="2" max="40" step="1" value="10"></div>
+        <div class="ctrl"><div class="top"><label for="wy-k">Most parents per variable k</label><output id="wy-k-o">2</output></div><input type="range" id="wy-k" min="0" max="6" step="1" value="2"></div>
+        <div class="stats">
+          <div class="stat"><div class="v" id="wy-full"></div><div class="k">full table</div></div>
+          <div class="stat"><div class="v" id="wy-bn"></div><div class="k">network (at most)</div></div>
+          <div class="stat"><div class="v" id="wy-mem"></div><div class="k">full table in memory</div></div>
+          <div class="stat"><div class="v" id="wy-ratio"></div><div class="k">times smaller</div></div>
+        </div>
+        <p class="note" id="wy-say"></p>
+      </div></div>
+    </div>
+    <h3>Four things go wrong with one big table</h3>
+    <ul class="pts block" style="margin-top:14px">
+      <li><b>Storage</b><span>The table doubles with every variable you add. Past about 40 yes/no variables it no longer fits in any computer&rsquo;s memory.</span></li>
+      <li><b>Asking experts</b><span>Nobody can tell you P(rain, sprinkler on, grass dry, cat inside, &hellip;) for billions of rows. People can tell you how likely the grass is to be wet <i>if</i> it rained.</span></li>
+      <li><b>Learning from data</b><span>With billions of rows, almost every row is seen zero times in any real data set, so counting gives useless estimates.</span></li>
+      <li><b>Answering questions</b><span>Any query, such as P(rain | wet grass), means adding up rows. With an exponential number of rows, the sum takes exponential time.</span></li>
+    </ul>
+    <div class="prose block">
+      <p>The fix is to notice that most variables directly depend on only a few others. The grass does not care about the day of the week once you know whether it rained and whether the sprinkler ran. A Bayesian network writes these dependencies down as a graph, and keeps only the small tables the graph needs.</p>
+    </div>
+  </div>
+</section>
+
+<!-- DAG -->
+<section class="chap" id="dag">
+  <div class="wrap">
+    <div class="tag">The graph</div>
+    <h2>Directed acyclic graphs</h2>
+    <div class="prose">
+      <p>A Bayesian network has two parts. The first is a <em class="term">directed acyclic graph</em> (DAG). Each node is a random variable. An arrow X &rarr; Y says X <i>directly influences</i> Y, and we call X a <em class="term">parent</em> of Y and Y a <em class="term">child</em> of X. <i>Directed</i> means each arrow has a direction. <i>Acyclic</i> means you can never follow arrows and come back to where you started.</p>
+      <p>The second part is a table of probabilities for each node given its parents, which comes in <a href="#cpt">section 4</a>. In the running example, rain makes the grass wet, the sprinkler makes the grass wet, and on rainy days the gardener rarely switches the sprinkler on. That gives three arrows: Rain &rarr; Sprinkler, Rain &rarr; Wet grass and Sprinkler &rarr; Wet grass.</p>
+    </div>
+    <ul class="pts block" style="margin-top:18px">
+      <li><b>Parents pa(X)</b><span>The nodes with an arrow into X. Wet grass has parents {Sprinkler, Rain}.</span></li>
+      <li><b>Ancestors and descendants</b><span>Follow arrows backwards to find ancestors and forwards to find descendants. Rain is an ancestor of everything; Wet grass is a descendant of everything.</span></li>
+      <li><b>Root and leaf</b><span>A root has no parents (Rain). A leaf has no children (Wet grass).</span></li>
+      <li><b>Topological order</b><span>A list of the nodes where every parent comes before its children: Rain, Sprinkler, Wet grass. Every DAG has at least one. A graph with a cycle has none, and that is exactly why cycles are not allowed.</span></li>
+    </ul>
+    <div class="prose block"><p><strong>Build your own graph.</strong> Choose an arrow, or no arrow, between each pair of variables. The page checks for cycles, finds a topological order, and counts how many probabilities the graph needs.</p></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10 net"><canvas id="dg-cv" aria-label="The graph you built from the three variables"></canvas></div><figcaption id="dg-cap"></figcaption></figure>
+      <div class="panel">
+        <div class="grp" id="dg-pairs"></div>
+        <div class="grp"><span class="mini-h">Presets</span><div class="chips" id="dg-pre" role="group" aria-label="Preset graphs"></div></div>
+        <div class="grp">
+          <div class="stats">
+            <div class="stat"><div class="v" id="dg-ok"></div><div class="k">is it a DAG?</div></div>
+            <div class="stat"><div class="v" id="dg-np"></div><div class="k">numbers needed (full table 7)</div></div>
+          </div>
+          <p class="note" id="dg-order"></p>
+          <p class="note" id="dg-say"></p>
+        </div>
+      </div>
+    </div>
+    <div class="prose block">
+      <p>Arrows do not have to point from cause to effect. Wet grass &rarr; Rain is a legal arrow, and a graph with an arrow between every pair can represent <i>any</i> joint distribution. Causal directions are still the usual choice, because the numbers they need are the ones people can estimate, and causal graphs tend to need fewer arrows.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FACTOR -->
+<section class="chap" id="factor">
+  <div class="wrap">
+    <div class="tag">The key equation</div>
+    <h2>Factorising the joint</h2>
+    <div class="prose">
+      <p>The <em class="term">chain rule</em> of probability splits any joint distribution into a product of conditionals, in any order you like. For three variables in the order R, S, G:</p>
+    </div>
+    <div class="eq"><div class="m">\[ P(R, S, G) = P(R)\; P(S \mid R)\; P(G \mid R, S) \]</div><div class="read"><b>Read it as:</b> pick the first variable on its own, then the second given the first, then the third given the first two. This is always true. It follows from the definition P(A, B) = P(A) P(B | A).</div></div>
+    <div class="prose block">
+      <p>A Bayesian network adds one assumption, the <em class="term">local Markov property</em>: once you know a node&rsquo;s parents, the node is independent of everything that is not its descendant. In a topological order, everything before a node is a non-descendant, so every term of the chain rule can drop the variables that are not parents. What is left is one small table per node:</p>
+    </div>
+    <div class="eq"><div class="m">\[ P(x_1, \dots, x_n) \;=\; \prod_{i=1}^{n} P\big(x_i \mid \mathrm{pa}(x_i)\big) \]</div><div class="read"><b>Read it as:</b> the probability of a complete world (a value for every variable) is the product, over all nodes, of the probability of that node&rsquo;s value given its parents&rsquo; values in the same world.</div><div class="eq-say"><b>In words</b><em>Multiply one number from each node&rsquo;s table, and you get the probability of the whole world.</em></div></div>
+    <div class="prose block"><p><strong>Pick an order for the chain rule.</strong> The terms are checked against the graph you built in the lab above. In a topological order, every term shrinks to a table the network stores. In any other order, at least one term asks about a variable given its own descendant, and the network has no table for that.</p></div>
+    <div class="lab">
+      <div>
+        <div class="chips" id="fc-ord" role="group" aria-label="Chain rule order"></div>
+        <ol class="fterms" id="fc-terms"></ol>
+        <p class="say-line" id="fc-prod"></p>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="stats">
+          <div class="stat"><div class="v" id="fc-topo"></div><div class="k">topological order?</div></div>
+          <div class="stat"><div class="v" id="fc-ncpt"></div><div class="k">terms read from a table</div></div>
+        </div>
+        <p class="note" id="fc-say"></p>
+        <p class="note">The graph in use: <span id="fc-graph" class="mono"></span>. <a href="#dag">Change it in section 2.</a></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CPT -->
+<section class="chap" id="cpt">
+  <div class="wrap">
+    <div class="tag">The numbers</div>
+    <h2>Conditional probability tables</h2>
+    <div class="prose">
+      <p>Each node stores a <em class="term">conditional probability table</em> (CPT). It has one row for each combination of its parents&rsquo; values, and each row is a probability distribution over the node&rsquo;s own values, so every row adds up to 1. For a yes/no node, one number per row is free: P(true | parents). The other is 1 minus it.</p>
+      <p>Rain is a root, so its table is one number, the prior P(R = T) = 0.2. Sprinkler has one parent, so two rows. Wet grass has two parents, so four rows. That is 1 + 2 + 4 = 7 numbers, the same as the full table, because this small graph has an arrow between every pair. The savings appear when graphs are sparse, as in the first lab. The numbers below are the classic textbook values for this example.</p>
+      <p><strong>Move any slider.</strong> The table of all eight worlds on the left is rebuilt from the CPTs by the factorisation. Each world&rsquo;s probability is the product of three numbers, one from each table. Hover over a slider to light up the rows that use it. The same numbers drive every lab further down the page.</p>
+    </div>
+    <div class="lab">
+      <div>
+        <div class="tbl-wrap"><table class="hand jt" id="cp-jt"></table></div>
+        <p class="note" id="cp-say" style="margin-top:10px"></p>
+      </div>
+      <div class="panel">
+        <div class="grp cpts" id="cp-sl"></div>
+        <div class="grp"><div class="btns"><button type="button" class="btn" id="cp-reset">Reset to the textbook numbers</button></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HAND -->
+<section class="chap" id="hand">
+  <div class="wrap">
+    <div class="tag">Worked example</div>
+    <h2>The calculation, by hand</h2>
+    <div class="prose">
+      <p>The grass is wet. What is the probability it rained? We want P(R = T | G = T). Everything we need is in the three tables, with the textbook numbers: P(R = T) = 0.2; P(S = T | R = T) = 0.01, P(S = T | R = F) = 0.4; P(G = T | S, R) = 0.99, 0.8, 0.9, 0.0 for (T, T), (F, T), (T, F), (F, F). We did not observe the sprinkler, so we add up over both of its values. This is called <em class="term">summing out</em>, or <em class="term">marginalising</em>, a hidden variable.</p>
+    </div>
+    <ol class="steps">
+      <li><div><b>Write the question as a ratio.</b> By the definition of conditional probability,<div class="m">\[ P(R{=}T \mid G{=}T) = \frac{P(R{=}T,\, G{=}T)}{P(G{=}T)} \]</div></div></li>
+      <li><div><b>Numerator: sum out the sprinkler, with rain on.</b> Use the factorisation for each value of S.<div class="m">\[ \begin{aligned} P(R{=}T, G{=}T) &= P(R{=}T)\,P(S{=}T \mid R{=}T)\,P(G{=}T \mid S{=}T, R{=}T) \\ &\quad + P(R{=}T)\,P(S{=}F \mid R{=}T)\,P(G{=}T \mid S{=}F, R{=}T) \\ &= 0.2 \times 0.01 \times 0.99 \;+\; 0.2 \times 0.99 \times 0.8 \\ &= 0.00198 + 0.15840 = 0.16038 \end{aligned} \]</div></div></li>
+      <li><div><b>Same again with rain off.</b><div class="m">\[ \begin{aligned} P(R{=}F, G{=}T) &= 0.8 \times 0.4 \times 0.9 \;+\; 0.8 \times 0.6 \times 0.0 \\ &= 0.288 + 0 = 0.288 \end{aligned} \]</div></div></li>
+      <li><div><b>Denominator: the two cases together.</b> Wet grass happens either with rain or without it.<div class="m">\[ P(G{=}T) = 0.16038 + 0.288 = 0.44838 \]</div></div></li>
+      <li><div><b>Divide.</b><div class="m">\[ P(R{=}T \mid G{=}T) = \frac{0.16038}{0.44838} \approx 0.3577 \]</div>Seeing wet grass raises the probability of rain from 20% to about 36%. It does not make rain likely, because the sprinkler is the more common reason for wet grass. The same steps give P(S = T | G = T) &asymp; 0.6467.</div></li>
+    </ol>
+    <div class="verdict">
+      <div><div class="who" style="color:var(--muted)">Before looking</div><div class="say">20.0%</div><div class="p">P(R = T), the prior</div></div>
+      <div><div class="who lda-c">Grass is wet</div><div class="say">35.8%</div><div class="p">P(R = T | G = T)</div></div>
+      <div><div class="who qda-c">Wet, and the sprinkler was on</div><div class="say">0.7%</div><div class="p">P(R = T | G = T, S = T)</div></div>
+    </div>
+    <p class="note block" style="max-width:72ch">The last column shows <em class="term">explaining away</em>: once the sprinkler accounts for the wet grass, rain becomes even less likely than before you looked. Chapter 6.2 explains why this happens from the shape of the graph alone.</p>
+
+    <div class="two block">
+      <div>
+        <h4 class="mini">The same steps with your numbers</h4>
+        <div class="eq-run" id="hd-live"></div>
+        <p class="note" style="margin-top:8px">These lines follow the sliders in <a href="#cpt">section 4</a>. With the textbook numbers they match the steps above.</p>
+      </div>
+      <div>
+        <h4 class="mini">Your turn</h4>
+        <p style="font-size:.95rem">With the textbook numbers, work out P(S = T | G = T). Hint: the numerator sums the two worlds where both the sprinkler is on and the grass is wet.</p>
+        <div class="btns" style="margin-top:10px; align-items:center"><label for="hd-in" class="note">Your answer</label><input type="number" id="hd-in" step="0.0001" min="0" max="1" placeholder="0.xxxx" style="width:9em"><button type="button" class="btn primary" id="hd-chk">Check</button><button type="button" class="btn" id="hd-show">Show the working</button></div>
+        <p class="note" id="hd-fb" aria-live="polite" style="margin-top:10px"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SAMPLE -->
+<section class="chap" id="sample">
+  <div class="wrap">
+    <div class="tag">Generative models</div>
+    <h2>Ancestral sampling</h2>
+    <div class="prose">
+      <p>A Bayesian network is a <em class="term">generative model</em>: it is a recipe for making up data that looks like the world it describes. The recipe is called <em class="term">ancestral sampling</em>. Visit the nodes in a topological order. At each node, its parents already have values, so they pick out one row of its CPT. Flip a biased coin with that row&rsquo;s probability: draw a random number u between 0 and 1, and set the node to True if u is less than P(true | parents).</p>
+      <p>One pass through the graph gives one complete world, drawn with exactly the probability the factorisation gives it. Draw many worlds, and the fraction of each kind settles on its probability. <strong>Step through one variable at a time, then add samples in bulk and watch the bars meet their targets.</strong></p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\text{for each node } X_i \text{ in topological order:} \\ &\qquad u_i \sim \mathrm{Uniform}(0, 1) \\ &\qquad x_i = \big[\, u_i < P(X_i{=}T \mid \mathrm{pa}(x_i)) \,\big] \end{aligned} \]</div><div class="read"><b>Read it as:</b> parents first. Because every parent is sampled before its child, the CPT row for the child is always known when you get to it. The brackets mean &ldquo;True if the condition holds&rdquo;.</div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10 net"><canvas id="as-cv" aria-label="The network during ancestral sampling, with the random number drawn at the current node"></canvas></div><figcaption id="as-cap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1 tallish"><canvas id="as-bars" aria-label="Fraction of samples in each of the eight worlds, next to the exact probability"></canvas></div><figcaption>Bars: the fraction of samples that landed in each world. Ticks: the exact probability from the factorisation.</figcaption></figure>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <div class="btns"><button type="button" class="btn primary" id="as-step">Next variable</button><button type="button" class="btn" id="as-one">Whole sample</button></div>
+          <div class="btns"><button type="button" class="btn" id="as-100">+100 samples</button><button type="button" class="btn" id="as-1k">+1,000</button><button type="button" class="btn" id="as-clr">Clear</button></div>
+        </div>
+        <div class="grp">
+          <div class="stats">
+            <div class="stat"><div class="v" id="as-n">0</div><div class="k">samples drawn</div></div>
+            <div class="stat"><div class="v" id="as-tv">&ndash;</div><div class="k">biggest gap to exact</div></div>
+          </div>
+          <span class="mini-h">Last few samples (R S G)</span>
+          <div class="hist mono" id="as-hist"></div>
+          <p class="note" id="as-say"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LAB -->
+<section class="chap" id="lab">
+  <div class="wrap">
+    <div class="tag">Main lab</div>
+    <h2>Lab: exact versus simulated</h2>
+    <div class="prose">
+      <p>Samples can answer conditional questions too. To estimate P(R = T | G = T), draw N worlds, throw away every world where the grass is dry, and count how often it rained in the worlds that are left. This is <em class="term">rejection sampling</em>. The estimate wobbles around the exact answer, and the wobble shrinks like 1/&radic;(number of kept samples).</p>
+      <p><strong>Choose a question and a number of samples, change the probabilities, and compare the two answers.</strong> The thick line is one run of the sampler. The faint lines are four more runs with other random seeds. The shaded band is the exact answer &plusmn; 2 standard errors, where about 95% of runs should be. Then make the evidence rare: keep the first question, set P(R = T) and P(S = T | R = F) to 0.01, and watch rejection throw almost every sample away.</p>
+    </div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="lb-cv" aria-label="Running estimate from sampling against the number of samples, with the exact answer and a 95% band"></canvas></div><figcaption id="lb-cap"></figcaption></figure>
+        <div class="stats stats4 block" style="margin-top:12px">
+          <div class="stat"><div class="v" id="lb-ex"></div><div class="k">exact (enumeration)</div></div>
+          <div class="stat"><div class="v" id="lb-sim"></div><div class="k">simulated (this run)</div></div>
+          <div class="stat"><div class="v" id="lb-err"></div><div class="k">error</div></div>
+          <div class="stat"><div class="v" id="lb-kept"></div><div class="k">samples kept</div></div>
+        </div>
+        <p class="note" id="lb-say" style="margin-top:10px"></p>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <label class="mini-h" for="lb-q">Question</label><select id="lb-q" class="qsel"></select>
+          <div class="ctrl"><div class="top"><label for="lb-n">Samples N</label><output id="lb-n-o">10,000</output></div><input type="range" id="lb-n" min="2" max="5.5" step="0.1" value="4"></div>
+          <div class="btns"><button type="button" class="btn" id="lb-seed">New random seed</button><button type="button" class="btn primary" id="lb-reset">Reset everything</button></div>
+          <p class="note mono" id="lb-seed-o"></p>
+        </div>
+        <div class="grp cpts" id="lb-sl"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- NOISY-OR -->
+<section class="chap" id="noisyor">
+  <div class="wrap">
+    <div class="tag">Efficient CPDs</div>
+    <h2>Noisy-OR: a CPT in k+1 numbers</h2>
+    <div class="prose">
+      <p>A yes/no node with k yes/no parents needs a CPT with 2<sup>k</sup> rows. Add a burst pipe, a dog, morning dew and seven other causes of wet grass, and the table has 1,024 rows, most of which nobody could estimate. When a node has many parents we need a cheaper <em class="term">conditional probability distribution</em> (CPD): a formula that fills in the table from a few numbers.</p>
+      <p>The most popular one is <em class="term">noisy-OR</em>. It assumes each cause, on its own, turns the effect on with some probability q<sub>i</sub>; that causes fail independently of each other; and that a <em class="term">leak</em> probability &lambda; covers every cause the model leaves out. The effect stays off only if the leak and every active cause all fail.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} P(G{=}F \mid \text{parents}) &= (1-\lambda) \prod_{i \text{ on}} (1 - q_i) \\ P(G{=}T \mid \text{parents}) &= 1 - P(G{=}F \mid \text{parents}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> q<sub>i</sub> is the chance that cause i alone wets the grass. The product runs over the causes that are on in this row of the table. For our row with rain and sprinkler both on, q<sub>R</sub> = 0.8, q<sub>S</sub> = 0.9 and &lambda; = 0: P(G = T) = 1 &minus; 1 &times; 0.2 &times; 0.1 = 0.98. The full table says 0.99, so noisy-OR is nearly right with one number fewer.</div><div class="eq-say"><b>In words</b><em>Every cause gets its own chance to wet the grass. The grass stays dry only if they all miss.</em></div></div>
+    <div class="lab">
+      <div>
+        <div class="tbl-wrap"><table class="hand" id="no-tab"></table></div>
+        <figure style="margin-top:14px"><div class="plot ar-3x1 tallish"><canvas id="no-cv" aria-label="Numbers needed by a full CPT and by noisy-OR against the number of parents, on a log scale"></canvas></div><figcaption id="no-cap"></figcaption></figure>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="no-qr">q<sub>R</sub>: rain alone wets it</label><output id="no-qr-o"></output></div><input type="range" id="no-qr" min="0" max="1" step="0.01" value="0.8"></div>
+          <div class="ctrl"><div class="top"><label for="no-qs">q<sub>S</sub>: sprinkler alone wets it</label><output id="no-qs-o"></output></div><input type="range" id="no-qs" min="0" max="1" step="0.01" value="0.9"></div>
+          <div class="ctrl"><div class="top"><label for="no-lk">&lambda;: leak (dew, a dog, &hellip;)</label><output id="no-lk-o"></output></div><input type="range" id="no-lk" min="0" max="0.5" step="0.01" value="0"></div>
+          <div class="btns"><button type="button" class="btn primary" id="no-use" aria-pressed="false">Use noisy-OR in the network</button><button type="button" class="btn" id="no-fit">Fit to the full CPT</button></div>
+          <p class="note" id="no-state"></p>
+        </div>
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="no-k">Number of causes k</label><output id="no-k-o">10</output></div><input type="range" id="no-k" min="1" max="20" step="1" value="10"></div>
+          <div class="stats">
+            <div class="stat"><div class="v" id="no-full"></div><div class="k">full CPT rows</div></div>
+            <div class="stat"><div class="v" id="no-nor"></div><div class="k">noisy-OR numbers</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="prose block">
+      <p>The price is an assumption: causes cannot interact. Noisy-OR cannot say &ldquo;rain and the sprinkler together flood the lawn far more than either alone&rdquo;, or &ldquo;the cover only matters when it rains&rdquo;. Other compact CPDs make other trade-offs. <em class="term">Noisy-MAX</em> extends the idea to variables with more than two levels, a <em class="term">logistic CPD</em> puts the parents through a weighted sum and a sigmoid, and a <em class="term">tree CPD</em> stores only the rows that differ. Deterministic CPDs (the node is an exact function of its parents) are the extreme case with no free numbers at all.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PYTHON -->
+<section class="chap" id="python">
+  <div class="wrap">
+    <div class="tag">Code</div>
+    <h2>The whole network in Python</h2>
+    <div class="prose">
+      <p>Everything on this page fits in about 130 lines of plain Python, with no libraries to install. The script defines the graph and the CPTs, prints the joint table, answers queries exactly by enumeration, estimates one of them by ancestral sampling with rejection, and builds the noisy-OR table. Save it as <span class="mono">bayes_net.py</span> and run <span class="mono">python bayes_net.py</span>. It needs Python 3.8 or newer.</p>
+    </div>
+    <div class="code-head block"><span>bayes_net.py</span><div class="btns"><button type="button" class="btn" id="py-copy">Copy code</button><a class="btn" href="bayes_net.py" download>&#8595; Download</a></div></div>
+<pre class="code" style="margin-top:8px"><code id="py-code">"""A Bayesian network for rain, sprinkler and wet grass.
+
+Run it with:  python bayes_net.py
+Needs Python 3.8 or newer and nothing else (standard library only).
+"""
+import itertools
+import random
+
+# 1. The graph. Each variable lists its parents. ORDER is a topological
+#    order: every parent comes before its children.
+PARENTS = {
+    "Rain": [],
+    "Sprinkler": ["Rain"],
+    "WetGrass": ["Sprinkler", "Rain"],
+}
+ORDER = ["Rain", "Sprinkler", "WetGrass"]
+
+# 2. The conditional probability tables (CPTs). For each combination of
+#    parent values we store P(variable = True | parents).
+#    P(variable = False | parents) is 1 minus that number.
+CPT = {
+    "Rain": {(): 0.2},
+    "Sprinkler": {(False,): 0.4, (True,): 0.01},
+    "WetGrass": {
+        (False, False): 0.0,   # no sprinkler, no rain
+        (False, True): 0.8,    # rain only
+        (True, False): 0.9,    # sprinkler only
+        (True, True): 0.99,    # both
+    },
+}
+
+
+def p_node(var, value, world):
+    """P(var = value | the values of var's parents in world)."""
+    key = tuple(world[p] for p in PARENTS[var])
+    p_true = CPT[var][key]
+    return p_true if value else 1.0 - p_true
+
+
+def joint(world):
+    """The factorisation: P(R, S, G) = P(R) * P(S | R) * P(G | S, R)."""
+    p = 1.0
+    for var in ORDER:
+        p *= p_node(var, world[var], world)
+    return p
+
+
+def all_worlds():
+    """Every assignment of True/False to the three variables (8 of them)."""
+    for values in itertools.product([True, False], repeat=len(ORDER)):
+        yield dict(zip(ORDER, values))
+
+
+def query(target, evidence):
+    """Exact P(target = True | evidence) by enumerating the joint table."""
+    match = [w for w in all_worlds() if all(w[k] == v for k, v in evidence.items())]
+    p_evidence = sum(joint(w) for w in match)
+    p_both = sum(joint(w) for w in match if w[target])
+    return p_both / p_evidence
+
+
+def ancestral_sample(rng):
+    """Draw one world: visit variables parents-first, flip a biased coin each."""
+    world = {}
+    for var in ORDER:
+        p_true = p_node(var, True, world)
+        world[var] = rng.random() &lt; p_true
+    return world
+
+
+def estimate(target, evidence, n, seed=0):
+    """Rejection sampling: draw n worlds, keep those that match the evidence."""
+    rng = random.Random(seed)
+    kept = hits = 0
+    for _ in range(n):
+        w = ancestral_sample(rng)
+        if all(w[k] == v for k, v in evidence.items()):
+            kept += 1
+            hits += w[target]
+    return hits / kept, kept
+
+
+def noisy_or(q, leak, active):
+    """P(effect = True) when each active cause i fires with probability q[i]."""
+    p_off = 1.0 - leak
+    for cause, on in active.items():
+        if on:
+            p_off *= 1.0 - q[cause]
+    return 1.0 - p_off
+
+
+if __name__ == "__main__":
+    tf = lambda b: "T" if b else "F"
+
+    print("The joint table, one product per row")
+    print(" R S G   P(R)  P(S|R) P(G|S,R)   joint")
+    total = 0.0
+    for w in all_worlds():
+        f = [p_node(v, w[v], w) for v in ORDER]
+        p = joint(w)
+        total += p
+        print(f" {tf(w['Rain'])} {tf(w['Sprinkler'])} {tf(w['WetGrass'])}  "
+              f"{f[0]:5.2f}  {f[1]:5.2f}  {f[2]:6.2f}   {p:.5f}")
+    print(f" sum of all 8 rows = {total:.5f}")
+    print()
+
+    g = {"WetGrass": True}
+    print("Exact answers by enumeration")
+    print(f" P(WetGrass = T)                   = {query('WetGrass', {}):.4f}")
+    print(f" P(Rain = T | WetGrass = T)        = {query('Rain', g):.4f}")
+    print(f" P(Sprinkler = T | WetGrass = T)   = {query('Sprinkler', g):.4f}")
+    print(f" P(Rain = T | WetGrass = T, S = T) = "
+          f"{query('Rain', {'WetGrass': True, 'Sprinkler': True}):.4f}")
+    print()
+
+    exact = query("Rain", g)
+    print("Ancestral sampling + rejection, estimating P(Rain = T | WetGrass = T)")
+    print("       n    kept  estimate   error")
+    for n in (100, 1_000, 10_000, 100_000):
+        est, kept = estimate("Rain", g, n, seed=1)
+        print(f" {n:7d} {kept:7d}   {est:.4f}  {est - exact:+.4f}")
+    print()
+
+    q = {"Rain": 0.8, "Sprinkler": 0.9}
+    print("Noisy-OR for WetGrass: q_rain = 0.8, q_sprinkler = 0.9, leak = 0")
+    print(" S R   noisy-OR   full CPT")
+    for s, r in [(False, False), (False, True), (True, False), (True, True)]:
+        p = noisy_or(q, 0.0, {"Rain": r, "Sprinkler": s})
+        print(f" {tf(s)} {tf(r)}   {p:8.3f}   {CPT['WetGrass'][(s, r)]:8.3f}")
+    print(" parameters: noisy-OR 3 (two q's and a leak), full CPT 4;"
+          " with 10 parents: 11 vs 1024")</code></pre>
+    <p class="note block" style="max-width:72ch">Output, exactly as printed when run with Python 3.14:</p>
+<pre class="code out"><code>The joint table, one product per row
+ R S G   P(R)  P(S|R) P(G|S,R)   joint
+ T T T   0.20   0.01    0.99   0.00198
+ T T F   0.20   0.01    0.01   0.00002
+ T F T   0.20   0.99    0.80   0.15840
+ T F F   0.20   0.99    0.20   0.03960
+ F T T   0.80   0.40    0.90   0.28800
+ F T F   0.80   0.40    0.10   0.03200
+ F F T   0.80   0.60    0.00   0.00000
+ F F F   0.80   0.60    1.00   0.48000
+ sum of all 8 rows = 1.00000
+
+Exact answers by enumeration
+ P(WetGrass = T)                   = 0.4484
+ P(Rain = T | WetGrass = T)        = 0.3577
+ P(Sprinkler = T | WetGrass = T)   = 0.6467
+ P(Rain = T | WetGrass = T, S = T) = 0.0068
+
+Ancestral sampling + rejection, estimating P(Rain = T | WetGrass = T)
+       n    kept  estimate   error
+     100      44   0.2955  -0.0622
+    1000     434   0.3180  -0.0397
+   10000    4422   0.3643  +0.0066
+  100000   44605   0.3589  +0.0012
+
+Noisy-OR for WetGrass: q_rain = 0.8, q_sprinkler = 0.9, leak = 0
+ S R   noisy-OR   full CPT
+ F F      0.000      0.000
+ F T      0.800      0.800
+ T F      0.900      0.900
+ T T      0.980      0.990
+ parameters: noisy-OR 3 (two q's and a leak), full CPT 4; with 10 parents: 11 vs 1024</code></pre>
+    <p class="note block" style="max-width:72ch">The sampling rows use Python&rsquo;s own random numbers with seed 1, so they will not match the browser lab number for number. They should sit inside the lab&rsquo;s band for the same N. The exact answers match the worked example and the lab to four decimal places.</p>
+    <h3>Things to try</h3>
+    <ul class="pts block" style="margin-top:14px">
+      <li><b>Change a CPT</b><span>Set the sprinkler to run on a timer: make both rows of <span class="mono">CPT["Sprinkler"]</span> equal to 0.4. Does P(Rain | WetGrass) go up or down, and why?</span></li>
+      <li><b>Add a node</b><span>Add <span class="mono">"Cloudy"</span> as a parent of both Rain and Sprinkler. Put it first in <span class="mono">ORDER</span> and give it a CPT. Nothing else in the code needs to change.</span></li>
+      <li><b>Rare evidence</b><span>Estimate <span class="mono">P(Rain | WetGrass = False)</span> after setting P(Rain) to 0.001. Count how many samples rejection keeps.</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>What to carry home</h2>
+    <ul class="take">
+      <li>A full joint table over n yes/no variables needs 2<sup>n</sup> &minus; 1 numbers. That is too many to store, to ask experts for, to learn from data, or to sum over.</li>
+      <li>A Bayesian network is a DAG plus one CPT per node. Arrows point from parents to children, and the graph must have no cycles so that a topological order exists.</li>
+      <li>The joint factorises as the product of P(x<sub>i</sub> | pa(x<sub>i</sub>)). The cost grows with the number of parents, not the number of variables.</li>
+      <li>Any query can be answered exactly by summing the factorised joint and normalising, or approximately by ancestral sampling: sample parents before children, then count. Rejection sampling wastes samples when the evidence is rare.</li>
+      <li>Noisy-OR fills a CPT with k parents from k + 1 numbers, by assuming each cause acts independently and a leak covers the rest.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Our three-node network needs 7 numbers, the same as the full table. So what did the graph buy us here?</summary><p>Nothing in storage, because the graph has an arrow between every pair, which is a complete DAG and can represent any distribution over three variables. What it did buy is numbers that people can estimate (how often does rain wet the grass?) instead of joint probabilities of whole worlds. The storage savings appear as soon as arrows are missing: the timer version needs 6, and sparse networks with dozens of variables need thousands of times fewer numbers than the full table.</p></details>
+      <details class="q"><summary>Why can&rsquo;t a Bayesian network contain a cycle such as Rain &rarr; Wet grass &rarr; Rain?</summary><p>With a cycle there is no topological order, so the product of CPTs is no longer guaranteed to be a probability distribution that sums to 1, and ancestral sampling has nowhere to start: each node in the cycle waits for the other. Feedback over time is modelled by unrolling into time slices (a dynamic Bayesian network), where Rain today points to Wet grass today, which can point to something tomorrow.</p></details>
+      <details class="q"><summary>Ancestral sampling draws worlds from P(R, S, G). How would you draw worlds from P(R, S | G = T)?</summary><p>Rejection sampling: draw from the full joint and keep only worlds where G = T. The kept worlds are exact samples from the conditional distribution. The catch is cost: if P(G = T) is 0.001, you throw away 999 of every 1,000 samples. Likelihood weighting and MCMC (later chapters) avoid this waste.</p></details>
+      <details class="q"><summary>Is P(G = T | R = T) one of the numbers in the Wet grass CPT?</summary><p>No. The CPT conditions on both parents. P(G = T | R = T) sums out the sprinkler: 0.01 &times; 0.99 + 0.99 &times; 0.8 = 0.8019. A CPT gives you probabilities given all the parents, and anything else has to be calculated.</p></details>
+      <details class="q"><summary>Noisy-OR with q<sub>R</sub> = 0.8 and q<sub>S</sub> = 0.9 gives 0.98 when both are on. The textbook table says 0.99. What would it mean if the true value were 0.5?</summary><p>That rain and the sprinkler interfere: together they wet the grass less often than either one alone would. Noisy-OR can only give a value of at least max(q<sub>R</sub>, q<sub>S</sub>) when both causes are on, so it cannot represent this. You would need the full table, or a CPD that allows interactions, such as a logistic CPD with an interaction term.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn" href="../build-an-agent/">&larr; Previous: Project: Build an Agent</a>
+      <a class="btn primary" href="../">All chapters</a>
+    </div>
+    <p class="note" style="margin-top:10px">Next in the book: 6.2 Conditional Independence &amp; d-Separation, which explains explaining away from the graph alone.</p>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Pearl, J. (1988). <em>Probabilistic Reasoning in Intelligent Systems: Networks of Plausible Inference</em>. Morgan Kaufmann.</li>
+      <li>Russell, S. &amp; Norvig, P. (2021). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed., chapter 13, Probabilistic reasoning. Pearson.</li>
+      <li>Koller, D. &amp; Friedman, N. (2009). <em>Probabilistic Graphical Models: Principles and Techniques</em>, chapter 3 (the Bayesian network representation) and chapter 5 (local probabilistic models, including noisy-OR). MIT Press.</li>
+      <li>Bishop, C. M. (2006). <em>Pattern Recognition and Machine Learning</em>, section 8.1, Bayesian networks. Springer.</li>
+      <li>Henrion, M. (1989). Some practical issues in constructing belief networks. In <em>Uncertainty in Artificial Intelligence 3</em>, 161&ndash;173 (the leaky noisy-OR).</li>
+      <li>Beinlich, I., Suermondt, H., Chavez, R. &amp; Cooper, G. (1989). The ALARM monitoring system: a case study with two probabilistic inference techniques for belief networks. <em>Proceedings of the 2nd European Conference on AI in Medicine</em>.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Every number on this page is computed live in your browser from the CPTs in section 4: exact answers by enumerating the eight worlds, simulated answers by ancestral sampling. The rain, sprinkler and wet grass probabilities are the standard textbook values for this example.</div>
+</footer>
+
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ================= Bayesian networks: rain, sprinkler, wet grass ================= */
+/* The one model every lab shares. s[r] = P(S=T | R=r); g[s][r] = P(G=T | S=s, R=r). */
+const DEF = { r: 0.2, s: [0.4, 0.01], g: [[0.0, 0.8], [0.9, 0.99]] };
+const M = JSON.parse(JSON.stringify(DEF));
+const NOR = { on: false, qr: 0.8, qs: 0.9, lk: 0 };
+const V = ['R', 'S', 'G'], NAME = { R: 'Rain', S: 'Sprinkler', G: 'Wet grass' };
+const VCOL = { R: '--lda', S: '--cB', G: '--cA' };
+const col = v => css(VCOL[v]);
+const TF = b => b ? 'T' : 'F';
+const nf = n => Math.round(n).toLocaleString('en-US');
+const pct = (p, d = 1) => isFinite(p) ? (p * 100).toFixed(d) + '%' : '–';
+const p2 = v => { const a = v.toFixed(2); return Math.abs(+a - v) > 1e-9 ? v.toFixed(3) : a; };
+
+function noisyG(s, r) { return 1 - (1 - NOR.lk) * (s ? 1 - NOR.qs : 1) * (r ? 1 - NOR.qr : 1); }
+function gT(s, r) { return NOR.on ? noisyG(s, r) : M.g[s][r]; }
+function pR(r) { return r ? M.r : 1 - M.r; }
+function pS(s, r) { return s ? M.s[r] : 1 - M.s[r]; }
+function pG(g, s, r) { const p = gT(s, r); return g ? p : 1 - p; }
+function joint(r, s, g) { return pR(r) * pS(s, r) * pG(g, s, r); }
+const WORLDS = []; for (const r of [1, 0]) for (const s of [1, 0]) for (const g of [1, 0]) WORLDS.push([r, s, g]);
+const match = (w, ev) => Object.keys(ev).every(k => w[k] === ev[k]);
+function query(t, ev) { let num = 0, den = 0; WORLDS.forEach(w => { if (match(w, ev)) { const p = joint(w[0], w[1], w[2]); den += p; if (w[t]) num += p; } }); return { p: den > 0 ? num / den : NaN, num, den }; }
+
+const listeners = [];
+let busy = false;
+function changed(src) { if (busy) return; busy = true; try { listeners.forEach(f => f(src)); } finally { busy = false; } }
+
+/* ---------- drawing the network ---------- */
+const POS = { R: [0.2, 0.2], S: [0.8, 0.2], G: [0.5, 0.74] };
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function arrow(c, x1, y1, x2, y2, colr, lw, dash) {
+  const a = Math.atan2(y2 - y1, x2 - x1), hl = 10 + lw;
+  c.save(); c.strokeStyle = colr; c.fillStyle = colr; c.lineWidth = lw; if (dash) c.setLineDash(dash);
+  c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2 - Math.cos(a) * hl * .8, y2 - Math.sin(a) * hl * .8); c.stroke(); c.setLineDash([]);
+  c.beginPath(); c.moveTo(x2, y2); c.lineTo(x2 - hl * Math.cos(a - .38), y2 - hl * Math.sin(a - .38)); c.lineTo(x2 - hl * Math.cos(a + .38), y2 - hl * Math.sin(a + .38)); c.closePath(); c.fill(); c.restore();
+}
+/* o: { edges: [[a,b],..], bad: Set('a>b'), p: {R: prob}, obs: {R: 0/1}, val: {R: 0/1}, hl: 'R', sub: {R: 'text'}, yScale: 1 } */
+function drawNet(cv, o) {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); const W = r.width, H = r.height * (o.yScale || 1);
+  c.clearRect(0, 0, r.width, r.height);
+  const nw = clamp(W * 0.34, 96, 190), nh = clamp(H * 0.25, 58, 86), small = W < 420;
+  const box = {}; V.forEach(v => { box[v] = { x: POS[v][0] * W, y: POS[v][1] * H + (o.yOff || 0) }; });
+  if (small) { box.R.x = Math.max(box.R.x, nw / 2 + 6); box.S.x = Math.min(box.S.x, W - nw / 2 - 6); }
+  (o.edges || []).forEach(([a, b]) => {
+    const A = box[a], B = box[b], dx = B.x - A.x, dy = B.y - A.y;
+    const t = q => Math.min((nw / 2 + q) / Math.abs(dx || 1e-9), (nh / 2 + q) / Math.abs(dy || 1e-9));
+    const ta = t(3), tb = t(5), bad = o.bad && o.bad.has(a + '>' + b);
+    arrow(c, A.x + dx * ta, A.y + dy * ta, B.x - dx * tb, B.y - dy * tb, bad ? css('--qda') : css('--muted'), bad ? 2.6 : 2, bad ? [6, 4] : null);
+  });
+  V.forEach(v => {
+    const B = box[v], x = B.x - nw / 2, y = B.y - nh / 2, cl = col(v), ob = o.obs && o.obs[v] != null, va = o.val && o.val[v] != null;
+    c.save();
+    if (o.hl === v) { c.shadowColor = cl; c.shadowBlur = 16; }
+    rrect(c, x, y, nw, nh, 10); c.fillStyle = css('--surface'); c.fill(); c.shadowBlur = 0;
+    if (ob || va) { c.fillStyle = cl; c.globalAlpha = (ob ? o.obs[v] : o.val[v]) ? 0.16 : 0.06; c.fill(); c.globalAlpha = 1; }
+    c.strokeStyle = cl; c.lineWidth = ob || o.hl === v ? 3 : 1.6; rrect(c, x, y, nw, nh, 10); c.stroke(); c.restore();
+    c.fillStyle = css('--ink'); c.font = '600 ' + (small ? 12.5 : 14) + 'px ' + css('--f-body'); c.textAlign = 'left'; c.textBaseline = 'top';
+    c.fillText(NAME[v], x + 10, y + 8);
+    let tag = ob ? (small ? TF(o.obs[v]) : o.obs[v] ? 'seen: T' : 'seen: F') : va ? (o.val[v] ? 'True' : 'False') : (o.val ? '?' : '');
+    if (tag) { c.font = '600 ' + (small ? 11 : 12) + 'px ' + css('--f-mono'); c.textAlign = 'right'; c.fillStyle = cl; c.fillText(tag, x + nw - 9, y + 9); }
+    if (o.p && o.p[v] != null) {
+      const p = o.p[v], bx = x + 10, bw = nw - 20, by = y + nh - 24;
+      c.fillStyle = css('--soft'); rrect(c, bx, by, bw, 8, 3); c.fill();
+      if (isFinite(p)) { c.fillStyle = cl; rrect(c, bx, by, Math.max(2, bw * p), 8, 3); c.fill(); }
+      c.fillStyle = css('--muted'); c.font = (small ? 10.5 : 11.5) + 'px ' + css('--f-mono'); c.textAlign = 'left'; c.textBaseline = 'top';
+      c.fillText('P(T) ' + (isFinite(p) ? pct(p) : 'undefined'), bx, by + 10);
+    }
+    if (o.sub && o.sub[v]) { c.fillStyle = css('--muted'); c.font = (small ? 10.5 : 11.5) + 'px ' + css('--f-mono'); c.textAlign = 'left'; c.textBaseline = 'top'; o.sub[v].split('\n').forEach((ln, i) => c.fillText(ln, x + 10, y + (small ? 27 : 30) + i * 14)); }
+  });
+  return { box, nw, nh, W, H: r.height, c };
+}
+const RUN_EDGES = [['R', 'S'], ['R', 'G'], ['S', 'G']];
+
+/* ---------- CPT sliders (two synced copies) ---------- */
+const CPT_ROWS = [
+  { v: 'R', key: 'r', lab: 'P(R = T)' },
+  { v: 'S', key: 's1', lab: 'P(S = T | R = T)' }, { v: 'S', key: 's0', lab: 'P(S = T | R = F)' },
+  { v: 'G', key: 'g11', lab: 'P(G = T | S = T, R = T)' }, { v: 'G', key: 'g10', lab: 'P(G = T | S = T, R = F)' },
+  { v: 'G', key: 'g01', lab: 'P(G = T | S = F, R = T)' }, { v: 'G', key: 'g00', lab: 'P(G = T | S = F, R = F)' }];
+const getK = k => k === 'r' ? M.r : k[0] === 's' ? M.s[+k[1]] : gT(+k[1], +k[2]);
+function setK(k, x) { if (k === 'r') M.r = x; else if (k[0] === 's') M.s[+k[1]] = x; else M.g[+k[1]][+k[2]] = x; }
+const sliderSets = [];
+function buildCPT(el, pre) {
+  let h = '';
+  ['R', 'S', 'G'].forEach(v => {
+    h += `<div class="cpt-node"><span class="mini-h"><i class="sw" style="background:var(${VCOL[v]})"></i>${NAME[v]}${v === 'R' ? ' (root)' : v === 'S' ? ' | Rain' : ' | Sprinkler, Rain'}</span>`;
+    CPT_ROWS.filter(o => o.v === v).forEach(o => {
+      h += `<div class="ctrl" data-k="${o.key}"><div class="top"><label for="${pre}-${o.key}">${o.lab}</label><output id="${pre}-${o.key}-o"></output></div><input type="range" id="${pre}-${o.key}" min="0" max="1" step="0.01"></div>`;
+    });
+    h += '</div>';
+  });
+  el.innerHTML = h;
+  CPT_ROWS.forEach(o => { $('#' + pre + '-' + o.key).addEventListener('input', e => { setK(o.key, +e.target.value); changed(pre); }); });
+  sliderSets.push(pre);
+}
+function syncSliders() {
+  sliderSets.forEach(pre => CPT_ROWS.forEach(o => {
+    const s = $('#' + pre + '-' + o.key), x = getK(o.key), lock = NOR.on && o.v === 'G';
+    if (Math.abs(+s.value - x) > 1e-9) s.value = x;
+    s.disabled = lock;
+    $('#' + pre + '-' + o.key + '-o').textContent = p2(x) + (lock ? ' (noisy-OR)' : '');
+  }));
+}
+function resetModel() { M.r = DEF.r; M.s = DEF.s.slice(); M.g = DEF.g.map(a => a.slice()); NOR.on = false; }
+
+/* ================= HERO: evidence and beliefs ================= */
+const HE = { R: null, S: null, G: null };
+let heroBox = null;
+{
+  const el = $('#hero-ev');
+  el.innerHTML = V.map(v => `<span class="ev"><b style="color:var(${VCOL[v]})">${NAME[v]}</b><span class="seg sm" role="group" aria-label="${NAME[v]} evidence">` +
+    ['?', 'T', 'F'].map(x => `<button type="button" data-he="${v}${x}" aria-pressed="${x === '?'}">${x === '?' ? 'unknown' : x === 'T' ? 'true' : 'false'}</button>`).join('') + '</span></span>').join('');
+  $$('[data-he]', el).forEach(b => b.addEventListener('click', () => { const v = b.dataset.he[0], x = b.dataset.he[1]; HE[v] = x === '?' ? null : x === 'T' ? 1 : 0; heroDraw(); }));
+  const cv = $('#hero-cv');
+  cv.addEventListener('click', e => {
+    if (!heroBox) return; const [px, py] = evPos(cv, e);
+    V.forEach(v => { const B = heroBox.box[v]; if (Math.abs(px - B.x) < heroBox.nw / 2 && Math.abs(py - B.y) < heroBox.nh / 2) { HE[v] = HE[v] == null ? 1 : HE[v] === 1 ? 0 : null; heroDraw(); } });
+  });
+  cv.addEventListener('pointermove', e => { if (!heroBox) return; const [px, py] = evPos(cv, e); cv.style.cursor = V.some(v => Math.abs(px - heroBox.box[v].x) < heroBox.nw / 2 && Math.abs(py - heroBox.box[v].y) < heroBox.nh / 2) ? 'pointer' : 'default'; });
+}
+function heroDraw() {
+  V.forEach(v => $$(`[data-he^="${v}"]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.he[1] === (HE[v] == null ? '?' : HE[v] ? 'T' : 'F')))));
+  const ev = {}; V.forEach((v, i) => { if (HE[v] != null) ev[i] = HE[v]; });
+  const p = {}, prior = {}; V.forEach((v, i) => { p[v] = HE[v] != null ? HE[v] : query(i, ev).p; prior[v] = query(i, {}).p; });
+  const obs = {}; V.forEach(v => { if (HE[v] != null) obs[v] = HE[v]; });
+  heroBox = drawNet($('#hero-cv'), { edges: RUN_EDGES, p, obs });
+  const n = Object.keys(ev).length, pe = query(0, ev).den;
+  let cap;
+  if (!n) cap = `No evidence yet, so the bars show each variable on its own: P(rain) ${pct(prior.R)}, P(sprinkler on) ${pct(prior.S)}, P(wet grass) ${pct(prior.G)}. Try setting Wet grass to true.`;
+  else if (!(pe > 0)) cap = 'This combination has probability 0 under the current tables (with the textbook numbers, the grass is never wet without rain or the sprinkler), so there is nothing to update.';
+  else {
+    const seen = V.filter(v => HE[v] != null).map(v => `${NAME[v].toLowerCase()} ${HE[v] ? 'true' : 'false'}`).join(', ');
+    const rest = V.filter(v => HE[v] == null).map(v => `P(${NAME[v].toLowerCase()}) ${pct(prior[v])} &rarr; <b>${pct(p[v])}</b>`).join('; ');
+    cap = `Given ${seen}: ${rest || 'everything is observed'}. Computed exactly by adding up the ${WORLDS.filter(w => match(w, ev)).length} worlds that agree with what you saw, out of 8.`;
+  }
+  $('#hero-cap').innerHTML = cap;
+}
+fig($('#hero-cv'), heroDraw);
+listeners.push(heroDraw);
+
+/* ================= 1. WHY: the table that explodes ================= */
+const human = x => { if (x < 1e4) return nf(x); const u = [[1e12, ' trillion'], [1e9, ' billion'], [1e6, ' million'], [1e3, 'k']]; for (const [s, n] of u) if (x >= s) return (x / s).toFixed(x / s < 10 ? 1 : 0) + n; return nf(x); };
+const short = x => { x = Math.round(x); const u = [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'k']]; for (const [s, n] of u) if (x >= s) return +(x / s).toPrecision(3) + n; return String(x); };
+const bytes = b => { const u = ['bytes', 'KB', 'MB', 'GB', 'TB', 'PB']; let i = 0; while (b >= 1000 && i < u.length - 1) { b /= 1000; i++; } return (i ? b.toFixed(b < 10 ? 1 : 0) : nf(b)) + ' ' + u[i]; };
+const bnMax = (n, k) => { let t = 0; for (let i = 1; i <= n; i++) t += Math.pow(2, Math.min(k, i - 1)); return t; };
+function wyDraw() {
+  const n = +$('#wy-n').value, k = +$('#wy-k').value, cv = $('#wy-cv');
+  $('#wy-n-o').textContent = n; $('#wy-k-o').textContent = k;
+  const full = Math.pow(2, n) - 1, bn = bnMax(n, k);
+  $('#wy-full').textContent = human(full); $('#wy-bn').textContent = human(bn); $('#wy-mem').textContent = bytes(full * 8); $('#wy-ratio').textContent = human(full / bn) + '×';
+  $('#wy-say').innerHTML = k >= n - 1 ? `With k &ge; n &minus; 1, each node may depend on every node before it: a complete graph. It can represent any distribution, and saves nothing.` :
+    `With ${n} variables and at most ${k} parent${k === 1 ? '' : 's'} each, a network needs at most <b>${nf(bn)}</b> numbers instead of <b>${nf(full)}</b>. Add one more variable and the full table doubles; the network grows by at most ${nf(Math.pow(2, k))}.`;
+  const v = frame(cv, [2, 40], [0, 12.5], { l: 52, b: 34 });
+  axes(v, 'variables n', 'numbers needed (log scale)', { sy: 2, fy: y => short(Math.pow(10, y)), sx: 4 });
+  clip(v);
+  for (let kk = 0; kk <= 6; kk++) if (kk !== k) curve(v, x => Math.log10(bnMax(Math.round(x), kk)), css('--lda'), 1, [2, 3]);
+  curve(v, x => Math.log10(Math.pow(2, x) - 1), css('--qda'), 3);
+  curve(v, x => Math.log10(bnMax(Math.round(x), k)), css('--lda'), 3);
+  seg(v, n, 0, n, 12.5, css('--muted'), 1, [4, 4]);
+  dot(v, n, Math.log10(full), css('--qda'), 5.5); dot(v, n, Math.log10(bn), css('--lda'), 5.5);
+  v.ctx.restore();
+  const c = v.ctx; c.font = '600 12px ' + css('--f-body'); c.textAlign = 'left'; c.textBaseline = 'bottom';
+  c.fillStyle = css('--qda'); c.fillText('full joint table', v.X(Math.min(n, 30)) + 8, v.Y(Math.log10(Math.pow(2, Math.min(n, 30)))) - 4);
+  c.fillStyle = css('--lda'); c.fillText(`network, k = ${k}`, v.X(22) + 6, v.Y(Math.log10(bnMax(22, k))) - 6);
+  $('#wy-cap').innerHTML = `<span style="color:var(--qda)">&#9644;</span> the full joint table, 2<sup>n</sup> &minus; 1 &nbsp; <span style="color:var(--lda)">&#9644;</span> the most a network with at most k = ${k} parents per node can need &nbsp; <span style="color:var(--lda)">┄</span> other values of k. Each grid line is 100 times the one below it.`;
+}
+$('#wy-n').addEventListener('input', wyDraw); $('#wy-k').addEventListener('input', wyDraw);
+fig($('#wy-cv'), wyDraw);
+
+/* ================= 2. DAG builder ================= */
+const PAIRS = [['R', 'S'], ['R', 'G'], ['S', 'G']];
+const DG = { RS: 1, RG: 1, SG: 1 };
+const PRESETS = [
+  { id: 'run', lab: 'Running example', e: { RS: 1, RG: 1, SG: 1 } },
+  { id: 'timer', lab: 'Sprinkler on a timer', e: { RS: 0, RG: 1, SG: 1 } },
+  { id: 'none', lab: 'No arrows', e: { RS: 0, RG: 0, SG: 0 } },
+  { id: 'rev', lab: 'All reversed', e: { RS: -1, RG: -1, SG: -1 } },
+  { id: 'cyc', lab: 'A cycle', e: { RS: 1, RG: -1, SG: 1 } }];
+function dgEdges() { const E = []; PAIRS.forEach(([a, b]) => { const s = DG[a + b]; if (s === 1) E.push([a, b]); else if (s === -1) E.push([b, a]); }); return E; }
+function dgInfo() {
+  const E = dgEdges(), pa = { R: [], S: [], G: [] }; E.forEach(([a, b]) => pa[b].push(a));
+  const perms = [['R', 'S', 'G'], ['R', 'G', 'S'], ['S', 'R', 'G'], ['S', 'G', 'R'], ['G', 'R', 'S'], ['G', 'S', 'R']];
+  const topo = perms.filter(p => E.every(([a, b]) => p.indexOf(a) < p.indexOf(b)));
+  const desc = v => { const out = new Set(), st = [v]; while (st.length) { const x = st.pop(); E.forEach(([a, b]) => { if (a === x && !out.has(b)) { out.add(b); st.push(b); } }); } return out; };
+  return { E, pa, topo, perms, desc, dag: topo.length > 0, np: V.reduce((t, v) => t + Math.pow(2, pa[v].length), 0) };
+}
+const sortPa = l => V.filter(v => l.includes(v));
+const condStr = (v, l) => l.length ? `P(${v} | ${l.join(', ')})` : `P(${v})`;
+{
+  $('#dg-pairs').innerHTML = PAIRS.map(([a, b]) => `<div><span class="mini-h">${NAME[a]} and ${NAME[b]}</span><div class="seg sm" role="group" aria-label="Arrow between ${NAME[a]} and ${NAME[b]}">` +
+    `<button type="button" data-dg="${a + b}:0">none</button><button type="button" data-dg="${a + b}:1">${a} &rarr; ${b}</button><button type="button" data-dg="${a + b}:-1">${b} &rarr; ${a}</button></div></div>`).join('');
+  $$('[data-dg]').forEach(b => b.addEventListener('click', () => { const [k, s] = b.dataset.dg.split(':'); DG[k] = +s; dgUpd(); }));
+  $('#dg-pre').innerHTML = PRESETS.map(p => `<button type="button" data-dp="${p.id}">${p.lab}</button>`).join('');
+  $$('[data-dp]').forEach(b => b.addEventListener('click', () => { Object.assign(DG, PRESETS.find(p => p.id === b.dataset.dp).e); dgUpd(); }));
+}
+function dgUpd() {
+  $$('[data-dg]').forEach(b => { const [k, s] = b.dataset.dg.split(':'); b.setAttribute('aria-pressed', String(DG[k] === +s)); });
+  const cur = PRESETS.find(p => PAIRS.every(([a, b]) => p.e[a + b] === DG[a + b]));
+  $$('[data-dp]').forEach(b => b.setAttribute('aria-pressed', String(!!cur && cur.id === b.dataset.dp)));
+  dgDraw(); fcUpd();
+}
+function dgDraw() {
+  const I = dgInfo(), bad = new Set();
+  if (!I.dag) I.E.forEach(([a, b]) => bad.add(a + '>' + b));
+  const sub = {}; V.forEach(v => { sub[v] = I.pa[v].length ? 'parents: ' + sortPa(I.pa[v]).join(', ') : 'root, no parents'; sub[v] += '\n' + Math.pow(2, I.pa[v].length) + ' number' + (I.pa[v].length ? 's' : ''); });
+  drawNet($('#dg-cv'), { edges: I.E, bad, sub });
+  $('#dg-ok').textContent = I.dag ? 'Yes' : 'No'; $('#dg-ok').style.color = I.dag ? css('--cA') : css('--qda');
+  $('#dg-np').textContent = I.dag ? I.np : '–';
+  $('#dg-order').innerHTML = I.dag ? `Topological order${I.topo.length > 1 ? 's' : ''}: ${I.topo.map(p => p.join(', ')).join(' &nbsp;or&nbsp; ')}` : 'No topological order exists.';
+  let say;
+  if (!I.dag) { say = `<b style="color:var(--qda)">Cycle.</b> Follow the arrows: ${cycleStr(I.E)}. You come back to the start, so no node can be sampled first and this is not a Bayesian network.`; }
+  else {
+    const miss = PAIRS.filter(([a, b]) => DG[a + b] === 0).map(([a, b]) => {
+      const z = V.find(v => v !== a && v !== b), za = I.E.some(e => (e[0] === z && e[1] === a) || (e[0] === a && e[1] === z)), zb = I.E.some(e => (e[0] === z && e[1] === b) || (e[0] === b && e[1] === z));
+      const coll = I.pa[z].includes(a) && I.pa[z].includes(b);
+      return `No arrow between ${NAME[a]} and ${NAME[b]}: the graph claims they are independent` + (coll ? `, as long as you have not seen ${NAME[z]}.` : za && zb ? ` once you know ${NAME[z]}.` : '.');
+    });
+    say = miss.length ? miss.join(' ') + ` Each missing arrow is an assumption, and it saves numbers: ${I.np} instead of 7.` : 'An arrow joins every pair, a complete graph. It can represent any distribution over three variables, so it needs all 7 numbers.';
+  }
+  $('#dg-say').innerHTML = say;
+  $('#dg-cap').innerHTML = I.dag ? 'Factorisation: <span class="mono">P(R, S, G) = ' + V.map(v => condStr(v, sortPa(I.pa[v]))).join(' · ') + '</span>' : '<span style="color:var(--qda)">Dashed red arrows form a cycle.</span>';
+}
+function cycleStr(E) { for (const s of V) { const path = [s]; let x = s; for (let i = 0; i < 3; i++) { const e = E.find(e => e[0] === x); if (!e) break; x = e[1]; path.push(x); if (x === s) return path.map(v => NAME[v]).join(' → '); } } return 'the arrows loop'; }
+fig($('#dg-cv'), dgDraw);
+
+/* ================= 3. Factorisation: chain rule orders ================= */
+let FC = ['R', 'S', 'G'];
+{
+  const perms = [['R', 'S', 'G'], ['R', 'G', 'S'], ['S', 'R', 'G'], ['S', 'G', 'R'], ['G', 'R', 'S'], ['G', 'S', 'R']];
+  $('#fc-ord').innerHTML = perms.map(p => `<button type="button" data-fc="${p.join('')}">${p.join(', ')}</button>`).join('');
+  $$('[data-fc]').forEach(b => b.addEventListener('click', () => { FC = b.dataset.fc.split(''); fcUpd(); }));
+}
+function fcUpd() {
+  $$('[data-fc]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fc === FC.join(''))));
+  const I = dgInfo(), terms = [];
+  $('#fc-graph').textContent = I.E.length ? I.E.map(e => e[0] + '→' + e[1]).join(', ') : 'no arrows';
+  let ok = 0;
+  const lis = FC.map((v, i) => {
+    const pre = FC.slice(0, i), pa = I.pa[v], de = I.desc(v);
+    const paIn = pa.every(p => pre.includes(p)), deIn = pre.filter(p => de.has(p));
+    const isCPT = I.dag && paIn && !deIn.length;
+    if (isCPT) ok++;
+    const f = pre.length ? `P(${v} | ${pre.map(p => isCPT && !pa.includes(p) ? `<del>${p}</del>` : p).join(', ')})` : `P(${v})`;
+    terms.push(isCPT ? condStr(v, sortPa(pa)) : condStr(v, pre));
+    let bd;
+    if (!I.dag) bd = '<span class="bd no">graph has a cycle</span>';
+    else if (isCPT) bd = `<span class="bd ok">table of ${NAME[v]}${pre.some(p => !pa.includes(p)) ? ', after dropping non-parents' : ''}</span>`;
+    else if (deIn.length) bd = `<span class="bd no">conditions on its descendant ${deIn.join(', ')}</span>`;
+    else { const late = pa.filter(p => !pre.includes(p)); bd = `<span class="bd no">its parent${late.length > 1 ? 's' : ''} ${late.join(', ')} come${late.length > 1 ? '' : 's'} later</span>`; }
+    return `<li><span class="f">${f}</span>${bd}</li>`;
+  });
+  $('#fc-terms').innerHTML = lis.join('');
+  const topo = I.dag && I.topo.some(p => p.join('') === FC.join(''));
+  $('#fc-topo').textContent = !I.dag ? '–' : topo ? 'Yes' : 'No'; $('#fc-topo').style.color = topo ? css('--cA') : css('--qda');
+  $('#fc-ncpt').textContent = I.dag ? `${ok} of 3` : '–';
+  $('#fc-prod').innerHTML = `P(R, S, G) = ${terms.join(' · ')}`;
+  $('#fc-say').innerHTML = !I.dag ? 'The graph above has a cycle, so there is no factorisation to check. Pick a preset in section 2.' : topo ?
+    'Every term is a table the network stores: cross out the non-parents and you have the factorisation. The chain rule said nothing about the graph; the struck-out variables are exactly the independence assumptions the missing parents make.' :
+    'This order still gives a correct chain rule, since the chain rule holds in any order. But some terms are not tables the network stores. Computing them means summing over the joint, which is the inference problem itself. Topological orders avoid that.';
+}
+
+/* ================= 4. CPTs and the joint table ================= */
+buildCPT($('#cp-sl'), 'cp');
+let cpHL = null;
+function cpDraw() {
+  let h = '<thead><tr><th>R</th><th>S</th><th>G</th><th class="r">P(R)</th><th class="r">P(S | R)</th><th class="r">P(G | S, R)</th><th class="r">joint</th><th class="jb"></th></tr></thead><tbody>';
+  let tot = 0, best = null, pg = 0, mx = 0;
+  WORLDS.forEach(w => mx = Math.max(mx, joint(...w)));
+  WORLDS.forEach(w => {
+    const [r, s, g] = w, f = [pR(r), pS(s, r), pG(g, s, r)], p = f[0] * f[1] * f[2]; tot += p; if (g) pg += p; if (!best || p > best.p) best = { w, p };
+    const use = cpHL ? (cpHL === 'r' ? 0 : cpHL[0] === 's' ? (+cpHL[1] === r ? 1 : -1) : (+cpHL[1] === s && +cpHL[2] === r ? 2 : -1)) : -1;
+    h += `<tr${use >= 0 ? ' class="hl"' : ''}>` + w.map(x => `<td class="tf ${x ? 't' : 'f'}">${TF(x)}</td>`).join('') + f.map((x, i) => `<td class="r${use === i ? ' hf' : ''}">${p2(x)}</td>`).join('') +
+      `<td class="r"><b>${p.toFixed(5)}</b></td><td class="jb"><i style="width:${mx > 0 ? p / mx * 100 : 0}%"></i></td></tr>`;
+  });
+  h += `</tbody><tfoot><tr><th colspan="6">sum of all 8 worlds</th><th class="r">${tot.toFixed(5)}</th><th></th></tr></tfoot>`;
+  $('#cp-jt').innerHTML = h;
+  $('#cp-say').innerHTML = `Each row is P(R) &times; P(S | R) &times; P(G | S, R) for that world, and the rows always sum to 1 because every CPT row does. The most likely world is <b>R = ${TF(best.w[0])}, S = ${TF(best.w[1])}, G = ${TF(best.w[2])}</b> (${best.p.toFixed(3)}). The grass is wet in four worlds, which add up to P(G = T) = ${pg.toFixed(4)}.`;
+}
+CPT_ROWS.forEach(o => { const row = $(`#cp-sl [data-k="${o.key}"]`); const on = () => { cpHL = o.key; cpDraw(); }, off = () => { cpHL = null; cpDraw(); };
+  row.addEventListener('pointerenter', on); row.addEventListener('pointerleave', off); const inp = $('input', row); inp.addEventListener('focus', on); inp.addEventListener('blur', off); });
+$('#cp-reset').addEventListener('click', () => { resetModel(); changed('reset'); });
+listeners.push(syncSliders, cpDraw);
+
+/* ================= 5. By hand ================= */
+function hdLive() {
+  const a = [M.r, M.s[1], gT(1, 1)], b = [M.r, 1 - M.s[1], gT(0, 1)], c = [1 - M.r, M.s[0], gT(1, 0)], d = [1 - M.r, 1 - M.s[0], gT(0, 0)];
+  const pr = x => x[0] * x[1] * x[2], num = pr(a) + pr(b), oth = pr(c) + pr(d), den = num + oth;
+  const t = x => x.map(p2).join(' × ');
+  $('#hd-live').innerHTML = `<div class="rp-h">Live, from the current tables</div>` +
+    `<div class="rp-row">P(R=T, G=T) = ${t(a)} + ${t(b)} = ${num.toFixed(5)}</div>` +
+    `<div class="rp-row">P(R=F, G=T) = ${t(c)} + ${t(d)} = ${oth.toFixed(5)}</div>` +
+    `<div class="rp-row">P(G=T) = ${num.toFixed(5)} + ${oth.toFixed(5)} = ${den.toFixed(5)}</div>` +
+    `<div class="rp-row rp-win">P(R=T | G=T) = ${den > 0 ? `${num.toFixed(5)} / ${den.toFixed(5)} = ${(num / den).toFixed(4)}` : 'undefined, because P(G=T) = 0'}</div>`;
+}
+listeners.push(hdLive);
+{
+  const ANS = (0.2 * 0.01 * 0.99 + 0.8 * 0.4 * 0.9) / 0.44838;
+  const work = 'P(S=T, G=T) = 0.2 × 0.01 × 0.99 + 0.8 × 0.4 × 0.9 = 0.00198 + 0.288 = 0.28998. P(G=T) = 0.44838 from the worked example. So P(S=T | G=T) = 0.28998 / 0.44838 ≈ 0.6467.';
+  $('#hd-chk').addEventListener('click', () => {
+    const x = parseFloat($('#hd-in').value), fb = $('#hd-fb');
+    if (!isFinite(x)) { fb.innerHTML = 'Type a probability between 0 and 1 first.'; return; }
+    const near = y => Math.abs(x - y) < 0.0015;
+    if (near(ANS)) fb.innerHTML = `<b style="color:var(--cA)">Correct.</b> ${work}`;
+    else if (near(0.3577)) fb.innerHTML = 'That is P(R = T | G = T), the rain question. This one asks about the sprinkler: keep the worlds where S = T.';
+    else if (near(0.28998)) fb.innerHTML = 'That is the numerator P(S = T, G = T). Now divide by P(G = T) = 0.44838.';
+    else if (near(0.322)) fb.innerHTML = 'That is P(S = T) before looking at the grass. Condition on G = T: only worlds with wet grass count.';
+    else fb.innerHTML = `<b style="color:var(--qda)">Not quite.</b> Add the two worlds with S = T and G = T (one with rain, one without), then divide by P(G = T) = 0.44838.`;
+  });
+  $('#hd-in').addEventListener('keydown', e => { if (e.key === 'Enter') $('#hd-chk').click(); });
+  $('#hd-show').addEventListener('click', () => { $('#hd-fb').innerHTML = work; });
+}
+
+/* ================= 6. Ancestral sampling, step by step ================= */
+const AS = { cur: {}, last: null, counts: new Array(8).fill(0), n: 0, hist: [], rng: mulberry32(2024), note: '' };
+const wIdx = (r, s, g) => (1 - r) * 4 + (1 - s) * 2 + (1 - g);
+function asP(v, w) { return v === 'R' ? M.r : v === 'S' ? M.s[w.R] : gT(w.S, w.R); }
+function asRow(v, w) { return v === 'R' ? 'P(R = T)' : v === 'S' ? `P(S = T | R = ${TF(w.R)})` : `P(G = T | S = ${TF(w.S)}, R = ${TF(w.R)})`; }
+function asCommit(w) { AS.counts[wIdx(w.R, w.S, w.G)]++; AS.n++; AS.hist.unshift(w); AS.hist.length = Math.min(AS.hist.length, 8); }
+function asStep() {
+  if (Object.keys(AS.cur).length === 3) AS.cur = {};
+  const v = V[Object.keys(AS.cur).length], p = asP(v, AS.cur), u = AS.rng(), x = u < p ? 1 : 0;
+  AS.last = { v, p, u, x, row: asRow(v, AS.cur) }; AS.cur[v] = x;
+  if (Object.keys(AS.cur).length === 3) asCommit(Object.assign({}, AS.cur));
+}
+function asFinish() { if (Object.keys(AS.cur).length === 3) AS.cur = {}; do asStep(); while (Object.keys(AS.cur).length < 3); }
+function asBulk(n) { if (Object.keys(AS.cur).length && Object.keys(AS.cur).length < 3) asFinish(); for (let i = 0; i < n; i++) { const r = AS.rng() < M.r ? 1 : 0, s = AS.rng() < M.s[r] ? 1 : 0, g = AS.rng() < gT(s, r) ? 1 : 0; asCommit({ R: r, S: s, G: g }); } AS.cur = {}; AS.last = null; }
+$('#as-step').addEventListener('click', () => { asStep(); asDraw(); });
+$('#as-one').addEventListener('click', () => { asFinish(); asDraw(); });
+$('#as-100').addEventListener('click', () => { asBulk(100); asDraw(); });
+$('#as-1k').addEventListener('click', () => { asBulk(1000); asDraw(); });
+$('#as-clr').addEventListener('click', () => { AS.cur = {}; AS.last = null; AS.counts.fill(0); AS.n = 0; AS.hist = []; AS.note = ''; asDraw(); });
+function asDraw() {
+  const cv = $('#as-cv'), sub = {}, L = AS.last;
+  V.forEach(v => { if (AS.cur[v] != null && L && L.v === v) sub[v] = `p = ${p2(L.p)}\nu = ${L.u.toFixed(3)} → ${TF(L.x)}`; else if (AS.cur[v] != null) sub[v] = 'sampled'; });
+  const k = Object.keys(AS.cur).length, nxt = k < 3 ? V[k] : null;
+  if (nxt && !sub[nxt]) sub[nxt] = 'next, p = ' + p2(asP(nxt, AS.cur));
+  const o = drawNet(cv, { edges: RUN_EDGES, val: AS.cur, hl: L ? L.v : null, sub, yScale: 0.8 });
+  // number line for the last draw
+  const c = o.c, W = o.W, H = o.H, x0 = 24, x1 = W - 24, y = H * 0.89;
+  c.save(); c.font = '11px ' + css('--f-mono'); c.textBaseline = 'top';
+  c.strokeStyle = css('--line'); c.lineWidth = 6; c.lineCap = 'round'; c.beginPath(); c.moveTo(x0, y); c.lineTo(x1, y); c.stroke();
+  if (L) {
+    const cl = col(L.v), xp = x0 + (x1 - x0) * L.p, xu = x0 + (x1 - x0) * L.u;
+    c.strokeStyle = cl; c.beginPath(); c.moveTo(x0, y); c.lineTo(Math.max(x0 + 0.5, xp), y); c.stroke();
+    c.lineCap = 'butt'; c.lineWidth = 2; c.strokeStyle = css('--ink'); c.beginPath(); c.moveTo(xu, y - 12); c.lineTo(xu, y + 6); c.stroke();
+    c.fillStyle = css('--ink'); c.textAlign = clamp(xu, x0 + 40, x1 - 40) === xu ? 'center' : xu < W / 2 ? 'left' : 'right'; c.textBaseline = 'bottom'; c.fillText('u = ' + L.u.toFixed(3), xu, y - 13);
+    c.textBaseline = 'top'; c.fillStyle = cl; c.textAlign = 'left'; c.fillText(`True if u < ${p2(L.p)}`, x0, y + 9);
+  } else { c.fillStyle = css('--muted'); c.textAlign = 'left'; c.fillText('the random number u for the last draw appears here', x0, y + 9); }
+  c.fillStyle = css('--muted'); c.textAlign = 'right'; c.textBaseline = 'top'; c.fillText('0 … 1', x1, y + 9);
+  c.restore();
+  let cap;
+  if (!L && !AS.n) cap = 'Press <b>Next variable</b>. Rain comes first because it has no parents, so its row of the table is just P(R = T).';
+  else if (L) { const done = Object.keys(AS.cur).length === 3; cap = `${NAME[L.v]}: its row is ${L.row} = ${p2(L.p)}. The draw was u = ${L.u.toFixed(3)}, which is ${L.x ? 'less than' : 'not less than'} ${p2(L.p)}, so ${NAME[L.v]} = <b>${L.x ? 'True' : 'False'}</b>. ` + (done ? `That completes a world: R = ${TF(AS.cur.R)}, S = ${TF(AS.cur.S)}, G = ${TF(AS.cur.G)}, which the factorisation gives probability ${joint(AS.cur.R, AS.cur.S, AS.cur.G).toFixed(5)}.` : `Next is ${NAME[V[Object.keys(AS.cur).length]]}, whose parents now have values.`); }
+  else cap = `Drew ${nf(AS.n)} complete worlds, parents first each time.`;
+  $('#as-cap').innerHTML = cap;
+  // bars
+  const bc = $('#as-bars'), ex = WORLDS.map(w => joint(...w)), fr = AS.counts.map(x => AS.n ? x / AS.n : 0);
+  const top = Math.max(0.05, ...ex, ...fr) * 1.12;
+  const v = frame(bc, [-0.5, 7.5], [0, top], { l: 42, b: 30, t: 10 });
+  axes(v, '', '', { sx: 100, fx: () => '', ny: 4, fy: y => Math.round(y * 100) + '%' });
+  const bw = Math.min(34, v.pw / 8 * 0.6);
+  WORLDS.forEach((w, i) => {
+    const x = v.X(i); v.ctx.fillStyle = css('--lda'); v.ctx.globalAlpha = 0.8; v.ctx.fillRect(x - bw / 2, v.Y(fr[i]), bw, v.Y(0) - v.Y(fr[i])); v.ctx.globalAlpha = 1;
+    v.ctx.strokeStyle = css('--ink'); v.ctx.lineWidth = 2.5; v.ctx.beginPath(); v.ctx.moveTo(x - bw / 2 - 5, v.Y(ex[i])); v.ctx.lineTo(x + bw / 2 + 5, v.Y(ex[i])); v.ctx.stroke();
+    v.ctx.fillStyle = css('--muted'); v.ctx.font = '11px ' + css('--f-mono'); v.ctx.textAlign = 'center'; v.ctx.textBaseline = 'top'; v.ctx.fillText(w.map(TF).join(''), x, v.h - v.pad.b + 6);
+  });
+  $('#as-n').textContent = nf(AS.n);
+  const gap = AS.n ? Math.max(...fr.map((f, i) => Math.abs(f - ex[i]))) : NaN;
+  $('#as-tv').textContent = AS.n ? (gap * 100).toFixed(1) + ' pts' : '–';
+  $('#as-hist').innerHTML = AS.hist.length ? AS.hist.map(w => `<div>${TF(w.R)} ${TF(w.S)} ${TF(w.G)} <span class="note">p = ${joint(w.R, w.S, w.G).toFixed(4)}</span></div>`).join('') : '<span class="note">none yet</span>';
+  $('#as-say').innerHTML = AS.note || (AS.n >= 50 ? `With ${nf(AS.n)} samples the biggest gap between a bar and its tick is ${(gap * 100).toFixed(1)} percentage points. Gaps shrink roughly like 1/&radic;n: four times the samples, half the gap.` : 'Bulk sampling uses exactly the same recipe, just without stopping to show each coin flip.');
+}
+fig($('#as-cv'), asDraw); fig($('#as-bars'), asDraw);
+listeners.push(src => { if (AS.n || Object.keys(AS.cur).length) { AS.cur = {}; AS.last = null; AS.counts.fill(0); AS.n = 0; AS.hist = []; AS.note = 'The tables changed, so the old samples were cleared. The ticks show the new exact probabilities.'; } asDraw(); });
+
+/* ================= 7. Main lab: exact versus simulated ================= */
+const QS = [
+  { id: 'rg', t: 0, ev: { 2: 1 }, lab: 'P(Rain = T | Wet grass = T)' },
+  { id: 'sg', t: 1, ev: { 2: 1 }, lab: 'P(Sprinkler = T | Wet grass = T)' },
+  { id: 'rgs', t: 0, ev: { 2: 1, 1: 1 }, lab: 'P(Rain = T | Wet grass = T, Sprinkler = T)' },
+  { id: 'rgf', t: 0, ev: { 2: 0 }, lab: 'P(Rain = T | Wet grass = F)' },
+  { id: 'gr', t: 2, ev: { 0: 1 }, lab: 'P(Wet grass = T | Rain = T)' },
+  { id: 'g', t: 2, ev: {}, lab: 'P(Wet grass = T)' }];
+const LB = { seed: 7, runs: null };
+$('#lb-q').innerHTML = QS.map(q => `<option value="${q.id}">${q.lab}</option>`).join('');
+buildCPT($('#lb-sl'), 'lb');
+function lbN() { return Math.round(Math.pow(10, +$('#lb-n').value)); }
+function lbSim() {
+  const q = QS.find(x => x.id === $('#lb-q').value), N = lbN(), runs = [];
+  const gt = [[gT(0, 0), gT(0, 1)], [gT(1, 0), gT(1, 1)]], ev = Object.keys(q.ev).map(k => [+k, q.ev[k]]);
+  for (let s = 0; s < 5; s++) {
+    const rnd = mulberry32(LB.seed * 7919 + s * 104729 + 1), pts = [];
+    let kept = 0, hit = 0, next = 10;
+    const w = [0, 0, 0];
+    for (let i = 1; i <= N; i++) {
+      w[0] = rnd() < M.r ? 1 : 0; w[1] = rnd() < M.s[w[0]] ? 1 : 0; w[2] = rnd() < gt[w[1]][w[0]] ? 1 : 0;
+      let ok = true; for (let j = 0; j < ev.length; j++) if (w[ev[j][0]] !== ev[j][1]) { ok = false; break; }
+      if (ok) { kept++; hit += w[q.t]; }
+      if (i >= next || i === N) { if (kept) pts.push([i, hit / kept]); next = Math.ceil(next * 1.06); }
+    }
+    runs.push({ pts, kept, est: kept ? hit / kept : NaN });
+  }
+  LB.runs = runs; LB.q = q; LB.N = N;
+}
+function lbDraw() {
+  if (!LB.runs) return;
+  const q = LB.q, N = LB.N, E = query(q.t, q.ev), ex = E.p, pe = E.den, R0 = LB.runs[0];
+  $('#lb-n-o').textContent = nf(N); $('#lb-seed-o').textContent = 'seed ' + LB.seed + ' for the thick line; the faint lines use four other seeds';
+  const cv = $('#lb-cv'), v = frame(cv, [1, Math.log10(N)], [0, 1], { l: 46, b: 34 });
+  axes(v, 'samples drawn (log scale)', q.lab, { sx: N > 3e4 ? 1 : 0.5, fx: x => short(Math.pow(10, x)), sy: 0.2 });
+  clip(v);
+  const c = v.ctx;
+  if (isFinite(ex) && pe > 0) {
+    const se = n => 2 * Math.sqrt(ex * (1 - ex) / Math.max(1, n * pe));
+    c.beginPath(); const K = 120;
+    for (let i = 0; i <= K; i++) { const lx = 1 + (Math.log10(N) - 1) * i / K, n = Math.pow(10, lx); c.lineTo(v.X(lx), v.Y(Math.min(1, ex + se(n)))); }
+    for (let i = K; i >= 0; i--) { const lx = 1 + (Math.log10(N) - 1) * i / K, n = Math.pow(10, lx); c.lineTo(v.X(lx), v.Y(Math.max(0, ex - se(n)))); }
+    c.closePath(); c.fillStyle = css('--cA'); c.globalAlpha = 0.14; c.fill(); c.globalAlpha = 1;
+    seg(v, 1, ex, Math.log10(N), ex, css('--ink'), 1.6, [6, 4]);
+  }
+  LB.runs.forEach((r, i) => {
+    if (!r.pts.length) return; c.save(); c.strokeStyle = css('--lda'); c.lineWidth = i ? 1.1 : 2.6; c.globalAlpha = i ? 0.35 : 1; c.beginPath();
+    r.pts.forEach(([n, e], j) => { const X = v.X(Math.log10(Math.max(10, n))), Y = v.Y(e); j ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.stroke(); c.restore();
+  });
+  if (isFinite(R0.est)) dot(v, Math.log10(N), R0.est, css('--lda'), 5);
+  c.restore();
+  const err = R0.est - ex, sek = isFinite(ex) && R0.kept ? Math.sqrt(ex * (1 - ex) / R0.kept) : NaN;
+  $('#lb-ex').textContent = isFinite(ex) ? ex.toFixed(4) : 'undefined';
+  $('#lb-sim').textContent = isFinite(R0.est) ? R0.est.toFixed(4) : 'no samples';
+  $('#lb-err').textContent = isFinite(err) ? (err >= 0 ? '+' : '') + err.toFixed(4) : '–';
+  $('#lb-kept').innerHTML = `${human(R0.kept)}<span class="kk">of ${human(N)} (${pct(R0.kept / N)})</span>`;
+  let say;
+  if (!(pe > 0)) say = 'The evidence has probability 0 under these tables, so the question has no answer, exact or simulated. Move a slider so the evidence can happen.';
+  else if (!R0.kept) say = `No sample matched the evidence. P(evidence) = ${pe.toPrecision(2)}, so you would expect to keep about ${(N * pe).toPrecision(2)} of ${nf(N)} samples. This is the weakness of rejection sampling: rare evidence wastes almost every sample.`;
+  else if (ex === 0 || ex === 1) say = `Under these tables the answer is exactly ${ex}, so every kept sample agrees and there is no wobble at all. Move a slider away from 0 or 1 to bring the randomness back.`;
+  else {
+    const z = sek > 0 ? Math.abs(err) / sek : 0;
+    say = `This run is off by ${Math.abs(err).toFixed(4)}, which is ${z.toFixed(1)} standard errors (one standard error is &radic;(p(1&minus;p)/kept) = ${sek.toFixed(4)}), so it is ${z <= 2 ? '<b>inside</b>' : '<b>outside</b>'} the 95% band${z <= 2 ? '' : '. About 1 run in 20 lands outside; press New random seed'}. ` +
+      (Object.keys(q.ev).length ? `Rejection kept ${pct(R0.kept / N)} of the samples; on average it keeps P(evidence) = ${pct(pe)}.` : 'There is no evidence, so every sample counts.');
+  }
+  $('#lb-say').innerHTML = say;
+  $('#lb-cap').innerHTML = `<span style="color:var(--lda)">&#9644;</span> running estimate, seed ${LB.seed} &nbsp; <span style="color:var(--lda);opacity:.5">&#9644;</span> four other seeds &nbsp; <span style="color:var(--ink)">- -</span> exact answer by enumeration &nbsp; <span style="color:var(--cA)">&#9646;</span> exact &plusmn; 2 standard errors for the samples kept so far.`;
+}
+let lbT = 0;
+function lbGo() { clearTimeout(lbT); lbT = setTimeout(() => { lbSim(); lbDraw(); }, 16); }
+$('#lb-q').addEventListener('change', lbGo); $('#lb-n').addEventListener('input', lbGo);
+$('#lb-seed').addEventListener('click', () => { LB.seed = 1 + Math.floor(Math.random() * 9999); lbGo(); });
+$('#lb-reset').addEventListener('click', () => { resetModel(); $('#lb-q').value = 'rg'; $('#lb-n').value = 4; LB.seed = 7; changed('reset'); });
+fig($('#lb-cv'), lbDraw);
+listeners.push(lbGo);
+
+/* ================= 8. Noisy-OR ================= */
+function noUpd() {
+  NOR.qr = +$('#no-qr').value; NOR.qs = +$('#no-qs').value; NOR.lk = +$('#no-lk').value;
+  $('#no-qr-o').textContent = NOR.qr.toFixed(2); $('#no-qs-o').textContent = NOR.qs.toFixed(2); $('#no-lk-o').textContent = NOR.lk.toFixed(2);
+  let h = '<thead><tr><th>Sprinkler</th><th>Rain</th><th>noisy-OR working</th><th class="r">noisy-OR</th><th class="r">full CPT</th><th class="r">gap</th></tr></thead><tbody>';
+  [[0, 0], [0, 1], [1, 0], [1, 1]].forEach(([s, r]) => {
+    const parts = [`(1 − ${NOR.lk.toFixed(2)})`]; if (s) parts.push(`(1 − ${NOR.qs.toFixed(2)})`); if (r) parts.push(`(1 − ${NOR.qr.toFixed(2)})`);
+    const p = noisyG(s, r), f = M.g[s][r];
+    h += `<tr><td class="tf ${s ? 't' : 'f'}">${TF(s)}</td><td class="tf ${r ? 't' : 'f'}">${TF(r)}</td><td class="mono">1 − ${parts.join(' × ')}</td><td class="r"><b>${p.toFixed(3)}</b></td><td class="r">${p2(f)}</td><td class="r" style="color:${Math.abs(p - f) > 0.05 ? css('--qda') : 'inherit'}">${(p - f >= 0 ? '+' : '') + (p - f).toFixed(3)}</td></tr>`;
+  });
+  $('#no-tab').innerHTML = h + '</tbody>';
+  const b = $('#no-use'); b.setAttribute('aria-pressed', String(NOR.on)); b.textContent = NOR.on ? 'Back to the full table' : 'Use noisy-OR in the network';
+  $('#no-state').innerHTML = NOR.on ? '<b style="color:var(--cA)">The network now uses noisy-OR for wet grass.</b> The hero, the joint table, the hand calculation and both sampling labs all use these numbers, and the wet grass sliders are locked until you switch back.' :
+    'The network is using the full four-row table. Press the button to swap in the three noisy-OR numbers everywhere on the page.';
+  noK();
+}
+function noK() {
+  const k = +$('#no-k').value; $('#no-k-o').textContent = k; $('#no-full').textContent = human(Math.pow(2, k)); $('#no-nor').textContent = k + 1;
+  $('#no-cap').innerHTML = `<span style="color:var(--qda)">&#9646;</span> rows in a full CPT, 2<sup>k</sup> &nbsp; <span style="color:var(--lda)">&#9646;</span> noisy-OR numbers, k + 1 (log scale). With ${k} cause${k > 1 ? 's' : ''}: ${nf(Math.pow(2, k))} versus ${k + 1}.`;
+  const v = frame($('#no-cv'), [0.4, 20.6], [0, 6.6], { l: 46, b: 28, t: 10 });
+  axes(v, 'parents k', '', { sx: 2, sy: 2, fy: y => short(Math.pow(10, y)) });
+  clip(v);
+  for (let i = 1; i <= 20; i++) {
+    const w = Math.max(2, v.pw / 21 * 0.36), x = v.X(i);
+    v.ctx.globalAlpha = i === k ? 1 : 0.45;
+    v.ctx.fillStyle = css('--qda'); v.ctx.fillRect(x - w, v.Y(Math.log10(Math.pow(2, i))), w, v.Y(0) - v.Y(Math.log10(Math.pow(2, i))));
+    v.ctx.fillStyle = css('--lda'); v.ctx.fillRect(x, v.Y(Math.log10(i + 1)), w, v.Y(0) - v.Y(Math.log10(i + 1)));
+  }
+  v.ctx.globalAlpha = 1; v.ctx.restore();
+}
+['no-qr', 'no-qs', 'no-lk'].forEach(id => $('#' + id).addEventListener('input', () => { noUpd(); if (NOR.on) changed('nor'); }));
+$('#no-k').addEventListener('input', noK);
+$('#no-use').addEventListener('click', () => { NOR.on = !NOR.on; changed('nor'); });
+$('#no-fit').addEventListener('click', () => {
+  const lk = clamp(M.g[0][0], 0, 0.99), f = g => clamp(1 - (1 - g) / (1 - lk), 0, 1);
+  $('#no-lk').value = Math.min(0.5, lk); $('#no-qr').value = f(M.g[0][1]); $('#no-qs').value = f(M.g[1][0]); noUpd(); if (NOR.on) changed('nor');
+});
+fig($('#no-cv'), noK);
+listeners.push(noUpd);
+
+/* ================= 9. Python: copy ================= */
+$('#py-copy').addEventListener('click', () => {
+  const t = $('#py-code').textContent, b = $('#py-copy'), ok = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy code'; }, 1600); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(ok, () => fallback());
+  else fallback();
+  function fallback() { const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok(); } catch (e) { b.textContent = 'Select the code and copy'; } ta.remove(); }
+});
+
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) { const nl = on.parentElement, a = on.getBoundingClientRect(), b = nl.getBoundingClientRect(); nl.scrollLeft += a.left - b.left - (b.width - a.width) / 2; } } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+redrawAll();
+changed('init'); dgUpd();
+window.__bnDebug = { M, NOR, DG, AS, LB, query, joint, changed };
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
