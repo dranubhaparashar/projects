@@ -1,0 +1,1663 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive lecture on dynamic Bayesian networks and particle filters: build two-slice DBNs and count their parameters against the equivalent HMM, filter a battery meter that glitches or breaks for good, watch exact inference blow up as state variables become correlated, resample weighted samples with SIR, see likelihood weighting collapse, step a particle filter through propagate, weight and resample on a bimodal benchmark, compare resampling schemes, and track a real waved albatross from noisy GPS fixes.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Dynamic Bayesian Networks &amp; Particle Filters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+/* x120: DBNs & particle filters */
+.plot.herofig { aspect-ratio: 10 / 6.6; cursor: crosshair; }
+.plot.pjmap { aspect-ratio: 1.36 / 1; }
+#hero-cap { min-height: 6.2em; }
+#pf-cap, #rs-offcap, #cn-cap { min-height: 3em; }
+#project pre.code:not(.out) { max-height: 520px; overflow: auto; }
+table.race tr.win td { background: color-mix(in srgb, var(--cC) 12%, transparent); }
+#pj-board td:first-child { white-space: normal; min-width: 180px; }
+.muted { color: var(--muted); }
+.plot.tallish { aspect-ratio: 2.4 / 1; }
+@media (max-width: 560px) { .plot.tallish { aspect-ratio: 1.5 / 1; } .plot.ar-16x10 { aspect-ratio: 1.1 / 1; } .plot.pjmap { aspect-ratio: 1.15 / 1; } .plot.ar-3x1 { aspect-ratio: 1.9 / 1; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">DBNs &amp; particle filters <span>&middot; a cloud of weighted guesses</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#construct">Building a DBN</a>
+      <a href="#battery">Sensor failure</a>
+      <a href="#exact">Exact inference</a>
+      <a href="#sir">SIR</a>
+      <a href="#lw">Likelihood weighting</a>
+      <a href="#pf">Particle filter</a>
+      <a href="#resample">Resampling</a>
+      <a href="#project">Albatross project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Probabilistic models &amp; inference · chapter 6.17 · dynamic Bayesian networks</div>
+      <h1>Dynamic Bayesian Networks &amp; Particle Filters</h1>
+      <div class="sub">Track anything with a cloud of weighted guesses</div>
+      <p class="lead">A dynamic Bayesian network describes a world that changes: one small Bayes net per moment, copied forward in time. Exact inference in it quickly becomes hopeless, so we cheat honestly: keep a few hundred random guesses of the hidden state, move each one the way the world moves, weight it by how well it explains the latest reading, and copy the good ones. That is a particle filter. In the figure, a hidden target only reports its noisy distance to the beacons, and 800 particles (purple) chase it. <strong>Move your pointer or finger over the figure</strong> to steer the target, then switch between one, two and three beacons: the cloud becomes a ring, two blobs, or one.</p>
+      <dl class="facts">
+        <div><dt>The model</dt><dd>A Bayes net per time slice: P(X<sub>t+1</sub> | X<sub>t</sub>) and P(E<sub>t</sub> | X<sub>t</sub>), repeated</dd></div>
+        <div><dt>The trick</dt><dd>Propagate, weight, resample: N samples stand in for the belief state</dd></div>
+        <div><dt>The project</dt><dd>333 GPS fixes of a waved albatross (Movebank, CC0), tracked through a noisy tag</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="plot herofig"><canvas id="hero-cv" aria-label="A particle filter tracking a hidden target from range readings; move the pointer to steer the target"></canvas></div>
+      <div class="btns" style="margin-top:10px; align-items:center">
+        <div class="seg" role="group" aria-label="Number of beacons"><button type="button" data-hb="1">1 beacon</button><button type="button" data-hb="2">2 beacons</button><button type="button" data-hb="3" aria-pressed="true">3 beacons</button></div>
+        <button type="button" class="btn" id="hero-scatter">Scatter the particles</button>
+      </div>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cC)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>9 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#construct"><i>01</i>A Bayes net for every moment</a></li>
+    <li><a href="#battery"><i>02</i>When the battery meter lies</a></li>
+    <li><a href="#exact"><i>03</i>Exact inference hits a wall</a></li>
+    <li><a href="#sir"><i>04</i>Sampling-importance-resampling</a></li>
+    <li><a href="#lw"><i>05</i>Why likelihood weighting dies</a></li>
+    <li><a href="#pf"><i>06</i>Propagate, weight, resample</a></li>
+    <li><a href="#resample"><i>07</i>Bishop&rsquo;s view &amp; how to resample</a></li>
+    <li><a href="#project"><i>08</i>Tracking a waved albatross</a></li>
+    <li><a href="#summary"><i>09</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- CONSTRUCT -->
+<section class="chap" id="construct">
+  <div class="wrap">
+    <div class="tag">AIMA 14.5 &amp; 14.5.1 &middot; constructing DBNs</div>
+    <h2>Building a dynamic Bayesian network</h2>
+    <div class="prose">
+      <p>A <em class="term">dynamic Bayesian network</em> (DBN) is a Bayes net for a process that unfolds in time. Time is cut into <b>slices</b>; each slice holds the same set of variables: hidden state variables X<sub>t</sub> and observed evidence variables E<sub>t</sub>. You never draw the whole, endless network. You specify three things and the rest is copies: the <b>prior</b> P(X<sub>0</sub>), the <b>transition model</b> P(X<sub>t+1</sub> | X<sub>t</sub>), and the <b>sensor model</b> P(E<sub>t</sub> | X<sub>t</sub>). Two assumptions make the copying legal: the process is <em class="term">first-order Markov</em> (the next slice depends only on the current one) and <em class="term">stationary</em> (the same conditional tables apply at every step).</p>
+      <p>The hidden Markov model of the earlier chapters is a DBN with a single discrete state variable and a single evidence variable. The Kalman filter of the previous chapter is a DBN whose variables are all continuous, with linear-Gaussian tables. A DBN can be both at once and more: discrete modes next to continuous positions, several sensors, nonlinear links. Conversely, every DBN with discrete variables <i>can</i> be turned into an HMM, by gluing all its state variables into one &ldquo;mega-variable&rdquo; whose values are all combinations. The catch is size. If each of n Boolean state variables has k parents in the previous slice, the DBN needs n&middot;2<sup>k</sup> numbers for its transition model; the equivalent HMM needs a 2<sup>n</sup> &times; 2<sup>n</sup> matrix. <strong>Pick a preset, then drag n and k</strong> and compare the two counts.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &P(\mathbf X_{0:t}, \mathbf E_{1:t}) = P(\mathbf X_0) \\ &\quad \times \prod_{i=1}^{t} \Big( P(\mathbf X_i \mid \mathbf X_{i-1}) \\ &\qquad\qquad \cdot P(\mathbf E_i \mid \mathbf X_i) \Big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the joint distribution of a whole history is the prior times, for each step, one transition factor and one sensor factor. Because the factors repeat, three small tables define a model of any length.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The joint over states and evidence is the prior times the product of transition and sensor terms.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &P(\mathbf X_{t+1} \mid \mathbf X_t) \\ &\quad = \prod_{j=1}^{n} P\big(X^{j}_{t+1} \mid \mathrm{Pa}(X^{j}_{t+1})\big) \end{aligned} \]</div><div class="read"><b>Read it as:</b> inside the transition model each state variable X<sup>j</sup> has its own small table, conditioned only on its parents Pa(&middot;) (a few variables in slice t, and possibly some in slice t+1). That factorisation is what a DBN has and an HMM throws away.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The transition model is a product of one table per variable, each given its parents.&rdquo;</em></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \underbrace{n \cdot 2^{k}}_{\text{DBN}} \quad\text{versus}\quad \underbrace{2^{n} \times 2^{n}}_{\text{HMM}} \]</div><div class="read"><b>Read it as:</b> for Boolean variables, each table P(X<sup>j</sup><sub>t+1</sub> = true | parents) needs one number per parent combination, 2<sup>k</sup> of them, and there are n tables. The HMM&rsquo;s single state has 2<sup>n</sup> values, so its transition matrix has 2<sup>n</sup> rows and 2<sup>n</sup> columns (each row summing to 1, so 2<sup>n</sup>(2<sup>n</sup> &minus; 1) of them are free).</div><div class="eq-say"><b>Say it</b><em>&ldquo;n times two to the k, against two to the n squared.&rdquo;</em></div><div class="eq-run" id="run-cn"></div></div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="cn-cv" aria-label="Two slices of the chosen dynamic Bayesian network"></canvas></div><figcaption id="cn-cap"></figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Network"><button type="button" data-cn="umb">Umbrella (an HMM)</button><button type="button" data-cn="bat">Battery robot</button><button type="button" data-cn="alb">Albatross tracker</button><button type="button" data-cn="own" aria-pressed="true">Your sparse DBN</button></div>
+        <div class="ctrl"><div class="top"><label for="cn-n">State variables n</label><output id="cn-n-o"></output></div><input type="range" id="cn-n" min="1" max="30" step="1" value="20"></div>
+        <div class="ctrl"><div class="top"><label for="cn-k">Parents per variable k</label><output id="cn-k-o"></output></div><input type="range" id="cn-k" min="1" max="8" step="1" value="3"></div>
+        <div class="stats"><div class="stat"><div class="v" id="cn-d"></div><div class="k">DBN transition numbers</div></div><div class="stat"><div class="v" id="cn-h"></div><div class="k">HMM transition entries</div></div><div class="stat"><div class="v" id="cn-s"></div><div class="k">values of the mega-variable</div></div><div class="stat"><div class="v" id="cn-r"></div><div class="k">HMM / DBN</div></div></div>
+        <p class="note" id="cn-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BATTERY -->
+<section class="chap" id="battery">
+  <div class="wrap">
+    <div class="tag">AIMA 14.5.1 &middot; modelling a sensor that fails</div>
+    <h2>When the battery meter lies</h2>
+    <div class="prose">
+      <p>Real sensors fail, and a DBN is the natural place to say how. Take a robot whose battery charge B<sub>t</sub> runs from 0 to 5 and slowly drains (each step it loses one unit with probability 0.08), read by a meter M<sub>t</sub>. With a plain <b>Gaussian error model</b> (the reading is the charge plus discretised noise of standard deviation 0.7) a single reading of 0 is a disaster: the charge cannot be 4 if the meter says 0, so the belief crashes towards empty, and the robot might abandon its job to recharge.</p>
+      <p>The first fix is a <em class="term">transient failure model</em>: whatever the charge, the meter reads 0 with a small probability &phi;. Now one zero is shrugged off, because &ldquo;a glitch&rdquo; explains it better than &ldquo;the battery just lost four units at once&rdquo;. But a long run of zeros still drags the belief to empty: each new zero is another independent glitch, and a string of glitches becomes less likely than a flat battery. The second fix adds a hidden Boolean state variable, <b>BMBroken</b>, with a <em class="term">persistence arc</em> from one slice to the next: once broken, the meter stays broken and reads 0. After a few zeros, &ldquo;the meter broke&rdquo; becomes the best explanation, and the battery belief simply follows its predicted slow drain. <strong>Lengthen the run of zeros</strong> and watch the three models part ways.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &P(M_t = m \mid B_t = b) \\ &\quad = (1-\phi)\, G(m; b) + \phi\,[m = 0] \end{aligned} \]</div><div class="read"><b>Read it as:</b> the transient failure model. G(m; b) is the discretised Gaussian error model (weights e<sup>&minus;(m&minus;b)&sup2;/(2&middot;0.7&sup2;)</sup> over m = 0&hellip;5, normalised); with probability &phi; the meter glitches and reports 0 instead. &phi; = 0 gives the plain Gaussian model.</div><div class="eq-say"><b>Say it</b><em>&ldquo;One minus phi times the Gaussian, plus phi on a reading of zero.&rdquo;</em></div><div class="eq-run" id="run-bt1"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} P(\mathit{Br}_{t+1} \mid \mathit{Br}_t) &= 1 \\ P(\mathit{Br}_{t+1} \mid \lnot\mathit{Br}_t) &= \beta = 0.002 \\ P(M_t = 0 \mid \mathit{Br}_t) &= 1 \end{aligned} \]</div><div class="read"><b>Read it as:</b> the persistent failure model adds the state variable Br = BMBroken. It almost never breaks (&beta; per step), never repairs itself, and a broken meter always says 0. A working meter follows the transient model above.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Broken stays broken; it breaks with probability beta; a broken meter reads zero.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <figure><div class="plot ar-16x10"><canvas id="bt-cv" aria-label="Expected battery charge under three sensor models, and the probability that the meter is broken"></canvas></div><figcaption><span style="color:var(--qda)">&#9644;</span> Gaussian model &nbsp; <span style="color:var(--cB)">&#9644;</span> transient failure &nbsp; <span style="color:var(--cC)">&#9644;</span> persistent failure: E[B<sub>t</sub> | m<sub>1:t</sub>] &nbsp; <span style="color:var(--ink)">- -</span> true charge &nbsp; dots: meter readings &nbsp; shaded: P(BMBroken<sub>t</sub> | m<sub>1:t</sub>), right axis.</figcaption></figure>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="bt-z">Zeros start at step</label><output id="bt-z-o"></output></div><input type="range" id="bt-z" min="4" max="38" step="1" value="20"></div>
+        <div class="ctrl"><div class="top"><label for="bt-l">Number of zero readings</label><output id="bt-l-o"></output></div><input type="range" id="bt-l" min="0" max="37" step="1" value="1"></div>
+        <div class="ctrl"><div class="top"><label for="bt-p">Glitch probability &phi;</label><output id="bt-p-o"></output></div><input type="range" id="bt-p" min="0.01" max="0.2" step="0.01" value="0.05"></div>
+        <div class="stats"><div class="stat"><div class="v" id="bt-g"></div><div class="k">Gaussian: E[B] after the zeros</div></div><div class="stat"><div class="v" id="bt-t"></div><div class="k">transient: E[B] after the zeros</div></div><div class="stat"><div class="v" id="bt-q"></div><div class="k">persistent: E[B] after the zeros</div></div><div class="stat"><div class="v" id="bt-b"></div><div class="k">P(meter broken) then</div></div></div>
+        <p class="note" id="bt-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- EXACT -->
+<section class="chap" id="exact">
+  <div class="wrap">
+    <div class="tag">AIMA 14.5.2 &middot; exact inference in DBNs</div>
+    <h2>Exact inference: affordable in time, not in size</h2>
+    <div class="prose">
+      <p>A DBN is a Bayes net, so in principle any exact algorithm works: <em class="term">unroll</em> the network for as many slices as you have evidence and run variable elimination. Done naively, the cost of each new query grows with t. The fix is the one we used for HMMs: sum out slice t as soon as slice t+1 has been added, keeping just two slices in memory. This <em class="term">rollup</em> filtering is exactly the forward recursion, and it costs the same at every step.</p>
+      <p>The trouble is what the forward message is <i>about</i>: the joint distribution of <b>all</b> n state variables, d<sup>n</sup> numbers for variables with d values. With good elimination ordering each update costs about d<sup>n+k</sup> operations rather than the d<sup>2n</sup> of a full transition matrix, but it is still exponential in n. And you cannot escape by storing one marginal per variable: even when each variable talks only to its neighbours, a few steps of shared history make them all <b>correlated</b>, so the belief state no longer factorises. Here n machines stand in a line; a fault in one makes its right-hand neighbour more likely to fail, and each machine may have a noisy warning light. The page filters exactly over all 2<sup>n</sup> joint states and, beside it, with a <em class="term">fully factored</em> filter that keeps only n marginals. <strong>Switch to &ldquo;light on the last machine only&rdquo;</strong> and watch the correlation, and the factored filter&rsquo;s error, grow.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\mathbf f_{1:t+1}(\mathbf x_{t+1}) \\ &\quad = \alpha\, P(\mathbf e_{t+1} \mid \mathbf x_{t+1}) \\ &\quad \times \sum_{\mathbf x_t} P(\mathbf x_{t+1} \mid \mathbf x_t)\, \mathbf f_{1:t}(\mathbf x_t) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the forward message f<sub>1:t</sub> = P(X<sub>t</sub> | e<sub>1:t</sub>) is pushed through the transition model (sum out the old slice), multiplied by the new evidence, and renormalised (&alpha;). The sum runs over every joint assignment of the n state variables.</div><div class="eq-say"><b>Say it</b><em>&ldquo;New belief is alpha times the evidence likelihood times the old belief pushed through the transition model.&rdquo;</em></div><div class="eq-run" id="run-ex1"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &I(X^1, \dots, X^n) \\ &\quad = \sum_{j=1}^{n} H(X^j) - H(X^1, \dots, X^n) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the multi-information, in bits, of the belief state: how much the sum of the separate uncertainties exceeds the joint uncertainty. It is 0 exactly when the belief is a product of its marginals, the only case in which n numbers would be enough.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Sum of the marginal entropies minus the joint entropy.&rdquo;</em></div><div class="eq-run" id="run-ex2"></div></div>
+    </div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-3x1 tallish"><canvas id="ex-heat" aria-label="Probability of a fault for each machine over time: exact filter above, factored filter below"></canvas></div><figcaption>Each cell is P(machine faulty | lights so far), white = 0, purple = 1. Top block: exact filter over all joint states; bottom block: fully factored filter. Small dots mark machines that really are faulty; the ring marks the step you are inspecting.</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="ex-mi" aria-label="Multi-information of the exact belief state over time"></canvas></div><figcaption><span style="color:var(--cC)">&#9644;</span> multi-information of the exact belief (bits) &nbsp; <span style="color:var(--cB)">&#9644;</span> largest error of the factored filter&rsquo;s marginals, per step.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="seg" role="group" aria-label="Sensors"><button type="button" data-exs="all" aria-pressed="true">A light on every machine</button><button type="button" data-exs="last">Light on the last machine only</button></div>
+        <div class="ctrl"><div class="top"><label for="ex-n">Machines n</label><output id="ex-n-o"></output></div><input type="range" id="ex-n" min="2" max="14" step="1" value="8"></div>
+        <div class="ctrl"><div class="top"><label for="ex-t">Inspect step t</label><output id="ex-t-o"></output></div><input type="range" id="ex-t" min="1" max="30" step="1" value="20"></div>
+        <div class="btns"><button type="button" class="btn" id="ex-new">New run</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="ex-s"></div><div class="k">numbers in the exact belief state</div></div><div class="stat"><div class="v" id="ex-o"></div><div class="k">multiply-adds per update</div></div><div class="stat"><div class="v" id="ex-i"></div><div class="k">multi-information at t (bits)</div></div><div class="stat"><div class="v" id="ex-e"></div><div class="k">factored filter: worst marginal error at t</div></div></div>
+        <p class="note" id="ex-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SIR -->
+<section class="chap" id="sir">
+  <div class="wrap">
+    <div class="tag">PRML 11.1.5 &middot; sampling-importance-resampling</div>
+    <h2>Sampling-importance-resampling</h2>
+    <div class="prose">
+      <p>Approximate inference in DBNs is built from one sampling move, so we take it apart first. You want samples from a density p(z) that you can only evaluate up to a constant, p&#771;(z). <a href="../monte-carlo-basics/">Importance sampling</a> draws L samples from an easy proposal q(z) and gives each a weight p&#771;/q. Expectations then come out as weighted averages, but you are left with a <i>weighted</i> sample. Rejection sampling would give an unweighted one, but it needs a constant k with k&middot;q(z) &ge; p&#771;(z) everywhere, which is often unknown or huge.</p>
+      <p><em class="term">Sampling-importance-resampling</em> (SIR) gets an unweighted sample without k. Stage one: draw z<sub>1</sub>, &hellip;, z<sub>L</sub> from q and compute normalised weights w<sub>l</sub>. Stage two: draw L new values <b>from the set {z<sub>1</sub>, &hellip;, z<sub>L</sub>} itself</b>, picking z<sub>l</sub> with probability w<sub>l</sub>. Good samples get copied, poor ones vanish. The result follows p only approximately, but more and more exactly as L grows. <strong>Move the proposal away from one of the modes</strong>, and notice that the effective sample size can look healthy while the answer is badly wrong.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ w_l = \frac{\tilde p(z_l) / q(z_l)}{\sum_{m=1}^{L} \tilde p(z_m) / q(z_m)} \]</div><div class="read"><b>Read it as:</b> each sample&rsquo;s weight is how much more the target likes it than the proposal did, divided by the total so the weights sum to 1. The unknown normalising constant of p cancels top and bottom.</div><div class="eq-say"><b>Say it</b><em>&ldquo;w-l is p-tilde over q at z-l, normalised over all L samples.&rdquo;</em></div><div class="eq-run" id="run-sr1"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} p(z \le a) &= \sum_{l:\, z_l \le a} w_l \\ &= \frac{\sum_l I(z_l \le a)\, \tilde p(z_l)/q(z_l)}{\sum_l \tilde p(z_l)/q(z_l)} \\ &\xrightarrow{L \to \infty} \frac{\int I(z \le a)\, \tilde p(z)\, dz}{\int \tilde p(z)\, dz} \\ &= \int I(z \le a)\, p(z)\, dz \end{aligned} \]</div><div class="read"><b>Read it as:</b> why SIR works. After resampling, the chance that a value is at most a is the total weight of the samples at most a. Each sum over the samples is an average under q, so for large L it becomes an integral against q, the q cancels, and what is left is the true cumulative distribution of p.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The resampled CDF is a ratio of two importance-sampling averages, which tends to the CDF of p.&rdquo;</em></div><div class="eq-run" id="run-sr2"></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \mathbb E[f(z)] &\approx \sum_{l=1}^{L} w_l\, f(z_l) \\ \mathrm{ESS} &= \frac{1}{\sum_{l} w_l^{2}} \end{aligned} \]</div><div class="read"><b>Read it as:</b> for moments you do not need stage two at all: use the weights directly (resampling only adds noise). The effective sample size ESS says how many equally weighted samples the weighted set is worth: L when all weights are equal, 1 when one sample has all the weight. It measures weight balance, not coverage: a proposal that misses a mode entirely can still have a high ESS.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Expectations are weighted averages; ESS is one over the sum of squared weights.&rdquo;</em></div><div class="eq-run" id="run-sr3"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-3x1 tallish"><canvas id="sr-cv" aria-label="Target density, proposal and weighted samples"></canvas></div><figcaption><span style="color:var(--ink)">&#9644;</span> target p(z) &nbsp; <span style="color:var(--cB)">- -</span> proposal q(z) &nbsp; <span style="color:var(--cC)">|</span> samples, stem height = weight (largest = full height).</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1 tallish"><canvas id="sr-h" aria-label="Histogram of the resampled values against the target"></canvas></div><figcaption><span style="color:var(--cC)">&#9646;</span> histogram of the L resampled values &nbsp; <span style="color:var(--ink)">&#9644;</span> target density.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="sr-l">Samples L</label><output id="sr-l-o"></output></div><input type="range" id="sr-l" min="1" max="4" step="0.05" value="3"></div>
+        <div class="ctrl"><div class="top"><label for="sr-m">Proposal mean</label><output id="sr-m-o"></output></div><input type="range" id="sr-m" min="-3" max="3" step="0.1" value="0"></div>
+        <div class="ctrl"><div class="top"><label for="sr-s">Proposal spread &sigma;<sub>q</sub></label><output id="sr-s-o"></output></div><input type="range" id="sr-s" min="0.3" max="4" step="0.05" value="2"></div>
+        <div class="btns"><button type="button" class="btn" id="sr-new">New draw</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="sr-e"></div><div class="k">effective sample size</div></div><div class="stat"><div class="v" id="sr-d"></div><div class="k">distinct values after resampling</div></div><div class="stat"><div class="v" id="sr-mu"></div><div class="k">weighted mean (true &minus;0.22)</div></div><div class="stat"><div class="v" id="sr-tv"></div><div class="k">histogram vs target: TV distance</div></div></div>
+        <p class="note" id="sr-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- LIKELIHOOD WEIGHTING -->
+<section class="chap" id="lw">
+  <div class="wrap">
+    <div class="tag">AIMA 14.5.3 &middot; approximate inference, part 1</div>
+    <h2>Why likelihood weighting dies in a DBN</h2>
+    <div class="prose">
+      <p>The obvious approximate method for a DBN is <b>likelihood weighting</b> on the unrolled network. Each sample runs forward slice by slice: its state is drawn from the transition model, and its weight is multiplied by the probability of the evidence actually seen. Run all N samples together and this is even an online algorithm with constant work per step. It fails anyway, for a simple reason: <b>the samples never look at the evidence</b>. They wander wherever the transition model takes them, the evidence only reweights them, and after a few dozen steps almost every sample has drifted somewhere the evidence rules out. Nearly all the weight sits on one or two samples, and the number of samples needed for a fixed accuracy grows exponentially with t.</p>
+      <p>The cure has two parts. First, let the set of samples itself <i>be</i> the approximation to the forward message, so each step starts from where the samples are now, not from the prior. Second, keep the samples where the probability is: replace the weighted set by an unweighted one in which samples are copied in proportion to their weights. That is SIR applied at every step, and it is the particle filter. The test bed is a random walk read through Gaussian noise, where the <a href="../kalman-filter/">Kalman filter</a> gives the exact posterior to compare against. <strong>Raise N</strong>, and see how little it helps likelihood weighting.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} x^{(i)}_t &\sim P(X_t \mid x^{(i)}_{t-1}) \\ w^{(i)}_t &= w^{(i)}_{t-1}\, P(e_t \mid x^{(i)}_t) \\ &= \prod_{s=1}^{t} P(e_s \mid x^{(i)}_s) \end{aligned} \]</div><div class="read"><b>Read it as:</b> likelihood weighting in a DBN. Sample i&rsquo;s state follows the transition model alone; its weight is the product of the evidence likelihoods along its whole path. Products of many factors spread over many orders of magnitude, which is why one path ends up with almost all the weight.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Sample the state from the transition model; multiply the weight by the evidence likelihood.&rdquo;</em></div><div class="eq-run" id="run-lw1"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} x_t &= x_{t-1} + v_t, & v_t &\sim \mathcal N(0, 1) \\ e_t &= x_t + w_t, & w_t &\sim \mathcal N(0, r^2) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the test model: a random walk with unit steps, starting from x<sub>0</sub> ~ N(0, 1), observed with noise of standard deviation r. Because everything is linear and Gaussian, the Kalman filter computes the exact posterior mean and variance at every step.</div><div class="eq-say"><b>Say it</b><em>&ldquo;x-t is x-t-minus-one plus unit noise; e-t is x-t plus noise of size r.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-3x1 tallish"><canvas id="lw-cv" aria-label="True state, observations, Kalman posterior and the two sampling estimates over time"></canvas></div><figcaption><span style="color:var(--ink)">&#9644;</span> true state &nbsp; <span style="color:var(--muted)">&#9679;</span> observations &nbsp; <span style="color:var(--cA)">&#9646;</span> Kalman posterior &plusmn;2 sd &nbsp; <span style="color:var(--cB)">&#9644;</span> likelihood weighting &nbsp; <span style="color:var(--cC)">&#9644;</span> particle filter (posterior means).</figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="lw-ess" aria-label="Effective sample size over time for both methods, log scale"></canvas></div><figcaption>Effective sample size as a share of N, log scale: <span style="color:var(--cB)">&#9644;</span> likelihood weighting &nbsp; <span style="color:var(--cC)">&#9644;</span> particle filter (measured after weighting, before resampling).</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="lw-n">Samples N</label><output id="lw-n-o"></output></div><input type="range" id="lw-n" min="1" max="3.7" step="0.05" value="2.5"></div>
+        <div class="ctrl"><div class="top"><label for="lw-r">Sensor noise r</label><output id="lw-r-o"></output></div><input type="range" id="lw-r" min="0.2" max="3" step="0.1" value="0.5"></div>
+        <div class="btns"><button type="button" class="btn" id="lw-new">New run</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="lw-e1"></div><div class="k">likelihood weighting: ESS at t = 50</div></div><div class="stat"><div class="v" id="lw-e2"></div><div class="k">particle filter: ESS at t = 50</div></div><div class="stat"><div class="v" id="lw-g1"></div><div class="k">LW: RMS gap to the Kalman mean</div></div><div class="stat"><div class="v" id="lw-g2"></div><div class="k">PF: RMS gap to the Kalman mean</div></div></div>
+        <p class="note" id="lw-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PARTICLE FILTER -->
+<section class="chap" id="pf">
+  <div class="wrap">
+    <div class="tag">AIMA 14.5.3 &middot; particle filtering</div>
+    <h2>The particle filter, one phase at a time</h2>
+    <div class="prose">
+      <p>A <em class="term">particle filter</em> keeps N samples, the particles, of the current state. It starts with N draws from the prior P(X<sub>0</sub>) and repeats three moves for every new piece of evidence. <b>Propagate</b>: move each particle by sampling its next state from the transition model. <b>Weight</b>: give each particle the likelihood of the new evidence in its state. <b>Resample</b>: draw N particles from the weighted set, each picked with probability proportional to its weight, and forget the weights. Every step costs the same, linear in N, however long the run.</p>
+      <p>Is the cloud really the posterior? Suppose the N particles are a fair sample of P(X<sub>t</sub> | e<sub>1:t</sub>). Propagating them gives a fair sample of the one-step prediction; weighting by the evidence likelihood and resampling turns that into a sample of P(X<sub>t+1</sub> | e<sub>1:t+1</sub>), by exactly the forward equation of the exact-inference section. So the filter is <em class="term">consistent</em>: as N &rarr; &infin; it gives the correct posterior. The test is a classic nonlinear benchmark: the sensor reports x&sup2;/20, so it cannot tell +x from &minus;x and the posterior often has two peaks, which a Kalman filter cannot represent. The curve is the exact posterior, computed on a grid of 601 points. <strong>Step through one phase at a time</strong>, then press play.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\textbf{propagate:} \\ &\quad x^{(i)}_{t+1} \sim P(X_{t+1} \mid x^{(i)}_{t}) \\ &\textbf{weight:} \\ &\quad w^{(i)} = P(e_{t+1} \mid x^{(i)}_{t+1}) \\ &\textbf{resample:} \\ &\quad \text{draw } N \text{ times; } \Pr(i) \propto w^{(i)} \end{aligned} \]</div><div class="read"><b>Read it as:</b> the whole algorithm. With resampling at every step this is the <em class="term">bootstrap filter</em>: the proposal is the transition model and the weight is just the evidence likelihood.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Move each particle with the transition model, weight it by the evidence, resample in proportion to weight.&rdquo;</em></div><div class="eq-run" id="run-pf1"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &\frac{N(x_{t+1} \mid e_{1:t+1})}{N} \\ &\quad \approx \alpha\, P(e_{t+1} \mid x_{t+1}) \\ &\quad \times \sum_{x_t} P(x_{t+1} \mid x_t)\, P(x_t \mid e_{1:t}) \\ &\quad = P(x_{t+1} \mid e_{1:t+1}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the consistency argument. N(x | e) counts particles in state x. After propagation the expected count at x<sub>t+1</sub> is N times the one-step prediction; weighting multiplies it by the evidence likelihood; resampling normalises. The result is the forward update, so the share of particles in each state tracks the true posterior.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The share of particles in a state approximates alpha times evidence likelihood times predicted probability, which is the filtered posterior.&rdquo;</em></div></div>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} x_t &= \tfrac12 x_{t-1} + \frac{25\, x_{t-1}}{1 + x_{t-1}^2} \\ &\quad + 8\cos(1.2\,t) + v_t \\ e_t &= x_t^2 / 20 + w_t \\ v_t &\sim \mathcal N(0, 10), \quad w_t \sim \mathcal N(0, 1) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the benchmark (Gordon, Salmond &amp; Smith, 1993), with x<sub>0</sub> ~ N(0, 5). The state is pushed around by a strongly nonlinear map and a periodic forcing; the sensor squares it, so a reading of 5 says &ldquo;x is near +10 or near &minus;10&rdquo;. The variances here are 10 and 1.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Half x plus twenty-five x over one plus x squared plus eight cos one-point-two t; the sensor sees x squared over twenty.&rdquo;</em></div><div class="eq-run" id="run-pf2"></div></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10"><canvas id="pf-cv" aria-label="Particles and exact density for the current step"></canvas></div><figcaption id="pf-cap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1"><canvas id="pf-fan" aria-label="Particle clouds over time, with the true state"></canvas></div><figcaption>Every step so far: <span style="color:var(--cC)">&#9679;</span> particles after resampling &nbsp; <span style="color:var(--ink)">&#9644;</span> true state &nbsp; <span style="color:var(--cA)">- -</span> exact posterior mean.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn primary" id="pf-phase">Next phase</button><button type="button" class="btn" id="pf-step">Whole step</button><button type="button" class="btn" id="pf-play">Play</button><button type="button" class="btn" id="pf-reset">Reset</button></div>
+        <div class="ctrl"><div class="top"><label for="pf-n">Particles N</label><output id="pf-n-o"></output></div><input type="range" id="pf-n" min="20" max="2000" step="20" value="200"></div>
+        <div class="btns"><button type="button" class="btn" id="pf-new">New sequence</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pf-t"></div><div class="k">step &middot; phase</div></div><div class="stat"><div class="v" id="pf-e"></div><div class="k">effective sample size</div></div><div class="stat"><div class="v" id="pf-p"></div><div class="k">P(x &gt; 0): particles / exact</div></div><div class="stat"><div class="v" id="pf-m"></div><div class="k">mean: particles / exact</div></div></div>
+        <p class="note" id="pf-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- RESAMPLING / PRML VIEW -->
+<section class="chap" id="resample">
+  <div class="wrap">
+    <div class="tag">PRML 13.3.4 &middot; particle filters, in Bishop&rsquo;s notation</div>
+    <h2>The same filter as SIR, and how to resample</h2>
+    <div class="prose">
+      <p>Bishop derives the particle filter for a general state-space model with hidden states z<sub>n</sub> and observations x<sub>n</sub>, writing X<sub>n</sub> for all observations up to n. Suppose you hold L samples z<sub>n</sub><sup>(l)</sup> drawn from the <i>predictive</i> distribution p(z<sub>n</sub> | X<sub>n&minus;1</sub>). Bayes&rsquo; rule says the posterior is the predictive times the likelihood p(x<sub>n</sub> | z<sub>n</sub>), renormalised, so this is exactly the SIR situation: proposal = predictive, unnormalised target = predictive &times; likelihood, and the importance weights reduce to the normalised likelihoods. The weighted samples then define the next predictive distribution as a <b>mixture</b>: one copy of the transition density per particle, mixed with the particle&rsquo;s weight. Drawing from that mixture means choosing a component by weight (resampling) and then sampling the transition (propagation). Same algorithm, derived in two lines.</p>
+      <p>Two practical choices remain. <b>When</b> to resample: every resampling throws information away (copies are not new samples), so many filters resample only when the effective sample size falls below a threshold, such as N/2. <b>How</b>: drawing N independent picks (<em class="term">multinomial</em>) is the noisiest option. <em class="term">Residual</em> resampling first keeps &lfloor;N w<sub>i</sub>&rfloor; copies of each particle deterministically and draws only the remainder at random. <em class="term">Systematic</em> resampling uses one random offset and N evenly spaced pointers, so each particle gets either &lfloor;N w<sub>i</sub>&rfloor; or &lceil;N w<sub>i</sub>&rceil; copies. <strong>Draw new weights</strong> to compare the offspring counts, then vary N and the threshold to see the effect on accuracy, measured against the exact grid filter.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbb E[f(\mathbf z_n) \mid \mathbf X_n] &\approx \sum_{l=1}^{L} w_n^{(l)} f(\mathbf z_n^{(l)}) \\ w_n^{(l)} &= \frac{p(\mathbf x_n \mid \mathbf z_n^{(l)})}{\sum_{m=1}^{L} p(\mathbf x_n \mid \mathbf z_n^{(m)})} \end{aligned} \]</div><div class="read"><b>Read it as:</b> with samples from the predictive distribution, posterior expectations are weighted averages, and the weights are the likelihoods of the new observation, normalised. This is the SIR weight with q = predictive and p&#771; = predictive &times; likelihood: the predictive cancels.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Posterior expectations are sums of w-n-l times f; w-n-l is the normalised likelihood of x-n under sample l.&rdquo;</em></div><div class="eq-run" id="run-rs1"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &p(\mathbf z_{n+1} \mid \mathbf X_n) \\ &\; = \!\int\! p(\mathbf z_{n+1} \mid \mathbf z_n)\, p(\mathbf z_n \mid \mathbf X_n)\, d\mathbf z_n \\ &\; \approx \sum_{l=1}^{L} w_n^{(l)}\, p(\mathbf z_{n+1} \mid \mathbf z_n^{(l)}) \end{aligned} \]</div><div class="read"><b>Read it as:</b> replacing the posterior by its weighted samples turns the integral into a mixture of L transition densities. Sampling it (pick l with probability w<sub>n</sub><sup>(l)</sup>, then sample z<sub>n+1</sub> from that component) gives the samples for the next step.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The next predictive is a mixture: weight w-n-l on the transition density from each sample.&rdquo;</em></div></div>
+    </div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-3x1 tallish"><canvas id="rs-off" aria-label="Offspring counts of twelve particles under three resampling schemes"></canvas></div><figcaption id="rs-offcap"></figcaption></figure>
+        <figure style="margin-top:12px"><div class="plot ar-3x1 tallish"><canvas id="rs-cv" aria-label="Average gap between particle and exact posterior means for three resampling schemes"></canvas></div><figcaption>Average |particle mean &minus; exact mean| over the 50 steps of the benchmark sequence, mean of 20 runs, bars &plusmn;1 standard error. Same observations for all runs; only the filter&rsquo;s random numbers change.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="btns"><button type="button" class="btn" id="rs-new">New weights</button></div>
+        <div class="ctrl"><div class="top"><label for="rs-n">Particles N</label><output id="rs-n-o"></output></div><input type="range" id="rs-n" min="50" max="1000" step="50" value="300"></div>
+        <div class="ctrl"><div class="top"><label for="rs-th">Resample when ESS &lt; threshold &times; N</label><output id="rs-th-o"></output></div><input type="range" id="rs-th" min="0.1" max="1" step="0.05" value="1"></div>
+        <div class="stats"><div class="stat"><div class="v" id="rs-a"></div><div class="k">multinomial: mean gap</div></div><div class="stat"><div class="v" id="rs-b"></div><div class="k">residual: mean gap</div></div><div class="stat"><div class="v" id="rs-c"></div><div class="k">systematic: mean gap</div></div><div class="stat"><div class="v" id="rs-r"></div><div class="k">resampling steps per run (of 50)</div></div></div>
+        <p class="note" id="rs-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: tracking a waved albatross through a cheap, noisy tag</h2>
+    <div class="prose">
+      <p>The data are real GPS fixes from the Movebank study <b>&ldquo;Galapagos Albatrosses&rdquo;</b> (Cruz, Proa&ntilde;o, Anderson, Huyvaert &amp; Wikelski, 2013; Movebank Data Repository, <a href="https://doi.org/10.5441/001/1.3hp3s250" rel="noopener">doi:10.5441/001/1.3hp3s250</a>, licensed <b>CC0 1.0</b>; described by Dodge et al., 2013). Tags recorded a fix every 90 minutes. We use one foraging trip of the bird with tag 147 (animal ID 4262-84830876, a waved albatross, <i>Phoebastria irrorata</i>, deployed at Punta Suarez according to the study&rsquo;s reference data): 333 fixes from 12 June to 3 July 2008, out to 1,479 km from the colony and back. Positions are converted to kilometres east and north of the colony. This page embeds that extract of the CC0 data.</p>
+      <p>The GPS fixes are accurate to a few metres, so they serve as <b>ground truth</b>. To give the filter something to do, the page <b>simulates a cheaper tag</b> on top of them: each fix is transmitted only with probability p, and each transmitted fix gets a random error, usually small (&sigma; km) but sometimes, with probability &epsilon;, a wild outlier (&sigma; = 50 km). The filter sees only those degraded fixes and must reconstruct the whole track, every 90 minutes, including the gaps. Its model is the DBN drawn in the first section: a hidden behaviour mode (resting on the water or travelling), a velocity, a position, a hidden &ldquo;outlier&rdquo; switch, and the fix. A baseline Kalman filter with a constant-velocity model sees the same fixes; to be generous, its noise level q is chosen <b>in hindsight</b>, by trying eleven values and keeping the one with the smallest error against the truth.</p>
+    </div>
+    <div class="two">
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} \mathbf v_{t} &= \begin{cases} 0.2\,\mathbf v_{t-1} + 1.5\,\boldsymbol\xi & \text{rest} \\ 30\,\boldsymbol\xi & \text{take-off} \\ 0.9\,\mathbf v_{t-1} + 10\,\boldsymbol\xi & \text{travel} \end{cases} \\ \mathbf p_t &= \mathbf p_{t-1} + \mathbf v_t\, \Delta t \end{aligned} \]</div><div class="read"><b>Read it as:</b> the transition model, velocities in km/h and &Delta;t the real time between fixes (about 1.5 h). &xi; is a pair of independent standard normal draws. The mode flips with probability 0.1 per step. Resting birds drift slowly; a bird that has just switched to travelling gets a fresh random heading and speed; a travelling bird keeps most of its velocity. These numbers were set by hand from the speeds in the track and a few trial runs, not fitted.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Velocity decays and jitters by mode; position adds velocity times delta-t.&rdquo;</em></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ \begin{aligned} &p(\mathbf y_t \mid \mathbf p_t) \\ &\; = (1 - \epsilon)\, \mathcal N(\mathbf y_t; \mathbf p_t, \sigma^2 I) \\ &\; + \epsilon\, \mathcal N(\mathbf y_t; \mathbf p_t, 50^2 I) \end{aligned} \]</div><div class="read"><b>Read it as:</b> the sensor model, with the hidden outlier switch summed out. A fix far from a particle is not fatal to it, because the wide component can explain it. The filter is told the tag&rsquo;s true &sigma; and &epsilon;. The posterior chance that a fix is an outlier is the weighted share of the wide component.</div><div class="eq-say"><b>Say it</b><em>&ldquo;One minus epsilon times a tight Gaussian, plus epsilon times a wide one.&rdquo;</em></div><div class="eq-run" id="run-pj"></div></div>
+    </div>
+
+    <h3>1 &middot; Degrade the tag, then filter it</h3>
+    <div class="lab">
+      <div>
+        <figure><div class="plot pjmap"><canvas id="pj-map" aria-label="The albatross trip: true GPS track, noisy fixes, particle-filter and Kalman estimates, and the particle cloud at the chosen fix"></canvas></div><figcaption><span style="color:var(--ink)">&#9644;</span> GPS truth &nbsp; <span style="color:var(--muted)">&#9679;</span> fixes the cheap tag sent (<span style="color:var(--qda)">&#9675;</span> ringed: the filter thinks it is an outlier) &nbsp; <span style="color:var(--cC)">&#9644;</span> particle filter &nbsp; <span style="color:var(--cB)">- -</span> Kalman &nbsp; purple cloud: particles at the chosen fix. Axes in km from the colony.</figcaption></figure>
+      </div>
+      <div class="panel"><div class="grp">
+        <div class="ctrl"><div class="top"><label for="pj-p">Fixes transmitted p</label><output id="pj-p-o"></output></div><input type="range" id="pj-p" min="0.1" max="1" step="0.05" value="0.5"></div>
+        <div class="ctrl"><div class="top"><label for="pj-s">Typical error &sigma; (km)</label><output id="pj-s-o"></output></div><input type="range" id="pj-s" min="1" max="20" step="1" value="5"></div>
+        <div class="ctrl"><div class="top"><label for="pj-e">Outlier rate &epsilon;</label><output id="pj-e-o"></output></div><input type="range" id="pj-e" min="0.01" max="0.3" step="0.01" value="0.1"></div>
+        <div class="ctrl"><div class="top"><label for="pj-n">Particles N</label><output id="pj-n-o"></output></div><input type="range" id="pj-n" min="100" max="5000" step="100" value="1000"></div>
+        <div class="ctrl"><div class="top"><label for="pj-k">Show the cloud at fix</label><output id="pj-k-o"></output></div><input type="range" id="pj-k" min="1" max="332" step="1" value="30"></div>
+        <div class="btns"><button type="button" class="btn" id="pj-tag">New tag noise</button><button type="button" class="btn" id="pj-def">Defaults</button></div>
+        <div class="stats"><div class="stat"><div class="v" id="pj-r1"></div><div class="k">particle filter: median / RMS error (km)</div></div><div class="stat"><div class="v" id="pj-r2"></div><div class="k">Kalman (tuned in hindsight): median / RMS</div></div><div class="stat"><div class="v" id="pj-r3"></div><div class="k">outliers flagged / false alarms</div></div><div class="stat"><div class="v" id="pj-r4"></div><div class="k">behaviour mode agrees with the GPS</div></div></div>
+        <p class="note" id="pj-say"></p>
+      </div></div>
+    </div>
+    <div class="two block">
+      <figure><div class="plot ar-3x1 tallish"><canvas id="pj-err" aria-label="Error over time for both filters"></canvas></div><figcaption>Error against the GPS truth at every fix (km, log scale): <span style="color:var(--cC)">&#9644;</span> particle filter &nbsp; <span style="color:var(--cB)">&#9644;</span> Kalman. Grey ticks along the bottom: fixes the tag sent.</figcaption></figure>
+      <figure><div class="plot ar-3x1 tallish"><canvas id="pj-mode" aria-label="Posterior probability of travelling against the true speed"></canvas></div><figcaption><span style="color:var(--cC)">&#9644;</span> P(travelling | fixes so far) from the particles &nbsp; shaded: steps the GPS track covers faster than 10 km/h. The filter never sees the GPS speeds.</figcaption></figure>
+    </div>
+
+    <h3>2 &middot; The scoreboard</h3>
+    <p class="note" style="max-width:72ch">For the tag settings above, each particle count is run with the filter&rsquo;s seed 11 (the run that is also printed by the Python script at the defaults) and with seeds 11 to 15, to show how much a single run varies.</p>
+    <div class="tbl-wrap block"><table class="hand race" id="pj-board"></table></div>
+    <p class="note block" style="max-width:72ch" id="pj-bsay"></p>
+
+    <h3>The same experiment in Python</h3>
+    <p class="note" style="max-width:72ch">This script reproduces the project at the default settings with the same random-number generator (mulberry32) and the same order of random draws as the page, in plain Python so that every floating-point operation happens in the same order. Its numbers should match the page&rsquo;s defaults digit for digit.</p>
+<pre class="code"><code>import json, sys, math, time
+S = sys.argv[1] if len(sys.argv) > 1 else "./"
+trip = json.load(open(S + "x120-trip.json"))           # 333 GPS fixes of one waved albatross trip (Movebank, CC0)
+T = len(trip["t"]); TX, TY, TT = trip["x"], trip["y"], trip["t"]
+M32 = 0xFFFFFFFF
+def rng(a):                                             # mulberry32, the generator the page uses
+    st = [a &amp; M32]
+    def r():
+        st[0] = (st[0] + 0x6D2B79F5) &amp; M32; a = st[0]
+        t = ((a ^ (a >> 15)) * (1 | a)) &amp; M32
+        t = ((t + (((t ^ (t >> 7)) * (61 | t)) &amp; M32)) &amp; M32) ^ t
+        return ((t ^ (t >> 14)) &amp; M32) / 4294967296
+    return r
+def gauss(r):
+    u = 0.0
+    while u == 0.0: u = r()
+    return math.sqrt(-2 * math.log(u)) * math.cos(2 * math.pi * r())
+def exp_(v): return math.inf if v > 709 else math.exp(v)
+def log_(v): return -math.inf if v == 0 else math.log(v)
+
+def tag_sim(seed, p_obs, sig, eps, sig_o):              # a cheaper, noisier tag: drop fixes, add errors
+    r = rng(seed); seen, out, ox, oy = [0] * T, [0] * T, [0.0] * T, [0.0] * T
+    for k in range(1, T):
+        u1, u2 = r(), r(); g1 = gauss(r); g2 = gauss(r)
+        seen[k] = 1 if u1 &lt; p_obs else 0; out[k] = 1 if u2 &lt; eps else 0
+        s = sig_o if out[k] else sig; ox[k] = TX[k] + s * g1; oy[k] = TY[k] + s * g2
+    return seen, out, ox, oy
+
+B = dict(pSw=0.1, aT=0.9, sT=10, sJ=30, aR=0.2, sR=1.5, thr=0.5)
+def systematic(w, r):
+    N = len(w); u0 = r() / N; j = 0; c = w[0]; out = [0] * N
+    for i in range(N):
+        u = u0 + i / N
+        while u > c and j &lt; N - 1: j += 1; c += w[j]
+        out[i] = j
+    return out
+
+def bird_pf(obs, N, seed, sig, eps, sig_o):
+    seen, _, ox, oy = obs; r = rng(seed)
+    x = [TX[0]] * N; y = [TY[0]] * N; vx = [0.0] * N; vy = [0.0] * N; m = [0] * N; w = [1 / N] * N
+    la = math.log((1 - eps) / (2 * math.pi * sig * sig)); lb = math.log(eps / (2 * math.pi * sig_o * sig_o))
+    ia = 1 / (2 * sig * sig); ib = 1 / (2 * sig_o * sig_o)
+    ex, ey, pT, pO, nres = [TX[0]], [TY[0]], [0.0], [math.nan], 0
+    for k in range(1, T):
+        dt = TT[k] - TT[k - 1]
+        for i in range(N):                              # 1. propagate through the transition model
+            was = m[i]
+            if r() &lt; B["pSw"]: m[i] = 1 - m[i]
+            g1 = gauss(r); g2 = gauss(r)
+            if m[i] and not was: vx[i] = B["sJ"] * g1; vy[i] = B["sJ"] * g2
+            elif m[i]: vx[i] = B["aT"] * vx[i] + B["sT"] * g1; vy[i] = B["aT"] * vy[i] + B["sT"] * g2
+            else: vx[i] = B["aR"] * vx[i] + B["sR"] * g1; vy[i] = B["aR"] * vy[i] + B["sR"] * g2
+            x[i] += vx[i] * dt; y[i] += vy[i] * dt
+        if seen[k]:                                     # 2. weight by the mixture sensor model
+            lw = [0.0] * N; rsp = [0.0] * N; po = 0.0
+            for i in range(N):
+                dx = x[i] - ox[k]; dy = y[i] - oy[k]; d2 = dx * dx + dy * dy; a = la - d2 * ia; b = lb - d2 * ib
+                rsp[i] = 1 / (1 + exp_(a - b))
+                lw[i] = log_(w[i]) + (a + math.log(1 + math.exp(b - a)) if a > b else b + math.log(1 + math.exp(a - b)))
+            mx = max(lw); s = 0.0
+            for i in range(N): w[i] = math.exp(lw[i] - mx); s += w[i]
+            for i in range(N): w[i] /= s
+            for i in range(N): po += w[i] * rsp[i]
+            pO.append(po)
+        else: pO.append(math.nan)
+        sx = sy = sm = 0.0
+        for i in range(N): sx += w[i] * x[i]; sy += w[i] * y[i]; sm += w[i] * m[i]
+        ex.append(sx); ey.append(sy); pT.append(sm)
+        e2 = 0.0
+        for i in range(N): e2 += w[i] * w[i]
+        if 1 / e2 &lt; B["thr"] * N:                       # 3. resample when the effective sample size drops
+            idx = systematic(w, r)
+            x = [x[j] for j in idx]; y = [y[j] for j in idx]; vx = [vx[j] for j in idx]; vy = [vy[j] for j in idx]; m = [m[j] for j in idx]
+            w = [1 / N] * N; nres += 1
+    return ex, ey, pT, pO, nres
+
+def bird_kf(obs, q, Rv):                                # constant-velocity Kalman filter, per axis
+    seen, _, ox, oy = obs
+    def run(z0, oz):
+        p, v, P11, P12, P22, out = z0, 0.0, 0.0, 0.0, 100.0, [z0]
+        for k in range(1, T):
+            dt = TT[k] - TT[k - 1]; p += v * dt
+            a = P11 + 2 * dt * P12 + dt * dt * P22 + q * dt * dt * dt / 3; b = P12 + dt * P22 + q * dt * dt / 2; c = P22 + q * dt
+            P11, P12, P22 = a, b, c
+            if seen[k]:
+                Sv = P11 + Rv; K1 = P11 / Sv; K2 = P12 / Sv; inn = oz[k] - p; p += K1 * inn; v += K2 * inn
+                P11, P12, P22 = (1 - K1) * P11, (1 - K1) * P12, P22 - K2 * P12
+            out.append(p)
+        return out
+    return run(TX[0], ox), run(TY[0], oy)
+
+def errs(ex, ey): return [math.hypot(ex[k] - TX[k], ey[k] - TY[k]) for k in range(1, T)]
+def rmse(e): return math.sqrt(sum(v * v for v in e) / len(e))
+def median(e): s = sorted(e); n = len(s); return s[(n - 1) // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
+def q95(e): s = sorted(e); return s[min(len(s) - 1, int(0.95 * len(s)))]
+
+T0 = time.time()
+p_obs, sig, eps, sig_o = 0.5, 5.0, 0.1, 50.0
+obs = tag_sim(7, p_obs, sig, eps, sig_o); seen, out = obs[0], obs[1]
+ks = [k for k in range(1, T) if seen[k]]
+raw = [math.hypot(obs[2][k] - TX[k], obs[3][k] - TY[k]) for k in ks]
+print(f"trip: {T} GPS fixes over {TT[-1]:.1f} h; tag keeps {len(ks)} fixes, {sum(out[k] for k in ks)} of them outliers")
+print(f"raw fixes: RMSE {rmse(raw):.3f} km, median {median(raw):.3f} km")
+Rv = (1 - eps) * sig ** 2 + eps * sig_o ** 2; best = None
+for q in [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]:
+    e = errs(*bird_kf(obs, q, Rv))
+    if best is None or rmse(e) &lt; best[1]: best = (q, rmse(e), e)
+q, _, ek = best
+print(f"Kalman, R = {Rv:.1f} km^2, q tuned in hindsight = {q}: RMSE {rmse(ek):.3f}  median {median(ek):.3f}  95th pct {q95(ek):.3f} km")
+oks = [k for k in ks if out[k]]
+print(f"  at the {len(oks)} outlier fixes the Kalman estimate is off by {sum(ek[k - 1] for k in oks) / len(oks):.3f} km on average")
+step_travel = [0] + [1 if math.hypot(TX[k] - TX[k - 1], TY[k] - TY[k - 1]) / (TT[k] - TT[k - 1]) > 10 else 0 for k in range(1, T)]
+print(f"steps the GPS track covers faster than 10 km/h: {sum(step_travel)} of {T - 1}")
+for N in [100, 300, 1000, 3000]:
+    t1 = time.time(); runs = []
+    for seed in range(11, 16):
+        ex, ey, pT, pO, nres = bird_pf(obs, N, seed, sig, eps, sig_o); runs.append(rmse(errs(ex, ey)))
+        if seed == 11: e, rpT, rpO, rn = errs(ex, ey), pT, pO, nres; keep = (ex[100], ey[100], pT[100])
+    ag = sum(1 for k in range(1, T) if (rpT[k] > 0.5) == bool(step_travel[k]))
+    caught = sum(1 for k in oks if rpO[k] > 0.5); false = sum(1 for k in ks if not out[k] and rpO[k] > 0.5)
+    print(f"PF N={N:4d} seed 11: RMSE {rmse(e):.3f}  median {median(e):.3f}  95th pct {q95(e):.3f} km; at outliers {sum(e[k - 1] for k in oks) / len(oks):.3f} km")
+    print(f"     travel agrees {ag}/{T - 1}, outliers flagged {caught}/{len(oks)}, false alarms {false}/{len(ks) - len(oks)}, resampled {rn}x;"
+          f" RMSE over seeds 11-15: mean {sum(runs) / 5:.3f} km ({time.time() - t1:.1f} s)")
+    if N == 1000: k1000 = keep
+print(f"N=1000, seed 11, fix 100: x {k1000[0]:.9f}  y {k1000[1]:.9f}  P(travel) {k1000[2]:.9f}")
+print(f"total {time.time() - T0:.0f} s")</code></pre>
+<pre class="code out"><code>trip: 333 GPS fixes over 502.5 h; tag keeps 157 fixes, 13 of them outliers
+raw fixes: RMSE 19.903 km, median 6.175 km
+Kalman, R = 272.5 km^2, q tuned in hindsight = 20: RMSE 32.214  median 11.134  95th pct 70.329 km
+  at the 13 outlier fixes the Kalman estimate is off by 47.933 km on average
+steps the GPS track covers faster than 10 km/h: 86 of 332
+PF N= 100 seed 11: RMSE 55.872  median 12.436  95th pct 121.217 km; at outliers 34.147 km
+     travel agrees 245/332, outliers flagged 10/13, false alarms 37/144, resampled 125x; RMSE over seeds 11-15: mean 46.441 km (0.9 s)
+PF N= 300 seed 11: RMSE 40.703  median 9.250  95th pct 81.115 km; at outliers 36.598 km
+     travel agrees 253/332, outliers flagged 6/13, false alarms 10/144, resampled 132x; RMSE over seeds 11-15: mean 40.275 km (2.4 s)
+PF N=1000 seed 11: RMSE 37.609  median 9.098  95th pct 70.184 km; at outliers 34.379 km
+     travel agrees 249/332, outliers flagged 6/13, false alarms 8/144, resampled 133x; RMSE over seeds 11-15: mean 34.846 km (8.0 s)
+PF N=3000 seed 11: RMSE 29.040  median 8.167  95th pct 72.760 km; at outliers 37.247 km
+     travel agrees 264/332, outliers flagged 6/13, false alarms 2/144, resampled 136x; RMSE over seeds 11-15: mean 31.625 km (24.6 s)
+N=1000, seed 11, fix 100: x 931.189111716  y -372.329180323  P(travel) 0.076337617
+total 36 s</code></pre>
+    <p class="note" style="max-width:72ch" id="pj-honest"></p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>A DBN is a Bayes net copied through time: a prior, a transition model P(X<sub>t+1</sub> | X<sub>t</sub>) and a sensor model P(E<sub>t</sub> | X<sub>t</sub>). HMMs and Kalman filters are special cases; factoring the state into variables makes the model exponentially smaller than the equivalent HMM.</li>
+      <li>Hidden state variables with persistence arcs, such as BMBroken, let a DBN tell a passing glitch from a lasting fault, which no fixed error model can.</li>
+      <li>Exact filtering in a DBN costs the same at every step but is exponential in the number of state variables, because local links correlate all of them within a few steps.</li>
+      <li>SIR turns weighted samples into unweighted ones by drawing from them in proportion to their weights; likelihood weighting in a DBN fails because its samples ignore the evidence and its weights collapse.</li>
+      <li>The particle filter propagates, weights and resamples N particles; it is consistent, linear in N per step, and happy with nonlinear, multimodal and mixed discrete-continuous models, at the price of Monte Carlo noise.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>A DBN has 12 Boolean state variables, each with 2 parents in the previous slice. How many numbers do the DBN and the equivalent HMM need for the transition model?</summary><p>The DBN needs 12 &times; 2&sup2; = 48 numbers. The HMM&rsquo;s mega-variable has 2&sup1;&sup2; = 4,096 values, so its transition matrix has 4,096 &times; 4,096 &asymp; 16.8 million entries (4,096 &times; 4,095 of them free).</p></details>
+      <details class="q"><summary>Why can&rsquo;t a transient failure model cope with a meter that has broken for good?</summary><p>It treats each zero reading as a fresh, independent glitch with probability &phi;. A run of k zeros then has probability about &phi;<sup>k</sup> under &ldquo;the battery is fine&rdquo;, which soon falls below the probability of &ldquo;the battery is flat&rdquo;, so the belief slides to empty. Only a state variable that persists, like BMBroken, can make a long run of zeros cheap to explain.</p></details>
+      <details class="q"><summary>The machines are connected only to their neighbours. Why does exact filtering still need all 2<sup>n</sup> joint states?</summary><p>Each step couples every machine to its neighbour, and over several steps those couplings chain along the line, so evidence about one machine changes beliefs about all the others. The belief state becomes correlated (its multi-information is above zero), so it is not a product of n marginals, and any factored representation is an approximation.</p></details>
+      <details class="q"><summary>In the SIR lab the effective sample size can be high while the weighted mean is far from &minus;0.22. How?</summary><p>ESS only measures how evenly the weight is spread over the samples you drew. If the proposal never puts samples near one of the modes, the weights among the samples it did draw can be quite even, so ESS is high, but that mode is simply missing, and the estimate is wrong. ESS cannot detect what was never sampled.</p></details>
+      <details class="q"><summary>Why does resampling at every step not make the particle filter collapse the way likelihood weighting does?</summary><p>Resampling resets the weights to equal and moves the particles to where the evidence says the state is. The next weights then depend only on one new observation instead of the product of all observations so far, so they never spread over many orders of magnitude. The price is some loss of diversity: copies are not independent samples, which is why some filters resample only when the ESS falls below a threshold.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../learning-bayes-nets/">Next chapter: Learning Bayesian Networks: Hidden Variables &amp; Structure &rarr;</a>
+      <a class="btn" href="../kalman-filter/">&larr; Previous: Linear Dynamical Systems &amp; the Kalman Filter</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Russell, S. &amp; Norvig, P. (2021). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed. Pearson: section 14.5 (dynamic Bayesian networks: 14.5.1 constructing DBNs, 14.5.2 exact inference, 14.5.3 approximate inference).</li>
+      <li>Bishop, C. M. (2006). <em>Pattern Recognition and Machine Learning</em>. Springer: section 11.1.5 (sampling-importance-resampling) and section 13.3.4 (particle filters).</li>
+      <li>Gordon, N. J., Salmond, D. J. &amp; Smith, A. F. M. (1993). Novel approach to nonlinear/non-Gaussian Bayesian state estimation. <em>IEE Proceedings F</em> 140(2): 107&ndash;113.</li>
+      <li>Rubin, D. B. (1988). Using the SIR algorithm to simulate posterior distributions. In <em>Bayesian Statistics 3</em>, Oxford University Press, 395&ndash;402.</li>
+      <li>Dean, T. &amp; Kanazawa, K. (1989). A model for reasoning about persistence and causation. <em>Computational Intelligence</em> 5(3): 142&ndash;150.</li>
+      <li>Boyen, X. &amp; Koller, D. (1998). Tractable inference for complex stochastic processes. <em>Proc. UAI</em>: 33&ndash;42.</li>
+      <li>Doucet, A., de Freitas, N. &amp; Gordon, N. (eds.) (2001). <em>Sequential Monte Carlo Methods in Practice</em>. Springer.</li>
+      <li>Cruz, S., Proa&ntilde;o, C. B., Anderson, D., Huyvaert, K. &amp; Wikelski, M. (2013). Data from: The Environmental-Data Automated Track Annotation (Env-DATA) System: linking animal tracks with environmental data. Movebank Data Repository, doi:10.5441/001/1.3hp3s250. CC0 1.0.</li>
+      <li>Dodge, S. et al. (2013). The Environmental-Data Automated Track Annotation (Env-DATA) System: linking animal tracks with environmental data. <em>Movement Ecology</em> 1: 3, doi:10.1186/2051-3933-1-3.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Hover any dotted number to see how it was calculated. Albatross GPS data: Cruz et al. (2013), Movebank Data Repository, CC0 1.0.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ---------- particle-filter core: DBNs, SIR, likelihood weighting, bootstrap filter, albatross tracker ---------- */
+const PFC = (function () {
+  'use strict';
+  function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function gauss(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+  const LN2PI = Math.log(2 * Math.PI);
+
+  /* ===== resampling: each returns an index array of length N (weights w normalised) ===== */
+  function systematic(w, r) {
+    const N = w.length, out = new Int32Array(N), u0 = r() / N; let j = 0, c = w[0];
+    for (let i = 0; i < N; i++) { const u = u0 + i / N; while (u > c && j < N - 1) { j++; c += w[j]; } out[i] = j; }
+    return out;
+  }
+  function multinomial(w, r) {
+    const N = w.length, out = new Int32Array(N), cum = new Float64Array(N); let c = 0;
+    for (let j = 0; j < N; j++) { c += w[j]; cum[j] = c; }
+    for (let i = 0; i < N; i++) { const u = r() * c; let lo = 0, hi = N - 1; while (lo < hi) { const mid = (lo + hi) >> 1; if (cum[mid] < u) lo = mid + 1; else hi = mid; } out[i] = lo; }
+    return out;
+  }
+  function residual(w, r) {
+    const N = w.length, out = new Int32Array(N), res = new Float64Array(N); let k = 0, rs = 0;
+    for (let j = 0; j < N; j++) { const c = Math.floor(N * w[j]); for (let q = 0; q < c; q++) out[k++] = j; res[j] = N * w[j] - c; rs += res[j]; }
+    const left = N - k; if (left > 0) { for (let j = 0; j < N; j++) res[j] /= rs; const ex = multinomial(res, r); for (let q = 0; q < left; q++) out[k + q] = ex[q]; }
+    return out;
+  }
+  const RESAMPLE = { systematic, multinomial, residual };
+  function essOf(w) { let s = 0; for (let i = 0; i < w.length; i++) s += w[i] * w[i]; return 1 / s; }
+  // normalise log-weights in place into w; returns log of the normaliser (relative to max)
+  function normLog(lw, w) { let mx = -Infinity; for (let i = 0; i < lw.length; i++) if (lw[i] > mx) mx = lw[i]; let s = 0; for (let i = 0; i < lw.length; i++) { w[i] = Math.exp(lw[i] - mx); s += w[i]; } for (let i = 0; i < lw.length; i++) w[i] /= s; return mx + Math.log(s); }
+
+  /* ===== SIR on a bimodal target (PRML 11.1.5) ===== */
+  const SIRT = { a: 0.65, m1: -1.2, s1: 0.55, m2: 1.6, s2: 0.45 };
+  const npdf = (z, m, s) => Math.exp(-0.5 * ((z - m) / s) ** 2) / (s * Math.sqrt(2 * Math.PI));
+  const sirP = z => SIRT.a * npdf(z, SIRT.m1, SIRT.s1) + (1 - SIRT.a) * npdf(z, SIRT.m2, SIRT.s2);
+  const sirMean = SIRT.a * SIRT.m1 + (1 - SIRT.a) * SIRT.m2;
+  function sir(L, qm, qs, seed) {
+    const r = rng(seed), z = new Float64Array(L), w = new Float64Array(L); let sw = 0;
+    for (let l = 0; l < L; l++) { z[l] = qm + qs * gauss(r); w[l] = sirP(z[l]) / npdf(z[l], qm, qs); sw += w[l]; }
+    let mean = 0; for (let l = 0; l < L; l++) { w[l] /= sw; mean += w[l] * z[l]; }
+    const idx = multinomial(w, r), seen = new Set(idx), zs = Float64Array.from(idx, i => z[i]);
+    // total-variation distance between the resampled histogram and the target, 40 bins on [-4, 4]
+    const B = 40, lo = -4, hi = 4, h = new Float64Array(B); let inside = 0;
+    zs.forEach(v => { const b = Math.floor((v - lo) / (hi - lo) * B); if (b >= 0 && b < B) { h[b]++; inside++; } });
+    let tv = 0; const P = new Float64Array(B);
+    for (let b = 0; b < B; b++) { const a = lo + (hi - lo) * b / B, c = a + (hi - lo) / B; let m = 0; for (let k = 0; k < 20; k++) { const x = a + (c - a) * (k + 0.5) / 20; m += sirP(x) * (c - a) / 20; } P[b] = m; tv += Math.abs(h[b] / L - m); }
+    tv /= 2;
+    return { z, w, zs, ess: essOf(w), distinct: seen.size, mean, tv, h, P, B, lo, hi };
+  }
+
+  /* ===== linear-Gaussian random walk: likelihood weighting (no resampling) vs particle filter vs Kalman ===== */
+  function lgSim(T, rsd, seed) { const r = rng(seed), x = [gauss(r)], y = [NaN]; for (let t = 1; t <= T; t++) { x.push(x[t - 1] + gauss(r)); y.push(x[t] + rsd * gauss(r)); } return { x, y }; }
+  function lgKF(y, rsd) { const T = y.length - 1, m = [0], P = [1]; for (let t = 1; t <= T; t++) { const pm = m[t - 1], pp = P[t - 1] + 1, K = pp / (pp + rsd * rsd); m.push(pm + K * (y[t] - pm)); P.push((1 - K) * pp); } return { m, P }; }
+  function lgRun(y, rsd, N, seed, resample) {
+    const r = rng(seed), T = y.length - 1, x = new Float64Array(N), lw = new Float64Array(N), w = new Float64Array(N);
+    for (let i = 0; i < N; i++) x[i] = gauss(r);
+    const mean = [0], ess = [N], maxw = [1 / N];
+    for (let t = 1; t <= T; t++) {
+      for (let i = 0; i < N; i++) { x[i] += gauss(r); const d = (y[t] - x[i]) / rsd; lw[i] += -0.5 * d * d; }
+      normLog(lw, w); let m = 0, mw = 0; for (let i = 0; i < N; i++) { m += w[i] * x[i]; if (w[i] > mw) mw = w[i]; }
+      mean.push(m); ess.push(essOf(w)); maxw.push(mw);
+      if (resample) { const idx = systematic(w, r), nx = Float64Array.from(idx, j => x[j]); x.set(nx); lw.fill(0); }
+    }
+    return { mean, ess, maxw };
+  }
+
+  /* ===== the classic nonlinear benchmark: exact grid filter and the bootstrap particle filter ===== */
+  const NL = { q: 10, r: 1, p0: 5, lo: -30, hi: 30, G: 601 };
+  const nlF = (x, t) => x / 2 + 25 * x / (1 + x * x) + 8 * Math.cos(1.2 * t);
+  const nlH = x => x * x / 20;
+  function nlSim(T, seed) { const r = rng(seed), x = [Math.sqrt(NL.p0) * gauss(r)], y = [NaN]; for (let t = 1; t <= T; t++) { x.push(nlF(x[t - 1], t) + Math.sqrt(NL.q) * gauss(r)); y.push(nlH(x[t]) + Math.sqrt(NL.r) * gauss(r)); } return { x, y }; }
+  const nlGridX = Float64Array.from({ length: NL.G }, (_, i) => NL.lo + (NL.hi - NL.lo) * i / (NL.G - 1));
+  // returns for each t: predictive density pred[t] and filtered density filt[t] on the grid (sum to 1)
+  function nlGrid(y) {
+    const T = y.length - 1, G = NL.G, X = nlGridX, pred = [], filt = [];
+    let f = Float64Array.from(X, x => Math.exp(-0.5 * x * x / NL.p0)); { let s = 0; f.forEach(v => s += v); for (let i = 0; i < G; i++) f[i] /= s; }
+    pred.push(f.slice()); filt.push(f.slice());
+    const col = new Float64Array(G);
+    for (let t = 1; t <= T; t++) {
+      const p = new Float64Array(G);
+      for (let j = 0; j < G; j++) { if (f[j] < 1e-300) continue; const mu = nlF(X[j], t); let s = 0; const i0 = Math.max(0, Math.ceil((mu - 6 * Math.sqrt(NL.q) - NL.lo) / (NL.hi - NL.lo) * (G - 1))), i1 = Math.min(G - 1, Math.floor((mu + 6 * Math.sqrt(NL.q) - NL.lo) / (NL.hi - NL.lo) * (G - 1))); col.fill(0); for (let i = i0; i <= i1; i++) { const d = X[i] - mu; col[i] = Math.exp(-0.5 * d * d / NL.q); s += col[i]; } if (s > 0) { const c = f[j] / s; for (let i = i0; i <= i1; i++) p[i] += c * col[i]; } }
+      pred.push(p.slice());
+      let s = 0; for (let i = 0; i < G; i++) { const d = y[t] - nlH(X[i]); p[i] *= Math.exp(-0.5 * d * d / NL.r); s += p[i]; }
+      for (let i = 0; i < G; i++) p[i] /= s; filt.push(p); f = p;
+    }
+    const stat = d => { let m = 0, pos = 0; for (let i = 0; i < G; i++) { m += d[i] * X[i]; if (X[i] > 0) pos += d[i]; else if (X[i] === 0) pos += d[i] / 2; } return { mean: m, pos }; };
+    return { pred, filt, mean: filt.map(d => stat(d).mean), pos: filt.map(d => stat(d).pos) };
+  }
+  // a full bootstrap filter run that records every phase, for the step-by-step lab
+  function nlPF(y, N, seed, scheme, thr) {
+    scheme = scheme || 'systematic'; thr = thr == null ? 1 : thr;
+    const r = rng(seed), T = y.length - 1; let x = new Float64Array(N), w = new Float64Array(N).fill(1 / N);
+    for (let i = 0; i < N; i++) x[i] = Math.sqrt(NL.p0) * gauss(r);
+    const hist = [{ prop: x.slice(), w: w.slice(), post: x.slice() }], mean = [0], pos = [0.5], ess = [N]; let nres = 0;
+    for (let t = 1; t <= T; t++) {
+      for (let i = 0; i < N; i++) x[i] = nlF(x[i], t) + Math.sqrt(NL.q) * gauss(r);
+      const prop = x.slice(); const lw = new Float64Array(N);
+      for (let i = 0; i < N; i++) { const d = y[t] - nlH(x[i]); lw[i] = Math.log(w[i]) - 0.5 * d * d / NL.r; }
+      normLog(lw, w); let m = 0, p = 0; for (let i = 0; i < N; i++) { m += w[i] * x[i]; if (x[i] > 0) p += w[i]; }
+      mean.push(m); pos.push(p); const e = essOf(w); ess.push(e); const wt = w.slice();
+      let did = false; if (e < thr * N || thr >= 1) { const idx = RESAMPLE[scheme](w, r); x = Float64Array.from(idx, j => x[j]); w.fill(1 / N); did = true; nres++; }
+      hist.push({ prop, w: wt, post: x.slice(), did });
+    }
+    return { hist, mean, pos, ess, nres };
+  }
+
+  /* ===== the battery DBN: exact filtering for three sensor models (AIMA 14.5.1) ===== */
+  const BAT = { L: 6, pDrop: 0.08, sd: 0.7, pBreak: 0.002 };
+  function batSensor(phi) { // P(M = m | B = b), b, m in 0..5
+    const L = BAT.L, S = [];
+    for (let b = 0; b < L; b++) { const row = []; let s = 0; for (let m = 0; m < L; m++) { row.push(Math.exp(-0.5 * ((m - b) / BAT.sd) ** 2)); s += row[m]; } for (let m = 0; m < L; m++) row[m] = (1 - phi) * row[m] / s + (m === 0 ? phi : 0); S.push(row); }
+    return S;
+  }
+  // readings: array of meter values (index 0 unused). model: 'gauss' | 'transient' | 'persistent'
+  function batFilter(readings, model, phi) {
+    const L = BAT.L, T = readings.length - 1, S = batSensor(model === 'gauss' ? 0 : phi);
+    let f = new Float64Array(2 * L); f[L - 1] = 1; // battery full, meter working
+    const eB = [L - 1], pBr = [0];
+    for (let t = 1; t <= T; t++) {
+      const g = new Float64Array(2 * L);
+      for (let br = 0; br < 2; br++) for (let b = 0; b < L; b++) { const p = f[br * L + b]; if (!p) continue;
+        const nb = [[b, b > 0 ? 1 - BAT.pDrop : 1]]; if (b > 0) nb.push([b - 1, BAT.pDrop]);
+        const brk = model === 'persistent' ? (br ? [[1, 1]] : [[0, 1 - BAT.pBreak], [1, BAT.pBreak]]) : [[0, 1]];
+        for (const [b2, pb] of nb) for (const [r2, pr] of brk) g[r2 * L + b2] += p * pb * pr; }
+      const m = readings[t]; let s = 0;
+      for (let br = 0; br < 2; br++) for (let b = 0; b < L; b++) { g[br * L + b] *= br ? (m === 0 ? 1 : 0) : S[b][m]; s += g[br * L + b]; }
+      for (let i = 0; i < 2 * L; i++) g[i] /= s; f = g;
+      let e = 0, pb = 0; for (let br = 0; br < 2; br++) for (let b = 0; b < L; b++) { e += f[br * L + b] * b; if (br) pb += f[br * L + b]; }
+      eB.push(e); pBr.push(pb);
+    }
+    return { eB, pBr };
+  }
+  // the scenario: the true battery and meter readings with a stretch of zeros
+  function batScenario(T, z0, zlen, seed) {
+    const r = rng(seed), S = batSensor(0), B = [BAT.L - 1], M = [NaN];
+    for (let t = 1; t <= T; t++) {
+      const u = r(), g = r(); let b = B[t - 1]; if (b > 0 && u < BAT.pDrop) b--; B.push(b);
+      let c = 0, m = 0; for (; m < BAT.L - 1; m++) { c += S[b][m]; if (g < c) break; } M.push(t >= z0 && t < z0 + zlen ? 0 : m);
+    }
+    return { B, M };
+  }
+
+  /* ===== a chain of n machines: exact belief state (2^n numbers) vs fully factored filter (AIMA 14.5.2) ===== */
+  const CH = { okOk: 0.97, okBad: 0.75, fix: 0.1, lightBad: 0.8, lightOk: 0.15 };
+  // P(machine i OK at t+1 | it, left neighbour) ; state bit 1 = OK
+  const pOK = (self, left) => self ? (left ? CH.okOk : CH.okBad) : CH.fix;
+  function chainSim(n, T, seed, allSensors) {
+    const r = rng(seed), X = [Array(n).fill(1)], E = [null];
+    for (let t = 1; t <= T; t++) { const p = X[t - 1], x = [], e = [];
+      for (let i = 0; i < n; i++) x.push(r() < pOK(p[i], i ? p[i - 1] : 1) ? 1 : 0);
+      for (let i = 0; i < n; i++) { const u = r(); e.push(allSensors || i === n - 1 ? (u < (x[i] ? CH.lightOk : CH.lightBad) ? 1 : 0) : -1); }
+      X.push(x); E.push(e); }
+    return { X, E };
+  }
+  function chainExact(n, E) {
+    const S = 1 << n, T = E.length - 1; let f = new Float64Array(S); f[S - 1] = 1; // all OK
+    const marg = [Array(n).fill(0)], mi = [0], Hj = [0], Hall = [0];
+    for (let t = 1; t <= T; t++) {
+      // eliminate one old variable at a time, from the last machine to the first (machine i's new value needs old i and old i-1)
+      for (let i = n - 1; i >= 0; i--) {
+        const g = new Float64Array(S), bi = 1 << i, bl = i ? 1 << (i - 1) : 0;
+        for (let s = 0; s < S; s++) { const p = f[s]; if (!p) continue; const self = s & bi ? 1 : 0, left = i ? (s & bl ? 1 : 0) : 1, q = pOK(self, left);
+          g[s | bi] += p * q; g[s & ~bi] += p * (1 - q); }
+        f = g;
+      }
+      let z = 0; const e = E[t];
+      for (let s = 0; s < S; s++) { let l = 1; for (let i = 0; i < n; i++) if (e[i] >= 0) { const ok = s >> i & 1, pl = ok ? CH.lightOk : CH.lightBad; l *= e[i] ? pl : 1 - pl; } f[s] *= l; z += f[s]; }
+      for (let s = 0; s < S; s++) f[s] /= z;
+      const m = Array(n).fill(0); let H = 0; for (let s = 0; s < S; s++) { const p = f[s]; if (!p) continue; H -= p * Math.log2(p); for (let i = 0; i < n; i++) if (!(s >> i & 1)) m[i] += p; }
+      let Hm = 0; m.forEach(p => { if (p > 0 && p < 1) Hm -= p * Math.log2(p) + (1 - p) * Math.log2(1 - p); });
+      marg.push(m); mi.push(Math.max(0, Hm - H)); Hj.push(Hm); Hall.push(H);
+    }
+    return { marg, mi, Hj, Hall };
+  }
+  function chainFactored(n, E) {
+    const T = E.length - 1; let q = Array(n).fill(1); const marg = [Array(n).fill(0)];
+    for (let t = 1; t <= T; t++) {
+      const nq = q.map((qi, i) => { const ql = i ? q[i - 1] : 1; return qi * ql * pOK(1, 1) + qi * (1 - ql) * pOK(1, 0) + (1 - qi) * pOK(0, 0); });
+      const e = E[t]; q = nq.map((p, i) => { if (e[i] < 0) return p; const lo = e[i] ? CH.lightOk : 1 - CH.lightOk, lb = e[i] ? CH.lightBad : 1 - CH.lightBad; return p * lo / (p * lo + (1 - p) * lb); });
+      marg.push(q.map(p => 1 - p));
+    }
+    return { marg };
+  }
+
+  /* ===== the albatross tracker (project) ===== */
+  // simulate a cheap tag: each fix k >= 1 is transmitted with prob pObs; error N(0, sig^2) per axis, or N(0, sigO^2) with prob eps
+  function tagSim(trip, seed, pObs, sig, eps, sigO) {
+    const r = rng(seed), T = trip.t.length, seen = new Uint8Array(T), out = new Uint8Array(T), ox = new Float64Array(T), oy = new Float64Array(T);
+    for (let k = 1; k < T; k++) { const u1 = r(), u2 = r(), g1 = gauss(r), g2 = gauss(r); seen[k] = u1 < pObs ? 1 : 0; out[k] = u2 < eps ? 1 : 0; const s = out[k] ? sigO : sig; ox[k] = trip.x[k] + s * g1; oy[k] = trip.y[k] + s * g2; }
+    return { seen, out, ox, oy };
+  }
+  const BIRD = { pSw: 0.1, aT: 0.9, sT: 10, sJ: 30, aR: 0.2, sR: 1.5, thr: 0.5 };
+  function birdPF(trip, obs, N, seed, M, keep) {
+    const r = rng(seed), T = trip.t.length, P = BIRD;
+    let x = new Float64Array(N).fill(trip.x[0]), y = new Float64Array(N).fill(trip.y[0]), vx = new Float64Array(N), vy = new Float64Array(N), m = new Uint8Array(N);
+    let w = new Float64Array(N).fill(1 / N); const lw = new Float64Array(N);
+    const la = Math.log((1 - M.eps) / (2 * Math.PI * M.sig * M.sig)), lb = Math.log(M.eps / (2 * Math.PI * M.sigO * M.sigO)), ia = 1 / (2 * M.sig * M.sig), ib = 1 / (2 * M.sigO * M.sigO);
+    const ex = [trip.x[0]], ey = [trip.y[0]], pT = [0], pOut = [NaN], ess = [N], spr = [0], clouds = keep ? [null] : null; let nres = 0;
+    for (let k = 1; k < T; k++) {
+      const dt = trip.t[k] - trip.t[k - 1];
+      for (let i = 0; i < N; i++) {
+        const was = m[i]; if (r() < P.pSw) m[i] = 1 - m[i];
+        const g1 = gauss(r), g2 = gauss(r);
+        if (m[i] && !was) { vx[i] = P.sJ * g1; vy[i] = P.sJ * g2; } // take off: a fresh heading and speed
+        else if (m[i]) { vx[i] = P.aT * vx[i] + P.sT * g1; vy[i] = P.aT * vy[i] + P.sT * g2; } else { vx[i] = P.aR * vx[i] + P.sR * g1; vy[i] = P.aR * vy[i] + P.sR * g2; }
+        x[i] += vx[i] * dt; y[i] += vy[i] * dt;
+      }
+      if (obs.seen[k]) { let po = 0; const rsp = new Float64Array(N);
+        for (let i = 0; i < N; i++) { const dx = x[i] - obs.ox[k], dy = y[i] - obs.oy[k], d2 = dx * dx + dy * dy, a = la - d2 * ia, b = lb - d2 * ib; rsp[i] = 1 / (1 + Math.exp(a - b));
+          lw[i] = Math.log(w[i]) + (a > b ? a + Math.log(1 + Math.exp(b - a)) : b + Math.log(1 + Math.exp(a - b))); }
+        normLog(lw, w); for (let i = 0; i < N; i++) po += w[i] * rsp[i]; pOut.push(po);
+      } else pOut.push(NaN);
+      let sx = 0, sy = 0, sm = 0; for (let i = 0; i < N; i++) { sx += w[i] * x[i]; sy += w[i] * y[i]; sm += w[i] * m[i]; }
+      ex.push(sx); ey.push(sy); pT.push(sm); const e = essOf(w); ess.push(e);
+      { let v = 0; for (let i = 0; i < N; i++) v += w[i] * ((x[i] - sx) ** 2 + (y[i] - sy) ** 2); spr.push(Math.sqrt(v)); }
+      if (keep) { const K = Math.min(N, keep); clouds[k] = { x: Float32Array.from(x.subarray(0, K)), y: Float32Array.from(y.subarray(0, K)), w: Float32Array.from(w.subarray(0, K)) }; }
+      if (e < P.thr * N) { const idx = systematic(w, r); x = Float64Array.from(idx, j => x[j]); y = Float64Array.from(idx, j => y[j]); vx = Float64Array.from(idx, j => vx[j]); vy = Float64Array.from(idx, j => vy[j]); m = Uint8Array.from(idx, j => m[j]); w.fill(1 / N); nres++; }
+    }
+    return { ex, ey, pT, pOut, ess, spr, nres, clouds };
+  }
+  // constant-velocity Kalman filter, one axis at a time (the model separates over x and y)
+  function birdKF(trip, obs, q, Rv) {
+    const T = trip.t.length, ex = [trip.x[0]], ey = [trip.y[0]];
+    const run = (z0, oz, outArr) => { let p = z0, v = 0, P11 = 0, P12 = 0, P22 = 100; // velocity unknown: sd 10 km/h
+      for (let k = 1; k < T; k++) { const dt = trip.t[k] - trip.t[k - 1];
+        p += v * dt; const a = P11 + 2 * dt * P12 + dt * dt * P22 + q * dt * dt * dt / 3, b = P12 + dt * P22 + q * dt * dt / 2, c = P22 + q * dt; P11 = a; P12 = b; P22 = c;
+        if (obs.seen[k]) { const S = P11 + Rv, K1 = P11 / S, K2 = P12 / S, inn = oz[k] - p; p += K1 * inn; v += K2 * inn; const n11 = (1 - K1) * P11, n12 = (1 - K1) * P12, n22 = P22 - K2 * P12; P11 = n11; P12 = n12; P22 = n22; }
+        outArr.push(p); } };
+    run(trip.x[0], obs.ox, ex); run(trip.y[0], obs.oy, ey);
+    return { ex, ey };
+  }
+  function errs(trip, ex, ey) { const e = []; for (let k = 1; k < trip.t.length; k++) e.push(Math.hypot(ex[k] - trip.x[k], ey[k] - trip.y[k])); return e; }
+  function rmse(e) { let s = 0; e.forEach(v => s += v * v); return Math.sqrt(s / e.length); }
+  function median(e) { const s = Array.from(e).sort((a, b) => a - b), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; }
+  const KFQ = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+  function bestKF(trip, obs, Rv) { let best = null; for (const q of KFQ) { const k = birdKF(trip, obs, q, Rv), e = rmse(errs(trip, k.ex, k.ey)); if (!best || e < best.rmse) best = { q, rmse: e, kf: k }; } return best; }
+
+  return { rng, gauss, systematic, multinomial, residual, RESAMPLE, essOf, normLog, SIRT, sirP, sirMean, npdf, sir, lgSim, lgKF, lgRun, NL, nlF, nlH, nlSim, nlGridX, nlGrid, nlPF,
+    BAT, batSensor, batFilter, batScenario, CH, pOK, chainSim, chainExact, chainFactored, tagSim, BIRD, birdPF, birdKF, errs, rmse, median, KFQ, bestKF };
+})();
+
+const TRIP = {"t":[0.0,1.507,3.003,4.507,6.007,7.513,9.001,10.502,12.015,13.507,16.507,18.002,19.507,21.028,22.515,24.003,25.507,27.007,28.507,30.015,33.012,34.503,36.006,37.514,39.005,40.503,42.005,43.501,45.013,46.501,47.997,49.505,51.006,52.505,54.007,55.506,57.005,58.494,59.994,61.513,63.001,64.505,66.003,67.507,69.004,70.501,72.007,73.499,75.007,76.498,77.996,79.507,81.013,82.497,84.004,85.51,87.005,88.501,90.007,91.507,93.013,94.5,95.998,97.505,98.999,100.496,102.007,103.503,105.007,106.494,107.995,109.512,110.994,112.505,114.0,115.507,117.004,118.505,120.007,121.499,123.005,124.496,126.006,127.507,129.005,130.502,132.012,133.498,135.007,136.501,138.005,139.507,141.012,142.502,144.003,145.512,147.003,148.504,150.012,151.503,153.007,154.505,156.003,157.513,159.003,160.503,162.013,163.504,165.012,166.502,168.003,169.505,171.005,172.503,174.006,175.512,176.998,178.501,180.013,181.505,183.007,184.504,186.003,187.512,189.004,190.507,192.007,193.512,195.002,196.505,198.014,199.504,201.013,202.504,204.002,205.507,207.007,208.505,210.002,211.512,213.001,214.497,216.003,217.503,219.007,220.505,222.002,223.507,225.0,226.497,228.003,229.504,231.007,232.501,234.005,235.512,237.005,238.503,240.012,241.502,243.007,244.505,246.004,247.52,248.997,250.498,252.012,253.497,255.007,256.5,258.005,259.513,261.005,262.497,264.007,265.503,267.007,268.501,270.003,271.512,272.997,274.503,275.995,277.505,279.005,280.499,282.012,283.505,285.007,286.501,288.0,289.504,291.0,292.504,294.015,295.507,296.996,298.503,300.005,301.504,303.013,304.504,305.995,307.513,309.004,310.504,312.02,313.501,315.005,316.501,318.006,319.507,321.0,322.494,324.007,325.495,327.007,328.501,330.007,331.512,333.002,334.505,336.007,337.505,339.005,340.503,342.005,343.512,344.996,346.504,348.003,349.506,351.007,352.507,354.005,355.507,357.001,358.504,360.012,361.504,363.007,364.507,366.002,367.514,369.007,370.499,372.004,373.503,374.998,376.503,378.005,379.505,381.015,382.504,383.999,385.507,387.005,388.499,390.006,391.507,392.999,394.497,396.007,397.501,399.005,400.498,401.998,403.505,405.005,406.499,408.007,409.506,411.004,412.512,414.002,415.515,417.007,418.496,420.006,421.503,422.998,424.504,426.005,427.505,429.012,430.506,432.007,433.506,435.01,436.502,438.003,439.507,441.003,442.507,444.004,445.507,447.005,448.497,449.998,451.513,453.002,454.514,456.022,457.504,459.005,460.502,462.001,463.503,465.004,466.505,468.012,469.501,471.003,472.501,474.01,475.502,477.012,478.507,480.007,481.515,483.003,484.5,486.004,487.507,489.013,490.505,491.998,493.505,495.003,496.495,498.007,499.499,502.507],"x":[-0.51,-3.77,-0.86,-4.17,8.31,30.14,60.79,99.79,113.42,157.79,229.24,226.47,224.11,248.75,300.4,349.63,389.25,431.67,474.38,518.52,594.43,640.65,682.83,725.55,762.29,804.1,806.72,806.3,833.34,862.75,884.41,916.99,940.14,956.36,956.45,956.28,956.9,957.44,956.75,955.8,955.56,955.59,955.35,955.56,955.32,955.09,955.49,957.51,958.74,965.15,965.54,964.85,968.86,968.56,968.88,969.22,974.17,982.37,983.33,983.5,984.25,983.71,984.34,985.62,986.68,985.31,985.1,989.74,989.4,989.68,990.19,991.61,993.24,994.73,995.79,996.23,992.93,981.95,977.7,976.68,976.09,975.84,975.56,971.98,965.5,964.76,965.42,966.94,968.22,968.74,968.85,964.66,959.28,950.57,937.5,931.42,931.52,931.14,932.24,933.74,930.8,929.44,928.67,927.8,926.44,925.17,923.91,927.96,928.04,931.06,932.01,931.33,936.83,947.28,961.74,972.88,971.09,969.91,967.66,963.17,951.96,948.55,950.29,949.77,964.84,1000.67,1027.5,1042.99,1040.81,1040.3,1038.24,1037.8,1037.01,1036.03,1035.16,1033.94,1032.71,1031.6,1030.58,1029.62,1033.51,1032.56,1031.41,1031.87,1023.77,1019.38,1024.91,1040.28,1039.39,1038.26,1037.26,1039.34,1033.39,1035.29,1046.01,1054.34,1049.28,1046.93,1047.39,1048.91,1047.06,1048.09,1049.02,1047.0,1051.64,1050.1,1049.2,1048.08,1047.34,1046.03,1044.66,1042.75,1053.19,1052.84,1052.24,1052.14,1055.38,1058.88,1058.57,1057.18,1054.79,1053.45,1052.81,1052.01,1051.04,1049.71,1048.59,1048.33,1056.99,1055.72,1055.37,1055.14,1056.06,1056.43,1056.57,1049.89,1058.49,1058.08,1057.68,1057.02,1056.55,1057.66,1057.1,1058.18,1057.01,1056.94,1057.45,1056.16,1055.17,1056.18,1042.12,1041.24,1040.04,1038.71,1036.78,1034.99,1033.19,1032.13,1030.46,1028.78,1015.13,1015.16,1036.18,1042.3,1047.07,1055.46,1063.24,1082.91,1082.69,1081.94,1080.51,1079.5,1078.75,1078.11,1077.56,1076.75,1105.49,1116.65,1116.59,1148.36,1185.15,1212.35,1221.45,1221.42,1218.71,1217.03,1215.45,1214.23,1213.21,1212.11,1210.92,1210.39,1214.06,1215.22,1212.26,1210.0,1209.54,1208.13,1211.31,1204.63,1202.28,1200.14,1198.61,1197.83,1196.35,1195.36,1194.32,1192.72,1198.46,1190.66,1154.2,1115.44,1078.37,1080.81,1088.42,1089.24,1102.33,1102.11,1101.75,1101.12,1100.69,1100.06,1099.21,1098.16,1101.9,1076.58,1048.33,1037.3,1033.55,1027.26,1001.66,1007.31,1006.25,1005.88,1005.6,1005.36,1005.67,1005.28,1004.11,1003.06,993.89,929.08,906.85,835.69,785.6,740.2,715.28,713.56,702.38,701.01,699.54,698.51,697.77,697.24,696.91,696.42,659.27,591.01,516.83,444.16,382.88,333.91,267.4,201.3,135.41,99.58,97.99,96.62,95.45,94.26,92.18,89.95,0.01],"y":[-1.02,-1.03,3.89,3.15,-8.36,-8.16,-2.07,6.26,-11.13,4.14,22.84,24.56,27.16,30.63,39.38,42.13,36.15,33.28,28.68,18.88,3.37,-4.88,-8.52,-15.8,-21.75,-32.82,-31.84,-30.34,-42.07,-53.02,-62.19,-78.31,-94.65,-111.03,-111.0,-110.95,-111.31,-111.32,-110.75,-110.74,-111.01,-111.13,-111.12,-110.9,-110.19,-109.32,-107.22,-105.19,-103.11,-119.94,-123.17,-122.35,-125.78,-124.48,-124.59,-130.17,-145.52,-166.21,-170.2,-170.2,-173.44,-171.73,-172.04,-171.84,-171.31,-173.54,-172.94,-189.3,-193.34,-192.36,-191.47,-190.51,-189.96,-189.61,-188.85,-187.63,-200.79,-233.59,-246.39,-244.56,-243.43,-243.17,-253.88,-261.03,-274.31,-273.9,-273.16,-272.05,-270.76,-269.33,-267.43,-275.72,-277.99,-303.18,-315.48,-341.47,-356.69,-365.56,-364.83,-369.98,-372.68,-370.75,-368.49,-365.81,-363.34,-361.02,-359.03,-353.17,-367.71,-372.34,-376.38,-376.35,-391.24,-425.98,-451.73,-459.63,-461.02,-460.11,-482.06,-487.72,-497.69,-507.77,-513.86,-513.17,-534.77,-562.89,-568.3,-576.23,-575.83,-576.33,-575.33,-574.77,-574.24,-573.65,-572.65,-571.62,-570.8,-570.01,-569.24,-568.57,-572.48,-571.9,-571.37,-571.63,-569.55,-569.42,-566.21,-575.36,-577.51,-576.65,-575.77,-575.22,-573.51,-571.15,-574.82,-579.72,-585.41,-582.05,-582.22,-581.94,-580.96,-581.87,-580.81,-580.65,-583.15,-582.0,-580.91,-579.99,-579.41,-578.6,-577.52,-578.04,-584.89,-584.54,-584.22,-584.54,-588.0,-588.25,-585.02,-585.08,-583.72,-582.46,-581.26,-580.28,-579.36,-578.38,-577.51,-577.01,-585.02,-585.46,-585.08,-584.48,-584.1,-590.47,-584.01,-591.98,-597.99,-596.13,-594.7,-593.24,-591.9,-589.77,-588.71,-584.71,-587.31,-587.01,-588.14,-591.92,-583.25,-585.94,-579.01,-577.78,-576.49,-575.57,-574.77,-574.2,-573.36,-572.17,-570.98,-571.73,-564.29,-565.09,-574.19,-576.5,-579.26,-587.74,-601.11,-619.78,-620.71,-618.73,-616.75,-614.94,-613.38,-612.13,-610.77,-609.32,-635.35,-676.06,-713.4,-742.9,-763.53,-798.46,-829.34,-833.47,-832.22,-830.2,-828.35,-826.65,-825.35,-824.07,-822.72,-821.69,-829.47,-836.8,-833.74,-829.98,-826.09,-824.11,-828.15,-823.05,-821.32,-819.34,-816.85,-814.49,-812.82,-811.04,-809.89,-808.66,-789.72,-782.95,-783.02,-764.95,-760.45,-733.61,-706.19,-682.71,-671.28,-669.61,-667.85,-666.24,-664.86,-663.73,-662.89,-662.09,-628.71,-610.81,-580.1,-577.27,-572.01,-568.44,-564.86,-569.02,-568.24,-567.34,-566.46,-565.63,-565.0,-564.24,-563.98,-563.61,-558.5,-527.05,-513.88,-469.8,-445.28,-421.36,-403.16,-402.81,-389.24,-387.57,-386.05,-384.14,-382.26,-380.5,-379.66,-378.89,-344.93,-301.98,-264.55,-224.42,-189.04,-161.2,-123.68,-91.32,-60.27,-38.31,-37.89,-36.87,-35.46,-34.25,-34.16,-34.46,0.01],"gs":[0.23,0.41,0.69,0.78,13.84,0.55,12.94,12.9,7.8,11.55,1.01,1.12,0.46,11.54,16.34,14.0,0.62,8.33,13.55,9.67,7.54,9.8,7.73,7.23,0.53,7.75,0.42,1.12,0.91,7.27,0.32,10.74,11.36,0.19,0.13,0.31,0.3,0.82,0.39,0.78,0.1,0.38,0.04,0.12,0.64,0.36,0.21,13.81,0.46,0.21,0.38,0.75,0.16,0.4,0.5,0.54,0.87,8.51,0.84,1.05,0.43,0.21,0.5,0.17,0.34,0.38,0.25,11.2,0.58,0.59,0.33,0.18,0.34,0.51,0.65,0.27,8.47,8.97,0.52,0.23,0.25,0.49,0.29,0.59,0.14,0.95,0.39,0.2,0.27,0.43,0.46,0.47,0.49,8.88,7.44,11.98,0.94,0.86,0.5,7.17,0.4,0.38,0.73,0.54,0.71,0.58,0.43,13.12,0.24,7.39,8.97,1.33,8.29,11.44,0.47,0.23,0.29,0.37,0.92,13.43,7.86,7.47,0.31,0.45,8.58,7.43,9.81,0.3,1.1,0.27,0.79,0.51,0.18,0.56,0.15,0.33,0.84,0.68,1.43,0.42,0.44,0.34,0.53,9.66,9.32,9.91,0.39,0.85,0.67,0.63,0.39,0.37,0.38,0.13,12.92,0.63,14.32,0.59,0.11,0.41,1.01,0.26,0.69,0.72,0.77,0.19,0.37,0.49,0.5,0.25,0.29,0.3,0.23,0.26,0.25,0.51,0.47,8.88,0.58,0.08,0.54,1.35,0.43,0.69,0.07,0.72,0.78,0.16,0.68,0.28,0.33,0.52,0.61,0.58,11.02,10.98,1.12,0.2,0.03,0.62,0.15,0.49,0.18,0.3,0.48,0.46,9.24,15.32,0.33,10.15,0.94,0.64,0.54,0.93,0.7,0.64,0.33,0.48,0.53,15.9,18.31,1.05,0.31,11.98,0.87,0.39,8.11,0.5,0.82,0.52,0.39,0.31,0.97,0.83,0.15,0.04,11.72,9.98,11.27,0.24,11.34,10.26,9.59,0.73,0.88,0.66,1.1,0.8,0.39,0.74,0.23,0.48,12.22,0.5,0.95,0.56,0.24,0.66,14.4,0.5,0.57,0.73,0.65,0.11,0.43,0.59,0.47,0.7,14.36,0.46,14.77,14.0,14.44,17.68,10.34,16.36,0.7,0.79,0.55,0.32,0.45,0.09,0.18,0.13,13.97,15.14,0.39,9.58,0.42,9.32,11.24,0.71,0.3,0.14,0.22,0.49,0.16,0.44,0.3,0.43,13.59,18.15,8.25,19.49,0.75,0.7,0.57,0.41,13.55,0.27,0.56,0.48,0.67,0.81,0.98,0.16,14.69,19.99,16.4,17.74,1.15,0.3,14.14,13.65,16.47,0.24,0.58,0.35,0.16,0.45,0.98,0.9,0.05],"acc":[2.3,3.3,13.3,6.7,5.9,3.6,7.2,11.0,7.4,5.4,3.1,3.8,3.8,4.3,10.8,5.1,5.1,7.9,5.6,22.8,4.6,5.9,5.9,3.3,3.1,3.1,3.1,19.5,3.3,4.1,5.6,10.5,4.1,4.9,2.8,2.8,4.3,4.3,4.1,4.3,5.6,4.6,7.7,3.8,3.1,4.1,3.3,3.1,2.3,5.9,6.7,4.3,4.1,4.6,6.7,2.6,3.1,6.4,15.6,7.2,3.3,5.6,13.3,2.8,5.1,7.2,3.6,6.4,4.9,5.4,8.7,2.8,4.3,2.8,8.7,2.0,2.6,3.3,2.3,2.8,3.6,5.6,3.8,4.9,5.4,4.9,3.3,5.1,2.6,3.8,4.6,4.3,3.6,3.8,6.7,3.6,5.9,10.5,2.6,3.3,5.4,5.9,13.3,3.1,3.8,2.6,2.0,2.6,3.1,3.1,3.3,9.7,4.3,18.4,3.6,2.8,4.9,8.7,4.3,3.6,4.3,4.3,3.6,20.2,13.8,4.1,4.1,2.6,3.6,5.9,2.8,3.8,5.1,7.2,16.9,31.0,3.8,3.1,5.4,4.9,3.1,5.1,3.3,5.9,3.3,4.1,4.9,3.1,6.4,22.5,2.8,2.8,2.6,5.4,2.8,3.6,5.9,9.7,2.8,2.6,3.1,3.6,3.1,3.3,6.1,8.7,3.3,7.2,3.6,4.3,3.1,2.0,2.0,2.8,3.8,5.4,4.9,6.1,7.4,2.8,4.6,4.3,13.1,3.1,4.6,6.4,4.1,3.1,3.1,5.6,3.8,3.1,8.2,11.5,3.6,3.1,8.4,4.9,2.6,3.3,2.8,5.1,23.0,5.1,2.8,2.8,11.8,4.9,3.6,7.4,6.7,3.3,5.1,7.7,4.3,4.3,5.9,3.3,5.1,4.6,4.3,4.3,3.8,6.9,5.4,7.2,3.6,2.6,4.9,11.0,3.6,5.1,3.3,5.1,3.3,3.1,3.8,3.8,3.8,3.8,5.1,3.8,8.7,3.8,2.8,6.9,18.9,7.2,7.2,3.6,2.3,2.8,5.1,3.1,6.7,4.9,3.1,4.1,7.7,6.9,8.7,7.2,4.1,4.3,2.8,3.1,3.8,7.4,3.1,6.1,3.6,3.1,8.2,13.8,4.9,4.1,9.5,6.9,2.3,3.1,3.6,4.3,2.8,2.8,3.1,5.6,3.3,3.6,3.8,8.4,6.4,9.7,37.4,2.6,5.9,12.8,4.1,3.6,3.8,9.0,4.1,7.9,10.2,5.4,3.3,4.3,7.4,3.3,6.1,4.1,2.8,3.8,7.9,9.2,4.1,2.6,3.3,3.6,4.1,6.9,4.3,4.6,7.2,5.6,4.9,2.8,6.1,4.3,2.6,3.1,2.8,3.1,3.8],"meta":{"id":"4262-84830876","tag":"147","start":"2008-06-12T15:00","end":"2008-07-03T13:30","site":"Punta Suarez","lat0":-1.38,"lon0":-89.75,"colony_offset_km":[1.11,0.81]}};
+const COL = () => ({ ink: css('--ink'), muted: css('--muted'), line: css('--line'), surf: css('--surface'), soft: css('--soft'), A: css('--cA'), B: css('--cB'), C: css('--cC'), lda: css('--lda'), qda: css('--qda') });
+const F = (v, d) => fmt(v, d == null ? 2 : d);
+const big = v => { if (!isFinite(v)) return '∞'; if (v < 1e6) return Math.round(v).toLocaleString('en-GB'); const e = Math.floor(Math.log10(v)); return (v / 10 ** e).toFixed(2) + '×10' + String(e).split('').map(c => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c]).join(''); };
+const pct = v => (100 * v).toFixed(0) + '%';
+function alphaCol(c, a) { const cv = document.createElement('canvas').getContext('2d'); cv.fillStyle = c; const h = cv.fillStyle; if (h[0] === '#') { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; } return h.replace('rgb(', 'rgba(').replace(')', `,${a})`); }
+function debounce(f, ms) { let t = 0; return () => { clearTimeout(t); t = setTimeout(f, ms); }; }
+function erf(x) { const s = Math.sign(x); x = Math.abs(x); const t = 1 / (1 + 0.3275911 * x), y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return s * y; }
+const ncdf = (z, m, s) => 0.5 * (1 + erf((z - m) / (s * Math.SQRT2)));
+function txt(c, s, x, y, o) { o = o || {}; c.save(); c.font = (o.size || 11) + 'px ' + css(o.mono === false ? '--f-body' : '--f-mono'); c.fillStyle = o.col || css('--muted'); c.textAlign = o.align || 'left'; c.textBaseline = o.base || 'middle'; c.fillText(s, x, y); c.restore(); }
+
+/* =================== hero: range-only tracking with 800 particles =================== */
+const HERO = { nb: 3, N: 800, tx: 5, ty: 4.6, aim: null, lastMove: -1e9, step: 0, ess: 800, run: true, vis: true, v: null };
+const HB = { 1: [[5, 3.25]], 2: [[2.2, 3.25], [7.8, 3.25]], 3: [[2.2, 3.25], [7.8, 3.25], [5, 0.75]] };
+const HW = [0, 10], HH = [0, 6.5], HSIG = 0.25, HQ = 0.14;
+const HR = mulberry32(2024);
+HERO.px = new Float64Array(HERO.N); HERO.py = new Float64Array(HERO.N); HERO.w = new Float64Array(HERO.N).fill(1 / HERO.N);
+function heroScatter() { for (let i = 0; i < HERO.N; i++) { HERO.px[i] = HW[1] * HR(); HERO.py[i] = HH[1] * HR(); } HERO.w.fill(1 / HERO.N); }
+heroScatter();
+const refl = (v, lo, hi) => v < lo ? 2 * lo - v : v > hi ? 2 * hi - v : v;
+function heroUpdate() {
+  // the target: follow the pointer, or wander on its own
+  const now = performance.now();
+  let gx, gy;
+  if (HERO.aim && now - HERO.lastMove < 2500) { gx = HERO.aim[0]; gy = HERO.aim[1]; }
+  else { const s = now / 1000; gx = 5 + 3.6 * Math.sin(0.31 * s) + 0.4 * Math.sin(1.3 * s); gy = 3.25 + 2.3 * Math.sin(0.47 * s + 1); }
+  const dx = gx - HERO.tx, dy = gy - HERO.ty, d = Math.hypot(dx, dy), mv = Math.min(d, 0.22);
+  if (d > 1e-9) { HERO.tx += dx / d * mv; HERO.ty += dy / d * mv; }
+  const B = HB[HERO.nb], z = B.map(b => Math.hypot(HERO.tx - b[0], HERO.ty - b[1]) + HSIG * gaussOf(HR));
+  const N = HERO.N, lw = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    HERO.px[i] = refl(HERO.px[i] + HQ * gaussOf(HR), HW[0], HW[1]); HERO.py[i] = refl(HERO.py[i] + HQ * gaussOf(HR), HH[0], HH[1]);
+    let l = 0; for (let j = 0; j < B.length; j++) { const e = (z[j] - Math.hypot(HERO.px[i] - B[j][0], HERO.py[i] - B[j][1])) / HSIG; l -= 0.5 * e * e; } lw[i] = l;
+  }
+  PFC.normLog(lw, HERO.w); HERO.ess = PFC.essOf(HERO.w); HERO.z = z;
+  let mx = 0, my = 0; for (let i = 0; i < N; i++) { mx += HERO.w[i] * HERO.px[i]; my += HERO.w[i] * HERO.py[i]; } HERO.mx = mx; HERO.my = my;
+  const idx = PFC.systematic(HERO.w, HR); HERO.px = Float64Array.from(idx, j => HERO.px[j]); HERO.py = Float64Array.from(idx, j => HERO.py[j]); HERO.w.fill(1 / N);
+  // spread and a crude two-cluster check: share of particles on each side of the beacon line
+  let sx = 0, sy = 0; for (let i = 0; i < N; i++) { sx += (HERO.px[i] - mx) ** 2; sy += (HERO.py[i] - my) ** 2; } HERO.spread = Math.sqrt((sx + sy) / N);
+  let above = 0; for (let i = 0; i < N; i++) if (HERO.py[i] > 3.25) above++; HERO.above = above / N;
+  HERO.step++;
+}
+function drawHero() {
+  const cv = $('#hero-cv'), v = HERO.v = frame(cv, HW, HH, { l: 6, r: 6, t: 6, b: 6 }, true), c = v.ctx, C = COL();
+  c.fillStyle = C.soft; c.globalAlpha = 0.5; c.fillRect(v.X(0), v.Y(6.5), v.X(10) - v.X(0), v.Y(0) - v.Y(6.5)); c.globalAlpha = 1;
+  const B = HB[HERO.nb];
+  B.forEach((b, j) => { if (HERO.z) { c.beginPath(); c.arc(v.X(b[0]), v.Y(b[1]), Math.max(1, HERO.z[j] * (v.X(1) - v.X(0))), 0, 7); c.strokeStyle = C.muted; c.globalAlpha = 0.45; c.setLineDash([3, 4]); c.lineWidth = 1; c.stroke(); c.setLineDash([]); c.globalAlpha = 1; } });
+  c.fillStyle = C.C; c.globalAlpha = 0.5; for (let i = 0; i < HERO.N; i++) { c.beginPath(); c.arc(v.X(HERO.px[i]), v.Y(HERO.py[i]), 1.7, 0, 7); c.fill(); } c.globalAlpha = 1;
+  B.forEach(b => { const x = v.X(b[0]), y = v.Y(b[1]); c.fillStyle = C.ink; c.beginPath(); c.moveTo(x, y - 9); c.lineTo(x + 7, y + 6); c.lineTo(x - 7, y + 6); c.closePath(); c.fill(); });
+  // the target: a small bird glyph
+  const x = v.X(HERO.tx), y = v.Y(HERO.ty); c.save(); c.strokeStyle = C.B; c.lineWidth = 3; c.lineCap = 'round'; c.beginPath(); c.moveTo(x - 9, y - 3); c.quadraticCurveTo(x - 4, y - 8, x, y); c.quadraticCurveTo(x + 4, y - 8, x + 9, y - 3); c.stroke(); c.restore();
+  if (HERO.mx != null) { c.beginPath(); c.arc(v.X(HERO.mx), v.Y(HERO.my), 7, 0, 7); c.strokeStyle = C.C; c.lineWidth = 2; c.stroke(); }
+}
+let heroCapT = 0;
+function heroCaption() {
+  const err = Math.hypot(HERO.mx - HERO.tx, HERO.my - HERO.ty), nb = HERO.nb, split = HERO.above > 0.2 && HERO.above < 0.8;
+  let s = `Step ${HERO.step.toLocaleString('en-GB')}: before resampling the ${HERO.N} weighted particles were worth ${tip(Math.round(HERO.ess), `ESS = 1 / Σ wᵢ²\n= ${fmt(HERO.ess, 1)} of ${HERO.N} particles`)} equal ones; the cloud&rsquo;s mean (ring) is ${tip(F(err, 2), `distance from the weighted mean (${F(HERO.mx)}, ${F(HERO.my)})\nto the target (${F(HERO.tx)}, ${F(HERO.ty)})`)} units from the target, spread ${tip(F(HERO.spread, 2), 'root-mean-square distance of the particles\nfrom their mean')}. `;
+  if (nb === 1) s += 'One range reading says how far, not which way, so the particles spread round a ring: the posterior is a ring, and its mean sits near the middle, far from the target.';
+  else if (nb === 2) s += split ? `Two ranges pin the target to one of two mirror-image points, one each side of the line through the beacons, and ${pct(Math.min(HERO.above, 1 - HERO.above))} of the cloud is on the wrong side. The data cannot tell them apart; the particles keep both.` : 'Two ranges leave two mirror-image candidates, one each side of the beacon line. Right now the cloud has settled on one side; cross the line slowly and the other one can win.';
+  else s += 'Three ranges in general position pick out one point, and the cloud is a single tight blob that follows the target. The dashed circles are the latest noisy ranges.';
+  $('#hero-cap').innerHTML = s;
+}
+fig($('#hero-cv'), drawHero);
+{
+  const cv = $('#hero-cv');
+  const aim = e => { const v = HERO.v; if (!v) return; const [px, py] = evPos(cv, e); HERO.aim = [clamp(v.iX(px), 0.2, 9.8), clamp(v.iY(py), 0.2, 6.3)]; HERO.lastMove = performance.now(); };
+  cv.addEventListener('pointermove', aim); cv.addEventListener('pointerdown', e => { aim(e); });
+  seg1('[data-hb]', 'data-hb', b => { HERO.nb = +b; heroCaption(); });
+  $('#hero-scatter').addEventListener('click', () => { heroScatter(); });
+  if ('IntersectionObserver' in window) new IntersectionObserver(es => es.forEach(en => { HERO.vis = en.isIntersecting; })).observe(cv);
+  let last = 0;
+  const loop = ts => { if (HERO.vis && !document.hidden && ts - last > 55) { last = ts; heroUpdate(); drawHero(); if (ts - heroCapT > 700) { heroCapT = ts; heroCaption(); } } requestAnimationFrame(loop); };
+  for (let i = 0; i < 25; i++) heroUpdate();
+  heroCaption(); requestAnimationFrame(loop);
+}
+
+/* =================== 1. constructing a DBN =================== */
+const CN = { mode: 'own', n: 20, k: 3 };
+const PRESETS = {
+  umb: { S: ['Rain'], E: ['Umbrella'], inter: [[0, 0]], intra: [], sens: [[0, 0]], cap: 'The umbrella world: one Boolean state variable and one sensor. A DBN with one discrete state variable is exactly an HMM.' },
+  bat: { S: ['X', 'Battery', 'BMBroken'], E: ['Z', 'BMeter'], inter: [[0, 0], [1, 1], [0, 1], [2, 2]], intra: [], sens: [[0, 0], [1, 1], [2, 1]], cap: 'A battery-powered robot: X is its position and velocity, read by a position sensor Z; moving (X) drains the battery; the meter BMeter reads the battery and is also a child of the persistent BMBroken variable (next section).' },
+  alb: { S: ['Mode', 'Velocity', 'Position', 'Outlier'], E: ['GPS fix'], inter: [[0, 0], [0, 1], [1, 1], [2, 2]], intra: [[0, 1], [1, 2]], sens: [[2, 0], [3, 0]], cap: 'The model the project uses for the albatross: a hidden behaviour mode (resting or travelling) drives the velocity, which moves the position; each fix depends on the position and on a hidden outlier switch that has no memory.' },
+};
+function cnStruct() {
+  if (CN.mode !== 'own') return PRESETS[CN.mode];
+  const n = CN.n, k = Math.min(CN.k, n), S = [], inter = [];
+  for (let j = 0; j < n; j++) { S.push('X' + (j + 1)); for (let p = 0; p < k; p++) inter.push([(j - p + n) % n, j]); }
+  return { S, E: [], inter, intra: [], sens: [], cap: `Your sparse DBN: ${n} Boolean state variables; each X<sup>j</sup><sub>t+1</sub> has ${k} parent${k > 1 ? 's' : ''} in slice t (itself and its ${k - 1} left-hand neighbour${k === 2 ? '' : 's'}, wrapping round). Sensors are not drawn.` };
+}
+function cnCounts(st) {
+  const n = st.S.length, par = st.S.map(() => 0); st.inter.forEach(e => par[e[1]]++); st.intra.forEach(e => par[e[1]]++);
+  const k = Math.max(...par), dbn = par.reduce((s, p) => s + 2 ** p, 0);
+  return { n, k, par, dbn, hmm: 2 ** (2 * n), states: 2 ** n };
+}
+function drawCN() {
+  const cv = $('#cn-cv'), r = cv.getBoundingClientRect(), v = frame(cv, [0, 1], [0, 1], { l: 0, r: 0, t: 0, b: 0 }), c = v.ctx, C = COL(), w = r.width, h = r.height;
+  const st = cnStruct(), n = st.S.length, show = n <= 10 ? [...Array(n).keys()] : [0, 1, 2, 3, 4, 5, 6, 7, -1, n - 1];
+  const hasE = st.E.length > 0, xs = hasE ? [0.11, 0.36, 0.64, 0.89] : [0, 0.3, 0.7, 0], rows = show.length;
+  const top = 36, bot = h - 16, rh = (bot - top) / rows, nw = Math.min(hasE ? 0.2 * w : 0.24 * w, 120), nh = Math.min(30, rh * 0.7);
+  const fs = Math.max(9, Math.min(12, nw / 8));
+  const posS = (j, col) => { const rI = show.indexOf(j); return rI < 0 ? null : [xs[col] * w, top + rh * (rI + 0.5)]; };
+  const posE = (e, col) => { const ps = st.sens.filter(s => s[1] === e).map(s => posS(s[0], col === 0 ? 1 : 2)).filter(Boolean); const y = ps.reduce((a, p) => a + p[1], 0) / ps.length; return [xs[col] * w, y]; };
+  txt(c, 'slice t', xs[1] * w, 14, { align: 'center', col: C.muted }); txt(c, 'slice t+1', xs[2] * w, 14, { align: 'center', col: C.muted });
+  c.strokeStyle = C.line; c.setLineDash([4, 4]); c.beginPath(); c.moveTo(w / 2, 26); c.lineTo(w / 2, h - 8); c.stroke(); c.setLineDash([]);
+  const arrow = (x1, y1, x2, y2, col, curve) => { c.save(); c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 1.4; c.beginPath(); c.moveTo(x1, y1); let ax = x1, ay = y1; if (curve) { const mx = (x1 + x2) / 2 + curve, my = (y1 + y2) / 2; c.quadraticCurveTo(mx, my, x2, y2); ax = mx; ay = my; } else c.lineTo(x2, y2); c.stroke();
+    const a = Math.atan2(y2 - ay, x2 - ax); c.beginPath(); c.moveTo(x2, y2); c.lineTo(x2 - 7 * Math.cos(a - 0.4), y2 - 7 * Math.sin(a - 0.4)); c.lineTo(x2 - 7 * Math.cos(a + 0.4), y2 - 7 * Math.sin(a + 0.4)); c.closePath(); c.fill(); c.restore(); };
+  // inter-slice arcs
+  st.inter.forEach(([a, b]) => { const p = posS(a, 1), q = posS(b, 2); if (!p || !q) return; arrow(p[0] + nw / 2, p[1], q[0] - nw / 2 - 2, q[1], alphaCol(C.C, 0.75)); });
+  // intra-slice arcs, both slices
+  st.intra.forEach(([a, b]) => [1, 2].forEach(col => { const p = posS(a, col), q = posS(b, col); if (!p || !q) return; arrow(p[0], p[1] + nh / 2, q[0], q[1] - nh / 2 - 2, C.muted); }));
+  // sensor arcs
+  if (hasE) st.sens.forEach(([s, e]) => { [[1, 0], [2, 3]].forEach(([cs, ce]) => { const p = posS(s, cs), q = posE(e, ce); if (!p) return; const left = ce === 0; arrow(left ? p[0] - nw / 2 : p[0] + nw / 2, p[1], left ? q[0] + nw / 2 + 2 : q[0] - nw / 2 - 2, q[1], C.muted); }); });
+  const node = (x, y, label, sub, ev) => { c.save(); c.beginPath(); const rx = x - nw / 2, ry = y - nh / 2; if (c.roundRect) c.roundRect(rx, ry, nw, nh, 7); else c.rect(rx, ry, nw, nh); c.fillStyle = ev ? C.soft : C.surf; c.fill(); c.strokeStyle = ev ? C.muted : C.C; c.lineWidth = ev ? 1 : 1.6; c.stroke();
+    c.font = fs + 'px ' + css('--f-body'); const tw = c.measureText(label).width; c.font = (fs - 2) + 'px ' + css('--f-body'); const sw = c.measureText(sub).width;
+    c.fillStyle = C.ink; c.textBaseline = 'middle'; c.textAlign = 'left'; c.font = fs + 'px ' + css('--f-body'); const x0 = x - (tw + sw + 1) / 2; c.fillText(label, x0, y); c.font = (fs - 2) + 'px ' + css('--f-body'); c.fillStyle = C.muted; c.fillText(sub, x0 + tw + 1, y + 4); c.restore(); };
+  show.forEach((j, rI) => { const y = top + rh * (rI + 0.5); if (j < 0) { txt(c, '⋮', xs[1] * w, y, { align: 'center', size: 16 }); txt(c, '⋮', xs[2] * w, y, { align: 'center', size: 16 }); return; } node(xs[1] * w, y, st.S[j], 't'); node(xs[2] * w, y, st.S[j], 't+1'); });
+  if (hasE) st.E.forEach((e, k) => { const p = posE(k, 0), q = posE(k, 3); node(p[0], p[1], e, 't', true); node(q[0], q[1], e, 't+1', true); });
+}
+function syncCN() {
+  $('#cn-n-o').textContent = CN.n; $('#cn-k-o').textContent = Math.min(CN.k, CN.n);
+  const st = cnStruct(), K = cnCounts(st);
+  $('#cn-cap').innerHTML = st.cap + (CN.mode === 'own' ? '' : ' Shaded boxes are evidence variables; purple arcs link the slices.');
+  const parTxt = CN.mode === 'own' ? `${K.n} × 2^${K.k}` : K.par.map(p => '2^' + p).join(' + ');
+  $('#cn-d').innerHTML = tip(big(K.dbn), `Σ over the ${K.n} variables of 2^(number of parents)\n= ${parTxt}\n= ${big(K.dbn)}\n(each variable treated as Boolean)`);
+  $('#cn-h').innerHTML = tip(big(K.hmm), `2^${K.n} × 2^${K.n} = 2^${2 * K.n}\n= ${big(K.hmm)} entries`);
+  $('#cn-s').innerHTML = tip(big(K.states), `2^${K.n} joint assignments\nof ${K.n} Boolean variables`);
+  $('#cn-r').innerHTML = tip(big(K.hmm / K.dbn) + '×', `${big(K.hmm)} ÷ ${big(K.dbn)}`);
+  $('#run-cn').innerHTML = `<b>Running example</b> ${CN.mode === 'own' ? `n = ${K.n}, k = ${K.k}` : 'the ' + { umb: 'umbrella world', bat: 'battery robot', alb: 'albatross tracker' }[CN.mode] + ', treating every variable as Boolean'}: the DBN needs ${tip(big(K.dbn), parTxt + ' = ' + big(K.dbn))} numbers; the HMM&rsquo;s transition matrix has ${tip(big(K.hmm), `(2^${K.n})² = 2^${2 * K.n}`)} entries, ${tip(big(K.states * (K.states - 1)), `2^${K.n} × (2^${K.n} − 1)`)} of them free.`;
+  let s;
+  if (K.n === 1) s = 'With a single state variable there is nothing to factor: the DBN and the HMM are the same model, with the same table.';
+  else if (K.hmm / K.dbn < 100) s = `With only ${K.n} state variables the gap is small (a factor of ${big(K.hmm / K.dbn)}), and gluing them into one HMM state is a perfectly reasonable thing to do.`;
+  else s = `The factored model needs ${big(K.dbn)} numbers; the flattened HMM needs ${big(K.hmm)}, ${big(K.hmm / K.dbn)} times as many. Each extra state variable doubles the HMM&rsquo;s state count and quadruples its matrix, but adds only one small table to the DBN. Sparse dependence is what makes big temporal models writable at all; the next sections show it does not make them easy to <i>reason</i> with.`;
+  $('#cn-say').innerHTML = s;
+  drawCN();
+}
+fig($('#cn-cv'), drawCN);
+seg1('[data-cn]', 'data-cn', m => { CN.mode = m; syncCN(); });
+const cnOwn = () => { if (CN.mode !== 'own') { CN.mode = 'own'; $$('[data-cn]').forEach(b => b.setAttribute('aria-pressed', b.dataset.cn === 'own' ? 'true' : 'false')); } };
+$('#cn-n').addEventListener('input', e => { CN.n = +e.target.value; cnOwn(); syncCN(); });
+$('#cn-k').addEventListener('input', e => { CN.k = +e.target.value; cnOwn(); syncCN(); });
+
+/* =================== 2. the battery meter =================== */
+const BT = { z0: 20, len: 1, phi: 0.05, T: 40 };
+function runBT() {
+  const sc = PFC.batScenario(BT.T, BT.z0, BT.len, 3), out = {};
+  ['gauss', 'transient', 'persistent'].forEach(m => { out[m] = PFC.batFilter(sc.M, m, BT.phi); });
+  BT.sc = sc; BT.f = out;
+}
+function drawBT() {
+  if (!BT.f) return;
+  const cv = $('#bt-cv'), v = frame(cv, [0, BT.T], [-0.2, 5.6], { l: 40, r: 40 }), c = v.ctx, C = COL();
+  axes(v, 'time step t', 'battery charge', { sx: 5, sy: 1 });
+  const f = BT.f, sc = BT.sc; clip(v);
+  // P(broken), right axis 0..1 mapped to 0..5
+  c.beginPath(); c.moveTo(v.X(0), v.Y(0)); for (let t = 0; t <= BT.T; t++) c.lineTo(v.X(t), v.Y(5 * f.persistent.pBr[t])); c.lineTo(v.X(BT.T), v.Y(0)); c.closePath(); c.fillStyle = alphaCol(C.C, 0.13); c.fill();
+  if (BT.len > 0) { c.fillStyle = alphaCol(C.qda, 0.07); c.fillRect(v.X(BT.z0 - 0.5), v.pad.t, v.X(Math.min(BT.T, BT.z0 + BT.len - 1) + 0.5) - v.X(BT.z0 - 0.5), v.ph); }
+  const line = (arr, col, lw, dash) => { c.save(); c.strokeStyle = col; c.lineWidth = lw; if (dash) c.setLineDash(dash); c.beginPath(); arr.forEach((y, t) => t ? c.lineTo(v.X(t), v.Y(y)) : c.moveTo(v.X(t), v.Y(y))); c.stroke(); c.restore(); };
+  // true charge as a step line
+  c.save(); c.strokeStyle = C.ink; c.setLineDash([5, 4]); c.lineWidth = 1.3; c.beginPath(); sc.B.forEach((b, t) => { if (!t) c.moveTo(v.X(0), v.Y(b)); else { c.lineTo(v.X(t), v.Y(sc.B[t - 1])); c.lineTo(v.X(t), v.Y(b)); } }); c.stroke(); c.restore();
+  line(f.transient.eB, alphaCol(C.B, 0.75), 5.5); line(f.gauss.eB, C.qda, 2); line(f.persistent.eB, C.C, 2);
+  for (let t = 1; t <= BT.T; t++) dot(v, t, sc.M[t], sc.M[t] === 0 && t >= BT.z0 && t < BT.z0 + BT.len ? C.qda : C.muted, 3);
+  v.ctx.restore();
+  c.save(); c.font = '11px ' + css('--f-mono'); c.fillStyle = C.C; c.textAlign = 'left'; c.textBaseline = 'middle';
+  [0, 0.5, 1].forEach(p => c.fillText(p.toFixed(1), v.w - v.pad.r + 5, v.Y(5 * p))); c.restore();
+}
+function syncBT() {
+  $('#bt-z-o').textContent = BT.z0; $('#bt-l').max = BT.T - BT.z0 + 1; if (BT.len > BT.T - BT.z0 + 1) BT.len = BT.T - BT.z0 + 1; $('#bt-l').value = BT.len;
+  $('#bt-l-o').textContent = BT.len === BT.T - BT.z0 + 1 ? BT.len + ' (to the end)' : BT.len; $('#bt-p-o').textContent = BT.phi.toFixed(2);
+  runBT(); const f = BT.f, tE = BT.len > 0 ? BT.z0 + BT.len - 1 : BT.T, sc = BT.sc;
+  const how = m => `E[B_${tE} | m_1:${tE}] = Σ_b b · P(B_${tE} = b | readings)\nexact forward filter over ${m === 'persistent' ? '6 charges × {working, broken} = 12' : '6'} states`;
+  $('#bt-g').innerHTML = tip(F(f.gauss.eB[tE]), how('gauss')); $('#bt-t').innerHTML = tip(F(f.transient.eB[tE]), how('transient')); $('#bt-q').innerHTML = tip(F(f.persistent.eB[tE]), how('persistent'));
+  $('#bt-b').innerHTML = tip(F(f.persistent.pBr[tE], 3), `P(BMBroken_${tE} = true | m_1:${tE}),\npersistent failure model`);
+  const S0 = PFC.batSensor(0), S1 = PFC.batSensor(BT.phi), b = sc.B[BT.z0];
+  $('#run-bt1').innerHTML = `<b>Running example</b> at step ${BT.z0} the true charge is ${b}. A reading of 0 has probability ${tip(S0[b][0].toExponential(2), `G(0; ${b}) = e^(−${b}²/(2·0.7²)) / Σ_m e^(−(m−${b})²/(2·0.7²))\n= ${S0[b][0].toExponential(3)}`)} under the Gaussian model but ${tip(F(S1[b][0], 4), `(1 − φ)·G(0; ${b}) + φ\n= ${F(1 - BT.phi, 2)} × ${S0[b][0].toExponential(2)} + ${F(BT.phi, 2)}\n= ${F(S1[b][0], 5)}`)} with &phi; = ${F(BT.phi)}: the glitch term dominates.`;
+  const g = f.gauss.eB[tE], tr = f.transient.eB[tE], pe = f.persistent.eB[tE], pb = f.persistent.pBr[tE], ended = BT.len > 0 && tE < BT.T;
+  let s;
+  if (BT.len === 0) s = `No zeros: the three models see ordinary readings and agree closely (E[B<sub>40</sub>] = ${F(g)}, ${F(tr)}, ${F(pe)}; true charge ${sc.B[BT.T]}). The failure terms cost almost nothing when nothing fails.`;
+  else if (BT.len === 1) s = `A single zero at step ${BT.z0}. The Gaussian model takes it at face value and its estimate crashes to ${F(g)} (the true charge is ${sc.B[tE]}). Both failure models call it a glitch and stay at ${F(tr)}${Math.abs(tr - pe) > 0.05 ? ' and ' + F(pe) : ''}; a broken meter is still very unlikely (P = ${F(pb, 3)}).`;
+  else {
+    s = `After ${BT.len} zeros in a row the Gaussian model says ${F(g)}, the transient model ${F(tr)}${tr < 1 ? ' (it now believes the battery is nearly flat: a long run of independent glitches is less likely than a dead battery)' : ' (still holding on, but each extra zero is another independent glitch and its estimate keeps sliding)'}, and the persistent model ${F(pe)}, with P(broken) = ${F(pb, 3)}${pb > 0.5 ? ': it has decided the meter broke and lets the charge follow its predicted slow drain' : ': not yet convinced, but every further zero makes &ldquo;broken&rdquo; the better explanation'}.`;
+    if (ended) s += ` When real readings resume at step ${tE + 1}, P(broken) drops to 0 at once (a broken meter cannot read anything but 0) and all three estimates snap back.`;
+  }
+  $('#bt-say').innerHTML = s; drawBT();
+}
+fig($('#bt-cv'), drawBT);
+$('#bt-z').addEventListener('input', e => { BT.z0 = +e.target.value; syncBT(); });
+$('#bt-l').addEventListener('input', e => { BT.len = +e.target.value; syncBT(); });
+$('#bt-p').addEventListener('input', e => { BT.phi = +e.target.value; syncBT(); });
+
+/* =================== 3. exact inference: machines in a line =================== */
+const EX = { n: 8, mode: 'all', t: 20, seed: 5, T: 30 };
+function runEX() { const sim = PFC.chainSim(EX.n, EX.T, EX.seed, EX.mode === 'all'); const t0 = performance.now(); EX.ex = PFC.chainExact(EX.n, sim.E); EX.ms = performance.now() - t0; EX.fa = PFC.chainFactored(EX.n, sim.E); EX.sim = sim;
+  EX.err = [0]; for (let t = 1; t <= EX.T; t++) { let m = 0; for (let i = 0; i < EX.n; i++) m = Math.max(m, Math.abs(EX.ex.marg[t][i] - EX.fa.marg[t][i])); EX.err.push(m); } }
+function drawEXheat() {
+  if (!EX.ex) return;
+  const cv = $('#ex-heat'), r = cv.getBoundingClientRect(), v = frame(cv, [0.5, EX.T + 0.5], [0, 1], { l: 82, r: 8, t: 8, b: 24 }), c = v.ctx, C = COL(), n = EX.n;
+  const gap = 10, bh = (v.ph - gap) / 2, ch = bh / n, cw = v.pw / EX.T;
+  const cell = p => { c.fillStyle = alphaCol(C.C, Math.max(0.03, Math.min(1, p))); };
+  [['exact', EX.ex.marg], ['factored', EX.fa.marg]].forEach(([lab, M], bI) => {
+    const y0 = v.pad.t + bI * (bh + gap);
+    c.fillStyle = C.surf; c.fillRect(v.pad.l, y0, v.pw, bh);
+    for (let t = 1; t <= EX.T; t++) for (let i = 0; i < n; i++) { cell(M[t][i]); c.fillRect(v.pad.l + (t - 1) * cw, y0 + i * ch, cw + 0.5, ch + 0.5); if (!EX.sim.X[t][i]) { c.fillStyle = C.ink; c.beginPath(); c.arc(v.pad.l + (t - 0.5) * cw, y0 + (i + 0.5) * ch, Math.min(2.6, ch / 3, cw / 3), 0, 7); c.fill(); } }
+    txt(c, lab, 6, y0 + bh / 2, { col: C.ink, size: 11 });
+    if (n <= 10 || r.height > 260) for (let i = 0; i < n; i += Math.max(1, Math.ceil(n / 6))) txt(c, String(i + 1), v.pad.l - 6, y0 + (i + 0.5) * ch, { align: 'right', size: 9 });
+  });
+  c.strokeStyle = C.ink; c.lineWidth = 1.6; c.strokeRect(v.pad.l + (EX.t - 1) * cw, v.pad.t, cw, v.ph);
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = C.muted; c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let t = 5; t <= EX.T; t += 5) c.fillText(String(t), v.pad.l + (t - 0.5) * cw, v.h - v.pad.b + 6);
+  if (EX.mode === 'last') { c.fillStyle = C.B; c.textAlign = 'left'; c.fillText('light', v.pad.l + 2, v.pad.t + (n - 0.5) * ch - 6); }
+}
+function drawEXmi() {
+  if (!EX.ex) return;
+  const mx = Math.max(0.3, ...EX.ex.mi, ...EX.err) * 1.12, cv = $('#ex-mi'), v = frame(cv, [0, EX.T], [0, mx], { l: 40 }), c = v.ctx, C = COL();
+  axes(v, 'step t', 'bits / error', { sx: 5 }); clip(v);
+  const line = (a, col) => { c.strokeStyle = col; c.lineWidth = 2.2; c.beginPath(); a.forEach((y, t) => t ? c.lineTo(v.X(t), v.Y(y)) : c.moveTo(v.X(t), v.Y(y))); c.stroke(); };
+  line(EX.ex.mi, C.C); line(EX.err, C.B); seg(v, EX.t, 0, EX.t, mx, C.ink, 1, [3, 3]); v.ctx.restore();
+}
+function syncEX() {
+  $('#ex-n-o').textContent = EX.n; $('#ex-t-o').textContent = EX.t; runEX();
+  const n = EX.n, S = 2 ** n, t = EX.t, mi = EX.ex.mi[t], er = EX.err[t];
+  $('#ex-s').innerHTML = tip(big(S), `2^${n} joint states of ${n} Boolean machines`);
+  $('#ex-o').innerHTML = tip(big(n * 2 * S), `eliminate one old variable at a time:\n${n} variables × 2^${n} states × 2 new values\n= ${big(n * 2 * S)}  (a full matrix would need 2^${2 * n} = ${big(S * S)})\nwhole 30-step run took ${EX.ms.toFixed(1)} ms here`);
+  $('#ex-i').innerHTML = tip(F(mi, 3), `Σ H(Xʲ) − H(X¹…Xⁿ) at t = ${t}\n= ${F(EX.ex.Hj[t], 4)} − ${F(EX.ex.Hall[t], 4)}`);
+  let wi = 0; for (let i = 0; i < n; i++) if (Math.abs(EX.ex.marg[t][i] - EX.fa.marg[t][i]) > Math.abs(EX.ex.marg[t][wi] - EX.fa.marg[t][wi])) wi = i;
+  $('#ex-e').innerHTML = tip(F(er, 3), `machine ${wi + 1} at t = ${t}:\nexact P(fault) = ${F(EX.ex.marg[t][wi], 4)}\nfactored P(fault) = ${F(EX.fa.marg[t][wi], 4)}`);
+  const ln = n - 1;
+  $('#run-ex1').innerHTML = `<b>Running example</b> at t = ${t}, the forward message has ${tip(big(S), '2^' + n)} entries. For machine ${n}: P(fault | lights) = ${tip(F(EX.ex.marg[t][ln], 3), 'sum of the exact belief over the\n' + big(S / 2) + ' joint states with machine ' + n + ' faulty')} exactly, ${tip(F(EX.fa.marg[t][ln], 3), 'from the fully factored filter')} factored; the light ${EX.sim.E[t][ln] ? 'is on' : 'is off'} and the machine ${EX.sim.X[t][ln] ? 'is in fact working' : 'is in fact faulty'}.`;
+  $('#run-ex2').innerHTML = `<b>Running example</b> at t = ${t}: ${tip(F(EX.ex.Hj[t], 3), 'Σ over machines of the binary entropy\nof each exact marginal')} &minus; ${tip(F(EX.ex.Hall[t], 3), '−Σ_s P(s) log₂ P(s)\nover the ' + big(S) + ' joint states')} = ${tip(F(mi, 3), 'multi-information')} bits.`;
+  const peak = Math.max(...EX.ex.mi), pkErr = Math.max(...EX.err);
+  let s = EX.mode === 'all'
+    ? `Every machine has its own light, so each marginal is pinned down mostly by its own evidence and the belief stays close to a product: multi-information peaks at ${F(peak, 3)} bits and the factored filter is never more than ${F(pkErr, 3)} away from the exact marginals. Local evidence keeps the correlations weak.`
+    : `Only the last machine has a light. Everything known about the others comes from inference through the chain, so their states become entangled with machine ${n}&rsquo;s and with each other: multi-information reaches ${F(peak, 3)} bits and the factored filter, which assumes independence, is off by up to ${F(pkErr, 3)} in a marginal. This is the regime where exact filtering needs the full joint, and its 2<sup>n</sup> cost.`;
+  if (n >= 12) s += ` At n = ${n} the exact belief already has ${big(S)} numbers; at n = 30 it would have over a billion.`;
+  $('#ex-say').innerHTML = s; drawEXheat(); drawEXmi();
+}
+fig($('#ex-heat'), drawEXheat); fig($('#ex-mi'), drawEXmi);
+seg1('[data-exs]', 'data-exs', m => { EX.mode = m; syncEX(); });
+$('#ex-n').addEventListener('input', e => { EX.n = +e.target.value; syncEX(); });
+$('#ex-t').addEventListener('input', e => { EX.t = +e.target.value; syncEX(); });
+$('#ex-new').addEventListener('click', () => { EX.seed++; syncEX(); });
+
+/* =================== 4. SIR =================== */
+const SR = { lg: 3, m: 0, s: 2, seed: 3 };
+const srL = () => Math.round(10 ** SR.lg);
+function drawSR() {
+  if (!SR.res) return;
+  const R = SR.res, C = COL(), qm = SR.m, qs = SR.s, ymax = Math.max(0.55, Math.min(1.4, 1.1 / (qs * Math.sqrt(2 * Math.PI)))) * 1.08;
+  { const cv = $('#sr-cv'), v = frame(cv, [-4, 4], [0, ymax], { l: 40 }), c = v.ctx; axes(v, 'z', 'density', { sx: 1 }); clip(v);
+    let wm = 0; for (let l = 0; l < R.w.length; l++) if (R.w[l] > wm) wm = R.w[l];
+    c.strokeStyle = alphaCol(C.C, 0.55); c.lineWidth = 1; const K = Math.min(R.z.length, 400);
+    for (let l = 0; l < K; l++) { const x = v.X(R.z[l]); c.beginPath(); c.moveTo(x, v.Y(0)); c.lineTo(x, v.Y(0.92 * ymax * R.w[l] / wm)); c.stroke(); }
+    curve(v, z => PFC.npdf(z, qm, qs), C.B, 2, [6, 4]); curve(v, PFC.sirP, C.ink, 2.4); v.ctx.restore(); }
+  { const cv = $('#sr-h'), v = frame(cv, [-4, 4], [0, 0.62], { l: 40 }), c = v.ctx; axes(v, 'z', 'density', { sx: 1 }); clip(v);
+    const bw = (R.hi - R.lo) / R.B; c.fillStyle = alphaCol(C.C, 0.45);
+    for (let b = 0; b < R.B; b++) { const d = R.h[b] / (srL() * bw), x0 = v.X(R.lo + b * bw), x1 = v.X(R.lo + (b + 1) * bw); c.fillRect(x0 + 0.5, v.Y(Math.min(d, 0.62)), x1 - x0 - 1, v.Y(0) - v.Y(Math.min(d, 0.62))); }
+    curve(v, PFC.sirP, C.ink, 2.4); v.ctx.restore(); }
+}
+function syncSR() {
+  const L = srL(); $('#sr-l-o').textContent = L.toLocaleString('en-GB'); $('#sr-m-o').textContent = F(SR.m, 1); $('#sr-s-o').textContent = F(SR.s);
+  const R = SR.res = PFC.sir(L, SR.m, SR.s, SR.seed);
+  let sw2 = 0; R.w.forEach(w => sw2 += w * w);
+  $('#sr-e').innerHTML = tip(Math.round(R.ess).toLocaleString('en-GB'), `1 / Σ w_l² = 1 / ${sw2.toExponential(3)}\n= ${fmt(R.ess, 1)} of L = ${L}`);
+  $('#sr-d').innerHTML = tip(R.distinct.toLocaleString('en-GB'), `distinct indices among the L = ${L}\nmultinomial draws (with replacement)`);
+  $('#sr-mu').innerHTML = tip(F(R.mean, 3), `Σ w_l z_l over the L weighted samples\n(no resampling needed); true mean\n0.65 × (−1.2) + 0.35 × 1.6 = −0.22`);
+  $('#sr-tv').innerHTML = tip(F(R.tv, 3), `½ Σ over 40 bins on [−4, 4] of\n|share of resampled values in the bin − target mass in the bin|\n0 = perfect, 1 = no overlap`);
+  let li = 0; for (let l = 1; l < L; l++) if (R.w[l] > R.w[li]) li = l;
+  const z = R.z[li], pz = PFC.sirP(z), qz = PFC.npdf(z, SR.m, SR.s);
+  let sumr = 0; for (let l = 0; l < L; l++) sumr += PFC.sirP(R.z[l]) / PFC.npdf(R.z[l], SR.m, SR.s);
+  $('#run-sr1').innerHTML = `<b>Running example</b> the heaviest of the ${L.toLocaleString('en-GB')} samples is z = ${tip(F(z, 3), 'drawn from q = N(' + F(SR.m, 1) + ', ' + F(SR.s) + '²)')}: p&#771;/q = ${tip(F(pz, 4), 'target density at z')} / ${tip(F(qz, 4), 'proposal density at z')} = ${F(pz / qz, 3)}, and dividing by the total ${tip(F(sumr, 1), 'Σ_m p̃(z_m)/q(z_m) over all samples')} gives w = ${tip(F(R.w[li], 4), F(pz / qz, 4) + ' / ' + F(sumr, 2))}.`;
+  let cw = 0; for (let l = 0; l < L; l++) if (R.z[l] <= 0) cw += R.w[l]; let cr = 0; R.zs.forEach(v => { if (v <= 0) cr++; });
+  const ex0 = 0.65 * ncdf(0, -1.2, 0.55) + 0.35 * ncdf(0, 1.6, 0.45);
+  $('#run-sr2').innerHTML = `<b>Running example</b> with a = 0: the weight on samples &le; 0 is ${tip(F(cw, 4), 'Σ of w_l over the samples with z_l ≤ 0')}; after resampling, ${tip(F(cr / L, 4), cr + ' of ' + L + ' resampled values are ≤ 0')} of the new values are &le; 0; the true p(z &le; 0) is ${tip(F(ex0, 4), '0.65 Φ((0 + 1.2)/0.55) + 0.35 Φ((0 − 1.6)/0.45)')}.`;
+  $('#run-sr3').innerHTML = `<b>Running example</b> E[z] &asymp; ${tip(F(R.mean, 4), 'Σ w_l z_l')} (true &minus;0.22); ESS = ${tip(fmt(R.ess, 1), '1 / Σ w²')} of ${L.toLocaleString('en-GB')}.`;
+  const bad = Math.abs(R.mean - PFC.sirMean) > 0.3, cover1 = ncdf(-1.2 + 0.8, SR.m, SR.s) - ncdf(-1.2 - 0.8, SR.m, SR.s), cover2 = ncdf(1.6 + 0.7, SR.m, SR.s) - ncdf(1.6 - 0.7, SR.m, SR.s);
+  let s;
+  if (bad && R.ess > 0.2 * L) s = `Here is the trap. The effective sample size is a comfortable ${Math.round(R.ess).toLocaleString('en-GB')} of ${L.toLocaleString('en-GB')}, yet the weighted mean is ${F(R.mean, 2)} instead of &minus;0.22 and the histogram is far from the curve (TV ${F(R.tv, 2)}): the proposal puts almost no samples near the ${cover1 < cover2 ? 'left' : 'right'}-hand mode, so that mode is simply missing, and the weights among the samples you do have are fairly even. ESS cannot see what was never drawn.`;
+  else if (R.ess < 0.05 * L) s = `The weights are very uneven: the ${L.toLocaleString('en-GB')} samples are worth only ${fmt(R.ess, 1)} equal ones. Resampling keeps just ${R.distinct} distinct values, copied many times over, so the histogram is spiky (TV ${F(R.tv, 2)}). A proposal much narrower than the target wastes samples like this; widen &sigma;<sub>q</sub>.`;
+  else if (bad) s = `The estimate is off (${F(R.mean, 2)} against &minus;0.22, TV ${F(R.tv, 2)}): too few samples land where the target has mass. More samples or a proposal closer to the target would help.`;
+  else s = `A good proposal: it is wider than the target and covers both modes, so the weights are moderate (ESS ${Math.round(R.ess).toLocaleString('en-GB')} of ${L.toLocaleString('en-GB')}), the weighted mean ${F(R.mean, 2)} is close to &minus;0.22, and the resampled histogram follows the curve (TV ${F(R.tv, 3)}, which shrinks as L grows).`;
+  $('#sr-say').innerHTML = s; drawSR();
+}
+fig($('#sr-cv'), drawSR); fig($('#sr-h'), drawSR);
+$('#sr-l').addEventListener('input', e => { SR.lg = +e.target.value; syncSR(); });
+$('#sr-m').addEventListener('input', e => { SR.m = +e.target.value; syncSR(); });
+$('#sr-s').addEventListener('input', e => { SR.s = +e.target.value; syncSR(); });
+$('#sr-new').addEventListener('click', () => { SR.seed++; syncSR(); });
+
+/* =================== 5. likelihood weighting vs particle filter =================== */
+const LW = { lg: 2.5, r: 0.5, seed: 5, T: 50 };
+const lwN = () => Math.round(10 ** LW.lg);
+function runLW() { const N = lwN(); LW.sim = PFC.lgSim(LW.T, LW.r, LW.seed); LW.kf = PFC.lgKF(LW.sim.y, LW.r); LW.a = PFC.lgRun(LW.sim.y, LW.r, N, 9 + LW.seed, false); LW.b = PFC.lgRun(LW.sim.y, LW.r, N, 9 + LW.seed, true); }
+function drawLW() {
+  if (!LW.sim) return;
+  const C = COL(), sim = LW.sim, kf = LW.kf, T = LW.T;
+  let lo = Infinity, hi = -Infinity; sim.x.forEach(v => { lo = Math.min(lo, v); hi = Math.max(hi, v); }); lo -= 2.5; hi += 2.5;
+  { const cv = $('#lw-cv'), v = frame(cv, [0, T], [lo, hi], { l: 40 }), c = v.ctx; axes(v, 'step t', 'state x', { sx: 10 }); clip(v);
+    c.beginPath(); for (let t = 0; t <= T; t++) c.lineTo(v.X(t), v.Y(kf.m[t] + 2 * Math.sqrt(kf.P[t]))); for (let t = T; t >= 0; t--) c.lineTo(v.X(t), v.Y(kf.m[t] - 2 * Math.sqrt(kf.P[t]))); c.closePath(); c.fillStyle = alphaCol(C.A, 0.2); c.fill();
+    const line = (a, col, lw) => { c.strokeStyle = col; c.lineWidth = lw; c.beginPath(); a.forEach((y, t) => t ? c.lineTo(v.X(t), v.Y(y)) : c.moveTo(v.X(t), v.Y(y))); c.stroke(); };
+    line(sim.x, C.ink, 1.5); for (let t = 1; t <= T; t++) dot(v, t, sim.y[t], C.muted, 2.4); line(LW.a.mean, C.B, 2.2); line(LW.b.mean, C.C, 2.2); v.ctx.restore(); }
+  { const N = lwN(), cv = $('#lw-ess'), v = frame(cv, [0, T], [-Math.log10(N) - 0.1, 0.05], { l: 44 }), c = v.ctx;
+    axes(v, 'step t', 'ESS / N', { sx: 10, sy: 1, fy: y => Math.abs(y) < 1e-9 ? '1' : '10' + String(Math.round(y)).replace('-', '⁻').replace(/\d/g, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+d]) }); clip(v);
+    const line = (a, col) => { c.strokeStyle = col; c.lineWidth = 2.2; c.beginPath(); a.forEach((e, t) => { const y = Math.log10(e / N); t ? c.lineTo(v.X(t), v.Y(y)) : c.moveTo(v.X(t), v.Y(y)); }); c.stroke(); };
+    line(LW.a.ess, C.B); line(LW.b.ess, C.C); v.ctx.restore(); }
+}
+function syncLW() {
+  const N = lwN(); $('#lw-n-o').textContent = N.toLocaleString('en-GB'); $('#lw-r-o').textContent = F(LW.r, 1); runLW();
+  const kf = LW.kf, gap = r => { let s = 0; for (let t = 1; t <= LW.T; t++) s += (r.mean[t] - kf.m[t]) ** 2; return Math.sqrt(s / LW.T); };
+  const g1 = gap(LW.a), g2 = gap(LW.b), e1 = LW.a.ess[LW.T], e2 = LW.b.ess[LW.T];
+  $('#lw-e1').innerHTML = tip(fmt(e1, e1 < 10 ? 2 : 0), `1 / Σ w² at t = 50, with\nw ∝ product of 50 likelihoods`);
+  $('#lw-e2').innerHTML = tip(fmt(e2, 0), `1 / Σ w² at t = 50, after weighting\nby one likelihood (resampled every step)`);
+  $('#lw-g1').innerHTML = tip(F(g1, 3), `√( (1/50) Σ_t (LW mean − Kalman mean)² )`); $('#lw-g2').innerHTML = tip(F(g2, 3), `√( (1/50) Σ_t (PF mean − Kalman mean)² )`);
+  let tc = LW.a.ess.findIndex((e, t) => t > 0 && e < 2);
+  $('#run-lw1').innerHTML = `<b>Running example</b> at t = 10 the heaviest of the ${N.toLocaleString('en-GB')} likelihood-weighting samples carries ${tip(pct(LW.a.maxw[10]), `max_i w⁽ⁱ⁾₁₀ / Σ_j w⁽ʲ⁾₁₀\n= ${F(LW.a.maxw[10], 4)}`)} of the total weight, at t = 50 ${tip(pct(LW.a.maxw[50]), F(LW.a.maxw[50], 4))}; the particle filter&rsquo;s heaviest particle at t = 50 carries ${tip((100 * LW.b.maxw[50]).toFixed(2) + '%', F(LW.b.maxw[50], 5))}.`;
+  let s = `With N = ${N.toLocaleString('en-GB')}, likelihood weighting&rsquo;s effective sample size ${tc > 0 ? `falls below 2 by step ${tc}` : 'never quite falls below 2'} and ends at ${fmt(e1, 2)}: in effect one sample path, which wanders away from the Kalman posterior (RMS gap ${F(g1, 2)}). The particle filter keeps an ESS of ${fmt(e2, 0)} and stays on top of the exact answer (RMS gap ${F(g2, 3)}). `;
+  s += LW.r <= 0.4 ? 'A precise sensor makes each likelihood factor sharp, so the weights of likelihood weighting collapse even faster.' : LW.r >= 1.5 ? 'With a vague sensor each factor is gentle and likelihood weighting survives longer, but the product of 50 factors still concentrates on a handful of paths.' : 'Multiplying N by ten barely delays the collapse: the number of samples needed grows exponentially with the length of the run.';
+  $('#lw-say').innerHTML = s; drawLW();
+}
+fig($('#lw-cv'), drawLW); fig($('#lw-ess'), drawLW);
+$('#lw-n').addEventListener('input', debounce(() => { LW.lg = +$('#lw-n').value; syncLW(); }, 40));
+$('#lw-r').addEventListener('input', e => { LW.r = +e.target.value; syncLW(); });
+$('#lw-new').addEventListener('click', () => { LW.seed++; syncLW(); });
+
+/* =================== 6. the particle filter, phase by phase =================== */
+const PF = { N: 200, seq: 4, t: 0, ph: 0, T: 50, timer: 0 };
+const NLG = {};
+function nlGridFor(seq) { if (!NLG[seq]) { const sim = PFC.nlSim(50, seq); NLG[seq] = { sim, g: PFC.nlGrid(sim.y) }; } return NLG[seq]; }
+function runPF() { const G = nlGridFor(PF.seq); PF.sim = G.sim; PF.g = G.g; PF.run = PFC.nlPF(G.sim.y, PF.N, 21 + PF.seq); }
+function pfView() { // what to show for (t, ph)
+  const r = PF.run, g = PF.g, N = PF.N;
+  if (PF.ph === 0) return { x: r.hist[PF.t].post, w: null, dens: g.filt[PF.t], tt: PF.t, lab: PF.t ? 'resampled' : 'prior' };
+  const h = r.hist[PF.t + 1];
+  if (PF.ph === 1) return { x: h.prop, w: null, dens: g.pred[PF.t + 1], tt: PF.t + 1, lab: 'propagated' };
+  return { x: h.prop, w: h.w, dens: g.filt[PF.t + 1], tt: PF.t + 1, lab: 'weighted' };
+}
+function pfStats(V) {
+  const N = PF.N, X = PFC.nlGridX; let m = 0, p = 0, em = 0, ep = 0;
+  for (let i = 0; i < N; i++) { const w = V.w ? V.w[i] : 1 / N; m += w * V.x[i]; if (V.x[i] > 0) p += w; }
+  for (let i = 0; i < X.length; i++) { em += V.dens[i] * X[i]; if (X[i] > 0) ep += V.dens[i]; else if (X[i] === 0) ep += V.dens[i] / 2; }
+  return { m, p, em, ep, ess: V.w ? PFC.essOf(V.w) : N };
+}
+function drawPF() {
+  if (!PF.run) return;
+  const C = COL(), V = pfView(), N = PF.N, dx = PFC.nlGridX[1] - PFC.nlGridX[0];
+  let dm = 0; V.dens.forEach(d => { dm = Math.max(dm, d / dx); });
+  const ymax = Math.max(0.12, dm * 1.15);
+  { const cv = $('#pf-cv'), v = frame(cv, [-25, 25], [-0.16 * ymax, ymax], { l: 44 }), c = v.ctx; axes(v, 'state x', 'density', { sx: 5, ny: 4 }); clip(v);
+    // weighted histogram of the particles, bins of width 1
+    const hb = new Float64Array(50); for (let i = 0; i < N; i++) { const b = Math.floor(V.x[i] + 25); if (b >= 0 && b < 50) hb[b] += V.w ? V.w[i] : 1 / N; }
+    c.fillStyle = alphaCol(C.C, 0.28); for (let b = 0; b < 50; b++) if (hb[b] > 0) { const y = Math.min(ymax, hb[b]); c.fillRect(v.X(b - 25) + 0.5, v.Y(y), v.X(b - 24) - v.X(b - 25) - 1, v.Y(0) - v.Y(y)); }
+    c.beginPath(); PFC.nlGridX.forEach((x, i) => { const y = V.dens[i] / dx; i ? c.lineTo(v.X(x), v.Y(y)) : c.moveTo(v.X(x), v.Y(y)); }); c.strokeStyle = C.A; c.lineWidth = 2.4; c.stroke();
+    if (PF.ph === 2 || (PF.ph === 0 && PF.t > 0)) { const e = PF.sim.y[V.tt]; if (e > 0) { const s = Math.sqrt(20 * e); [s, -s].forEach(x => seg(v, x, 0, x, ymax, C.B, 1.3, [4, 4])); } }
+    const ry = -0.08 * ymax, K = Math.min(N, 600); let wm = 0; if (V.w) for (let i = 0; i < N; i++) wm = Math.max(wm, V.w[i]);
+    c.fillStyle = alphaCol(C.C, 0.65); for (let i = 0; i < K; i++) { const rr = V.w ? 1 + 5 * Math.sqrt(V.w[i] / wm) : 2.2; c.beginPath(); c.arc(v.X(V.x[i]), v.Y(ry) + ((i * 7919) % 11 - 5) * 0.9, rr, 0, 7); c.fill(); }
+    star(v, PF.sim.x[V.tt], ry, C.ink, 7); v.ctx.restore(); }
+  { const cv = $('#pf-fan'), v = frame(cv, [0, PF.T], [-25, 25], { l: 40 }), c = v.ctx; axes(v, 'step t', 'x', { sx: 10, sy: 10 }); clip(v);
+    const last = PF.ph === 0 ? PF.t : PF.t; c.fillStyle = alphaCol(C.C, 0.22);
+    for (let t = 0; t <= last; t++) { const xs = PF.run.hist[t].post, K = Math.min(PF.N, 150); for (let i = 0; i < K; i++) { c.fillRect(v.X(t) - 1.2, v.Y(xs[i]) - 1.2, 2.4, 2.4); } }
+    c.strokeStyle = C.ink; c.lineWidth = 1.6; c.beginPath(); for (let t = 0; t <= V.tt; t++) t ? c.lineTo(v.X(t), v.Y(PF.sim.x[t])) : c.moveTo(v.X(t), v.Y(PF.sim.x[t])); c.stroke();
+    c.save(); c.strokeStyle = C.A; c.setLineDash([5, 4]); c.lineWidth = 1.6; c.beginPath(); for (let t = 0; t <= V.tt; t++) t ? c.lineTo(v.X(t), v.Y(PF.g.mean[t])) : c.moveTo(v.X(t), v.Y(PF.g.mean[t])); c.stroke(); c.restore();
+    seg(v, V.tt, -25, V.tt, 25, C.muted, 1, [3, 3]); v.ctx.restore(); }
+}
+function syncPF() {
+  $('#pf-n-o').textContent = PF.N; const V = pfView(), St = pfStats(V), t = V.tt, e = PF.sim.y[t];
+  $('#pf-t').textContent = `${t} · ${V.lab}`;
+  $('#pf-e').innerHTML = tip(fmt(St.ess, 0), V.w ? '1 / Σ wᵢ² after weighting' : 'all weights equal: ESS = N');
+  $('#pf-p').innerHTML = `${tip(F(St.p), 'share of particle weight at x > 0')} / ${tip(F(St.ep), 'exact: grid mass at x > 0')}`;
+  $('#pf-m').innerHTML = `${tip(F(St.m, 1), 'Σ wᵢ xᵢ')} / ${tip(F(St.em, 1), 'Σ over the 601 grid points of p(x) · x')}`;
+  const caps = [t ? `Step ${t}, after resampling: ${PF.N} equally weighted particles. The green curve is the exact posterior P(x<sub>${t}</sub> | e<sub>1:${t}</sub>); the bars are the particle histogram. The star is the true state.` : `Step 0: ${PF.N} particles drawn from the prior N(0, 5), with the prior density in green.`,
+    `Propagated to step ${t}: each particle has been pushed through the transition model. The curve is now the one-step <i>prediction</i> P(x<sub>${t}</sub> | e<sub>1:${t - 1}</sub>), which the particles sample without weights.`,
+    `Weighted by the reading e<sub>${t}</sub> = ${F(e, 2)}: dot size shows each particle&rsquo;s weight; the dashed lines mark &plusmn;&radic;(20e) = &plusmn;${F(Math.sqrt(Math.max(0, 20 * e)), 1)}, the two states that explain the reading best. The curve is the exact posterior.`];
+  $('#pf-cap').innerHTML = caps[PF.ph];
+  if (PF.ph === 2) { let bi = 0; for (let i = 1; i < PF.N; i++) if (V.w[i] > V.w[bi]) bi = i; const xb = V.x[bi], d = e - xb * xb / 20;
+    $('#run-pf1').innerHTML = `<b>Running example</b> step ${t}, weight phase: the heaviest particle sits at x = ${tip(F(xb, 2), 'its propagated state')}; its likelihood is ${tip(F(Math.exp(-0.5 * d * d), 4), `exp(−(e − x²/20)² / 2)\n= exp(−(${F(e, 2)} − ${F(xb * xb / 20, 2)})² / 2)`)}, normalised to w = ${tip(F(V.w[bi], 4), 'likelihood / Σ of all likelihoods')}.`; }
+  else $('#run-pf1').innerHTML = `<b>Running example</b> step ${t}, ${V.lab}: ${PF.N} particles, all with weight ${tip('1/' + PF.N, 'after resampling (or before weighting)\nevery particle counts the same')}. Press <i>Next phase</i> to ${PF.ph === 0 ? 'propagate them' : 'weight them by the reading'}.`;
+  if (t > 0) { const xp = PF.sim.x[t - 1]; $('#run-pf2').innerHTML = `<b>Running example</b> step ${t}: from the true x<sub>${t - 1}</sub> = ${F(xp, 2)} the deterministic part gives ${tip(F(PFC.nlF(xp, t), 2), `½(${F(xp, 2)}) + 25(${F(xp, 2)})/(1 + ${F(xp, 2)}²) + 8 cos(1.2 × ${t})`)}; noise made it x<sub>${t}</sub> = ${F(PF.sim.x[t], 2)}, and the sensor read e<sub>${t}</sub> = ${tip(F(e, 2), `${F(PF.sim.x[t], 2)}² / 20 + noise = ${F(PF.sim.x[t] ** 2 / 20, 2)} + ${F(e - PF.sim.x[t] ** 2 / 20, 2)}`)}, which points at &plusmn;${F(Math.sqrt(Math.max(0, 20 * e)), 1)}.`; }
+  else $('#run-pf2').innerHTML = `<b>Running example</b> step 0: the true start is x<sub>0</sub> = ${F(PF.sim.x[0], 2)}, drawn from N(0, 5); no reading yet.`;
+  const two = St.ep > 0.15 && St.ep < 0.85;
+  let s = PF.ph === 1 ? 'Propagation spreads the cloud and moves it with the dynamics; no evidence has been used yet, so the particles follow the prediction, wide and sometimes lopsided.'
+    : PF.ph === 2 ? `Weighting is where the evidence enters: particles near &plusmn;${F(Math.sqrt(Math.max(0, 20 * e)), 1)} ${St.ess < 0.3 * PF.N ? 'get large weights and the rest almost none' : 'get the largest weights, but the reading is not very sharp compared with the spread of the cloud, so the weights stay fairly even'} (ESS ${fmt(St.ess, 0)} of ${PF.N}).`
+    : PF.t ? 'Resampling copied the heavy particles and dropped the light ones; the histogram now follows the posterior without weights.' : 'The prior cloud: wide, centred on 0.';
+  if (PF.ph !== 1 && PF.t + (PF.ph ? 1 : 0) > 0) s += two ? ` The exact posterior has two peaks (P(x &gt; 0) = ${F(St.ep)}), because x&sup2;/20 cannot tell the sign; the particles split ${F(St.p)} : ${F(1 - St.p)} between them. A Kalman filter would have to pick a single bump.` : ` The posterior is essentially one-sided right now (P(x &gt; 0) = ${F(St.ep)}): the dynamics, not the sensor, have settled the sign. Particles: ${F(St.p)}.`;
+  if (PF.N <= 60) s += ' With so few particles the histogram is ragged and a mode can die out by chance; raise N.';
+  $('#pf-say').innerHTML = s; drawPF();
+}
+function pfNext() { if (PF.ph === 2) { PF.ph = 0; PF.t++; } else if (PF.t < PF.T) PF.ph++; if (PF.t >= PF.T) { PF.t = PF.T; PF.ph = 0; pfStop(); } syncPF(); }
+function pfStop() { clearInterval(PF.timer); PF.timer = 0; $('#pf-play').textContent = 'Play'; }
+fig($('#pf-cv'), drawPF); fig($('#pf-fan'), drawPF);
+$('#pf-phase').addEventListener('click', () => { pfStop(); pfNext(); });
+$('#pf-step').addEventListener('click', () => { pfStop(); if (PF.t >= PF.T) return; PF.t++; PF.ph = 0; syncPF(); });
+$('#pf-play').addEventListener('click', () => { if (PF.timer) { pfStop(); return; } if (PF.t >= PF.T) { PF.t = 0; PF.ph = 0; } $('#pf-play').textContent = 'Pause'; PF.timer = setInterval(pfNext, 380); });
+$('#pf-reset').addEventListener('click', () => { pfStop(); PF.t = 0; PF.ph = 0; syncPF(); });
+$('#pf-n').addEventListener('input', debounce(() => { pfStop(); PF.N = +$('#pf-n').value; runPF(); PF.t = 0; PF.ph = 0; syncPF(); }, 60));
+$('#pf-new').addEventListener('click', () => { pfStop(); PF.seq++; runPF(); PF.t = 0; PF.ph = 0; syncPF(); });
+
+/* =================== 7. resampling schemes =================== */
+const RS = { N: 300, th: 1, wseed: 1, R: 20 };
+const SCH = ['multinomial', 'residual', 'systematic'];
+function runRSoff() { const r = mulberry32(500 + RS.wseed), raw = Array.from({ length: 12 }, () => Math.exp(1.1 * gaussOf(r))), s = raw.reduce((a, b) => a + b, 0); RS.w = Float64Array.from(raw, v => v / s);
+  RS.off = SCH.map((sc, k) => { const idx = PFC.RESAMPLE[sc](RS.w, mulberry32(900 + 17 * RS.wseed + k)), cnt = new Array(12).fill(0); idx.forEach(i => cnt[i]++); return cnt; }); }
+function runRS() { const G = nlGridFor(4); RS.res = SCH.map(sc => { const gaps = []; let nr = 0; for (let k = 0; k < RS.R; k++) { const p = PFC.nlPF(G.sim.y, RS.N, 100 + k, sc, RS.th); let e = 0; for (let t = 1; t <= 50; t++) e += Math.abs(p.mean[t] - G.g.mean[t]); gaps.push(e / 50); nr += p.nres; }
+  const m = gaps.reduce((a, b) => a + b, 0) / RS.R, sd = Math.sqrt(gaps.reduce((a, b) => a + (b - m) ** 2, 0) / (RS.R - 1)); return { m, se: sd / Math.sqrt(RS.R), nr: nr / RS.R }; }); }
+const RSC = () => { const C = COL(); return [C.B, C.A, C.C]; };
+function drawRS() {
+  if (!RS.off || !RS.res) return;
+  const C = COL(), cols = RSC();
+  { const cv = $('#rs-off'), mx = Math.max(4, ...RS.off.flat(), ...Array.from(RS.w, w => 12 * w)) + 0.5, v = frame(cv, [0.4, 12.6], [0, mx], { l: 34 }), c = v.ctx; axes(v, 'particle', 'copies', { sx: 1, sy: 1 }); clip(v);
+    const bw = (v.X(1) - v.X(0)) * 0.24;
+    for (let i = 0; i < 12; i++) { RS.off.forEach((cnt, k) => { const x = v.X(i + 1) + (k - 1) * bw; c.fillStyle = cols[k]; c.globalAlpha = 0.85; c.fillRect(x - bw / 2 + 0.5, v.Y(cnt[i]), bw - 1, v.Y(0) - v.Y(cnt[i])); c.globalAlpha = 1; });
+      const e = 12 * RS.w[i]; c.strokeStyle = C.ink; c.lineWidth = 2; c.beginPath(); c.moveTo(v.X(i + 1) - 1.7 * bw, v.Y(e)); c.lineTo(v.X(i + 1) + 1.7 * bw, v.Y(e)); c.stroke(); }
+    v.ctx.restore(); }
+  { const cv = $('#rs-cv'), mx = Math.max(...RS.res.map(r => r.m + r.se)) * 1.25, v = frame(cv, [0, 3], [0, mx], { l: 44 }), c = v.ctx;
+    axes(v, '', 'mean gap', { sx: 1, fx: () => '' }); clip(v);
+    RS.res.forEach((r, k) => { const x0 = v.X(k + 0.2), x1 = v.X(k + 0.8); c.fillStyle = cols[k]; c.globalAlpha = 0.85; c.fillRect(x0, v.Y(r.m), x1 - x0, v.Y(0) - v.Y(r.m)); c.globalAlpha = 1;
+      seg(v, k + 0.5, r.m - r.se, k + 0.5, r.m + r.se, C.ink, 1.6); seg(v, k + 0.42, r.m + r.se, k + 0.58, r.m + r.se, C.ink, 1.6); seg(v, k + 0.42, r.m - r.se, k + 0.58, r.m - r.se, C.ink, 1.6);
+      txt(c, SCH[k], (x0 + x1) / 2, v.Y(0) - 12, { align: 'center', col: C.surf, size: 11 }); });
+    v.ctx.restore(); }
+}
+function syncRSoff() {
+  runRSoff(); const dev = RS.off.map(cnt => cnt.reduce((s, n, i) => s + (n - 12 * RS.w[i]) ** 2, 0));
+  $('#rs-offcap').innerHTML = `Twelve particles with random weights, resampled to 12: bars show the copies each gets under <span style="color:var(--cB)">&#9646;</span> multinomial, <span style="color:var(--cA)">&#9646;</span> residual and <span style="color:var(--cC)">&#9646;</span> systematic resampling; the black tick is the expected number N&middot;w<sub>i</sub>. Squared deviation from the ticks, &Sigma;(copies &minus; Nw)&sup2;: ${SCH.map((s, k) => `${s} ${tip(F(dev[k], 2), 'Σ over the 12 particles of\n(copies − 12 wᵢ)²')}`).join(', ')}.`;
+  drawRS();
+}
+function syncRS() {
+  $('#rs-n-o').textContent = RS.N; $('#rs-th-o').textContent = RS.th >= 1 ? '1 (every step)' : F(RS.th); runRS(); const R = RS.res;
+  ['#rs-a', '#rs-b', '#rs-c'].forEach((id, k) => { $(id).innerHTML = tip(F(R[k].m, 3), `mean over ${RS.R} runs of\n(1/50) Σ_t |PF mean − exact mean|\n± ${F(R[k].se, 3)} (standard error)`); });
+  $('#rs-r').innerHTML = tip(fmt(R[2].nr, 1), `average number of steps that resampled\nmultinomial ${fmt(R[0].nr, 1)}, residual ${fmt(R[1].nr, 1)}, systematic ${fmt(R[2].nr, 1)}`);
+  const G = nlGridFor(4), p = PFC.nlPF(G.sim.y, RS.N, 100, 'systematic', RS.th), t = 25;
+  const w25 = p.hist[t].w; let wmax = 0; for (let i = 0; i < RS.N; i++) wmax = Math.max(wmax, w25[i]);
+  $('#run-rs1').innerHTML = `<b>Running example</b> one systematic run with L = ${RS.N} at n = 25: E[z<sub>25</sub> | X<sub>25</sub>] &asymp; ${tip(F(p.mean[t], 3), 'Σ_l w⁽ˡ⁾ z⁽ˡ⁾ over the ' + RS.N + ' particles')}, exact ${tip(F(G.g.mean[t], 3), 'grid filter')}; the largest weight is ${tip(F(wmax, 4), 'max_l w⁽ˡ⁾₂₅ (uniform would be 1/' + RS.N + ' = ' + F(1 / RS.N, 4) + ')')}.`;
+  const order = [0, 1, 2].sort((a, b) => R[a].m - R[b].m), best = order[0], worst = order[2], sep = R[worst].m - R[best].m > 2 * Math.hypot(R[worst].se, R[best].se);
+  let s = `At N = ${RS.N} and ${RS.th >= 1 ? 'resampling every step' : 'resampling only when ESS &lt; ' + F(RS.th) + 'N (about ' + fmt(R[2].nr, 0) + ' of 50 steps)'}, ${SCH[best]} has the smallest average gap (${F(R[best].m, 3)}) and ${SCH[worst]} the largest (${F(R[worst].m, 3)}). `;
+  s += sep ? 'That difference is larger than twice its standard error, so it is probably real for this sequence.' : 'The differences are within about two standard errors, so 20 runs cannot separate the schemes here: resampling noise is only one source of error, next to the propagation noise every scheme shares.';
+  if (RS.th < 0.5) s += ` With this threshold the filter resamples on only about ${fmt(R[2].nr, 0)} of the 50 steps; in between, the weights drift towards degeneracy, which tends to widen the gap.`;
+  s += ' Systematic resampling also costs least: one random number per step instead of N.';
+  $('#rs-say').innerHTML = s; drawRS();
+}
+fig($('#rs-off'), drawRS); fig($('#rs-cv'), drawRS);
+$('#rs-new').addEventListener('click', () => { RS.wseed++; syncRSoff(); });
+$('#rs-n').addEventListener('input', debounce(() => { RS.N = +$('#rs-n').value; syncRS(); }, 120));
+$('#rs-th').addEventListener('input', debounce(() => { RS.th = +$('#rs-th').value; syncRS(); }, 120));
+
+/* =================== 8. project: the albatross =================== */
+const PJD = { p: 0.5, s: 5, e: 0.1, N: 1000, k: 30, tag: 7 };
+const PJ = Object.assign({}, PJD), SIGO = 50, T = TRIP.t.length;
+const STEPT = [0]; for (let k = 1; k < T; k++) STEPT.push(Math.hypot(TRIP.x[k] - TRIP.x[k - 1], TRIP.y[k] - TRIP.y[k - 1]) / (TRIP.t[k] - TRIP.t[k - 1]) > 10 ? 1 : 0);
+const pjM = () => ({ sig: PJ.s, eps: PJ.e, sigO: SIGO });
+const q95 = e => { const s = Array.from(e).sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(0.95 * s.length))]; };
+function pjObs() { PJ.obs = PFC.tagSim(TRIP, PJ.tag, PJ.p, PJ.s, PJ.e, SIGO); const Rv = (1 - PJ.e) * PJ.s ** 2 + PJ.e * SIGO ** 2; PJ.Rv = Rv; PJ.kf = PFC.bestKF(TRIP, PJ.obs, Rv); PJ.ek = PFC.errs(TRIP, PJ.kf.kf.ex, PJ.kf.kf.ey); }
+function pjRun() { const t0 = performance.now(); PJ.pf = PFC.birdPF(TRIP, PJ.obs, PJ.N, 11, pjM(), 300); PJ.ms = performance.now() - t0; PJ.ep = PFC.errs(TRIP, PJ.pf.ex, PJ.pf.ey); }
+function pjCounts(pf, obs) { let ag = 0, cau = 0, fa = 0, no = 0, ns = 0; for (let k = 1; k < T; k++) { if ((pf.pT[k] > 0.5) === !!STEPT[k]) ag++; if (obs.seen[k]) { ns++; if (obs.out[k]) { no++; if (pf.pOut[k] > 0.5) cau++; } else if (pf.pOut[k] > 0.5) fa++; } } return { ag, cau, fa, no, ns }; }
+function drawPJmap() {
+  if (!PJ.pf) return;
+  const C = COL(), cv = $('#pj-map'), v = frame(cv, [-60, 1280], [-900, 90], { l: 46, r: 10, t: 10, b: 30 }, true), c = v.ctx, k = PJ.k, ob = PJ.obs, pf = PJ.pf;
+  axes(v, 'km east', 'km north', { nx: 6, ny: 5 }); clip(v);
+  const path = (xs, ys, col, lw, dash) => { c.save(); c.strokeStyle = col; c.lineWidth = lw; if (dash) c.setLineDash(dash); c.beginPath(); for (let i = 0; i < T; i++) i ? c.lineTo(v.X(xs[i]), v.Y(ys[i])) : c.moveTo(v.X(xs[i]), v.Y(ys[i])); c.stroke(); c.restore(); };
+  path(TRIP.x, TRIP.y, alphaCol(C.ink, 0.75), 1.3);
+  for (let i = 1; i < T; i++) if (ob.seen[i]) { c.fillStyle = alphaCol(C.muted, 0.75); c.beginPath(); c.arc(v.X(ob.ox[i]), v.Y(ob.oy[i]), 2.2, 0, 7); c.fill(); if (pf.pOut[i] > 0.5) { c.strokeStyle = C.qda; c.lineWidth = 1.4; c.beginPath(); c.arc(v.X(ob.ox[i]), v.Y(ob.oy[i]), 5.5, 0, 7); c.stroke(); } }
+  path(PJ.kf.kf.ex, PJ.kf.kf.ey, C.B, 1.5, [5, 4]); path(pf.ex, pf.ey, C.C, 2);
+  const cl = pf.clouds[k]; if (cl) { let wm = 0; for (let i = 0; i < cl.w.length; i++) wm = Math.max(wm, cl.w[i]); c.fillStyle = C.C; for (let i = 0; i < cl.x.length; i++) { c.globalAlpha = 0.15 + 0.6 * Math.sqrt(cl.w[i] / wm); c.beginPath(); c.arc(v.X(cl.x[i]), v.Y(cl.y[i]), 1.8, 0, 7); c.fill(); } c.globalAlpha = 1; }
+  star(v, TRIP.x[k], TRIP.y[k], C.ink, 8); c.beginPath(); c.arc(v.X(pf.ex[k]), v.Y(pf.ey[k]), 7, 0, 7); c.strokeStyle = C.C; c.lineWidth = 2; c.stroke();
+  const x0 = v.X(0), y0 = v.Y(0); c.fillStyle = C.A; c.beginPath(); c.moveTo(x0, y0 - 8); c.lineTo(x0 + 7, y0 + 5); c.lineTo(x0 - 7, y0 + 5); c.closePath(); c.fill();
+  txt(c, 'colony (Punta Suarez)', x0 + 2, y0 + 16, { col: C.A, size: 11 });
+  v.ctx.restore();
+}
+function drawPJcharts() {
+  if (!PJ.pf) return;
+  const C = COL(), k = PJ.k;
+  { const cv = $('#pj-err'), v = frame(cv, [0, T], [-1, 3], { l: 40 }), c = v.ctx; axes(v, 'fix', 'error', { sx: 50, sy: 1, fy: y => (10 ** y >= 1 ? String(10 ** y) : (10 ** y).toFixed(1)) }); clip(v);
+    const line = (e, col, lw) => { c.strokeStyle = col; c.lineWidth = lw; c.beginPath(); e.forEach((d, i) => { const y = Math.log10(Math.max(0.1, d)); i ? c.lineTo(v.X(i + 1), v.Y(y)) : c.moveTo(v.X(i + 1), v.Y(y)); }); c.stroke(); };
+    line(PJ.ek, alphaCol(C.B, 0.9), 1.3); line(PJ.ep, C.C, 1.5);
+    c.fillStyle = alphaCol(C.muted, 0.6); for (let i = 1; i < T; i++) if (PJ.obs.seen[i]) c.fillRect(v.X(i) - 0.5, v.Y(-1) - 5, 1, 5);
+    seg(v, k, -1, k, 3, C.ink, 1, [3, 3]); v.ctx.restore(); }
+  { const cv = $('#pj-mode'), v = frame(cv, [0, T], [0, 1], { l: 40 }), c = v.ctx; axes(v, 'fix', 'P(travel)', { sx: 50, sy: 0.5 }); clip(v);
+    c.fillStyle = alphaCol(C.A, 0.22); for (let i = 1; i < T; i++) if (STEPT[i]) c.fillRect(v.X(i - 0.5), v.pad.t, v.X(i + 0.5) - v.X(i - 0.5) + 0.3, v.ph);
+    c.strokeStyle = C.C; c.lineWidth = 1.6; c.beginPath(); PJ.pf.pT.forEach((p, i) => i ? c.lineTo(v.X(i), v.Y(p)) : c.moveTo(v.X(i), v.Y(p))); c.stroke();
+    seg(v, k, 0, k, 1, C.ink, 1, [3, 3]); v.ctx.restore(); }
+}
+function syncPJk() {
+  const k = PJ.k, pf = PJ.pf, ob = PJ.obs; $('#pj-k-o').textContent = `${k} (${F(TRIP.t[k], 1)} h)`;
+  const e = Math.hypot(pf.ex[k] - TRIP.x[k], pf.ey[k] - TRIP.y[k]);
+  if (ob.seen[k]) { const d = Math.hypot(ob.ox[k] - TRIP.x[k], ob.oy[k] - TRIP.y[k]);
+    $('#run-pj').innerHTML = `<b>Running example</b> fix ${k} was transmitted ${tip(F(d, 1) + ' km', 'distance from the GPS truth\n' + (ob.out[k] ? '(drawn as an outlier, σ = 50 km)' : '(an ordinary error, σ = ' + PJ.s + ' km)'))} from the truth${ob.out[k] ? ', as a true outlier' : ''}. The particles put P(outlier | fix) = ${tip(F(pf.pOut[k], 3), 'Σᵢ wᵢ · εN(y; pᵢ, 50²) / [ (1−ε)N(y; pᵢ, σ²) + εN(y; pᵢ, 50²) ]\nwith the updated weights wᵢ')}, and their mean is ${tip(F(e, 1) + ' km', 'distance from the particle-weighted mean\nto the GPS truth at fix ' + k)} from the truth.`; }
+  else $('#run-pj').innerHTML = `<b>Running example</b> fix ${k} was not transmitted, so the cloud there is a pure prediction: its spread is ${tip(F(pf.spr[k], 1) + ' km', '√ Σᵢ wᵢ |pᵢ − mean|²')} and its mean is ${tip(F(e, 1) + ' km', 'distance to the GPS truth')} from the truth.`;
+  drawPJmap(); drawPJcharts();
+}
+function syncPJ() {
+  $('#pj-p-o').textContent = F(PJ.p); $('#pj-s-o').textContent = PJ.s; $('#pj-e-o').textContent = F(PJ.e); $('#pj-n-o').textContent = PJ.N.toLocaleString('en-GB');
+  pjRun(); const pf = PJ.pf, K = pjCounts(pf, PJ.obs), ep = PJ.ep, ek = PJ.ek;
+  const pm = PFC.median(ep), pr = PFC.rmse(ep), km = PFC.median(ek), kr = PFC.rmse(ek);
+  $('#pj-r1').innerHTML = `${tip(F(pm, 1), 'median over the 332 fixes after the start\nof |particle mean − GPS position|')} / ${tip(F(pr, 1), '√ mean of squared errors over 332 fixes\n(' + PJ.N + ' particles, seed 11, ' + PJ.ms.toFixed(0) + ' ms)')}`;
+  $('#pj-r2').innerHTML = `${tip(F(km, 1), 'median error, constant-velocity Kalman filter\nR = ' + F(PJ.Rv, 1) + ' km² (the error variance of the tag)')} / ${tip(F(kr, 1), 'RMS error; q = ' + PJ.kf.q + ' was the best of\n' + PFC.KFQ.join(', ') + '\nchosen by looking at the truth')}`;
+  $('#pj-r3').innerHTML = `${tip(K.cau + '/' + K.no, 'true outliers with P(outlier | fix) > 0.5')} · ${tip(String(K.fa), 'ordinary fixes with P(outlier | fix) > 0.5,\nout of ' + (K.ns - K.no))}`;
+  $('#pj-r4').innerHTML = tip(`${K.ag}/${T - 1}`, 'steps where [P(travel) > 0.5] equals\n[GPS track moved faster than 10 km/h]');
+  let s = `The particle filter&rsquo;s typical (median) error is ${F(pm, 1)} km against the Kalman filter&rsquo;s ${F(km, 1)} km${pm < km ? '' : ' (here the Kalman filter is ahead even on the median)'}. `;
+  s += pr < kr ? `Its RMS error is lower too (${F(pr, 1)} against ${F(kr, 1)} km). ` : `On RMS error, which is dominated by a few long transmission gaps in fast flight where any filter must guess, the hindsight-tuned Kalman filter is ahead here (${F(kr, 1)} against ${F(pr, 1)} km). `;
+  s += `The particles flag ${K.cau} of the ${K.no} outliers with ${K.fa} false alarm${K.fa === 1 ? '' : 's'}, and their behaviour mode matches the GPS speed at ${K.ag} of ${T - 1} steps. `;
+  s += PJ.p < 0.3 ? 'With so few fixes the cloud spends most of its time predicting: scrub through a gap and watch it fan out, then snap together at the next fix.' : PJ.e > 0.2 ? 'With this many outliers the Kalman filter is dragged off course again and again, while the mixture sensor model lets the particles shrug most of them off.' : PJ.N < 300 ? 'With few particles the cloud can lose the bird during a long gap; raise N.' : '<b>Scrub the fix slider</b> through a gap to see the cloud spread and recover.';
+  $('#pj-say').innerHTML = s; syncPJk();
+}
+function pjBoard() {
+  const tb = $('#pj-board'), ob = PJ.obs, ks = []; for (let k = 1; k < T; k++) if (ob.seen[k]) ks.push(k);
+  const raw = ks.map(k => Math.hypot(ob.ox[k] - TRIP.x[k], ob.oy[k] - TRIP.y[k])), oks = ks.filter(k => ob.out[k]);
+  const atO = e => oks.length ? oks.reduce((s, k) => s + e[k - 1], 0) / oks.length : NaN;
+  const rows = [['Raw fixes (transmitted only)', raw, null, '—'], [`Kalman, q = ${PJ.kf.q} (tuned in hindsight)`, PJ.ek, atO(PJ.ek), '—']];
+  const head = '<thead><tr><th>Method</th><th>Median km</th><th>RMS km</th><th>95th pct km</th><th>At outliers km</th><th>RMS, seeds 11&ndash;15</th></tr></thead>';
+  const row = (r, extra) => `<tr${extra || ''}><td>${r[0]}</td><td class="num">${F(PFC.median(r[1]), 2)}</td><td class="num">${F(PFC.rmse(r[1]), 2)}</td><td class="num">${F(q95(r[1]), 2)}</td><td class="num">${r[2] == null ? '—' : F(r[2], 2)}</td><td class="num">${r[3]}</td></tr>`;
+  tb.innerHTML = head + '<tbody>' + rows.map(r => row(r)).join('') + '<tr><td colspan="6" class="muted">computing the particle filters&hellip;</td></tr></tbody>';
+  const Ns = [100, 300, 1000, 3000], res = []; let i = 0; const myTag = PJ.tag + ':' + PJ.p + ':' + PJ.s + ':' + PJ.e; PJ.boardKey = myTag;
+  const stepB = () => {
+    if (PJ.boardKey !== myTag) return;
+    const N = Ns[i], runs = []; let det = null;
+    for (let sd = 11; sd <= 15; sd++) { const p = PFC.birdPF(TRIP, ob, N, sd, pjM()), e = PFC.errs(TRIP, p.ex, p.ey); runs.push(PFC.rmse(e)); if (sd === 11) det = e; }
+    res.push([`Particle filter, N = ${N.toLocaleString('en-GB')}`, det, atO(det), tip(F(runs.reduce((a, b) => a + b, 0) / 5, 2), 'mean of the five RMS errors\n' + runs.map(v => F(v, 2)).join(', ') + '\nmin ' + F(Math.min(...runs), 2) + ', max ' + F(Math.max(...runs), 2)), runs.reduce((a, b) => a + b, 0) / 5]);
+    i++;
+    const best = [rows[1], ...res].reduce((b, r) => PFC.median(r[1]) < PFC.median(b[1]) ? r : b);
+    tb.innerHTML = head + '<tbody>' + [...rows, ...res].map(r => row(r, r === best ? ' class="win"' : '')).join('') + (i < Ns.length ? '<tr><td colspan="6" class="muted">computing&hellip;</td></tr>' : '') + '</tbody>';
+    if (i < Ns.length) setTimeout(stepB, 30);
+    else { const r3 = res[3], kr = PFC.rmse(PJ.ek);
+      const kmed = PFC.median(PJ.ek), nb = res.filter(r => PFC.median(r[1]) < kmed).length;
+      const mono = res.every((r, j) => !j || r[4] <= res[j - 1][4]), ko = atO(PJ.ek), po = res.map(r => r[2]);
+      $('#pj-bsay').innerHTML = `The filter with the best median is highlighted (the raw fixes are not a competitor: they exist only where the tag transmitted). ${nb === 4 ? 'Every particle filter beats the Kalman filter on the median' : nb === 0 ? 'At these settings no particle filter beats the Kalman filter on the median' : nb + ' of the 4 particle filters beat the Kalman filter on the median'}. ${po.every(v => v < ko) ? `At the outlier fixes every particle filter is closer than the Kalman filter (${F(Math.max(...po), 1)} km at most, against ${F(ko, 1)} km), which shows the main reason the particles can win: the Kalman filter, with one Gaussian for all errors, is pulled towards every outlier.` : 'At the outlier fixes the two kinds of filter are close at these settings.'} RMS error ${mono ? 'falls as N grows' : 'does not fall steadily with N here'} and varies a lot from seed to seed (hover the last column); with 3,000 particles the five seeds average ${F(r3[4], 1)} km against the Kalman filter&rsquo;s ${F(kr, 1)} km.`; }
+  };
+  setTimeout(stepB, 30);
+}
+function pjHonest() {
+  const dflt = PJD, obs = PFC.tagSim(TRIP, dflt.tag, dflt.p, dflt.s, dflt.e, SIGO), p = PFC.birdPF(TRIP, obs, 1000, 11, { sig: dflt.s, eps: dflt.e, sigO: SIGO }), e = PFC.errs(TRIP, p.ex, p.ey);
+  $('#pj-honest').innerHTML = `<b>Browser versus Python.</b> At the default settings this page computes RMS error ${tip(F(PFC.rmse(e), 3), 'this browser, N = 1000, seed 11')} km and median ${F(PFC.median(e), 3)} km for the particle filter, and at fix 100 a mean of (${p.ex[100].toFixed(9)}, ${p.ey[100].toFixed(9)}) with P(travel) = ${p.pT[100].toFixed(9)}; compare the last lines of the Python output above. They agree to every printed digit because both use the same generator, the same order of draws and the same order of floating-point operations. <b>What is real and what is not:</b> the track is real GPS data; the cheap tag is simulated, so the errors and gaps are synthetic, and the filter is told the true error model. The motion parameters were chosen by hand after a few trial runs on this very track, so they flatter the particle filter a little, just as the hindsight tuning of q flatters the Kalman filter. A serious analysis would estimate both from data (for instance with the EM ideas of the next chapters) and use a smoother, which looks at future fixes too, to fill the gaps.`;
+}
+fig($('#pj-map'), drawPJmap); fig($('#pj-err'), drawPJcharts); fig($('#pj-mode'), drawPJcharts);
+const pjRe = debounce(() => { pjObs(); syncPJ(); pjBoard(); }, 120);
+$('#pj-p').addEventListener('input', e => { PJ.p = +e.target.value; $('#pj-p-o').textContent = F(PJ.p); pjRe(); });
+$('#pj-s').addEventListener('input', e => { PJ.s = +e.target.value; $('#pj-s-o').textContent = PJ.s; pjRe(); });
+$('#pj-e').addEventListener('input', e => { PJ.e = +e.target.value; $('#pj-e-o').textContent = F(PJ.e); pjRe(); });
+$('#pj-n').addEventListener('input', debounce(() => { PJ.N = +$('#pj-n').value; syncPJ(); }, 120));
+$('#pj-k').addEventListener('input', e => { PJ.k = +e.target.value; syncPJk(); });
+$('#pj-tag').addEventListener('click', () => { PJ.tag++; pjObs(); syncPJ(); pjBoard(); });
+$('#pj-def').addEventListener('click', () => { Object.assign(PJ, PJD); $('#pj-p').value = PJ.p; $('#pj-s').value = PJ.s; $('#pj-e').value = PJ.e; $('#pj-n').value = PJ.N; $('#pj-k').value = PJ.k; pjObs(); syncPJ(); pjBoard(); });
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+syncCN(); syncBT(); syncEX(); syncSR(); syncLW(); runPF(); PF.t = 4; PF.ph = 2; syncPF(); syncRSoff(); syncRS();
+pjObs(); syncPJ(); pjHonest(); pjBoard();
+window.__pf = { PFC, PJ, PF, RS, SR, LW, EX, BT, HERO };
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
