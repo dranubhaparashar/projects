@@ -1,0 +1,1801 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Exact inference in Bayesian networks: enumeration trees, factors, variable elimination step by step, elimination orders and treewidth, why exact inference is NP-hard, the landscape of approximate inference in deep models, and a project that answers diagnostic queries on the ALARM network and races seven elimination orders.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Exact Inference: Enumeration &amp; Variable Elimination</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+  svg: { fontCache: 'global' },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Lecture notebook layout; shared design system with the other lectures. */
+:root {
+  --bg: #F3F5F6;
+  --surface: #FFFFFF;
+  --ink: #16202A;
+  --muted: #586572;
+  --line: #D6DCE1;
+  --soft: #E8ECEF;
+  --lda: #2747C9;
+  --qda: #BE2F48;
+  --cA: #0F8278;
+  --cB: #CF7F12;
+  --cC: #7848A4;
+  --f-display: "STIX Two Text", Cambria, Georgia, "Times New Roman", serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+    --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141A; --surface: #161D25; --ink: #E4E9EE; --muted: #96A3B0; --line: #2A3540; --soft: #1D2630;
+  --lda: #8AA2FF; --qda: #FF7A90; --cA: #38C0B1; --cB: #F0AA45; --cC: #B78DE3;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) var(--bg); }
+::-webkit-scrollbar { width: 12px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, var(--bg)); border-radius: 999px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+#progress { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; height: 3px; width: 0; background: linear-gradient(90deg, var(--cA), var(--lda)); z-index: 40; pointer-events: none; border-radius: 0 2px 2px 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 1.0625rem; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 68ch; }
+.prose > * + * { margin-top: 0.9em; }
+p { margin: 0; }
+a { color: var(--lda); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lda); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; line-height: 1.12; }
+h2 { font-size: clamp(1.85rem, 4vw, 2.7rem); }
+h3 { font-size: 1.32rem; margin-top: 2.2em; }
+em.term { font-family: var(--f-display); font-style: italic; font-size: 1.08em; }
+.a-c { color: var(--cA); } .b-c { color: var(--cB); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; align-items: center; gap: 20px; height: 52px; }
+.back { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.back:hover { color: var(--ink); background: var(--soft); }
+.brand { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.brand span { color: var(--muted); font-weight: 400; }
+.navlinks { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.navlinks::-webkit-scrollbar { display: none; }
+.navlinks a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 6px 10px; border-radius: 999px; }
+.navlinks a:hover { color: var(--ink); background: var(--soft); }
+.navlinks a.on { color: var(--ink); background: var(--soft); font-weight: 500; }
+.hero { padding-block: 56px 40px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 48px; align-items: center; }
+.hero-grid > * { min-width: 0; }
+.kicker { font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.hero h1 { font-size: clamp(2.7rem, 7vw, 4.6rem); line-height: 1.0; margin-top: 14px; letter-spacing: -0.02em; }
+.hero .sub { font-family: var(--f-display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin-top: 10px; }
+.hero .lead { margin-top: 22px; font-size: 1.12rem; max-width: 48ch; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 30px; border-top: 1px solid var(--line); }
+.facts div { padding: 12px 14px 0 0; }
+.facts div + div { padding-left: 14px; border-left: 1px solid var(--line); }
+.facts dt { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 4px 0 0; font-size: 0.95rem; line-height: 1.4; }
+figure { margin: 0; }
+.plot { position: relative; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.plot canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ar-16x10 { aspect-ratio: 16 / 10; } .ar-3x1 { aspect-ratio: 3.2 / 1; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 10px; line-height: 1.5; max-width: 70ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 0.85rem; border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.seg button[aria-pressed="true"] { background: var(--soft); color: var(--ink); font-weight: 500; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.fig-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+section.chap { padding-block: 72px; border-top: 1px solid var(--line); }
+.tag { display: inline-flex; align-items: center; gap: 8px; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; margin-bottom: 14px; color: var(--muted); }
+.tag::before { content: ""; width: 18px; height: 3px; border-radius: 2px; background: currentColor; }
+.chap > .wrap > h2 + .prose { margin-top: 18px; }
+.block { margin-top: 32px; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.eq { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 14px; max-width: 760px; }
+.eq .m { overflow-x: auto; overflow-y: hidden; font-size: 1.06rem; }
+.eq .read { font-size: 0.9rem; color: var(--muted); border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq .read b { color: var(--ink); font-weight: 600; }
+.eq-say { font-size: 0.92rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.eq-say b { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cC); font-weight: 700; margin-right: 6px; }
+.eq-say em { font-family: var(--f-display); font-size: 1.04em; }
+mjx-container[display="true"] { margin: 0.5em 0 !important; }
+mjx-container { color: var(--ink); }
+.tip { border-bottom: 1.5px dotted color-mix(in srgb, var(--lda) 65%, transparent); cursor: help; position: relative; outline: none; border-radius: 2px; }
+.tip:hover, .tip:focus { background: color-mix(in srgb, var(--lda) 10%, transparent); }
+.tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 9px); background: var(--ink); color: var(--bg); padding: 9px 12px; border-radius: 7px; font-size: 0.8rem; font-family: var(--f-mono); line-height: 1.55; font-weight: 400; white-space: pre-line; width: max-content; max-width: min(78vw, 360px); z-index: 50; box-shadow: 0 6px 20px rgba(0,0,0,.22); pointer-events: none; }
+.pts { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.pts li { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; }
+.pts li b { font-weight: 600; }
+.uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-top: 18px; }
+.uses > div { padding: 16px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.uses h4 { margin: 0 0 4px; font-size: 0.98rem; font-weight: 600; }
+.uses p { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
+.uses .which { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.uses.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ctrl { display: grid; gap: 4px; }
+.ctrl .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted); gap: 8px; }
+.ctrl .top output { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+.btn { font: inherit; font-size: 0.86rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 13px; border-radius: 6px; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font-size: 0.9rem; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.lab { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; margin-top: 24px; }
+.lab > * { min-width: 0; }
+.panel { display: grid; gap: 18px; align-content: start; }
+.panel h4 { margin: 0; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel .grp { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.panel .grp:last-child { border-bottom: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+.say-line { font-family: var(--f-display); font-size: 1.25rem; margin-top: 14px; }
+.algo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 14px; margin-top: 18px; }
+.algo { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.algo .fam { font-family: var(--f-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.algo h4 { margin: 0; font-size: 1.05rem; font-family: var(--f-display); }
+.algo p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; }
+.algo .meta { font-size: 0.78rem; font-family: var(--f-mono); color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.rule { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.rule > div { padding: 16px 20px 16px 0; }
+.rule > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.rule h4 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.15rem; font-weight: 600; }
+.rule ul { margin: 0; padding-left: 1.1em; }
+.rule li + li { margin-top: 4px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 14px; max-width: 760px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; }
+.steps > li::before { content: counter(s); font-family: var(--f-mono); font-size: 0.85rem; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.steps > li > div { min-width: 0; }
+.take { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 0; max-width: 820px; border-top: 1px solid var(--line); counter-reset: t; }
+.take li { padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line); font-size: 1.02rem; position: relative; counter-increment: t; }
+.take li::before { content: counter(t); position: absolute; left: 0; top: 14px; font-family: var(--f-mono); font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+details.q { border-bottom: 1px solid var(--line); padding: 14px 0; max-width: 820px; }
+details.q summary { cursor: pointer; font-weight: 500; list-style: none; display: flex; gap: 12px; }
+details.q summary::-webkit-details-marker { display: none; }
+details.q summary::before { content: "+"; font-family: var(--f-mono); color: var(--muted); width: 14px; flex: none; }
+details.q[open] summary::before { content: "\2212"; }
+details.q p { margin-top: 8px; padding-left: 26px; color: var(--muted); }
+.refs { font-size: 0.92rem; padding-left: 1.2em; max-width: 820px; }
+.refs li + li { margin-top: 6px; }
+footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.word-link { text-decoration: underline dotted; text-underline-offset: 3px; color: inherit; }
+.word-link:hover { color: var(--lda); }
+@media (max-width: 920px) {
+  .hero-grid, .lab { grid-template-columns: minmax(0, 1fr); }
+  .uses { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  body { font-size: 1rem; }
+  section.chap { padding-block: 52px; }
+  .two, .rule { grid-template-columns: minmax(0, 1fr); }
+  .rule > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .facts div + div { border-left: 0; padding-left: 0; }
+  .pts li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .uses, .uses.cols2 { grid-template-columns: minmax(0, 1fr); }
+  .ar-3x1 { aspect-ratio: 2.2 / 1; }
+  .brand span { display: none; }
+}
+
+
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0; }
+.stat .v { font-family: var(--f-mono); font-size: 1.25rem; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .k { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.04em; }
+.stat.big .v { font-size: 2rem; }
+.meter { height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+.meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--cB), var(--cA)); border-radius: 999px; transition: width .15s ease; }
+.eq-run { font-size: 0.9rem; border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; line-height: 1.75; overflow-wrap: anywhere; }
+.eq-run:empty { display: none; }
+.eq-run b:first-child { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cA); font-weight: 700; margin-right: 4px; }
+details.how { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 760px; }
+details.how summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 0.93rem; list-style: none; display: flex; gap: 10px; }
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary::before { content: "+"; font-family: var(--f-mono); color: var(--cC); width: 12px; flex: none; }
+details.how[open] summary::before { content: "\2212"; }
+details.how > div { padding: 0 16px 14px 36px; font-size: 0.93rem; display: grid; gap: 8px; }
+table.hand td, table.hand th { white-space: nowrap; }
+table.hand input { width: 4.6em; font: inherit; font-family: var(--f-mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
+table.hand tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.86rem; color: var(--ink); font-family: var(--f-mono); font-weight: 500; }
+.r2-track { position: relative; height: 30px; border-radius: 6px; background: color-mix(in srgb, var(--cA) 22%, var(--surface)); border: 1px solid var(--line); overflow: hidden; max-width: 760px; }
+.r2-track i { position: absolute; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--qda) 55%, transparent); }
+.r2-track span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-family: var(--f-mono); font-size: 0.85rem; }
+h4.mini { margin: 0 0 8px; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h4.mini .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--lda); color: var(--ink); background: color-mix(in srgb, var(--lda) 10%, var(--surface)); font-weight: 500; }
+.coefs { display: grid; gap: 6px; }
+.cf { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 4.6em; gap: 8px; align-items: center; font-size: 0.85rem; }
+.cf > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf .cf-track { position: relative; height: 10px; background: var(--soft); border-radius: 999px; }
+.cf .cf-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.cf .cf-track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+.cf .num { text-align: right; }
+.cf.zero { opacity: .45; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; margin: 14px 0 0; max-width: 860px; }
+pre.code.out { background: var(--soft); }
+@media (max-width: 640px) { .stat.big .v { font-size: 1.6rem; } table.hand { font-size: 0.82rem; } }
+
+/* exact inference */
+.hero h1 { font-size: clamp(2.6rem, 6vw, 4.2rem); }
+.heroplot { aspect-ratio: 16 / 10; }
+.hero-btns .btn { font-size: 0.82rem; padding: 6px 11px; }
+.stats3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.plot.net { aspect-ratio: 16 / 10; }
+.plot.tree { aspect-ratio: 16 / 9.5; }
+.mini-h { display: block; font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.role { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; font-family: var(--f-mono); font-size: 0.8rem; }
+.role::before { content: ""; width: 14px; height: 10px; border-radius: 3px; border: 2px solid currentColor; }
+.role.q { color: var(--cC); } .role.e { color: var(--cA); } .role.h { color: var(--muted); }
+.role.h::before { border-style: dashed; border-width: 1.5px; }
+.evrow { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.evrow .ev { display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; flex-wrap: wrap; }
+.evrow .ev b { font-weight: 600; min-width: 6.4em; }
+.seg.sm button { padding: 4px 9px; font-size: 0.8rem; }
+.seg button:disabled { opacity: .35; cursor: not-allowed; }
+.trace { font-size: 0.78rem; line-height: 1.55; min-height: 6.4em; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.trace .rep { color: var(--cC); font-weight: 600; }
+/* factor tables */
+.fac-lab { grid-template-columns: minmax(0, 1fr) 260px; }
+.fac-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.fac-grid > div { min-width: 0; }
+table.ft th, table.ft td { padding: 5px 7px; }
+.fac-grid h4.mini { text-transform: none; letter-spacing: 0.02em; font-family: var(--f-mono); font-size: 0.82rem; color: var(--ink); }
+table.ft td.num { font-family: var(--f-mono); }
+table.ft tr.hl td { background: color-mix(in srgb, var(--cC) 11%, var(--surface)); }
+#fa-pr tbody tr { cursor: pointer; }
+#fa-pr tbody tr:hover td { background: color-mix(in srgb, var(--cC) 6%, var(--surface)); }
+table.hand.ft input { width: 4.4em; }
+td.r, th.r { text-align: right; }
+.tf { font-family: var(--f-mono); font-weight: 600; text-align: center; }
+.tf.t { color: var(--cA); } .tf.f { color: var(--muted); }
+/* the VE pile */
+.pile { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; align-content: start; min-height: 200px; }
+.fcard { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 8px 10px; display: grid; gap: 4px; align-content: start; transition: border-color .15s ease; }
+.fcard .fc-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.fcard .fc-n { font-family: var(--f-mono); font-size: 0.86rem; font-weight: 600; }
+.fcard .fc-s { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+.fcard .fc-note { font-size: 0.74rem; color: var(--muted); line-height: 1.35; }
+.fcard.next { border-color: var(--cB); box-shadow: inset 0 0 0 1px var(--cB); }
+.fcard.new { border-color: var(--cC); box-shadow: inset 0 0 0 1px var(--cC); background: color-mix(in srgb, var(--cC) 6%, var(--surface)); }
+.fcard.new .fc-note { color: var(--cC); }
+.fcard.dropped { opacity: .5; border-style: dashed; }
+.fcard.dropped .fc-n { text-decoration: line-through; }
+table.mini-t { font-size: 0.78rem; }
+table.mini-t th, table.mini-t td { padding: 2px 5px; border-bottom: 1px dashed var(--line); }
+table.mini-t td.num { font-family: var(--f-mono); text-align: right; }
+.evgrid { display: grid; gap: 6px; }
+.evline { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
+.evline b { font-family: var(--f-mono); width: 1.4em; }
+.chk { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer; }
+.chk input { accent-color: var(--cC); width: 16px; height: 16px; }
+.chips button { font-size: 0.82rem; padding: 4px 11px; }
+/* SAT and deep */
+.formula { font-size: 0.82rem; line-height: 1.7; margin-top: 12px; color: var(--muted); overflow-wrap: anywhere; max-height: 8.6em; overflow-y: auto; }
+.plot.sq { aspect-ratio: 1 / 0.92; }
+.mf { gap: 16px; }
+/* project */
+.plot.pj-bars { height: 420px; }
+.leafsel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+.leafsel label { display: grid; gap: 2px; font-family: var(--f-mono); font-size: 0.74rem; color: var(--muted); min-width: 0; }
+.leafsel select, select.qsel { font: inherit; font-family: var(--f-mono); font-size: 0.82rem; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
+.race-ctl { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 20px; margin-top: 18px; max-width: 900px; }
+.race-ctl select.qsel { width: auto; min-width: 12em; }
+.race-ctl .rc-seed { min-width: 200px; flex: 1; max-width: 300px; }
+table.race { max-width: 900px; }
+table.race td, table.race th { white-space: nowrap; }
+table.race tr.skip td { color: var(--muted); background: color-mix(in srgb, var(--qda) 5%, var(--surface)); }
+@media (max-width: 920px) { .fac-lab { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { .fac-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .plot.tree { aspect-ratio: 1 / 0.9; }
+  .plot.pj-bars { height: 520px; }
+  .pile { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two.mf { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+@media (max-width: 560px) { .heroplot { aspect-ratio: 340 / 440; } .plot.net { aspect-ratio: 1 / 0.95; } }
+@media (max-width: 460px) { .eq .m { font-size: 0.9rem; } .eq { padding: 14px 14px 12px; } .topbar .wrap { gap: 10px; } .brand { font-size: 0.98rem; } .back { padding: 5px 9px; } .fac-grid { gap: 10px; } table.ft th, table.ft td { padding: 4px 4px; } }
+
+/* lecture index pills */
+.lx { padding-block: 22px 26px; border-top: 1px solid var(--line); }
+.lx-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.lx-head b { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--lx); font-weight: 600; }
+.lx-head span { font-size: 0.82rem; color: var(--muted); }
+.lx ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lx a { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px 5px 5px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-size: 0.88rem; line-height: 1.3; transition: border-color .15s ease, background .15s ease; }
+.lx a:hover, .lx a:focus-visible { border-color: var(--lx); }
+.lx a:focus-visible { outline: 2px solid var(--lx); outline-offset: 2px; }
+.lx a.on { border-color: var(--lx); background: color-mix(in srgb, var(--lx) 8%, var(--surface)); }
+.lx i { font-style: normal; font-family: var(--f-mono); font-size: 0.7rem; font-weight: 500; color: var(--lx); padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--lx) 13%, transparent); }
+@media (max-width: 560px) { .lx a { font-size: 0.84rem; } }
+/* /lx */
+</style>
+</head>
+<body>
+
+<nav class="topbar" aria-label="Sections">
+  <div class="wrap">
+    <a class="back" href="../" aria-label="Back to all lectures">&larr; Lectures</a>
+    <a class="brand" href="#top">Exact Inference <span>&middot; sums in the right order</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#query">Queries</a>
+      <a href="#enum">Enumeration</a>
+      <a href="#factors">Factors</a>
+      <a href="#ve">Elimination</a>
+      <a href="#order">Order</a>
+      <a href="#hard">Hardness</a>
+      <a href="#deep">Deep models</a>
+      <a href="#project">Project</a>
+      <a href="#summary">Summary</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="kicker">Probabilistic models &middot; chapter 6.4 &middot; exact inference</div>
+      <h1>Exact Inference</h1>
+      <div class="sub">The same answer can cost a thousand steps or a billion. The order of the sums decides.</div>
+      <p class="lead">A Bayesian network stores a joint distribution in small pieces. To answer a question you must add up the hidden variables, and the ALARM network in the figure has 37 of them: written out, its joint table would have 1.7 &times; 10<sup>16</sup> rows. Variable elimination never writes that table. It removes one variable at a time, and each removal creates one new table whose size depends on the variable&rsquo;s neighbours at that moment. <strong>Click any node to eliminate it, or play an order, and watch the tables grow or stay small.</strong></p>
+      <dl class="facts">
+        <div><dt>Exact methods</dt><dd>Enumeration and variable elimination</dd></div>
+        <div><dt>Cost set by</dt><dd>The largest table the order creates</dd></div>
+        <div><dt>Worst case</dt><dd>NP-hard; exact counting is #P-hard</dd></div>
+      </dl>
+    </div>
+    <figure>
+      <div class="btns hero-btns"><button type="button" class="btn primary" id="hx-good">Play min-fill order</button><button type="button" class="btn" id="hx-bad">Play reverse file order</button><button type="button" class="btn" id="hx-reset">Reset</button></div>
+      <div class="plot heroplot" style="margin-top:10px"><canvas id="hx-cv" aria-label="The moral graph of the ALARM network. Eliminated nodes fade out and the new edges they create are drawn dashed."></canvas></div>
+      <div class="stats stats3" style="margin-top:10px">
+        <div class="stat"><div class="v" id="hx-n"></div><div class="k">eliminated</div></div>
+        <div class="stat"><div class="v" id="hx-last"></div><div class="k">last table created</div></div>
+        <div class="stat"><div class="v" id="hx-big"></div><div class="k">largest so far</div></div>
+      </div>
+      <figcaption id="hx-cap"></figcaption>
+    </figure>
+  </div>
+</header>
+<!-- LX -->
+<nav class="lx" aria-label="Lecture index" style="--lx: var(--cC)">
+  <div class="wrap">
+    <div class="lx-head"><b>Lecture index</b><span>9 stops &middot; click any to jump</span></div>
+    <ol>
+    <li><a href="#query"><i>01</i>Asking a network a question</a></li>
+    <li><a href="#enum"><i>02</i>Inference by enumeration</a></li>
+    <li><a href="#factors"><i>03</i>Factors that multiply and sum</a></li>
+    <li><a href="#ve"><i>04</i>Variable elimination, step by step</a></li>
+    <li><a href="#order"><i>05</i>Order, fill-in and treewidth</a></li>
+    <li><a href="#hard"><i>06</i>Why exact inference is NP-hard</a></li>
+    <li><a href="#deep"><i>07</i>Inference in deep models</a></li>
+    <li><a href="#project"><i>08</i>Diagnosing ALARM, racing orders</a></li>
+    <li><a href="#summary"><i>09</i>Five lines to remember</a></li>
+    </ol>
+  </div>
+</nav>
+<!-- /LX -->
+
+
+<main>
+<!-- QUERY -->
+<section class="chap" id="query">
+  <div class="wrap">
+    <div class="tag">The question</div>
+    <h2>Asking a network a question</h2>
+    <div class="prose">
+      <p>Chapter 6.1 built Bayesian networks and answered questions by adding up all eight worlds of a three-variable model. This chapter is about doing that addition well. First, some names. Every question splits the variables into three groups. The <em class="term">query</em> variable X is the one we want a distribution for. The <em class="term">evidence</em> variables E have been observed, with values e. Everything else is <em class="term">hidden</em>, Y: unobserved, and not asked about.</p>
+      <p>The running example is a classic from Russell and Norvig. A house has a burglar alarm. A burglary sets it off, and so, sometimes, does a small earthquake. Two neighbours, John and Mary, have promised to phone when they hear it. John sometimes mistakes the phone ringing for the alarm; Mary plays loud music and sometimes misses it. The five yes/no variables are Burglary (B), Earthquake (E), Alarm (A), JohnCalls (J) and MaryCalls (M). The numbers are the book&rsquo;s: P(B) = 0.001, P(E) = 0.002, the alarm rings with probability 0.95, 0.94, 0.29 or 0.001 depending on B and E, John calls with probability 0.90 if it rings and 0.05 if not, Mary with 0.70 and 0.01.</p>
+    </div>
+    <div class="eq"><div class="m">\[ P(X \mid \mathbf{e}) \;=\; \alpha\, P(X, \mathbf{e}) \;=\; \alpha \sum_{\mathbf{y}} P(X, \mathbf{e}, \mathbf{y}) \]</div><div class="read"><b>Read it as:</b> to get the distribution of X given what we saw, add up the joint probability over every combination y of the hidden variables, once for each value of X. That gives P(X, e), a list of numbers that does not yet sum to 1. The constant &alpha; = 1 / P(e) rescales it so that it does. In a Bayesian network each joint probability is a product of CPT entries, so the whole question is &ldquo;sums of products&rdquo;.</div><div class="eq-say"><b>Say it</b><em>&ldquo;P of X given e is alpha times the sum, over all values of the hidden variables, of the joint probability of X, e and y.&rdquo;</em></div><div class="eq-run" id="run-q"></div></div>
+    <div class="prose block"><p><strong>Click a node to cycle it through unknown, observed true and observed false; pick the query with the buttons.</strong> The answer is computed by the sum above, and the panel counts how many joint probabilities that sum needs.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head"><span class="seg" id="q-x" role="group" aria-label="Query variable"></span></div>
+        <div class="plot ar-16x10 net"><canvas id="q-cv" aria-label="The burglary network with the role of each variable and the posterior of the query"></canvas></div>
+        <figcaption>Ring colour: <span class="role q">query</span> <span class="role e">evidence</span> <span class="role h">hidden</span>. Each bar shows P(variable = true | evidence), all computed exactly.</figcaption>
+      </figure>
+      <div class="panel"><div class="grp">
+        <div class="stats">
+          <div class="stat"><div class="v" id="q-p"></div><div class="k" id="q-pk">P(query = true | e)</div></div>
+          <div class="stat"><div class="v" id="q-pe"></div><div class="k">P(e), the evidence</div></div>
+          <div class="stat"><div class="v" id="q-h"></div><div class="k">hidden variables</div></div>
+          <div class="stat"><div class="v" id="q-rows"></div><div class="k">joint terms summed</div></div>
+        </div>
+        <div class="btns"><button type="button" class="btn" id="q-jm">John and Mary both call</button><button type="button" class="btn" id="q-clr">Clear evidence</button></div>
+        <p class="note" id="q-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ENUMERATION -->
+<section class="chap" id="enum">
+  <div class="wrap">
+    <div class="tag">Method 1</div>
+    <h2>Inference by enumeration</h2>
+    <div class="prose">
+      <p>Take the most famous query: both neighbours called, so what is the chance of a burglary? The hidden variables are E and A. Substituting the network&rsquo;s factorisation into the sum gives four terms for each value of B, each a product of five CPT entries:</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &P(B \mid j, m) \\ &\;= \alpha \sum_{e} \sum_{a} P(B)\, P(e)\, P(a \mid B, e) \\ &\qquad\quad \times P(j \mid a)\, P(m \mid a) \end{aligned} \]</div><div class="read"><b>Read it as:</b> lower-case j and m mean J = true and M = true. For each value of B, run through the four combinations of e and a, multiply the five numbers that the network supplies for that world, and add. Four terms of four multiplications each: 16 multiplications and 3 additions per value of B.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Alpha times the sum over e and a of P of B, P of e, P of a given B and e, P of j given a, and P of m given a.&rdquo;</em></div></div>
+    <div class="prose block">
+      <p>Most of those factors do not depend on the variable being summed. P(B) does not change with e or a, so it can move outside both sums; P(e) does not change with a, so it can move outside the inner one. This is just the distributive law, x&middot;y + x&middot;z = x&middot;(y + z):</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &P(B \mid j, m) \\ &\;= \alpha\, P(B) \sum_{e} P(e) \\ &\qquad \times \sum_{a} P(a \mid B, e)\, P(j \mid a)\, P(m \mid a) \end{aligned} \]</div><div class="read"><b>Read it as:</b> evaluate from the inside out. For each e, the inner sum over a is a small number; multiply it by P(e), add the two e cases, and multiply by P(B). The nested form needs 11 multiplications and 3 additions per value of B instead of 16 and 3.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Alpha P of B, times the sum over e of P of e, times the sum over a of P of a given B e, P of j given a, P of m given a.&rdquo;</em></div><div class="eq-run" id="run-en"></div></div>
+    <div class="prose block">
+      <p>A computer evaluates the nested sum as a tree, depth first. This is the <em class="term">enumeration</em> algorithm: walk through the variables in a topological order; at a hidden variable, branch on each of its values and add the branches; at an evidence variable, multiply by its CPT entry and carry on. It needs memory only for one path, so its space is linear in the number of variables, but the tree has a leaf for every combination of the hidden variables, so its time is O(2<sup>n</sup>) for n yes/no variables. <strong>Step through the tree, then switch John or Mary to unknown and see the tree double.</strong> Purple nodes repeat a calculation already done elsewhere in the tree.</p>
+    </div>
+    <div class="lab">
+      <figure>
+        <div class="fig-head">
+          <span class="seg" id="en-b" role="group" aria-label="Value of Burglary"><button type="button" data-b="0" aria-pressed="true">b (burglary)</button><button type="button" data-b="1" aria-pressed="false">&not;b (none)</button></span>
+        </div>
+        <div class="plot ar-16x10 tree"><canvas id="en-cv" aria-label="The enumeration tree for the chosen value of Burglary. Evaluated nodes are filled; repeated subtrees are marked."></canvas></div>
+        <figcaption id="en-cap"></figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <div class="evrow"><span class="ev"><b>JohnCalls</b><span class="seg sm" id="en-j" role="group" aria-label="JohnCalls evidence"></span></span></div>
+          <div class="evrow"><span class="ev"><b>MaryCalls</b><span class="seg sm" id="en-m" role="group" aria-label="MaryCalls evidence"></span></span></div>
+          <div class="btns"><button type="button" class="btn primary" id="en-step">Next step</button><button type="button" class="btn" id="en-all">Finish</button><button type="button" class="btn" id="en-rst">Restart</button></div>
+        </div>
+        <div class="grp">
+          <div class="stats">
+            <div class="stat"><div class="v" id="en-mul"></div><div class="k">multiplications so far</div></div>
+            <div class="stat"><div class="v" id="en-add"></div><div class="k">additions so far</div></div>
+            <div class="stat"><div class="v" id="en-rep"></div><div class="k">of them repeated work</div></div>
+            <div class="stat"><div class="v" id="en-leaf"></div><div class="k">leaves in this tree</div></div>
+          </div>
+          <div class="trace mono" id="en-trace"></div>
+          <p class="note" id="en-say"></p>
+        </div>
+      </div>
+    </div>
+    <div class="prose block">
+      <p>The repeated nodes are the weakness. P(j | a) P(m | a) does not depend on e, yet the tree computes it once under e and again under &not;e. In a larger network the same small product can be recomputed thousands of times. The fix is to compute each one once and store it, which is exactly what the next two sections build.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FACTORS -->
+<section class="chap" id="factors">
+  <div class="wrap">
+    <div class="tag">The data structure</div>
+    <h2>Factors: tables that multiply and sum</h2>
+    <div class="prose">
+      <p>A <em class="term">factor</em> is a table with one number for every combination of values of some set of variables, its <em class="term">scope</em>. A CPT is a factor: P(A | B, E) is a table over A, B and E with 8 entries. Evidence shrinks a factor. Once we know J = true, P(j | A) is a table over A alone, with two entries: 0.90 and 0.05. A factor does not have to be a probability distribution; it is just numbers indexed by values.</p>
+      <p>Variable elimination needs only two operations on factors. The <em class="term">pointwise product</em> of two factors is a factor over the union of their scopes: each entry is the product of the two entries that agree on the shared variables. <em class="term">Summing out</em> a variable adds together the entries that differ only in that variable, and removes it from the scope.</p>
+    </div>
+    <div class="two block">
+      <div class="eq" style="margin-top:0"><div class="m">\[ f(X, Y, Z) = f_1(X, Y) \times f_2(Y, Z) \]</div><div class="read"><b>Read it as:</b> for every combination x, y, z, look up f<sub>1</sub>(x, y) and f<sub>2</sub>(y, z) and multiply them. With yes/no variables, two 4-entry factors make an 8-entry one. The product&rsquo;s size is exponential in the number of variables in the union, which is the cost that the rest of the chapter is about.</div><div class="eq-say"><b>Say it</b><em>&ldquo;f of X Y Z is f-one of X Y times f-two of Y Z.&rdquo;</em></div><div class="eq-run" id="run-fp"></div></div>
+      <div class="eq" style="margin-top:0"><div class="m">\[ g(Y, Z) = \sum_{x} f(x, Y, Z) \]</div><div class="read"><b>Read it as:</b> for each y and z, add the entries for every value of X. The 8-entry factor becomes a 4-entry one. If a factor does not mention X, it passes through the sum untouched: &sum;<sub>x</sub> f<sub>1</sub>(Y) f<sub>2</sub>(x, Y) = f<sub>1</sub>(Y) &sum;<sub>x</sub> f<sub>2</sub>(x, Y). That is the distributive law again, and it is why elimination only multiplies the factors that contain the variable being removed.</div><div class="eq-say"><b>Say it</b><em>&ldquo;g of Y Z is the sum over x of f of x, Y, Z.&rdquo;</em></div><div class="eq-run" id="run-fs"></div></div>
+    </div>
+    <div class="prose block"><p><strong>Edit any entry of f<sub>1</sub> or f<sub>2</sub>, click a row of the product, and choose which variable to sum out.</strong> Every number in the right-hand tables is recomputed from the two on the left; hover over one to see how.</p></div>
+    <div class="lab fac-lab">
+      <div>
+        <div class="fac-grid">
+          <div><h4 class="mini">f<sub>1</sub>(X, Y)</h4><div class="tbl-wrap"><table class="hand ft" id="fa-f1"></table></div></div>
+          <div><h4 class="mini">f<sub>2</sub>(Y, Z)</h4><div class="tbl-wrap"><table class="hand ft" id="fa-f2"></table></div></div>
+          <div><h4 class="mini">f<sub>1</sub> &times; f<sub>2</sub> (X, Y, Z)</h4><div class="tbl-wrap"><table class="hand ft" id="fa-pr"></table></div></div>
+          <div><h4 class="mini" id="fa-sh">sum out</h4><div class="tbl-wrap"><table class="hand ft" id="fa-su"></table></div></div>
+        </div>
+      </div>
+      <div class="panel"><div class="grp">
+        <span class="mini-h">Sum out</span>
+        <span class="seg" id="fa-x" role="group" aria-label="Variable to sum out"><button type="button" data-x="0" aria-pressed="true">X</button><button type="button" data-x="1" aria-pressed="false">Y</button><button type="button" data-x="2" aria-pressed="false">Z</button></span>
+        <div class="btns"><button type="button" class="btn" id="fa-rnd">Random entries</button><button type="button" class="btn" id="fa-def">Defaults</button></div>
+        <div class="stats">
+          <div class="stat"><div class="v" id="fa-mul"></div><div class="k">multiplications for the product</div></div>
+          <div class="stat"><div class="v" id="fa-add"></div><div class="k">additions for the sum</div></div>
+        </div>
+        <p class="note" id="fa-say"></p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- VARIABLE ELIMINATION -->
+<section class="chap" id="ve">
+  <div class="wrap">
+    <div class="tag">Method 2</div>
+    <h2>Variable elimination, step by step</h2>
+    <div class="prose">
+      <p><em class="term">Variable elimination</em> evaluates the nested sum from the inside out and stores every intermediate result as a factor, so nothing is computed twice. Start with one factor per CPT, with the evidence values plugged in. Then, for each hidden variable in some order: take every factor that mentions it, multiply them together, sum the variable out, and put the new, smaller-scope factor back in the pile. When no hidden variables are left, multiply what remains and normalise.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\text{for each hidden } Z\text{:} \\ &\quad g = \sum_{z}\; \prod_{f \,\ni\, Z} f \\ &\quad \mathcal{F} \leftarrow \big(\mathcal{F} \setminus \{f \ni Z\}\big) \cup \{g\} \\ &P(X \mid \mathbf{e}) = \alpha \prod_{f \in \mathcal{F}} f(X) \end{aligned} \]</div><div class="read"><b>Read it as:</b> &#8497; is the pile of factors, and f &ni; Z means &ldquo;the factors whose scope contains Z&rdquo;. Multiply just those, sum Z out to get the new factor g, and swap them for g. Factors that do not mention Z are left alone, which is the distributive law at work. At the end every factor mentions only X, and the product of them is P(X, e).</div><div class="eq-say"><b>Say it</b><em>&ldquo;For each hidden Z: g is the sum over z of the product of the factors that contain Z; replace them by g. Then P of X given e is alpha times the product of what is left.&rdquo;</em></div><div class="eq-run" id="run-ve"></div></div>
+    <div class="prose block"><p><strong>Choose a query, some evidence and an order, then press Next step.</strong> The factors in the pile are listed on the left; the ones about to be multiplied are highlighted, and the new factor appears at the end.</p></div>
+    <div class="lab">
+      <div>
+        <div class="pile" id="ve-pile" aria-live="polite"></div>
+        <p class="note" id="ve-say" style="margin-top:12px"></p>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <span class="mini-h">Query</span><span class="seg" id="ve-q" role="group" aria-label="Query variable"></span>
+          <span class="mini-h">Evidence</span><div id="ve-ev" class="evgrid"></div>
+          <span class="mini-h">Order</span><span class="seg" id="ve-o" role="group" aria-label="Elimination order"><button type="button" data-o="minfill" aria-pressed="true">min-fill</button><button type="button" data-o="file" aria-pressed="false">B, E, A, J, M</button><button type="button" data-o="reverse" aria-pressed="false">M, J, A, E, B</button></span>
+          <label class="chk"><input type="checkbox" id="ve-prune"> Drop irrelevant variables first</label>
+          <div class="btns"><button type="button" class="btn primary" id="ve-step">Next step</button><button type="button" class="btn" id="ve-run">Run to the end</button><button type="button" class="btn" id="ve-rst">Restart</button></div>
+        </div>
+        <div class="grp"><div class="stats">
+          <div class="stat"><div class="v" id="ve-k"></div><div class="k">eliminated</div></div>
+          <div class="stat"><div class="v" id="ve-big"></div><div class="k">largest factor</div></div>
+          <div class="stat"><div class="v" id="ve-cost"></div><div class="k">entries computed</div></div>
+          <div class="stat"><div class="v" id="ve-ans"></div><div class="k" id="ve-ansk">answer</div></div>
+        </div></div>
+      </div>
+    </div>
+    <h3>Irrelevant variables</h3>
+    <div class="prose block" style="margin-top:14px">
+      <p>Ask for P(J | B = true) and look at what happens to M. Its only factor is P(m | A). Summing it out gives a factor that is 1 for every value of A, because each row of a CPT sums to 1. M contributes nothing and can be dropped before we start. The general rule: <em class="term">every variable that is not an ancestor of the query or of an evidence variable is irrelevant</em> and can be removed. Repeating the argument from the leaves upwards removes whole branches of a large network. Tick &ldquo;Drop irrelevant variables first&rdquo; above to see it.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} &\sum_{m} P(m \mid A) = 1 \\ &\quad\Longrightarrow\; \sum_{m} f(\ldots)\, P(m \mid A) = f(\ldots) \end{aligned} \]</div><div class="read"><b>Read it as:</b> a leaf that is neither the query nor observed sums to a factor of ones, and multiplying by ones changes nothing. Once that leaf is gone its parents may have become leaves, and the same argument applies to them, unless they are ancestors of the query or the evidence.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Summing a CPT over its own variable gives one, so an unobserved leaf can be deleted.&rdquo;</em></div><div class="eq-run" id="run-ir"></div></div>
+  </div>
+</section>
+
+<!-- ORDER -->
+<section class="chap" id="order">
+  <div class="wrap">
+    <div class="tag">Complexity</div>
+    <h2>Elimination order and the shape of the graph</h2>
+    <div class="prose">
+      <p>Every elimination order gives the same answer, because addition can be done in any order. The cost is another matter. When Z is eliminated, the factors that mention it are exactly the ones that touch Z&rsquo;s neighbours in the network&rsquo;s <em class="term">moral graph</em> (the network with arrows made undirected and the parents of each node joined). The product therefore has scope Z plus all its current neighbours, and the new factor g links those neighbours to each other. In the graph this adds <em class="term">fill-in</em> edges: eliminating Z turns its neighbourhood into a clique.</p>
+      <p>The largest scope an order ever creates, minus one, is the <em class="term">induced width</em> of that order. The smallest induced width over all orders is the graph&rsquo;s <em class="term">treewidth</em>. Variable elimination&rsquo;s time and space are exponential in it, and only linear in the number of variables.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \text{cost} \;=\; \sum_{\text{steps } t} d^{\,|\mathrm{scope}_t|} \;\le\; n\, d^{\,w+1} \]</div><div class="read"><b>Read it as:</b> each step builds one product table, with d<sup>|scope|</sup> entries when every variable has d values. Over n steps the total is at most n times the largest one, and the largest has w + 1 variables when the order&rsquo;s induced width is w. A chain or a tree has w = 1; a k &times; k grid has treewidth k, so its best order still builds tables of 2<sup>k+1</sup> entries.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The cost is the sum of d to the scope size over the steps, at most n times d to the w plus one.&rdquo;</em></div><div class="eq-run" id="run-or"></div></div>
+    <div class="prose block"><p><strong>Pick a graph and an order, then drag the step slider to eliminate the nodes one at a time.</strong> All variables are yes/no. Dashed lines are fill-in edges; the outlined group is the scope of the table built at the current step.</p></div>
+    <div class="lab">
+      <figure>
+        <div class="plot ar-16x10 net"><canvas id="or-cv" aria-label="The chosen graph partly eliminated, with fill-in edges dashed and the current scope outlined"></canvas></div>
+        <figcaption id="or-cap"></figcaption>
+      </figure>
+      <div class="panel">
+        <div class="grp">
+          <span class="mini-h">Graph</span><div class="chips" id="or-g" role="group" aria-label="Graph"></div>
+          <span class="mini-h">Order</span><div class="chips" id="or-o" role="group" aria-label="Elimination order"></div>
+          <div class="ctrl"><div class="top"><label for="or-s">Step</label><output id="or-s-o"></output></div><input type="range" id="or-s" min="0" max="12" step="1" value="0"></div>
+          <div class="ctrl" id="or-seed-c"><div class="top"><label for="or-seed">Random seed</label><output id="or-seed-o">1</output></div><input type="range" id="or-seed" min="1" max="50" step="1" value="1"></div>
+        </div>
+        <div class="grp"><div class="stats">
+          <div class="stat"><div class="v" id="or-w"></div><div class="k">induced width</div></div>
+          <div class="stat"><div class="v" id="or-big"></div><div class="k">largest table</div></div>
+          <div class="stat"><div class="v" id="or-cost"></div><div class="k">entries, all steps</div></div>
+          <div class="stat"><div class="v" id="or-fill"></div><div class="k">fill-in edges</div></div>
+        </div><p class="note" id="or-say"></p></div>
+      </div>
+    </div>
+    <div class="two block">
+      <div class="prose">
+        <h4 class="mini">Polytrees are easy</h4>
+        <p>A network is <em class="term">singly connected</em>, or a <em class="term">polytree</em>, if there is at most one undirected path between any two nodes. The burglary network is one. Its moral graph is a tree of family cliques, so eliminating from the outside in, starting with a node that has only one neighbour in the polytree, never creates fill-in. Every table VE builds is then no bigger than the largest CPT, and the total time is linear in the total size of the CPTs.</p>
+        <h4 class="mini" style="margin-top:18px">Finding the best order is itself hard</h4>
+        <p>Computing the treewidth is NP-hard, so real systems use greedy rules. <b>Min-degree</b> eliminates the node with the fewest current neighbours. <b>Min-fill</b> eliminates the node whose removal adds the fewest fill-in edges. <b>Min-weight</b> eliminates the node whose table would be smallest. They are fast and usually good, but nothing guarantees they find the best order.</p>
+      </div>
+      <figure>
+        <div class="plot ar-16x10"><canvas id="or-cv2" aria-label="Largest table built by min-fill against the number of variables, for chains and square grids, on a log scale"></canvas></div>
+        <figcaption>Largest table built by the min-fill order, log scale. <span style="color:var(--cA)">&#9644;</span> a chain grows its tables not at all; <span style="color:var(--cC)">&#9644;</span> a k &times; k grid with the same number of nodes doubles them with every extra row.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- HARDNESS -->
+<section class="chap" id="hard">
+  <div class="wrap">
+    <div class="tag">Complexity</div>
+    <h2>Why no order can always save you</h2>
+    <div class="prose">
+      <p>Good orders help, but some networks have no good order at all, and that is not a gap in our cleverness. Exact inference in general Bayesian networks is <em class="term">NP-hard</em>. The proof turns any logic puzzle into a network. Take a 3-SAT formula: n yes/no variables and m clauses, each clause an OR of three literals such as (x<sub>1</sub> &or; &not;x<sub>3</sub> &or; x<sub>4</sub>). Build a root node for each variable with probability &frac12; of being true, a node for each clause that is deterministically the OR of its three literals, and a chain of AND nodes that ends in S, true exactly when every clause is.</p>
+    </div>
+    <div class="eq"><div class="m">\[ P(S = \text{true}) \;=\; \frac{\#\,\text{solutions of } \varphi}{2^{\,n}} \]</div><div class="read"><b>Read it as:</b> each of the 2<sup>n</sup> assignments of the roots has probability 1/2<sup>n</sup>, and S is true in exactly the satisfying ones. So P(S = true) &gt; 0 if and only if the formula &phi; can be satisfied. A fast exact inference algorithm would decide 3-SAT, which is NP-complete; and computing the number exactly would count solutions, which is <em class="term">#P-hard</em>, harder still.</div><div class="eq-say"><b>Say it</b><em>&ldquo;The probability that S is true equals the number of satisfying assignments over two to the n.&rdquo;</em></div><div class="eq-run" id="run-sat"></div></div>
+    <div class="prose block"><p><strong>Generate formulas and let variable elimination count their solutions.</strong> The page checks the count by trying all 2<sup>n</sup> assignments. Push the clause ratio m / n towards 4.3, where random formulas switch from almost always satisfiable to almost never.</p></div>
+    <div class="lab">
+      <div>
+        <figure><div class="plot ar-16x10 net"><canvas id="sat-cv" aria-label="The Bayesian network built from the formula: variables, clauses and the chain of AND nodes"></canvas></div><figcaption>Top row: the variables (orange), each true with probability &frac12;. Middle row: one node per clause, the OR of its three literals; <span style="color:var(--cA)">solid</span> edges are plain literals, <span style="color:var(--qda)">dashed</span> ones negated. Bottom row: the chain of AND nodes, ending in S (purple).</figcaption></figure>
+        <p class="formula mono" id="sat-f"></p>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="sat-n">Variables n</label><output id="sat-n-o"></output></div><input type="range" id="sat-n" min="3" max="12" step="1" value="6"></div>
+          <div class="ctrl"><div class="top"><label for="sat-m">Clauses m</label><output id="sat-m-o"></output></div><input type="range" id="sat-m" min="1" max="40" step="1" value="12"></div>
+          <div class="btns"><button type="button" class="btn primary" id="sat-new">New formula</button></div>
+        </div>
+        <div class="grp"><div class="stats">
+          <div class="stat"><div class="v" id="sat-p"></div><div class="k">P(S = true), by VE</div></div>
+          <div class="stat"><div class="v" id="sat-k"></div><div class="k">solutions (brute force)</div></div>
+          <div class="stat"><div class="v" id="sat-big"></div><div class="k">largest VE table</div></div>
+          <div class="stat"><div class="v" id="sat-nodes"></div><div class="k">network nodes</div></div>
+        </div><p class="note" id="sat-say"></p></div>
+      </div>
+    </div>
+    <div class="prose block">
+      <p>This is why exact inference is used where the structure allows it, as in ALARM and in the chains and trees of hidden Markov models, and why so much of the rest of this part of the book is about approximation. The next chapter shows a second exact method, the sum-product algorithm, which reuses work across many queries at once; on networks with loops, an exact version must first group variables into clusters (the <em class="term">junction tree</em>), and its cost is again exponential in the size of the largest cluster.</p>
+    </div>
+  </div>
+</section>
+
+<!-- DEEP -->
+<section class="chap" id="deep">
+  <div class="wrap">
+    <div class="tag">The landscape</div>
+    <h2>Inference in deep models: exact, approximate, amortised</h2>
+    <div class="prose">
+      <p>Deep generative models have the same problem in a sharper form. A model with visible units v and hidden units h is trained and used through questions like p(h | v), the posterior over the hidden causes, and log p(v), the likelihood. Both need sums over h. With k binary hidden units there are 2<sup>k</sup> terms, and deep models have hundreds or thousands of hidden units arranged in layers that are densely connected. The treewidth of such a graph is about the width of a layer, so variable elimination is out of the question.</p>
+      <p>What makes inference hard is not the number of hidden units by itself but their <em class="term">interactions</em>. If the hidden units are independent given v, the posterior factorises and is cheap: the restricted Boltzmann machine is designed so, with no edges between hidden units, so p(h | v) is a product of k separate sigmoids. As soon as hidden units interact, directly or because they compete to explain the same visible unit (explaining away, from chapter 6.1), the posterior couples them and the exact sum is exponential.</p>
+      <p>The standard way out is to change the question. Pick a simple family of distributions q(h), for example fully factorised ones, and find the member closest to the true posterior. The identity below says how close we got.</p>
+    </div>
+    <div class="eq"><div class="m">\[ \begin{aligned} \log p(v) &= \mathcal{L}(q) + \mathrm{KL}\big(q(h) \,\Vert\, p(h \mid v)\big) \\ \mathcal{L}(q) &= \mathbb{E}_{h \sim q}\big[\log p(v, h)\big] + H(q) \end{aligned} \]</div><div class="read"><b>Read it as:</b> for any q, the log-likelihood splits into the <em class="term">evidence lower bound</em> &#8466;(q) and a KL divergence, which is never negative. &#8466;(q) needs only expectations under the simple q, never the exact sum. Raising &#8466; therefore does two jobs at once: it tightens a lower bound on log p(v) and pulls q towards the true posterior. When q is exactly the posterior the KL term is 0 and the bound is tight.</div><div class="eq-say"><b>Say it</b><em>&ldquo;Log p of v equals the ELBO plus the KL divergence from q to the true posterior; the ELBO is the expected log joint plus the entropy of q.&rdquo;</em></div><div class="eq-run" id="run-dp"></div></div>
+    <div class="prose block"><p>The lab is the smallest case that shows the problem: two binary hidden units after v has been observed, with p(h | v) &prop; exp(b<sub>1</sub>h<sub>1</sub> + b<sub>2</sub>h<sub>2</sub> + w h<sub>1</sub>h<sub>2</sub>). The coupling w is the interaction. Up to a constant that we set to zero, log p(v, h) = b<sub>1</sub>h<sub>1</sub> + b<sub>2</sub>h<sub>2</sub> + w h<sub>1</sub>h<sub>2</sub>, so log p(v) is the log of the sum of the four exponentials. The page computes the exact posterior by summing the four states, and a factorised <em class="term">mean-field</em> q(h) = q<sub>1</sub>(h<sub>1</sub>) q<sub>2</sub>(h<sub>2</sub>) by updating each factor in turn: q<sub>1</sub> = &sigma;(b<sub>1</sub> + w q<sub>2</sub>), q<sub>2</sub> = &sigma;(b<sub>2</sub> + w q<sub>1</sub>), the coordinate ascent rule for &#8466;. <strong>Set w to 0 and the gap vanishes; make w strongly negative, the explaining-away pattern, and watch the factorised q fail to capture it.</strong></p></div>
+    <div class="lab">
+      <div>
+        <div class="two mf">
+          <figure><div class="plot sq"><canvas id="dp-ex" aria-label="The exact posterior over the four states of h1 and h2"></canvas></div><figcaption>Exact p(h | v): four states, summed directly.</figcaption></figure>
+          <figure><div class="plot sq"><canvas id="dp-mf" aria-label="The mean-field approximation over the four states"></canvas></div><figcaption>Mean-field q(h) = q<sub>1</sub>(h<sub>1</sub>) q<sub>2</sub>(h<sub>2</sub>).</figcaption></figure>
+        </div>
+        <p class="note" id="dp-say" style="margin-top:12px"></p>
+      </div>
+      <div class="panel">
+        <div class="grp">
+          <div class="ctrl"><div class="top"><label for="dp-b1">b<sub>1</sub>: pull of h<sub>1</sub></label><output id="dp-b1-o"></output></div><input type="range" id="dp-b1" min="-4" max="4" step="0.1" value="1"></div>
+          <div class="ctrl"><div class="top"><label for="dp-b2">b<sub>2</sub>: pull of h<sub>2</sub></label><output id="dp-b2-o"></output></div><input type="range" id="dp-b2" min="-4" max="4" step="0.1" value="1"></div>
+          <div class="ctrl"><div class="top"><label for="dp-w">w: interaction</label><output id="dp-w-o"></output></div><input type="range" id="dp-w" min="-8" max="8" step="0.1" value="-4"></div>
+          <div class="btns"><button type="button" class="btn" id="dp-ea">Explaining away</button><button type="button" class="btn" id="dp-rbm">No interaction (RBM-like)</button></div>
+        </div>
+        <div class="grp"><div class="stats">
+          <div class="stat"><div class="v" id="dp-lz"></div><div class="k">log p(v) (exact)</div></div>
+          <div class="stat"><div class="v" id="dp-L"></div><div class="k">ELBO &#8466;(q)</div></div>
+          <div class="stat"><div class="v" id="dp-kl"></div><div class="k">KL gap</div></div>
+          <div class="stat"><div class="v" id="dp-it"></div><div class="k">mean-field updates</div></div>
+        </div></div>
+      </div>
+    </div>
+    <h3>The map of methods</h3>
+    <div class="algo-grid">
+      <div class="algo"><div class="fam" style="color:var(--cA)">Exact</div><h4>Elimination and junction trees</h4><p>This chapter and the next. Exact answers, cost exponential in the treewidth. Fine for sparse networks, chains and trees; hopeless for densely connected layers.</p><div class="meta">ALARM, HMMs, polytrees</div></div>
+      <div class="algo"><div class="fam" style="color:var(--cA)">Exact, by design</div><h4>Models with easy posteriors</h4><p>Restricted Boltzmann machines have no edges between hidden units, so p(h | v) factorises and that direction of inference is cheap, even though log p(v) still needs an intractable normalising constant.</p><div class="meta">RBM: p(h | v) = &prod; &sigma;(&hellip;)</div></div>
+      <div class="algo"><div class="fam" style="color:var(--cB)">Approximate: optimise</div><h4>Variational inference</h4><p>Choose a tractable family q and maximise the ELBO. Mean-field is the simplest family. Fast and deterministic, but biased towards posteriors that are too simple.</p><div class="meta">ELBO, mean-field</div></div>
+      <div class="algo"><div class="fam" style="color:var(--cB)">Approximate: sample</div><h4>Monte Carlo and MCMC</h4><p>Draw samples whose distribution approaches the posterior: rejection, likelihood weighting, Gibbs sampling. Unbiased in the limit, but slow to mix when variables are strongly coupled.</p><div class="meta">Gibbs, likelihood weighting</div></div>
+      <div class="algo"><div class="fam" style="color:var(--cC)">Approximate: learn</div><h4>Amortised inference</h4><p>Train a network, the encoder, to output the parameters of q(h | v) in one forward pass, instead of optimising q afresh for every v. The variational autoencoder works this way.</p><div class="meta">VAE encoder, wake-sleep</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROJECT -->
+<section class="chap" id="project">
+  <div class="wrap">
+    <div class="tag">Real-world project</div>
+    <h2>Project: diagnosing ALARM, and racing elimination orders</h2>
+    <div class="prose">
+      <p>The <b>ALARM</b> network (Beinlich, Suermondt, Chavez and Cooper, 1989) was built by hand for monitoring patients on mechanical ventilation. This page embeds it unchanged, all 37 variables, 46 arcs and 509 free parameters, from the <a href="https://www.bnlearn.com/bnrepository/" rel="noopener">bnlearn Bayesian Network Repository</a> maintained by Marco Scutari, whose pages are licensed <b>CC BY-SA</b>; the extract embedded in this page is shared under the same licence. The variable and state names below are the ones in the file. The file does not say which variables are diagnoses and which are readings, so the page uses the structure: the 12 <em>roots</em> (no parents) are the candidate causes we query, and the 11 <em>leaves</em> (no children) are where we put evidence.</p>
+      <p>Enumeration is out of the question: with three readings and one query variable, the hidden variables still span more than 10<sup>14</sup> combinations. Variable elimination answers each query in a millisecond or so, if the order is good.</p>
+    </div>
+
+    <h3>1 &middot; Ask diagnostic questions</h3>
+    <div class="prose" style="margin-top:10px"><p><strong>Choose readings for any of the leaves, or start from a preset.</strong> Every bar is a separate exact query, P(root | readings), by variable elimination with the min-fill order.</p></div>
+    <div class="lab">
+      <div>
+        <div class="plot pj-bars"><canvas id="pj-cv" aria-label="Prior and posterior probability of the first state of each of the 12 root variables"></canvas></div>
+        <p class="note" style="margin-top:8px">Bars: the posterior given your readings. Tick: the prior, with no readings. Each row shows the probability of the variable&rsquo;s first state in the file.</p>
+        <p class="note" id="pj-say" style="margin-top:8px"></p>
+      </div>
+      <div class="panel">
+        <div class="grp"><span class="mini-h">Presets</span><div class="chips" id="pj-pre" role="group" aria-label="Evidence presets"></div></div>
+        <div class="grp"><span class="mini-h">Readings at the leaves</span><div class="leafsel" id="pj-ev"></div></div>
+        <div class="grp"><div class="stats">
+          <div class="stat"><div class="v" id="pj-pe"></div><div class="k">P(readings)</div></div>
+          <div class="stat"><div class="v" id="pj-t"></div><div class="k">12 queries, this browser</div></div>
+        </div></div>
+      </div>
+    </div>
+
+    <h3>2 &middot; Race the orders</h3>
+    <div class="prose" style="margin-top:10px"><p>One query, seven orders. Each order is run on the full network (or with irrelevant variables dropped, if you tick the box), and timed over repeated runs in your browser. An order whose largest table would need more than 32 MB is not run; the table shows what it would have needed. <strong>Change the query or the readings, try other random seeds, and press Race.</strong></p></div>
+    <div class="race-ctl">
+      <label class="mini-h" for="rc-q">Query</label><select id="rc-q" class="qsel"></select>
+      <div class="ctrl rc-seed"><div class="top"><label for="rc-seed">Random-order seed</label><output id="rc-seed-o">1</output></div><input type="range" id="rc-seed" min="1" max="100" step="1" value="1"></div>
+      <label class="chk"><input type="checkbox" id="rc-prune"> Drop irrelevant variables</label>
+      <button type="button" class="btn primary" id="rc-go">Race</button>
+    </div>
+    <div class="tbl-wrap block" style="margin-top:14px"><table class="hand race" id="rc-tab"></table></div>
+    <p class="note block" style="max-width:72ch; margin-top:12px" id="rc-say"></p>
+
+    <h3>The same computation in Python</h3>
+    <p class="note" style="max-width:72ch">The reference script reads the BIF file, runs its own variable elimination with numpy, and checks every posterior against one large <span class="mono">numpy.einsum</span> over all 37 CPTs, which chooses its own contraction order. The greedy orders and the seeded random order are implemented the same way as on this page, with ties broken by position in the file.</p>
+<pre class="code"><code>import re, numpy as np
+
+def read_bif(path):                                   # variables, states, parents, CPT arrays
+    txt = open(path).read(); states, order = {}, []
+    for m in re.finditer(r"variable\s+(\w+)\s*\{\s*type\s+discrete\s*\[\s*\d+\s*\]\s*\{([^}]*)\}", txt):
+        states[m.group(1)] = [s.strip() for s in m.group(2).split(",")]; order.append(m.group(1))
+    parents, cpt = {}, {}
+    for m in re.finditer(r"probability\s*\(\s*(\w+)\s*(?:\|\s*([^)]*))?\)\s*\{([^}]*)\}", txt):
+        v = m.group(1); ps = [p.strip() for p in m.group(2).split(",")] if m.group(2) else []
+        T = np.zeros([len(states[p]) for p in ps] + [len(states[v])]); parents[v] = ps
+        for line in filter(None, (l.strip() for l in m.group(3).split(";"))):
+            if line.startswith("table"): T[...] = np.array(line[5:].split(","), float).reshape(T.shape); continue
+            key, vals = re.match(r"\(([^)]*)\)\s*(.*)", line).groups()
+            T[tuple(states[p].index(k.strip()) for p, k in zip(ps, key.split(",")))] = np.array(vals.split(","), float)
+        cpt[v] = T
+    return order, states, parents, cpt
+
+def plan(order, scopes, card):                       # symbolic pass: sizes only
+    sc, big, cost = [set(s) for s in scopes], 0, 0
+    for x in order:
+        u = set().union(*[s for s in sc if x in s]); sc = [s for s in sc if x not in s]
+        size = int(np.prod([card[y] for y in u])); big = max(big, size); cost += size
+        sc.append(u - {x})
+    return big, cost
+
+def eliminate(factors, order):                       # factors: list of (scope list, array)
+    for x in order:
+        use = [f for f in factors if x in f[0]]; factors = [f for f in factors if x not in f[0]]
+        vs = list(dict.fromkeys(v for s, _ in use for v in s)); L = {v: chr(97 + i) for i, v in enumerate(vs)}
+        spec = ",".join("".join(L[v] for v in s) for s, _ in use) + "->" + "".join(L[v] for v in vs if v != x)
+        factors.append(([v for v in vs if v != x], np.einsum(spec, *[t for _, t in use])))
+    return factors
+# ... min-fill / min-degree / min-weight / seeded random orders, evidence slicing,
+#     barren-node pruning and the einsum cross-check: see x107-ref.py (about 200 lines)</code></pre>
+    <p class="note block" style="max-width:72ch">Output of the full script, run with Python 3.14 and numpy 2:</p>
+<pre class="code out"><code>ALARM: 37 variables, 46 arcs, 509 free parameters
+rows in the full joint table: 1.733e+16
+burglary check: P(B | j, m) = &lt;0.2842, 0.7158>
+
+low BP, CVP, PCWP: P(evidence) = 0.0430871; biggest moves (min-fill VE, checked by one big einsum):
+   P(LVFAILURE = TRUE) 0.0500 -> 0.6998
+   P(HYPOVOLEMIA = TRUE) 0.2000 -> 0.1593
+   P(ANAPHYLAXIS = TRUE) 0.0100 -> 0.0176
+MINVOL and PRESS zero: P(evidence) = 0.0157068; biggest moves (min-fill VE, checked by one big einsum):
+   P(KINKEDTUBE = TRUE) 0.0400 -> 0.5562
+   P(DISCONNECT = TRUE) 0.1000 -> 0.2328
+   P(MINVOLSET = LOW) 0.0500 -> 0.1152
+MINVOL low, PRESS zero: P(evidence) = 0.0063159; biggest moves (min-fill VE, checked by one big einsum):
+   P(INTUBATION = NORMAL) 0.9200 -> 0.0892
+   P(DISCONNECT = TRUE) 0.1000 -> 0.4367
+   P(MINVOLSET = LOW) 0.0500 -> 0.2112
+PAP and HRBP high: P(evidence) = 0.0439575; biggest moves (min-fill VE, checked by one big einsum):
+   P(PULMEMBOLUS = TRUE) 0.0100 -> 0.1404
+   P(ERRLOWOUTPUT = TRUE) 0.0500 -> 0.0039
+   P(DISCONNECT = TRUE) 0.1000 -> 0.0902
+
+P(LVFAILURE | low BP, CVP, PCWP): the same answer, seven orders
+  pruning barren nodes: off (33 hidden variables to eliminate)
+  order       largest factor  entries computed   P(LVFAILURE = TRUE)
+  minfill                144             1,270   0.699822
+  mindeg                 144             1,334   0.699822
+  minweight              144             1,432   0.699822
+  file                13,824            21,982   0.699822
+  random              73,728           145,562   0.699822
+  maxdeg       6,879,707,136    22,715,896,872   not run (51.3 GiB for one factor)
+  reverse        429,981,696       964,730,063   not run (3.2 GiB for one factor)
+  pruning on: 27 factors left, 23 to eliminate, largest 108, entries 732
+
+100 random orders (seeds 1-100): largest factor best 1,728, median 147,456, worst 286,654,464
+numpy time per query, min-fill: 1.63 ms</code></pre>
+    <p class="note block" style="max-width:72ch" id="rc-cmp">The browser computes the same posteriors to at least six decimal places and the same table sizes, because the order heuristics are the same code. The times differ: numpy hands each product to compiled code, while the page loops in JavaScript, and the page&rsquo;s timing depends on your machine. What carries over is the ratio between orders.</p>
+  </div>
+</section>
+
+<!-- SUMMARY -->
+<section class="chap" id="summary">
+  <div class="wrap">
+    <div class="tag">Wrap-up</div>
+    <h2>Five lines to remember</h2>
+    <ul class="take">
+      <li>Every query is P(X | e) = &alpha; &sum;<sub>y</sub> P(X, e, y): a sum, over the hidden variables, of products of CPT entries, then normalised.</li>
+      <li>Enumeration evaluates the nested sum as a depth-first tree. Its space is linear, but its time is exponential in the number of variables, and it repeats identical sub-calculations.</li>
+      <li>Variable elimination stores each intermediate result as a factor. Each step multiplies the factors that mention one hidden variable and sums it out. Variables that are not ancestors of the query or the evidence can be dropped first.</li>
+      <li>The cost is set by the largest factor, which is set by the elimination order: exponential in the induced width, linear in the number of variables. Polytrees are linear; min-fill and min-degree are good greedy orders; bad orders can be millions of times worse.</li>
+      <li>Exact inference is NP-hard in general (3-SAT fits in a network) and #P-hard to do exactly. In deep models hidden units interact so densely that approximate inference, variational, sampling or amortised, is the norm.</li>
+    </ul>
+    <h3>Check your understanding</h3>
+    <div style="margin-top:10px; border-top:1px solid var(--line); max-width:820px">
+      <details class="q"><summary>Enumeration uses only linear memory. Variable elimination can need far more. Why is VE still preferred?</summary><p>Because enumeration&rsquo;s time is exponential in the number of variables, whatever the structure, and it recomputes the same sub-products again and again. VE trades memory for time: it stores each intermediate factor once. On a sparse network such as ALARM its tables stay tiny (the largest has 144 entries with min-fill), so it uses little memory as well as little time. Only when the treewidth is large does VE&rsquo;s memory become the problem, and then enumeration would be hopeless anyway.</p></details>
+      <details class="q"><summary>For P(B | j, m), does it matter whether VE eliminates A or E first?</summary><p>Not for the answer, and hardly for the cost. Eliminating A first multiplies P(A | B, E), P(j | A) and P(m | A) into a table over A, B and E (8 entries) and leaves a factor over B and E. Eliminating E first multiplies P(E) and P(A | B, E) into a table over A, B and E (8 entries) and leaves a factor over A and B. Either way the largest table has 8 entries, because the burglary network is a polytree.</p></details>
+      <details class="q"><summary>A query asks P(Earthquake | Burglary = true). Which variables are irrelevant?</summary><p>JohnCalls, MaryCalls and Alarm: none of them is an ancestor of E or of B, so all three are dropped. (Seen step by step, J and M are unobserved leaves, and once they are gone A is one too.) What remains is P(E) and P(B), which do not interact, so the answer is just the prior P(E) = 0.002: knowing about a burglary says nothing about earthquakes unless we also observe the alarm or a call.</p></details>
+      <details class="q"><summary>What is the induced width of min-fill on a chain of n nodes, and why?</summary><p>One. Eliminating an end node of a chain creates a table over that node and its single neighbour, and adds no fill-in, so the remaining graph is again a chain. Every table has two variables, so the induced width is 2 &minus; 1 = 1 and the total cost is linear in n. Eliminating a middle node first builds a table over three variables (width 2) and joins its two neighbours with a fill-in edge: the rest is still a chain, but that step cost twice as much. For a chain the end-first order is optimal.</p></details>
+      <details class="q"><summary>Why does a factorised q(h) = q<sub>1</sub>(h<sub>1</sub>) q<sub>2</sub>(h<sub>2</sub>) fail on explaining away?</summary><p>Explaining away makes the posterior favour &ldquo;one cause or the other, but not both&rdquo;: mass on (1, 0) and (0, 1), little on (1, 1). A product of two independent marginals cannot put mass on two opposite corners without also putting it on the other two. Mean-field therefore picks one corner, or spreads out, and the KL gap measures what it misses. A richer q, sampling, or exact inference (here only four states) would capture it.</p></details>
+    </div>
+    <h3>Keep going</h3>
+    <div class="btns" style="margin-top:14px">
+      <a class="btn primary" href="../sum-product/">Next: 6.5 Factor Graphs &amp; the Sum-Product Algorithm &rarr;</a>
+      <a class="btn" href="../markov-random-fields/">&larr; Previous: Markov Random Fields</a>
+      <a class="btn primary" href="../sum-product/">Next chapter: Factor Graphs &amp; the Sum-Product Algorithm &rarr;</a>
+      <a class="btn" href="../">All chapters</a>
+    </div>
+    <h3>Where to go deeper</h3>
+    <ol class="refs">
+      <li>Russell, S. &amp; Norvig, P. (2021). <em>Artificial Intelligence: A Modern Approach</em>, 4th ed., section 13.3, Exact inference in Bayesian networks. Pearson.</li>
+      <li>Goodfellow, I., Bengio, Y. &amp; Courville, A. (2016). <em>Deep Learning</em>, section 16.6, Inference and approximate inference. MIT Press.</li>
+      <li>Zhang, N. L. &amp; Poole, D. (1994). A simple approach to Bayesian network computations. <em>Proceedings of the 10th Canadian Conference on Artificial Intelligence</em>, 171&ndash;178.</li>
+      <li>Dechter, R. (1999). Bucket elimination: a unifying framework for reasoning. <em>Artificial Intelligence</em>, 113(1&ndash;2), 41&ndash;85.</li>
+      <li>Cooper, G. F. (1990). The computational complexity of probabilistic inference using Bayesian belief networks. <em>Artificial Intelligence</em>, 42(2&ndash;3), 393&ndash;405.</li>
+      <li>Koller, D. &amp; Friedman, N. (2009). <em>Probabilistic Graphical Models: Principles and Techniques</em>, chapter 9, Variable elimination. MIT Press.</li>
+      <li>Beinlich, I., Suermondt, H., Chavez, R. &amp; Cooper, G. (1989). The ALARM monitoring system: a case study with two probabilistic inference techniques for belief networks. <em>Proceedings of the 2nd European Conference on Artificial Intelligence in Medicine</em>, 247&ndash;256.</li>
+      <li>Scutari, M. (2010). Learning Bayesian networks with the bnlearn R package. <em>Journal of Statistical Software</em>, 35(3), 1&ndash;22. Network files from the bnlearn Bayesian Network Repository, CC BY-SA.</li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Presenting? Press <span class="mono">J</span> and <span class="mono">K</span> to step forward and back through the sections. Every number on this page is computed live in your browser: the burglary network uses the textbook CPTs from Russell and Norvig, the project uses the ALARM network from the bnlearn repository (CC BY-SA, shared here under the same licence), and the Python output was produced by the reference script described in the project.</div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gaussOf(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+function fmt(v, d = 1) { if (!isFinite(v)) return '∞'; let s = v.toFixed(d); if (/^-0(\.0*)?$/.test(s)) s = s.slice(1); return s; }
+const escA = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const tip = (text, how) => `<span class="tip" tabindex="0" data-tip="${escA(how)}">${text}</span>`;
+
+/* ---------- canvas plumbing ---------- */
+function frame(cv, xl, yl, pad, eq) {
+  pad = Object.assign({ l: 46, r: 14, t: 14, b: 32 }, pad || {});
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  const w = r.width, h = r.height, pw = Math.max(1, w - pad.l - pad.r), ph = Math.max(1, h - pad.t - pad.b);
+  if (eq) { // equal scale on both axes: widen the short side
+    const sx = pw / (xl[1] - xl[0]), sy = ph / (yl[1] - yl[0]);
+    if (sx > sy) { const c = (xl[0] + xl[1]) / 2, half = pw / sy / 2; xl = [c - half, c + half]; }
+    else { const c = (yl[0] + yl[1]) / 2, half = ph / sx / 2; yl = [c - half, c + half]; }
+  }
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h, pad, pw, ph, xl, yl,
+    X: x => pad.l + (x - xl[0]) / (xl[1] - xl[0]) * pw, Y: y => pad.t + (1 - (y - yl[0]) / (yl[1] - yl[0])) * ph,
+    iX: px => xl[0] + (px - pad.l) / pw * (xl[1] - xl[0]), iY: py => yl[0] + (1 - (py - pad.t) / ph) * (yl[1] - yl[0]) };
+}
+function niceStep(range, n) { const s = range / n, p = Math.pow(10, Math.floor(Math.log10(s))), f = s / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+function axes(v, xlab, ylab, o) {
+  o = o || {}; const c = v.ctx, { pad, w, h } = v; c.save();
+  c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.strokeStyle = css('--line'); c.lineWidth = 1;
+  const sx = o.sx || niceStep(v.xl[1] - v.xl[0], o.nx || 6), sy = o.sy || niceStep(v.yl[1] - v.yl[0], o.ny || 5);
+  const dx = sx < 1 ? Math.min(3, Math.ceil(-Math.log10(sx) - 1e-9)) : 0, dy = sy < 1 ? Math.min(3, Math.ceil(-Math.log10(sy) - 1e-9)) : 0;
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  for (let x = Math.ceil(v.xl[0] / sx - 1e-9) * sx; x <= v.xl[1] + 1e-9; x += sx) { const px = Math.round(v.X(x)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(px, pad.t); c.lineTo(px, h - pad.b); c.stroke(); c.globalAlpha = 1; c.fillText(o.fx ? o.fx(x) : fmt(x, dx), px, h - pad.b + 5); }
+  c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let y = Math.ceil(v.yl[0] / sy - 1e-9) * sy; y <= v.yl[1] + 1e-9; y += sy) { const py = Math.round(v.Y(y)) + .5; c.globalAlpha = .6; c.beginPath(); c.moveTo(pad.l, py); c.lineTo(w - pad.r, py); c.stroke(); c.globalAlpha = 1; c.fillText(o.fy ? o.fy(y) : fmt(y, dy), pad.l - 6, py); }
+  c.fillStyle = css('--muted');
+  if (xlab) { c.textAlign = 'right'; c.textBaseline = 'bottom'; const tw = c.measureText(xlab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(w - pad.r - tw - 9, h - pad.b - 19, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(xlab, w - pad.r - 6, h - pad.b - 5); }
+  if (ylab) { c.textAlign = 'left'; c.textBaseline = 'top'; const tw = c.measureText(ylab).width; c.fillStyle = css('--surface'); c.globalAlpha = .85; c.fillRect(pad.l + 3, pad.t + 2, tw + 6, 15); c.globalAlpha = 1; c.fillStyle = css('--muted'); c.fillText(ylab, pad.l + 6, pad.t + 4); }
+  c.restore();
+}
+function clip(v) { v.ctx.save(); v.ctx.beginPath(); v.ctx.rect(v.pad.l, v.pad.t, v.pw, v.ph); v.ctx.clip(); }
+function dot(v, x, y, col, r, hollow) { const c = v.ctx; c.beginPath(); c.arc(v.X(x), v.Y(y), r || 4.5, 0, 7); if (hollow) { c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); } else { c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); } }
+function curve(v, f, col, lw, dash) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 2.5; if (dash) c.setLineDash(dash); c.beginPath(); const N = 160; for (let i = 0; i <= N; i++) { const x = v.xl[0] + (v.xl[1] - v.xl[0]) * i / N, y = f(x); const py = clamp(v.Y(y), -2000, 4000); i ? c.lineTo(v.X(x), py) : c.moveTo(v.X(x), py); } c.stroke(); c.restore(); }
+function seg(v, x1, y1, x2, y2, col, lw, dash, alpha) { const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = lw || 1.5; if (dash) c.setLineDash(dash); if (alpha != null) c.globalAlpha = alpha; c.beginPath(); c.moveTo(v.X(x1), v.Y(y1)); c.lineTo(v.X(x2), v.Y(y2)); c.stroke(); c.restore(); }
+function star(v, x, y, col, r) { const c = v.ctx, cx = v.X(x), cy = v.Y(y); r = r || 8; c.save(); c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; c.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); } c.closePath(); c.fillStyle = col; c.fill(); c.strokeStyle = css('--surface'); c.lineWidth = 1.2; c.stroke(); c.restore(); }
+
+const figs = [];
+function fig(cv, draw) { figs.push(draw); let t = 0; if ('ResizeObserver' in window) new ResizeObserver(() => { clearTimeout(t); t = setTimeout(draw, 30); }).observe(cv); }
+function redrawAll() { figs.forEach(f => f()); }
+const mq = matchMedia('(prefers-color-scheme: dark)');
+if (mq.addEventListener) mq.addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function evPos(cv, e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function draggable(cv, getV, pts, onChange) {
+  let drag = -1;
+  const near = (v, px, py) => { let best = -1, bd = 20 * 20; pts().forEach((p, i) => { const dx = v.X(p[0]) - px, dy = v.Y(p[1]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e); const i = near(v, px, py); if (i >= 0) { drag = i; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { const v = getV(); if (!v) return; const [px, py] = evPos(cv, e);
+    if (drag < 0) { cv.style.cursor = near(v, px, py) >= 0 ? 'grab' : 'default'; return; }
+    const P = pts()[drag]; P[0] = clamp(v.iX(px), v.xl[0], v.xl[1]); P[1] = clamp(v.iY(py), v.yl[0], v.yl[1]); onChange(); });
+  const up = () => { drag = -1; cv.style.cursor = 'default'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+function seg1(sel, attr, onPick) { $$(sel).forEach(b => b.addEventListener('click', () => { $$(sel).forEach(o => o.setAttribute('aria-pressed', o === b ? 'true' : 'false')); onPick(b.getAttribute(attr)); })); }
+
+
+/* ================= exact inference core: factors, orders, variable elimination ================= */
+/* A factor: { v: [variable ids], c: [cardinalities], t: Float64Array } in row-major order (last variable fastest). */
+function fSize(c) { let s = 1; for (const k of c) s *= k; return s; }
+function fMake(v, c, t) { return { v: v.slice(), c: c.slice(), t: t || new Float64Array(fSize(c)) }; }
+function fStrides(f) { const s = new Array(f.v.length); let m = 1; for (let i = f.v.length - 1; i >= 0; i--) { s[i] = m; m *= f.c[i]; } return s; }
+/* pointwise product of a list of factors; the scope is the union in order of first appearance */
+function fProduct(fs, card) {
+  const v = []; fs.forEach(f => f.v.forEach(x => { if (!v.includes(x)) v.push(x); }));
+  const c = v.map(x => card[x]), out = fMake(v, c), n = out.t.length, k = v.length;
+  const st = fs.map(f => { const s = fStrides(f), a = new Array(k).fill(0); f.v.forEach((x, i) => { a[v.indexOf(x)] = s[i]; }); return a; });
+  const idx = new Array(fs.length).fill(0), ctr = new Array(k).fill(0);
+  for (let i = 0; i < n; i++) {
+    let p = 1; for (let j = 0; j < fs.length; j++) p *= fs[j].t[idx[j]];
+    out.t[i] = p;
+    for (let d = k - 1; d >= 0; d--) {
+      ctr[d]++; for (let j = 0; j < fs.length; j++) idx[j] += st[j][d];
+      if (ctr[d] < c[d]) break;
+      for (let j = 0; j < fs.length; j++) idx[j] -= st[j][d] * c[d];
+      ctr[d] = 0;
+    }
+  }
+  if (!fs.length) out.t[0] = 1;
+  return out;
+}
+function fSumOut(f, x) {
+  const i = f.v.indexOf(x); if (i < 0) return f;
+  const v = f.v.filter((_, j) => j !== i), c = f.c.filter((_, j) => j !== i), out = fMake(v, c);
+  const s = fStrides(f), inner = s[i], ci = f.c[i], outer = f.t.length / (inner * ci);
+  for (let o = 0; o < outer; o++) for (let r = 0; r < inner; r++) { let sum = 0; for (let k = 0; k < ci; k++) sum += f.t[o * inner * ci + k * inner + r]; out.t[o * inner + r] = sum; }
+  return out;
+}
+function fRestrict(f, x, val) {
+  const i = f.v.indexOf(x); if (i < 0) return f;
+  const v = f.v.filter((_, j) => j !== i), c = f.c.filter((_, j) => j !== i), out = fMake(v, c);
+  const s = fStrides(f), inner = s[i], ci = f.c[i], outer = f.t.length / (inner * ci);
+  for (let o = 0; o < outer; o++) for (let r = 0; r < inner; r++) out.t[o * inner + r] = f.t[o * inner * ci + val * inner + r];
+  return out;
+}
+/* net: { names, card, parents, cpt: [Float64Array] } with each CPT laid out as (parents..., own) */
+function cptFactor(net, i) { const v = net.parents[i].concat([i]); return fMake(v, v.map(x => net.card[x]), Float64Array.from(net.cpt[i])); }
+function ancestorsOf(net, list) { const keep = new Set(), st = list.slice(); while (st.length) { const x = st.pop(); if (keep.has(x)) continue; keep.add(x); net.parents[x].forEach(p => st.push(p)); } return keep; }
+function veSetup(net, q, ev, prune) {
+  const n = net.names.length, keep = prune ? ancestorsOf(net, [q].concat(Object.keys(ev).map(Number))) : new Set([...Array(n).keys()]);
+  const scopes = [], ids = [];
+  for (let i = 0; i < n; i++) if (keep.has(i)) { scopes.push(net.parents[i].concat([i]).filter(x => !(x in ev))); ids.push(i); }
+  const elim = []; for (let i = 0; i < n; i++) if (keep.has(i) && i !== q && !(i in ev)) elim.push(i);
+  return { keep, scopes, elim, ids };
+}
+/* elimination orders: greedy ones break ties by file order; 'random' is a seeded Fisher-Yates shuffle */
+function makeOrder(kind, elim, scopes, card, seed) {
+  const left = elim.slice().sort((a, b) => a - b);
+  if (kind === 'file') return left;
+  if (kind === 'reverse') return left.reverse();
+  if (kind === 'random') { const r = mulberry32(seed || 1), a = left; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  if (Array.isArray(kind)) return kind.filter(x => elim.includes(x)).concat(left.filter(x => !kind.includes(x)));
+  const nbr = new Map();
+  const add = x => { if (!nbr.has(x)) nbr.set(x, new Set()); return nbr.get(x); };
+  scopes.forEach(s => s.forEach(a => { const A = add(a); s.forEach(b => { if (a !== b) A.add(b); }); }));
+  left.forEach(add);
+  const out = [];
+  while (left.length) {
+    let best = -1, bs = Infinity;
+    for (const x of left) {
+      const N = [...nbr.get(x)]; let sc;
+      if (kind === 'mindeg') sc = N.length;
+      else if (kind === 'maxdeg') sc = -N.length;
+      else if (kind === 'minweight') { sc = card[x]; N.forEach(y => sc *= card[y]); }
+      else { sc = 0; for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) if (!nbr.get(N[i]).has(N[j])) sc++; }
+      if (sc < bs) { bs = sc; best = x; }
+    }
+    const N = [...nbr.get(best)];
+    N.forEach(a => { const A = nbr.get(a); N.forEach(b => { if (a !== b) A.add(b); }); A.delete(best); });
+    nbr.delete(best); left.splice(left.indexOf(best), 1); out.push(best);
+  }
+  return out;
+}
+/* symbolic run: sizes only. Returns per-step scopes, the largest factor and total entries computed. */
+function vePlan(net, q, ev, kind, prune, seed) {
+  const S = veSetup(net, q, ev, prune), order = makeOrder(kind, S.elim, S.scopes, net.card, seed);
+  let sc = S.scopes.map(s => new Set(s)), big = 0, cost = 0; const steps = [];
+  for (const x of order) {
+    const use = sc.filter(s => s.has(x)); sc = sc.filter(s => !s.has(x));
+    const u = new Set(); use.forEach(s => s.forEach(y => u.add(y)));
+    let size = 1; u.forEach(y => size *= net.card[y]);
+    big = Math.max(big, size); cost += size; u.delete(x); sc.push(u);
+    steps.push({ x, n: use.length, size, scope: [...u] });
+  }
+  return { order, big, cost, steps, nf: S.scopes.length, elim: S.elim };
+}
+/* numeric run. ev: {id: stateIndex}. Returns the normalised posterior of q, P(e), and the bookkeeping. */
+function veRun(net, q, ev, kind, prune, seed, cap) {
+  const pl = vePlan(net, q, ev, kind, prune, seed);
+  if (cap && pl.big > cap) return Object.assign({ ok: false }, pl);
+  const S = veSetup(net, q, ev, prune);
+  let fs = S.ids.map(i => { let f = cptFactor(net, i); for (const e in ev) f = fRestrict(f, +e, ev[e]); return f; });
+  for (const x of pl.order) { const use = fs.filter(f => f.v.includes(x)); fs = fs.filter(f => !f.v.includes(x)); fs.push(fSumOut(fProduct(use, net.card), x)); }
+  const fin = fProduct(fs, net.card), z = fin.t.reduce((a, b) => a + b, 0);
+  return Object.assign({ ok: true, p: Array.from(fin.t, x => x / z), z, un: Array.from(fin.t) }, pl);
+}
+
+
+/* ================= shared formatting ================= */
+const nf = n => Math.round(n).toLocaleString('en-US');
+const pct = (p, d = 1) => isFinite(p) ? (p * 100).toFixed(d) + '%' : '–';
+function fv(x, d = 4) {
+  if (x === 0) return '0'; const a = Math.abs(x);
+  if (a >= 1e-3 && a < 1e6) { let s = x.toPrecision(d); if (s.includes('.') && !s.includes('e')) s = s.replace(/0+$/, '').replace(/\.$/, ''); return s; }
+  return x.toExponential(d - 1).replace('e-', 'e−').replace('e+', 'e');
+}
+function bigT(n) { return n < 1e6 ? nf(n) : n.toExponential(2).replace('e+', 'e'); }
+function bigH(n) { if (n < 1e6) return nf(n); const e = Math.floor(Math.log10(n)), m = n / Math.pow(10, e); return m.toFixed(2) + ' &times; 10<sup>' + e + '</sup>'; }
+function mem(n) { const b = n * 8; return b < 1024 ** 2 ? (b / 1024).toFixed(1) + ' KB' : b < 1024 ** 3 ? (b / 1024 ** 2).toFixed(1) + ' MB' : (b / 1024 ** 3).toFixed(1) + ' GiB'; }
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function arrow(c, x1, y1, x2, y2, col, lw) {
+  const a = Math.atan2(y2 - y1, x2 - x1), hl = 9 + lw;
+  c.save(); c.strokeStyle = col; c.fillStyle = col; c.lineWidth = lw;
+  c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2 - Math.cos(a) * hl * .8, y2 - Math.sin(a) * hl * .8); c.stroke();
+  c.beginPath(); c.moveTo(x2, y2); c.lineTo(x2 - hl * Math.cos(a - .38), y2 - hl * Math.sin(a - .38)); c.lineTo(x2 - hl * Math.cos(a + .38), y2 - hl * Math.sin(a + .38)); c.closePath(); c.fill(); c.restore();
+}
+function canvas2d(cv) {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, r.width, r.height);
+  return { c, W: r.width, H: r.height };
+}
+function segRow(el, opts, cur, onPick) {
+  el.innerHTML = opts.map(([v, lab]) => `<button type="button" data-v="${v}" aria-pressed="${String(v) === String(cur)}">${lab}</button>`).join('');
+  $$('button', el).forEach(b => b.addEventListener('click', () => { $$('button', el).forEach(o => o.setAttribute('aria-pressed', String(o === b))); onPick(b.dataset.v); }));
+}
+const setPressed = (el, v) => $$('button', el).forEach(o => o.setAttribute('aria-pressed', String(o.dataset.v === String(v))));
+
+/* ================= the burglary network ================= */
+const BN = { names: ['B', 'E', 'A', 'J', 'M'], card: [2, 2, 2, 2, 2], parents: [[], [], [0, 1], [2], [2]] };
+const FULL = ['Burglary', 'Earthquake', 'Alarm', 'JohnCalls', 'MaryCalls'];
+const LOW = ['b', 'e', 'a', 'j', 'm'];
+const PT = [[0.001], [0.002], [0.95, 0.94, 0.29, 0.001], [0.90, 0.05], [0.70, 0.01]];   /* P(X = T | parent row), rows with T first */
+BN.cpt = PT.map(rows => { const a = []; rows.forEach(p => a.push(p, 1 - p)); return Float64Array.from(a); });
+/* P(X_i = val | the parents' values in w); state 0 = true, 1 = false */
+function bnP(i, val, w) { let r = 0; BN.parents[i].forEach(p => { r = r * 2 + w[p]; }); return BN.cpt[i][r * 2 + val]; }
+function bnJoint(w) { let p = 1; for (let i = 0; i < 5; i++) p *= bnP(i, w[i], w); return p; }
+const WORLDS = []; for (let k = 0; k < 32; k++) WORLDS.push([4, 3, 2, 1, 0].map(s => (k >> s) & 1));
+function bnQuery(q, ev) {
+  let n = [0, 0], terms = 0;
+  WORLDS.forEach(w => { if (Object.keys(ev).every(k => w[k] === ev[k])) { n[w[q]] += bnJoint(w); terms++; } });
+  const z = n[0] + n[1]; return { p: n[0] / z, un: n, z, terms };
+}
+const lit = (i, v) => (v ? '&not;' : '') + LOW[i];
+const POS5 = [[0.22, 0.17], [0.78, 0.17], [0.5, 0.5], [0.24, 0.83], [0.76, 0.83]];
+/* o: { role: ['q'|'e'|'h' per node], p: [P(T) per node], ev: {i: val}, hl: Set } */
+function drawBurglary(cv, o) {
+  const { c, W, H } = canvas2d(cv), small = W < 440;
+  const nw = clamp(W * 0.3, 104, 176), nh = clamp(H * 0.25, 56, 74);
+  const box = POS5.map(([x, y]) => ({ x: clamp(x * W, nw / 2 + 6, W - nw / 2 - 6), y: y * H }));
+  [[0, 2], [1, 2], [2, 3], [2, 4]].forEach(([a, b]) => {
+    const A = box[a], B = box[b], dx = B.x - A.x, dy = B.y - A.y;
+    const t = q => Math.min((nw / 2 + q) / Math.abs(dx || 1e-9), (nh / 2 + q) / Math.abs(dy || 1e-9));
+    arrow(c, A.x + dx * t(3), A.y + dy * t(3), B.x - dx * t(5), B.y - dy * t(5), css('--muted'), 1.8);
+  });
+  const RC = { q: css('--cC'), e: css('--cA'), h: css('--muted') };
+  for (let i = 0; i < 5; i++) {
+    const B = box[i], x = B.x - nw / 2, y = B.y - nh / 2, rl = o.role[i], col = RC[rl];
+    c.save(); rrect(c, x, y, nw, nh, 10); c.fillStyle = css('--surface'); c.fill();
+    if (rl !== 'h') { c.fillStyle = col; c.globalAlpha = 0.09; c.fill(); c.globalAlpha = 1; }
+    c.strokeStyle = col; c.lineWidth = rl === 'h' ? 1.4 : 2.8; if (rl === 'h') c.setLineDash([4, 3]); rrect(c, x, y, nw, nh, 10); c.stroke(); c.restore();
+    c.fillStyle = css('--ink'); c.font = '600 ' + (small ? 12 : 13.5) + 'px ' + css('--f-body'); c.textAlign = 'left'; c.textBaseline = 'top';
+    c.fillText(small ? FULL[i].replace('Calls', '') : FULL[i], x + 9, y + 7);
+    c.font = '600 ' + (small ? 10.5 : 11.5) + 'px ' + css('--f-mono'); c.textAlign = 'right'; c.fillStyle = col;
+    c.fillText(rl === 'q' ? 'query' : rl === 'e' ? (o.ev[i] ? 'seen F' : 'seen T') : 'hidden', x + nw - 8, y + 8);
+    const p = o.p[i], bx = x + 9, bw = nw - 18, by = y + nh - 23;
+    c.fillStyle = css('--soft'); rrect(c, bx, by, bw, 7, 3); c.fill();
+    c.fillStyle = rl === 'h' ? css('--muted') : col; rrect(c, bx, by, Math.max(2, bw * p), 7, 3); c.fill();
+    c.fillStyle = css('--muted'); c.font = (small ? 10 : 11) + 'px ' + css('--f-mono'); c.textAlign = 'left';
+    c.fillText('P(T) ' + (p > 0 && p < 0.001 ? fv(p, 2) : pct(p)), bx, by + 9);
+  }
+  return { box, nw, nh };
+}
+
+/* ================= HERO: eliminate ALARM by hand ================= */
+const AL = {"names":["HISTORY","CVP","PCWP","HYPOVOLEMIA","LVEDVOLUME","LVFAILURE","STROKEVOLUME","ERRLOWOUTPUT","HRBP","HREKG","ERRCAUTER","HRSAT","INSUFFANESTH","ANAPHYLAXIS","TPR","EXPCO2","KINKEDTUBE","MINVOL","FIO2","PVSAT","SAO2","PAP","PULMEMBOLUS","SHUNT","INTUBATION","PRESS","DISCONNECT","MINVOLSET","VENTMACH","VENTTUBE","VENTLUNG","VENTALV","ARTCO2","CATECHOL","HR","CO","BP"],"states":[["TRUE","FALSE"],["LOW","NORMAL","HIGH"],["LOW","NORMAL","HIGH"],["TRUE","FALSE"],["LOW","NORMAL","HIGH"],["TRUE","FALSE"],["LOW","NORMAL","HIGH"],["TRUE","FALSE"],["LOW","NORMAL","HIGH"],["LOW","NORMAL","HIGH"],["TRUE","FALSE"],["LOW","NORMAL","HIGH"],["TRUE","FALSE"],["TRUE","FALSE"],["LOW","NORMAL","HIGH"],["ZERO","LOW","NORMAL","HIGH"],["TRUE","FALSE"],["ZERO","LOW","NORMAL","HIGH"],["LOW","NORMAL"],["LOW","NORMAL","HIGH"],["LOW","NORMAL","HIGH"],["LOW","NORMAL","HIGH"],["TRUE","FALSE"],["NORMAL","HIGH"],["NORMAL","ESOPHAGEAL","ONESIDED"],["ZERO","LOW","NORMAL","HIGH"],["TRUE","FALSE"],["LOW","NORMAL","HIGH"],["ZERO","LOW","NORMAL","HIGH"],["ZERO","LOW","NORMAL","HIGH"],["ZERO","LOW","NORMAL","HIGH"],["ZERO","LOW","NORMAL","HIGH"],["LOW","NORMAL","HIGH"],["NORMAL","HIGH"],["LOW","NORMAL","HIGH"],["LOW","NORMAL","HIGH"],["LOW","NORMAL","HIGH"]],"parents":[[5],[4],[4],[],[3,5],[],[3,5],[],[7,34],[10,34],[],[10,34],[],[],[13],[32,30],[],[24,30],[],[18,31],[19,23],[22],[],[24,22],[],[24,16,29],[],[],[27],[26,28],[24,16,29],[24,30],[31],[32,12,20,14],[33],[34,6],[35,14]],"cpt":[[0.9,0.1,0.01,0.99],[0.95,0.04,0.01,0.04,0.95,0.01,0.01,0.29,0.7],[0.95,0.04,0.01,0.04,0.95,0.01,0.01,0.04,0.95],[0.2,0.8],[0.95,0.04,0.01,0.01,0.09,0.9,0.98,0.01,0.01,0.05,0.9,0.05],[0.05,0.95],[0.98,0.01,0.01,0.5,0.49,0.01,0.95,0.04,0.01,0.05,0.9,0.05],[0.05,0.95],[0.98,0.01,0.01,0.3,0.4,0.3,0.01,0.98,0.01,0.4,0.59,0.01,0.98,0.01,0.01,0.01,0.01,0.98],[0.333333,0.333333,0.333333,0.333333,0.333333,0.333333,0.01,0.98,0.01,0.333333,0.333333,0.333333,0.98,0.01,0.01,0.01,0.01,0.98],[0.1,0.9],[0.333333,0.333333,0.333333,0.333333,0.333333,0.333333,0.01,0.98,0.01,0.333333,0.333333,0.333333,0.98,0.01,0.01,0.01,0.01,0.98],[0.1,0.9],[0.01,0.99],[0.98,0.01,0.01,0.3,0.4,0.3],[0.97,0.01,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.97,0.01,0.97,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.97,0.01,0.97,0.01,0.01,0.01,0.01,0.97,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.01,0.97],[0.04,0.96],[0.97,0.01,0.01,0.01,0.01,0.01,0.01,0.97,0.5,0.48,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.97,0.01,0.01,0.97,0.01,0.01,0.01,0.5,0.48,0.01,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.97,0.01,0.6,0.38,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.01,0.97],[0.05,0.95],[1.0,0.0,0.0,0.95,0.04,0.01,1.0,0.0,0.0,0.01,0.95,0.04,0.99,0.01,0.0,0.95,0.04,0.01,0.95,0.04,0.01,0.01,0.01,0.98],[0.98,0.01,0.01,0.98,0.01,0.01,0.01,0.98,0.01,0.98,0.01,0.01,0.01,0.01,0.98,0.69,0.3,0.01],[0.01,0.19,0.8,0.05,0.9,0.05],[0.01,0.99],[0.1,0.9,0.95,0.05,0.1,0.9,0.95,0.05,0.01,0.99,0.05,0.95],[0.92,0.03,0.05],[0.97,0.01,0.01,0.01,0.05,0.25,0.25,0.45,0.97,0.01,0.01,0.01,0.2,0.75,0.04,0.01,0.01,0.01,0.01,0.97,0.01,0.29,0.3,0.4,0.01,0.01,0.01,0.97,0.01,0.9,0.08,0.01,0.01,0.3,0.49,0.2,0.01,0.15,0.25,0.59,0.01,0.97,0.01,0.01,0.2,0.7,0.09,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.08,0.9,0.97,0.01,0.01,0.01,0.01,0.01,0.38,0.6,0.01,0.01,0.08,0.9,0.97,0.01,0.01,0.01,0.01,0.01,0.97,0.01,0.97,0.01,0.01,0.01,0.1,0.84,0.05,0.01,0.01,0.01,0.01,0.97,0.4,0.58,0.01,0.01,0.01,0.01,0.01,0.97],[0.1,0.9],[0.05,0.9,0.05],[0.05,0.93,0.01,0.01,0.05,0.01,0.93,0.01,0.05,0.01,0.01,0.93],[0.97,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.97,0.01,0.97,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.97],[0.97,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.3,0.68,0.01,0.01,0.95,0.03,0.01,0.01,0.01,0.01,0.01,0.97,0.01,0.97,0.01,0.01,0.95,0.03,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.97,0.01,0.01,0.97,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.5,0.48,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.97,0.01,0.4,0.58,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.97,0.01,0.97,0.01,0.01,0.01,0.97,0.01,0.01,0.01,0.3,0.68,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.01,0.97],[0.97,0.01,0.01,0.01,0.01,0.01,0.01,0.97,0.01,0.01,0.97,0.01,0.03,0.95,0.01,0.01,0.01,0.97,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.01,0.01,0.97,0.01,0.94,0.04,0.01,0.01,0.01,0.97,0.01,0.01,0.97,0.01,0.01,0.97,0.01,0.01,0.01,0.01,0.88,0.1,0.01],[0.01,0.01,0.98,0.01,0.01,0.98,0.04,0.92,0.04,0.9,0.09,0.01],[0.01,0.99,0.01,0.99,0.7,0.3,0.01,0.99,0.05,0.95,0.7,0.3,0.01,0.99,0.05,0.95,0.95,0.05,0.01,0.99,0.05,0.95,0.7,0.3,0.01,0.99,0.05,0.95,0.95,0.05,0.05,0.95,0.05,0.95,0.95,0.05,0.01,0.99,0.01,0.99,0.7,0.3,0.01,0.99,0.05,0.95,0.7,0.3,0.01,0.99,0.05,0.95,0.99,0.01,0.01,0.99,0.05,0.95,0.7,0.3,0.01,0.99,0.05,0.95,0.99,0.01,0.05,0.95,0.05,0.95,0.99,0.01,0.01,0.99,0.01,0.99,0.1,0.9,0.01,0.99,0.01,0.99,0.1,0.9,0.01,0.99,0.01,0.99,0.3,0.7,0.01,0.99,0.01,0.99,0.1,0.9,0.01,0.99,0.01,0.99,0.3,0.7,0.01,0.99,0.01,0.99,0.3,0.7],[0.05,0.9,0.05,0.01,0.09,0.9],[0.98,0.01,0.01,0.95,0.04,0.01,0.3,0.69,0.01,0.95,0.04,0.01,0.04,0.95,0.01,0.01,0.3,0.69,0.8,0.19,0.01,0.01,0.04,0.95,0.01,0.01,0.98],[0.98,0.01,0.01,0.98,0.01,0.01,0.3,0.6,0.1,0.98,0.01,0.01,0.1,0.85,0.05,0.05,0.4,0.55,0.9,0.09,0.01,0.05,0.2,0.75,0.01,0.09,0.9]],"wide":[[0.952,0.2372],[0.9714,0.905],[0.9666,0.965],[0.9327,0.6271],[0.9375,0.7839],[0.9423,0.4969],[0.8779,0.4369],[0.8672,0.035],[0.9666,0.035],[0.5836,0.035],[0.6733,0.035],[0.763,0.035],[0.517,0.965],[0.8294,0.965],[0.6182,0.8964],[0.3059,0.4976],[0.0625,0.4266],[0.0431,0.7296],[0.2128,0.965],[0.3486,0.965],[0.417,0.965],[0.0286,0.965],[0.1183,0.965],[0.2783,0.965],[0.0625,0.6225],[0.0383,0.3261],[0.2709,0.035],[0.0577,0.035],[0.1619,0.035],[0.079,0.2584],[0.167,0.5551],[0.1879,0.7821],[0.3928,0.7566],[0.5758,0.69],[0.788,0.2672],[0.7685,0.6456],[0.7446,0.965]],"tall":[[0.9193,0.0301],[0.9503,0.4478],[0.9425,0.5802],[0.8883,0.2088],[0.896,0.3598],[0.9038,0.1452],[0.8805,0.2943],[0.7309,0.0301],[0.9425,0.0812],[0.3773,0.0301],[0.5269,0.0301],[0.5673,0.0812],[0.7439,0.909],[0.8883,0.9699],[0.774,0.8173],[0.2828,0.798],[0.104,0.5332],[0.073,0.6133],[0.0575,0.9699],[0.3801,0.9699],[0.5787,0.9369],[0.4832,0.9699],[0.2149,0.9699],[0.1973,0.9188],[0.104,0.703],[0.0652,0.473],[0.104,0.1978],[0.0962,0.0301],[0.0885,0.1205],[0.0885,0.3963],[0.2226,0.6518],[0.113,0.8433],[0.4647,0.8149],[0.66,0.6784],[0.7047,0.252],[0.8549,0.5354],[0.958,0.7697]]};
+const ANET = { names: AL.names, card: AL.states.map(s => s.length), parents: AL.parents, cpt: AL.cpt.map(a => Float64Array.from(a)) };
+const AN = AL.names.length;
+const AEDGES = (() => {
+  const E = new Map(), key = (a, b) => Math.min(a, b) + '-' + Math.max(a, b);
+  AL.parents.forEach((ps, i) => { ps.forEach(p => E.set(key(i, p), { a: Math.min(i, p), b: Math.max(i, p), kind: 'arc', from: p, to: i })); });
+  AL.parents.forEach(ps => { for (let x = 0; x < ps.length; x++) for (let y = x + 1; y < ps.length; y++) { const k = key(ps[x], ps[y]); if (!E.has(k)) E.set(k, { a: Math.min(ps[x], ps[y]), b: Math.max(ps[x], ps[y]), kind: 'marry' }); } });
+  return [...E.values()];
+})();
+const NARC = AEDGES.filter(e => e.kind === 'arc').length, NMARRY = AEDGES.length - NARC;
+const HX = { nbr: null, gone: null, fill: [], steps: [], timer: 0, last: null };
+function hxReset() {
+  clearInterval(HX.timer); HX.timer = 0;
+  HX.nbr = Array.from({ length: AN }, () => new Set()); AEDGES.forEach(e => { HX.nbr[e.a].add(e.b); HX.nbr[e.b].add(e.a); });
+  HX.gone = new Array(AN).fill(false); HX.fill = []; HX.steps = []; HX.last = null; hxDraw();
+}
+function hxElim(x) {
+  if (HX.gone[x]) return;
+  const N = [...HX.nbr[x]].sort((a, b) => a - b); let size = ANET.card[x]; N.forEach(y => size *= ANET.card[y]);
+  let nfill = 0;
+  for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) if (!HX.nbr[N[i]].has(N[j])) { HX.nbr[N[i]].add(N[j]); HX.nbr[N[j]].add(N[i]); HX.fill.push([N[i], N[j]]); nfill++; }
+  N.forEach(y => HX.nbr[y].delete(x)); HX.nbr[x] = new Set(); HX.gone[x] = true;
+  HX.steps.push({ x, N, size, nfill }); HX.last = HX.steps[HX.steps.length - 1];
+}
+function hxPickMinFill() {
+  let best = -1, bs = Infinity;
+  for (let x = 0; x < AN; x++) { if (HX.gone[x]) continue; const N = [...HX.nbr[x]]; let f = 0; for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) if (!HX.nbr[N[i]].has(N[j])) f++; if (f < bs) { bs = f; best = x; } }
+  return best;
+}
+function hxPlay(kind) {
+  clearInterval(HX.timer);
+  if (HX.steps.length === AN) hxReset();
+  HX.timer = setInterval(() => {
+    let x = -1;
+    if (kind === 'good') x = hxPickMinFill(); else for (let i = AN - 1; i >= 0; i--) if (!HX.gone[i]) { x = i; break; }
+    if (x < 0) { clearInterval(HX.timer); HX.timer = 0; return; }
+    hxElim(x); hxDraw();
+    if (HX.steps.length === AN) { clearInterval(HX.timer); HX.timer = 0; hxDraw(); }
+  }, 230);
+}
+let hxGeom = null;
+function hxDraw() {
+  const cv = $('#hx-cv'), { c, W, H } = canvas2d(cv), tall = W / H < 1.1, L = tall ? AL.tall : AL.wide;
+  const base = tall ? [340, 440, 8.5] : [640, 400, 10], sc = Math.min(W / base[0], H / base[1]), fs = base[2] * sc;
+  const P = L.map(([x, y]) => [x * W, y * H]);
+  c.font = '500 ' + fs.toFixed(2) + 'px ' + css('--f-mono');
+  const bw = AL.names.map(s => c.measureText(s).width + 8 * sc), bh = fs + 8 * sc;
+  const last = HX.last, inScope = new Set(last ? last.N.concat([last.x]) : []);
+  /* edges */
+  c.lineCap = 'round';
+  AEDGES.forEach(e => {
+    if (HX.gone[e.a] || HX.gone[e.b]) return;
+    c.save(); c.strokeStyle = css('--muted'); c.globalAlpha = e.kind === 'arc' ? 0.75 : 0.5; c.lineWidth = 1.2; if (e.kind === 'marry') c.setLineDash([1.5, 3]);
+    c.beginPath(); c.moveTo(P[e.a][0], P[e.a][1]); c.lineTo(P[e.b][0], P[e.b][1]); c.stroke(); c.restore();
+  });
+  HX.fill.forEach(([a, b]) => {
+    if (HX.gone[a] || HX.gone[b]) return;
+    c.save(); c.strokeStyle = css('--cC'); c.lineWidth = 1.7; c.setLineDash([5, 3]); c.globalAlpha = 0.9;
+    c.beginPath(); c.moveTo(P[a][0], P[a][1]); c.lineTo(P[b][0], P[b][1]); c.stroke(); c.restore();
+  });
+  /* nodes */
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (let i = 0; i < AN; i++) {
+    const [x, y] = P[i], w = bw[i], gone = HX.gone[i], hl = inScope.has(i) && !gone, isLast = last && last.x === i;
+    c.save(); c.globalAlpha = gone ? (isLast ? 0.55 : 0.16) : 1;
+    rrect(c, x - w / 2, y - bh / 2, w, bh, 4 * sc); c.fillStyle = css('--surface'); c.fill();
+    if (hl || isLast) { c.fillStyle = css('--cC'); c.globalAlpha *= isLast ? 0.25 : 0.12; c.fill(); c.globalAlpha = gone ? 0.55 : 1; }
+    c.strokeStyle = hl || isLast ? css('--cC') : AL.parents[i].length ? css('--line') : css('--cB');
+    c.lineWidth = hl || isLast ? 2 : 1.1; if (isLast) c.setLineDash([3, 2]);
+    rrect(c, x - w / 2, y - bh / 2, w, bh, 4 * sc); c.stroke(); c.setLineDash([]);
+    c.fillStyle = css('--ink'); c.fillText(AL.names[i], x, y + 0.5);
+    c.restore();
+  }
+  hxGeom = { P, bw, bh };
+  const k = HX.steps.length, big = HX.steps.reduce((m, s) => s.size > m.size ? s : m, { size: 0 });
+  $('#hx-n').innerHTML = k + ' / ' + AN;
+  if (last) {
+    const how = `eliminate ${AL.names[last.x]} (${ANET.card[last.x]} states)\nits current neighbours:\n` + (last.N.length ? last.N.map(y => `  ${AL.names[y]} (${ANET.card[y]})`).join('\n') : '  none') + `\ntable over all of them:\n${[last.x].concat(last.N).map(y => ANET.card[y]).join(' × ')} = ${nf(last.size)} entries`;
+    $('#hx-last').innerHTML = tip(bigH(last.size), how);
+    const tot = HX.steps.reduce((s, t) => s + t.size, 0);
+    $('#hx-big').innerHTML = tip(bigH(big.size), `largest table so far: ${nf(big.size)} entries\ncreated when eliminating ${AL.names[big.x]}\nmemory as 8-byte numbers: ${mem(big.size)}\nall tables so far: ${nf(tot)} entries`);
+  } else { $('#hx-last').textContent = '–'; $('#hx-big').textContent = '–'; }
+  let cap;
+  if (!k) cap = `The ALARM network as variable elimination sees it: its moral graph, ${AN} variables and ${AEDGES.length} edges (${NARC} arcs plus ${NMARRY} dotted ones joining parents of a common child). Orange outlines are the ${AL.parents.filter(p => !p.length).length} roots. Eliminating a node builds a table over it and its current neighbours, then joins those neighbours to each other.`;
+  else if (k === AN) {
+    const tot = HX.steps.reduce((s, t) => s + t.size, 0);
+    cap = `All ${AN} variables eliminated: the final number is the sum of the whole joint, 1. The largest table this order built had ${bigH(big.size)} entries (${mem(big.size)}), from eliminating ${AL.names[big.x]}; all tables together held ${bigH(tot)}. ${big.size <= 1000 ? 'A good order: nothing bigger than a few hundred entries.' : big.size < 1e6 ? 'Workable, but a better order keeps every table in the hundreds.' : 'A bad order: min-fill does the same job with no table above a few hundred entries.'} Press Reset to try another.`;
+  } else {
+    cap = `Eliminated <b>${AL.names[last.x]}</b>: it touched ${last.N.length} variable${last.N.length === 1 ? '' : 's'}${last.N.length ? ' (' + last.N.map(y => AL.names[y]).join(', ') + ')' : ''}, so its table has ${bigH(last.size)} entries. ${last.nfill ? `That added ${last.nfill} fill-in edge${last.nfill === 1 ? '' : 's'} (dashed), which will make later tables bigger.` : 'No fill-in edges were needed, the best case.'} ${HX.timer ? '' : 'Click another node, or play an order.'}`;
+  }
+  $('#hx-cap').innerHTML = cap;
+}
+{
+  const cv = $('#hx-cv');
+  const hit = e => { if (!hxGeom) return -1; const [px, py] = evPos(cv, e); for (let i = 0; i < AN; i++) { if (HX.gone[i]) continue; const [x, y] = hxGeom.P[i]; if (Math.abs(px - x) <= hxGeom.bw[i] / 2 + 2 && Math.abs(py - y) <= hxGeom.bh / 2 + 3) return i; } return -1; };
+  cv.addEventListener('click', e => { const i = hit(e); if (i < 0) return; clearInterval(HX.timer); HX.timer = 0; hxElim(i); hxDraw(); });
+  cv.addEventListener('pointermove', e => { cv.style.cursor = hit(e) >= 0 ? 'pointer' : 'default'; });
+  $('#hx-good').addEventListener('click', () => hxPlay('good'));
+  $('#hx-bad').addEventListener('click', () => hxPlay('bad'));
+  $('#hx-reset').addEventListener('click', hxReset);
+  HX.nbr = Array.from({ length: AN }, () => new Set()); AEDGES.forEach(e => { HX.nbr[e.a].add(e.b); HX.nbr[e.b].add(e.a); }); HX.gone = new Array(AN).fill(false);
+  fig(cv, hxDraw);
+}
+
+/* ================= 1. queries ================= */
+const QS = { q: 0, ev: { 3: 0, 4: 0 } };
+let qGeom = null;
+function qDraw() {
+  const r = bnQuery(QS.q, QS.ev), role = [0, 1, 2, 3, 4].map(i => i === QS.q ? 'q' : i in QS.ev ? 'e' : 'h');
+  const p = [0, 1, 2, 3, 4].map(i => i in QS.ev ? 1 - QS.ev[i] : bnQuery(i, QS.ev).p);
+  qGeom = drawBurglary($('#q-cv'), { role, p, ev: QS.ev });
+  setPressed($('#q-x'), QS.q);
+  const h = role.filter(x => x === 'h').length, prior = bnQuery(QS.q, {}).p, evs = Object.keys(QS.ev).map(Number);
+  const evTxt = evs.length ? evs.map(i => lit(i, QS.ev[i])).join(', ') : 'no evidence';
+  $('#q-pk').innerHTML = `P(${FULL[QS.q]} = true | e)`;
+  $('#q-p').innerHTML = tip(pct(r.p, r.p < 0.01 ? 3 : 1), `P(${LOW[QS.q]}, e) = ${fv(r.un[0])}\nP(¬${LOW[QS.q]}, e) = ${fv(r.un[1])}\nα = 1 / (sum) = ${fv(1 / r.z)}\nP(${LOW[QS.q]} | e) = ${fv(r.un[0])} × ${fv(1 / r.z)} = ${fv(r.p)}`);
+  $('#q-pe').innerHTML = tip(fv(r.z, 3), `P(e) = P(${LOW[QS.q]}, e) + P(¬${LOW[QS.q]}, e)\n= ${fv(r.un[0])} + ${fv(r.un[1])}\n= ${fv(r.z)}` + (evs.length ? '' : '\n(no evidence: P(e) = 1)'));
+  $('#q-h').innerHTML = tip(String(h), role.map((x, i) => `${FULL[i]}: ${x === 'q' ? 'query' : x === 'e' ? 'evidence' : 'hidden'}`).join('\n'));
+  $('#q-rows').innerHTML = tip(String(r.terms), `2 values of the query × 2^${h} hidden combinations\n= 2 × ${2 ** h} = ${r.terms} joint probabilities,\neach a product of 5 CPT entries`);
+  $('#run-q').innerHTML = `<b>Running example</b> With ${evTxt}: P(${FULL[QS.q]} | e) = &alpha; &lang;${tip(fv(r.un[0]), 'sum of ' + r.terms / 2 + ' joint terms with ' + LOW[QS.q] + ' true')}, ${tip(fv(r.un[1]), 'sum of ' + r.terms / 2 + ' joint terms with ' + LOW[QS.q] + ' false')}&rang; = &lang;${tip(fv(r.p), fv(r.un[0]) + ' / ' + fv(r.z))}, ${tip(fv(1 - r.p), fv(r.un[1]) + ' / ' + fv(r.z))}&rang;, with &alpha; = 1 / ${fv(r.z)} = ${tip(fv(1 / r.z), '1 / P(e)')}.`;
+  let say;
+  if (!evs.length) say = `No evidence, so this is just the prior: P(${FULL[QS.q]} = true) = ${pct(r.p, 2)}, found by summing ${r.terms} joint terms. Click JohnCalls or MaryCalls to observe a call.`;
+  else {
+    const ch = r.p / prior;
+    say = `Observing ${evTxt} moves P(${FULL[QS.q]} = true) from ${pct(prior, 2)} to ${pct(r.p, 2)}${ch > 1.05 ? `, ${ch >= 10 ? Math.round(ch) : ch.toFixed(1)} times higher` : ch < 0.95 ? ', lower than before' : ', hardly a change'}. The sum ran over ${r.terms} joint terms because ${h} variable${h === 1 ? ' is' : 's are'} hidden; each extra hidden yes/no variable doubles that.`;
+    if (QS.q === 0 && QS.ev[3] === 0 && QS.ev[4] === 0 && evs.length === 2) say += ' Even with both calls, a burglary is still less likely than not: false alarms are rare, but burglaries are rarer.';
+  }
+  $('#q-say').innerHTML = say;
+}
+{
+  segRow($('#q-x'), FULL.map((n, i) => [i, n]), QS.q, v => { QS.q = +v; delete QS.ev[QS.q]; qDraw(); });
+  const cv = $('#q-cv');
+  const hit = e => { if (!qGeom) return -1; const [px, py] = evPos(cv, e); return qGeom.box.findIndex(B => Math.abs(px - B.x) < qGeom.nw / 2 && Math.abs(py - B.y) < qGeom.nh / 2); };
+  cv.addEventListener('click', e => { const i = hit(e); if (i < 0 || i === QS.q) return; if (!(i in QS.ev)) QS.ev[i] = 0; else if (QS.ev[i] === 0) QS.ev[i] = 1; else delete QS.ev[i]; qDraw(); });
+  cv.addEventListener('pointermove', e => { const i = hit(e); cv.style.cursor = i >= 0 && i !== QS.q ? 'pointer' : 'default'; });
+  $('#q-jm').addEventListener('click', () => { QS.q = 0; QS.ev = { 3: 0, 4: 0 }; qDraw(); });
+  $('#q-clr').addEventListener('click', () => { QS.ev = {}; qDraw(); });
+  fig(cv, qDraw);
+}
+
+/* ================= 2. enumeration tree ================= */
+const EN = { b: 0, j: 0, m: 0, done: 0, tree: null, post: [] };   /* j, m: 0 true, 1 false, 2 unknown */
+function enBuild() {
+  const ev = {}; if (EN.j < 2) ev[3] = EN.j; if (EN.m < 2) ev[4] = EN.m;
+  let id = 0; const post = [];
+  const mk = (lev, w, val) => {
+    const ww = w.slice(); ww[lev] = val;
+    const node = { lev, val, f: bnP(lev, val, ww), kids: [], id: id++ };
+    if (lev < 4) { const nx = lev + 1; if (nx in ev) node.kids.push(mk(nx, ww, ev[nx])); else node.kids.push(mk(nx, ww, 0), mk(nx, ww, 1)); }
+    /* signature: own value plus the values of earlier variables that this subtree's CPTs read */
+    const ctx = new Set(); for (let k = lev; k < 5; k++) BN.parents[k].forEach(p => { if (p < lev) ctx.add(p); });
+    node.sig = lev + ':' + val + '|' + [...ctx].sort().map(p => p + '=' + ww[p]).join(',');
+    node.ww = ww;
+    post.push(node); return node;
+  };
+  EN.tree = mk(0, [0, 0, 0, 0, 0], EN.b); EN.post = post; EN.ev = ev;
+  /* leaf x positions */
+  let leaf = 0; const place = n => { if (!n.kids.length) { n.x = leaf++; } else { n.kids.forEach(place); n.x = (n.kids[0].x + n.kids[n.kids.length - 1].x) / 2; } }; place(EN.tree); EN.leaves = leaf;
+  const seen = new Set(); post.forEach(n => { n.rep = seen.has(n.sig); seen.add(n.sig); });
+  post.forEach(n => { n.val2 = n.kids.length ? n.f * n.kids.reduce((s, k) => s + k.val2, 0) : n.f; });
+}
+function enCounts(k) {
+  let mul = 0, add = 0, rep = 0;
+  for (let i = 0; i < k; i++) { const n = EN.post[i]; if (n.kids.length) { mul++; add += n.kids.length - 1; if (n.rep) rep++; } }
+  return { mul, add, rep };
+}
+function enLabel(n) { const v = BN.names[n.lev].toLowerCase(); const ps = BN.parents[n.lev]; return `P(${n.val ? '¬' : ''}${v}${ps.length ? ' | ' + ps.map(p => (n.ww[p] ? '¬' : '') + BN.names[p].toLowerCase()).join(',') : ''})`; }
+function enDraw() {
+  const cv = $('#en-cv'), { c, W, H } = canvas2d(cv), small = W < 520;
+  const padL = small ? 22 : 34, padR = 8, top = 22, bot = 26, lv = (H - top - bot) / 4;
+  const sp = (W - padL - padR) / EN.leaves, X = n => padL + sp * (n.x + 0.5), Y = n => top + n.lev * lv;
+  const done = new Set(EN.post.slice(0, EN.done).map(n => n.id)), cur = EN.done ? EN.post[EN.done - 1] : null;
+  c.font = '600 11px ' + css('--f-mono'); c.fillStyle = css('--muted'); c.textAlign = 'left'; c.textBaseline = 'middle';
+  for (let k = 0; k < 5; k++) c.fillText(BN.names[k], 4, top + k * lv);
+  const nw = clamp(sp - 4, 16, 58), nh = 18;
+  const walk = (n, fn) => { fn(n); n.kids.forEach(k => walk(k, fn)); };
+  walk(EN.tree, n => n.kids.forEach(k => {
+    c.save(); c.strokeStyle = css('--line'); c.lineWidth = 1.3; c.beginPath(); c.moveTo(X(n), Y(n) + nh / 2); c.lineTo(X(k), Y(k) - nh / 2); c.stroke(); c.restore();
+    if (n.kids.length > 1 && sp > 13) { c.fillStyle = css('--muted'); c.font = (small ? 9.5 : 10.5) + 'px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText((k.val ? '¬' : '') + BN.names[k.lev].toLowerCase(), (X(n) + X(k)) / 2 + (k.val ? 7 : -7), (Y(n) + Y(k)) / 2); }
+  }));
+  walk(EN.tree, n => {
+    const x = X(n), y = Y(n), d = done.has(n.id), isCur = cur && cur.id === n.id, col = n.rep && d ? css('--cC') : css('--cA');
+    c.save(); rrect(c, x - nw / 2, y - nh / 2, nw, nh, 5); c.fillStyle = css('--surface'); c.fill();
+    if (d) { c.fillStyle = col; c.globalAlpha = isCur ? 0.32 : 0.14; c.fill(); c.globalAlpha = 1; }
+    c.strokeStyle = d ? col : css('--line'); c.lineWidth = isCur ? 2.4 : 1.2; rrect(c, x - nw / 2, y - nh / 2, nw, nh, 5); c.stroke();
+    if (nw >= 26) { c.fillStyle = css('--ink'); c.font = (nw < 40 ? 9 : 10.5) + 'px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(fv(n.f, nw < 40 ? 2 : 3), x, y + 0.5); }
+    if (d && n.kids.length && sp * n.kids.length > 50) { c.fillStyle = col; c.font = '600 ' + (small ? 9 : 10) + 'px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText('= ' + fv(n.val2, 3), x, y + nh / 2 + 2); }
+    c.restore();
+  });
+  /* counts and texts */
+  const k = EN.done, C = enCounts(k), T = enCounts(EN.post.length);
+  $('#en-mul').innerHTML = tip(`${C.mul} / ${T.mul}`, `one multiplication per non-leaf node:\nits CPT entry × (sum of its children)\nthis tree has ${T.mul} non-leaf nodes`);
+  $('#en-add').innerHTML = tip(`${C.add} / ${T.add}`, `a node with k children needs k − 1 additions\nthis tree: ${T.add} in total`);
+  $('#en-rep').innerHTML = tip(String(C.rep), `multiplications in nodes whose whole subtree\nwas already evaluated with the same values\n(their CPTs do not read the variable that differs)\nthis tree: ${T.rep} of ${T.mul}`);
+  $('#en-leaf').innerHTML = tip(String(EN.leaves), `one leaf per combination of the hidden variables\nhidden: ${[1, 2, 3, 4].filter(i => !(i in EN.ev)).map(i => BN.names[i]).join(', ')}\n2^${[1, 2, 3, 4].filter(i => !(i in EN.ev)).length} = ${EN.leaves}`);
+  const tr = EN.post.slice(Math.max(0, k - 4), k).map(n => n.kids.length ? `${enLabel(n)} × (${n.kids.map(q => fv(q.val2, 3)).join(' + ')}) = ${fv(n.val2, 4)}${n.rep ? '  repeated' : ''}` : `${enLabel(n)} = ${fv(n.f, 4)}  (leaf)`);
+  $('#en-trace').innerHTML = tr.length ? tr.map(t => `<div>${t.replace(/repeated$/, '<span class="rep">repeated</span>')}</div>`).join('') : '<div class="note">Press Next step to evaluate the first leaf.</div>';
+  const bname = EN.b ? '¬b' : 'b';
+  let cap;
+  if (!k) cap = `The tree for P(${bname}, e): the root is P(${bname}); each level is one variable in topological order. Hidden variables branch (two children), evidence variables do not. Numbers in the boxes are CPT entries; a result appears under each node once it has been evaluated.`;
+  else if (k < EN.post.length) cap = `Depth-first: ${cur.kids.length ? `node ${enLabel(cur)} multiplies its entry by the sum of its children, giving ${fv(cur.val2, 4)}` : `leaf ${enLabel(cur)} = ${fv(cur.f, 4)} is read straight from the CPT`}. Only the current path needs to be kept in memory.`;
+  else cap = `Done: P(${bname}, e) = ${fv(EN.tree.val2, 4)}, using ${T.mul} multiplications and ${T.add} additions, ${T.rep} of the multiplications repeated work. The other value of B needs a tree of the same shape.`;
+  $('#en-cap').innerHTML = cap;
+  const e2 = {}; if (EN.j < 2) e2[3] = EN.j; if (EN.m < 2) e2[4] = EN.m; const r = bnQuery(0, e2);
+  const evTxt = Object.keys(e2).length ? Object.keys(e2).map(i => lit(+i, e2[i])).join(', ') : 'no evidence';
+  $('#run-en').innerHTML = `<b>Running example</b> With ${evTxt}, the two trees give P(b, e) = ${tip(fv(r.un[0]), 'root value of the tree for b')} and P(&not;b, e) = ${tip(fv(r.un[1]), 'root value of the tree for ¬b')}, so P(B | e) = &alpha; &lang;${fv(r.un[0])}, ${fv(r.un[1])}&rang; = &lang;${tip(fv(r.p, 3), fv(r.un[0]) + ' / (' + fv(r.un[0]) + ' + ' + fv(r.un[1]) + ')')}, ${tip(fv(1 - r.p, 3), '1 − ' + fv(r.p, 3))}&rang;.`;
+  let say = `${T.mul} multiplications and ${T.add} additions for this value of B, ${2 * T.mul} and ${2 * T.add} for both. `;
+  if (EN.j < 2 && EN.m < 2) say += `With both calls observed only E and A are hidden: ${EN.leaves} leaves. The flat sum of products would need 16 multiplications per value; pulling P(b) and P(e) out of the sums saves 5. `;
+  else say += `With ${[EN.j, EN.m].filter(x => x === 2).length === 2 ? 'both calls' : 'a call'} unknown the tree has ${EN.leaves} leaves, yet every extra branch adds up to 1: &sum;<sub>j</sub> P(j | a) = 1. Enumeration cannot tell, but variable elimination can drop such variables before it starts. `;
+  say += T.rep ? `Of the ${T.mul}, ${T.rep} ${T.rep === 1 ? 'is' : 'are'} repeated work: the subtrees below A read only A's value, so the ones under &not;e redo the ones under e.` : '';
+  $('#en-say').innerHTML = say;
+}
+function enReset() { EN.done = 0; enBuild(); enDraw(); }
+{
+  const opts = [[0, 'true'], [1, 'false'], [2, 'unknown']];
+  segRow($('#en-j'), opts, 0, v => { EN.j = +v; enReset(); });
+  segRow($('#en-m'), opts, 0, v => { EN.m = +v; enReset(); });
+  seg1('#en-b button', 'data-b', v => { EN.b = +v; enReset(); });
+  $('#en-step').addEventListener('click', () => { if (EN.done < EN.post.length) EN.done++; enDraw(); });
+  $('#en-all').addEventListener('click', () => { EN.done = EN.post.length; enDraw(); });
+  $('#en-rst').addEventListener('click', enReset);
+  enBuild(); fig($('#en-cv'), enDraw);
+}
+
+/* ================= 3. factors ================= */
+const FA_DEF = { f1: [0.3, 0.7, 0.9, 0.1], f2: [0.2, 0.8, 0.6, 0.4] };
+const FA = { f1: FA_DEF.f1.slice(), f2: FA_DEF.f2.slice(), x: 0, row: 0 };
+const TFc = v => `<td class="tf ${v ? 'f' : 't'}">${v ? 'F' : 'T'}</td>`;
+function faBuildInputs() {
+  const mk = (id, a, b, key) => {
+    let h = `<thead><tr><th>${a}</th><th>${b}</th><th class="r">value</th></tr></thead><tbody>`;
+    for (let i = 0; i < 4; i++) h += `<tr data-r="${i}">${TFc(i >> 1)}${TFc(i & 1)}<td class="r"><input type="number" step="0.05" min="0" max="10" data-k="${key}" data-i="${i}" aria-label="${key}(${i >> 1 ? 'F' : 'T'}, ${i & 1 ? 'F' : 'T'})"></td></tr>`;
+    $(id).innerHTML = h + '</tbody>';
+  };
+  mk('#fa-f1', 'X', 'Y', 'f1'); mk('#fa-f2', 'Y', 'Z', 'f2');
+  $$('#fa-f1 input, #fa-f2 input').forEach(inp => inp.addEventListener('input', () => { const v = parseFloat(inp.value); if (isFinite(v) && v >= 0) { FA[inp.dataset.k][+inp.dataset.i] = v; faDraw(false); } }));
+}
+function faDraw(syncInputs) {
+  if (syncInputs !== false) $$('#fa-f1 input, #fa-f2 input').forEach(inp => { inp.value = FA[inp.dataset.k][+inp.dataset.i]; });
+  const pr = []; for (let i = 0; i < 8; i++) { const x = i >> 2, y = (i >> 1) & 1, z = i & 1; pr.push({ x, y, z, a: FA.f1[x * 2 + y], b: FA.f2[y * 2 + z], v: FA.f1[x * 2 + y] * FA.f2[y * 2 + z] }); }
+  const sel = pr[FA.row], N = ['X', 'Y', 'Z'], keep = [0, 1, 2].filter(k => k !== FA.x), L = v => v ? 'F' : 'T';
+  let h = '<thead><tr><th>X</th><th>Y</th><th>Z</th><th class="r">value</th></tr></thead><tbody>';
+  pr.forEach((r, i) => { h += `<tr data-r="${i}" class="${i === FA.row ? 'hl' : ''}">${TFc(r.x)}${TFc(r.y)}${TFc(r.z)}<td class="r num">${tip(fv(r.v, 3), `f1(${L(r.x)},${L(r.y)}) × f2(${L(r.y)},${L(r.z)})\n= ${fv(r.a)} × ${fv(r.b)}\n= ${fv(r.v)}`)}</td></tr>`; });
+  $('#fa-pr').innerHTML = h + '</tbody>';
+  $$('#fa-pr tbody tr').forEach(tr => tr.addEventListener('click', () => { FA.row = +tr.dataset.r; faDraw(false); }));
+  /* sum out */
+  const g = []; for (let i = 0; i < 4; i++) { const u = i >> 1, w = i & 1; const rows = pr.filter(r => [r.x, r.y, r.z][keep[0]] === u && [r.x, r.y, r.z][keep[1]] === w); g.push({ u, w, rows, v: rows.reduce((s, r) => s + r.v, 0) }); }
+  const selKey = [sel.x, sel.y, sel.z], gi = selKey[keep[0]] * 2 + selKey[keep[1]];
+  $('#fa-sh').innerHTML = `&sum;<sub>${N[FA.x].toLowerCase()}</sub> (${N[keep[0]]}, ${N[keep[1]]})`;
+  h = `<thead><tr><th>${N[keep[0]]}</th><th>${N[keep[1]]}</th><th class="r">value</th></tr></thead><tbody>`;
+  g.forEach((r, i) => { h += `<tr class="${i === gi ? 'hl' : ''}">${TFc(r.u)}${TFc(r.w)}<td class="r num">${tip(fv(r.v, 3), r.rows.map(q => `${L(q.x)}${L(q.y)}${L(q.z)}: ${fv(q.v)}`).join('\n') + `\nsum = ${fv(r.v)}`)}</td></tr>`; });
+  $('#fa-su').innerHTML = h + '</tbody>';
+  /* highlight the f1, f2 rows used by the selected product row */
+  $$('#fa-f1 tbody tr').forEach(tr => tr.classList.toggle('hl', +tr.dataset.r === sel.x * 2 + sel.y));
+  $$('#fa-f2 tbody tr').forEach(tr => tr.classList.toggle('hl', +tr.dataset.r === sel.y * 2 + sel.z));
+  $('#fa-mul').innerHTML = tip('8', '2 × 2 × 2 entries in the product,\none multiplication each');
+  $('#fa-add').innerHTML = tip('4', '4 entries in the result,\neach the sum of 2 numbers: 1 addition each');
+  $('#run-fp').innerHTML = `<b>Running example</b> Selected row: f(${L(sel.x)}, ${L(sel.y)}, ${L(sel.z)}) = f<sub>1</sub>(${L(sel.x)}, ${L(sel.y)}) &times; f<sub>2</sub>(${L(sel.y)}, ${L(sel.z)}) = ${fv(sel.a)} &times; ${fv(sel.b)} = ${tip(fv(sel.v), 'product of the two highlighted entries')}.`;
+  const gr = g[gi];
+  $('#run-fs').innerHTML = `<b>Running example</b> g(${N[keep[0]]} = ${L(gr.u)}, ${N[keep[1]]} = ${L(gr.w)}) = ${gr.rows.map(q => tip(fv(q.v), `the product row ${L(q.x)}${L(q.y)}${L(q.z)}`)).join(' + ')} = ${tip(fv(gr.v), 'sum over the two values of ' + N[FA.x])}.`;
+  let say;
+  if (FA.x === 1) say = 'Summing out Y, the variable the two factors share, gives g(X, Z) = &sum;<sub>y</sub> f<sub>1</sub>(X, y) f<sub>2</sub>(y, Z). That is exactly a matrix product: f<sub>1</sub> as a 2 &times; 2 matrix with rows X, times f<sub>2</sub> with rows Y. Variable elimination is a generalised matrix multiplication.';
+  else if (FA.x === 0) {
+    const s1 = [FA.f1[0] + FA.f1[2], FA.f1[1] + FA.f1[3]];
+    say = `X appears only in f<sub>1</sub>, so the distributive law lets us sum it out first: &sum;<sub>x</sub> f<sub>1</sub>(x, Y) = ${tip(fv(s1[0], 3), `f1(T,T) + f1(F,T) = ${fv(FA.f1[0])} + ${fv(FA.f1[2])}`)} for Y = T and ${tip(fv(s1[1], 3), `f1(T,F) + f1(F,F) = ${fv(FA.f1[1])} + ${fv(FA.f1[3])}`)} for Y = F, then multiply by f<sub>2</sub>: 2 additions and 4 multiplications instead of 8 multiplications and 4 additions. VE does this automatically by only multiplying the factors that mention the variable being removed.`;
+  } else {
+    const s2 = [FA.f2[0] + FA.f2[1], FA.f2[2] + FA.f2[3]];
+    say = `Z appears only in f<sub>2</sub>, so &sum;<sub>z</sub> f<sub>2</sub>(Y, z) can be done first, ${tip(fv(s2[0], 3), 'f2(T,T) + f2(T,F)')} and ${tip(fv(s2[1], 3), 'f2(F,T) + f2(F,F)')}. ${Math.abs(s2[0] - 1) < 1e-9 && Math.abs(s2[1] - 1) < 1e-9 ? 'Both are exactly 1, so f<sub>2</sub> behaves like a CPT P(Z | Y) and summing out Z changes nothing: the result equals f<sub>1</sub>. This is the irrelevant-variable effect of the next section.' : 'If f<sub>2</sub> were a CPT P(Z | Y) both sums would be 1 and the result would simply be f<sub>1</sub>.'}`;
+  }
+  $('#fa-say').innerHTML = say;
+}
+{
+  faBuildInputs();
+  seg1('#fa-x button', 'data-x', v => { FA.x = +v; faDraw(false); });
+  $('#fa-def').addEventListener('click', () => { FA.f1 = FA_DEF.f1.slice(); FA.f2 = FA_DEF.f2.slice(); faDraw(); });
+  $('#fa-rnd').addEventListener('click', () => { const r = Math.random; FA.f1 = FA.f1.map(() => Math.round(r() * 20) / 20); FA.f2 = FA.f2.map(() => Math.round(r() * 20) / 20); faDraw(); });
+  faDraw();
+}
+
+/* ================= 4. variable elimination on the burglary network ================= */
+const VE = { q: 0, ev: { 3: 0, 4: 0 }, order: 'minfill', prune: false, k: 0, sim: null };
+const fname = (base, v) => `${base}(${v.map(i => BN.names[i]).join(', ')})`;
+function veSim() {
+  const S = veSetup(BN, VE.q, VE.ev, VE.prune), all = [0, 1, 2, 3, 4];
+  const order = makeOrder(VE.order, S.elim, S.scopes, BN.card, 1);
+  let pile = [];
+  all.forEach(i => {
+    let f = cptFactor(BN, i); for (const e in VE.ev) f = fRestrict(f, +e, VE.ev[e]);
+    pile.push({ name: `f<sub>${BN.names[i]}</sub>`, f, src: i, dropped: !S.keep.has(i), born: -1 });
+  });
+  const dropped = pile.filter(p => p.dropped); pile = pile.filter(p => !p.dropped);
+  const states = [{ pile: pile.slice(), step: null }];
+  let big = 0, cost = 0;
+  order.forEach((x, t) => {
+    const use = pile.filter(p => p.f.v.includes(x)), prod = fProduct(use.map(p => p.f), BN.card), g = fSumOut(prod, x);
+    big = Math.max(big, prod.t.length); cost += prod.t.length;
+    const np = { name: `g<sub>${t + 1}</sub>`, f: g, born: t + 1 };
+    pile = pile.filter(p => !use.includes(p)).concat([np]);
+    states.push({ pile: pile.slice(), step: { x, use, prod, g: np, big, cost } });
+  });
+  const fin = fProduct(pile.map(p => p.f), BN.card), z = fin.t[0] + fin.t[1];
+  VE.sim = { order, states, dropped, fin, z, p: fin.t[0] / z, S };
+}
+function factorCard(p, cls, extra) {
+  const f = p.f, n = f.t.length;
+  let rows = '';
+  if (!f.v.length) rows = `<tr><td class="num">${tip(fv(f.t[0]), 'a constant: every variable in it has been fixed or summed out')}</td></tr>`;
+  else if (n <= 8) {
+    for (let i = 0; i < n; i++) { let r = i, vals = []; for (let d = f.v.length - 1; d >= 0; d--) { vals.unshift(r % 2); r = Math.floor(r / 2); } rows += `<tr>${vals.map(v => `<td class="tf ${v ? 'f' : 't'}">${v ? 'F' : 'T'}</td>`).join('')}<td class="r num">${fv(f.t[i], 3)}</td></tr>`; }
+  } else rows = `<tr><td class="note" colspan="${f.v.length + 1}">${n} entries</td></tr>`;
+  const head = f.v.length ? `<tr>${f.v.map(i => `<th>${BN.names[i]}</th>`).join('')}<th></th></tr>` : '';
+  return `<div class="fcard ${cls}"><div class="fc-h"><span class="fc-n">${p.name}(${f.v.map(i => BN.names[i]).join(', ')})</span><span class="fc-s">${n} entr${n === 1 ? 'y' : 'ies'}</span></div>${extra || ''}<table class="mini-t">${head}${rows}</table></div>`;
+}
+function veDraw() {
+  const s = VE.sim, k = VE.k, st = s.states[k], nextX = k < s.order.length ? s.order[k] : null;
+  let h = '';
+  s.dropped.forEach(p => { h += factorCard(p, 'dropped', `<div class="fc-note">dropped: ${BN.names[p.src]} is not an ancestor of the query or the evidence</div>`); });
+  st.pile.forEach(p => {
+    const isNew = st.step && st.step.g === p, isNext = nextX != null && p.f.v.includes(nextX);
+    h += factorCard(p, (isNew ? 'new ' : '') + (isNext ? 'next' : ''), isNew ? `<div class="fc-note">new: &sum;<sub>${BN.names[st.step.x].toLowerCase()}</sub> of ${st.step.use.map(u => u.name).join(' &times; ')}</div>` : '');
+  });
+  $('#ve-pile').innerHTML = h;
+  setPressed($('#ve-q'), VE.q);
+  $$('#ve-ev .seg').forEach((sg, i) => { const v = i === VE.q ? 'q' : (i in VE.ev ? VE.ev[i] : 2); setPressed(sg, v); $$('button', sg).forEach(b => { b.disabled = i === VE.q; }); });
+  const big = st.step ? st.step.big : 0, cost = st.step ? st.step.cost : 0, finished = k === s.order.length;
+  $('#ve-k').innerHTML = tip(`${k} / ${s.order.length}`, `hidden variables to eliminate, in this order:\n${s.order.map(i => BN.names[i]).join(', ') || '(none)'}`);
+  $('#ve-big').innerHTML = big ? tip(String(big), `largest product table built so far\n(2 values per variable in its scope)`) : '–';
+  $('#ve-cost').innerHTML = cost ? tip(String(cost), s.states.slice(1, k + 1).map((t, i) => `step ${i + 1}: ${t.step.prod.t.length} entries`).join('\n')) : '0';
+  $('#ve-ansk').innerHTML = `P(${FULL[VE.q]} = true | e)`;
+  $('#ve-ans').innerHTML = finished ? tip(fv(s.p, 4), `multiply the remaining factors:\nf(${LOW[VE.q]}) = ${fv(s.fin.t[0])}, f(¬${LOW[VE.q]}) = ${fv(s.fin.t[1])}\nnormalise: ${fv(s.fin.t[0])} / ${fv(s.z)} = ${fv(s.p)}`) : '…';
+  /* running example: the most recent step's first entry */
+  if (st.step) {
+    const t = st.step, g = t.g.f, x = t.x, vals = g.v.map(() => 0);
+    const entry = (f, xv) => { let idx = 0; f.v.forEach((y, d) => { const val = y === x ? xv : vals[g.v.indexOf(y)]; idx = idx * 2 + val; }); return f.t[idx]; };
+    const terms = [0, 1].map(xv => t.use.map(u => fv(entry(u.f, xv), 3)).join(' &times; '));
+    const at = g.v.map(i => `${LOW[i]}`).join(', ');
+    $('#run-ve').innerHTML = `<b>Running example</b> Step ${k}, eliminate ${BN.names[x]}: ${t.g.name}(${at || '&nbsp;'}) = &sum;<sub>${LOW[x]}</sub> ${t.use.map(u => u.name + '(&hellip;)').join(' ')} = ${terms.map(tm => '(' + tm + ')').join(' + ')} = ${tip(fv(g.t[0], 4), 'first entry of the new factor' + (g.v.length ? ', all its variables true' : ''))}.`;
+  } else $('#run-ve').innerHTML = `<b>Running example</b> The pile starts with one factor per CPT${Object.keys(VE.ev).length ? ', with the evidence ' + Object.keys(VE.ev).map(i => lit(+i, VE.ev[i])).join(', ') + ' plugged in' : ''}. Press Next step to eliminate ${s.order.length ? BN.names[s.order[0]] : 'nothing'}.`;
+  /* note */
+  let say;
+  if (!k) say = s.order.length ? `${s.order.length} hidden variable${s.order.length === 1 ? '' : 's'} to eliminate: ${s.order.map(i => BN.names[i]).join(', ')}. The highlighted factors mention ${BN.names[s.order[0]]} and will be multiplied first.` : 'Nothing is hidden, so there is nothing to eliminate: just multiply the factors and normalise.';
+  else if (!finished) say = `Eliminated ${BN.names[st.step.x]}: ${st.step.use.length} factor${st.step.use.length === 1 ? '' : 's'} multiplied into a table of ${st.step.prod.t.length} entries, then ${BN.names[st.step.x]} summed out to give ${st.step.g.name}. Next: ${BN.names[nextX]}.`;
+  else {
+    const r = bnQuery(VE.q, VE.ev), en = enumCost(VE.q, VE.ev);
+    say = `Finished. P(${FULL[VE.q]} = true | e) = ${fv(s.p, 4)}, the same as enumeration (${fv(r.p, 4)}). VE built ${s.order.length} table${s.order.length === 1 ? '' : 's'} with ${cost} entries in total, the largest ${big || 1}; enumeration&rsquo;s two trees would make ${en} multiplications.`;
+    if (s.dropped.length) say += ` Dropping ${s.dropped.map(p => BN.names[p.src]).join(' and ')} first saved work without changing the answer.`;
+  }
+  $('#ve-say').innerHTML = say;
+  /* irrelevant variables */
+  const irr = [0, 1, 2, 3, 4].filter(i => !ancestorsOf(BN, [VE.q].concat(Object.keys(VE.ev).map(Number))).has(i));
+  const sm = BN.cpt[4][0] + BN.cpt[4][1];
+  $('#run-ir').innerHTML = `<b>Running example</b> &sum;<sub>m</sub> P(m | a) = 0.70 + 0.30 = ${tip(fv(sm), 'P(m | a) + P(¬m | a)')}. For the current question, the irrelevant variables are ${irr.length ? irr.map(i => FULL[i]).join(', ') : 'none: every variable is an ancestor of the query or the evidence'}${irr.length ? (VE.prune ? ', and they have been dropped.' : '; tick the box to drop them.') : '.'}`;
+}
+function enumCost(q, ev) { const h = [0, 1, 2, 3, 4].filter(i => i !== q && !(i in ev)).length; return 2 * 4 * (2 ** h); }
+function veReset() { VE.k = 0; veSim(); veDraw(); }
+{
+  segRow($('#ve-q'), BN.names.map((n, i) => [i, n]), VE.q, v => { VE.q = +v; delete VE.ev[VE.q]; veReset(); });
+  $('#ve-ev').innerHTML = BN.names.map((n, i) => `<div class="evline"><b>${n}</b><span class="seg sm" role="group" aria-label="${FULL[i]} evidence"><button type="button" data-v="2">?</button><button type="button" data-v="0">T</button><button type="button" data-v="1">F</button></span></div>`).join('');
+  $$('#ve-ev .seg').forEach((sg, i) => $$('button', sg).forEach(b => b.addEventListener('click', () => { if (i === VE.q) return; const v = +b.dataset.v; if (v === 2) delete VE.ev[i]; else VE.ev[i] = v; veReset(); })));
+  seg1('#ve-o button', 'data-o', v => { VE.order = v; veReset(); });
+  $('#ve-prune').addEventListener('change', e => { VE.prune = e.target.checked; veReset(); });
+  $('#ve-step').addEventListener('click', () => { if (VE.k < VE.sim.order.length) VE.k++; veDraw(); });
+  $('#ve-run').addEventListener('click', () => { VE.k = VE.sim.order.length; veDraw(); });
+  $('#ve-rst').addEventListener('click', veReset);
+  veReset();
+}
+
+/* ================= 5. elimination order on graph families ================= */
+function gridGraph(r, c) { const pos = [], E = []; for (let i = 0; i < r; i++) for (let j = 0; j < c; j++) { pos.push([(j + 0.5) / c, (i + 0.5) / r]); if (j + 1 < c) E.push([i * c + j, i * c + j + 1]); if (i + 1 < r) E.push([i * c + j, (i + 1) * c + j]); } return { pos, E }; }
+const GRAPHS = {
+  chain: { lab: 'Chain of 12', tw: 1, make: () => { const pos = [], E = []; for (let i = 0; i < 12; i++) { const row = i < 6 ? 0 : 1, col = row ? 11 - i : i; pos.push([(col + 0.5) / 6, row ? 0.72 : 0.28]); if (i) E.push([i - 1, i]); } return { pos, E }; } },
+  tree: { lab: 'Tree of 15', tw: 1, make: () => { const pos = [], E = []; for (let i = 0; i < 15; i++) { const d = Math.floor(Math.log2(i + 1)), k = i + 1 - 2 ** d; pos.push([(k + 0.5) / 2 ** d, 0.12 + d * 0.25]); if (i) E.push([Math.floor((i - 1) / 2), i]); } return { pos, E }; } },
+  cycle: { lab: 'Cycle of 12', tw: 2, make: () => { const pos = [], E = []; for (let i = 0; i < 12; i++) { const a = -Math.PI / 2 + i * Math.PI / 6; pos.push([0.5 + 0.36 * Math.cos(a), 0.5 + 0.4 * Math.sin(a)]); E.push([i, (i + 1) % 12]); } return { pos, E }; } },
+  ladder: { lab: 'Ladder 2 × 7', tw: 2, make: () => gridGraph(2, 7) },
+  grid4: { lab: 'Grid 4 × 4', tw: 4, make: () => gridGraph(4, 4) },
+  grid5: { lab: 'Grid 5 × 5', tw: 5, make: () => gridGraph(5, 5) },
+};
+const ORDERS = { minfill: 'Min-fill', mindeg: 'Min-degree', file: 'Natural (row by row)', reverse: 'Reverse natural', random: 'Random', maxdeg: 'Max-degree first' };
+const OR = { g: 'grid4', o: 'minfill', s: 0, seed: 1 };
+function elimGraph(n, E, order) {
+  const nbr = Array.from({ length: n }, () => new Set()); E.forEach(([a, b]) => { nbr[a].add(b); nbr[b].add(a); });
+  const steps = [];
+  order.forEach(x => {
+    const N = [...nbr[x]], fill = [];
+    for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) if (!nbr[N[i]].has(N[j])) { nbr[N[i]].add(N[j]); nbr[N[j]].add(N[i]); fill.push([N[i], N[j]]); }
+    N.forEach(y => nbr[y].delete(x)); nbr[x].clear();
+    steps.push({ x, N, fill, size: 2 ** (N.length + 1) });
+  });
+  return steps;
+}
+function graphOrder(n, E, kind, seed) { const scopes = E.map(e => e.slice()); for (let i = 0; i < n; i++) scopes.push([i]); return makeOrder(kind, [...Array(n).keys()], scopes, new Array(n).fill(2), seed); }
+function orCompute() {
+  const G = GRAPHS[OR.g].make(), n = G.pos.length, order = graphOrder(n, G.E, OR.o, OR.seed), steps = elimGraph(n, G.E, order);
+  OR.G = G; OR.n = n; OR.steps = steps;
+  const sl = $('#or-s'); sl.max = n; if (OR.s > n) OR.s = n; sl.value = OR.s;
+}
+function orDraw() {
+  const { G, n, steps } = OR, s = OR.s, cv = $('#or-cv'), { c, W, H } = canvas2d(cv);
+  const pad = 26, P = G.pos.map(([x, y]) => [pad + x * (W - 2 * pad), pad + y * (H - 2 * pad)]);
+  const gone = new Set(steps.slice(0, s).map(t => t.x)), cur = s ? steps[s - 1] : null, scope = new Set(cur ? cur.N.concat([cur.x]) : []);
+  const fills = steps.slice(0, s).flatMap(t => t.fill);
+  const line = (a, b, col, lw, dash, al) => { c.save(); c.strokeStyle = col; c.lineWidth = lw; c.globalAlpha = al; if (dash) c.setLineDash(dash); c.beginPath(); c.moveTo(P[a][0], P[a][1]); c.lineTo(P[b][0], P[b][1]); c.stroke(); c.restore(); };
+  G.E.forEach(([a, b]) => line(a, b, css('--muted'), 1.6, null, gone.has(a) || gone.has(b) ? 0.12 : 0.8));
+  fills.forEach(([a, b]) => line(a, b, css('--cC'), 1.8, [5, 3], gone.has(a) || gone.has(b) ? 0.15 : 0.95));
+  if (cur) cur.N.forEach(y => line(cur.x, y, css('--cC'), 2.4, null, 0.9));
+  const r = clamp(Math.min(W, H) / 26, 8, 13);
+  for (let i = 0; i < n; i++) {
+    const [x, y] = P[i], g = gone.has(i), inS = scope.has(i), isCur = cur && cur.x === i;
+    c.save(); c.globalAlpha = g && !isCur ? 0.25 : 1;
+    c.beginPath(); c.arc(x, y, r, 0, 7); c.fillStyle = css('--surface'); c.fill(); if (isCur || inS) { c.save(); c.globalAlpha = isCur ? 1 : 0.2; c.fillStyle = css('--cC'); c.fill(); c.restore(); }
+    c.strokeStyle = inS ? css('--cC') : css('--muted'); c.lineWidth = inS ? 2.2 : 1.3; c.stroke();
+    c.fillStyle = isCur ? css('--surface') : css('--ink'); c.font = '600 ' + (r > 10 ? 10 : 9) + 'px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'middle';
+    const ord = steps.findIndex(t => t.x === i) + 1; c.fillText(g ? String(ord) : String(i + 1), x, y + 0.5);
+    c.restore();
+  }
+  const w = Math.max(...steps.map(t => t.N.length)), big = 2 ** (w + 1), cost = steps.reduce((a, t) => a + t.size, 0), nf2 = steps.reduce((a, t) => a + t.fill.length, 0);
+  $('#or-s-o').textContent = `${s} / ${n}`;
+  $('#or-w').innerHTML = tip(String(w), `largest number of neighbours at elimination\n= largest scope − 1\nthis graph's treewidth: ${GRAPHS[OR.g].tw}`);
+  $('#or-big').innerHTML = tip(nf(big), `2^(w + 1) = 2^${w + 1} = ${nf(big)} entries`);
+  $('#or-cost').innerHTML = tip(nf(cost), steps.map((t, i) => `${i + 1}. node ${t.x + 1}: 2^${t.N.length + 1} = ${t.size}`).join('\n'));
+  $('#or-fill').innerHTML = tip(String(nf2), `edges added between neighbours\nof an eliminated node, over all ${n} steps`);
+  const terms = steps.map(t => t.size), shown = terms.length > 8 ? terms.slice(0, 6).join(' + ') + ' + &hellip; + ' + terms[terms.length - 1] : terms.join(' + ');
+  $('#run-or').innerHTML = `<b>Running example</b> ${GRAPHS[OR.g].lab}, ${ORDERS[OR.o].toLowerCase()} order: cost = ${shown} = ${tip(nf(cost), 'sum of 2^|scope| over the ' + n + ' steps')} &le; n &middot; 2<sup>w+1</sup> = ${n} &times; ${nf(big)} = ${tip(nf(n * big), n + ' steps × the largest table')}.`;
+  $('#or-cap').innerHTML = cur ? `Step ${s}: eliminating node ${cur.x + 1}, which has ${cur.N.length} neighbour${cur.N.length === 1 ? '' : 's'}, builds a table of 2<sup>${cur.N.length + 1}</sup> = ${cur.size} entries${cur.fill.length ? ` and adds ${cur.fill.length} fill-in edge${cur.fill.length === 1 ? '' : 's'}` : ' with no fill-in'}. Eliminated nodes show their position in the order.` : `${GRAPHS[OR.g].lab}: ${n} nodes, ${G.E.length} edges. Drag the step slider to eliminate the nodes in the chosen order.`;
+  const tw = GRAPHS[OR.g].tw;
+  let say = w === tw ? `This order reaches the graph&rsquo;s treewidth, ${tw}: no order can do better. ` : `This order&rsquo;s induced width is ${w}, but the graph&rsquo;s treewidth is ${tw}: a better order would keep every table at ${2 ** (tw + 1)} entries or fewer, ${nf(big / 2 ** (tw + 1))} times smaller. `;
+  if (OR.g === 'chain' || OR.g === 'tree') say += 'A tree never needs fill-in when you start from the leaves.';
+  else if (OR.g === 'cycle') say += 'One loop costs one fill-in edge at best: the first node eliminated joins its two neighbours, and the rest is a chain.';
+  else if (OR.g.startsWith('grid')) say += `On a k &times; k grid the best you can do is width k, so tables of 2<sup>k+1</sup> entries; they double with every extra row.`;
+  else say += 'A ladder is a chain of squares: eliminating column by column keeps three variables per table.';
+  $('#or-say').innerHTML = say;
+  $('#or-seed-c').style.display = OR.o === 'random' ? '' : 'none';
+}
+function orChart() {
+  const cv = $('#or-cv2'), ks = [2, 3, 4, 5, 6, 7, 8];
+  const grid = ks.map(k => { const G = gridGraph(k, k), st = elimGraph(k * k, G.E, graphOrder(k * k, G.E, 'minfill', 1)); return [k * k, Math.log2(Math.max(...st.map(t => t.size)))]; });
+  const chain = ks.map(k => { const n = k * k, E = []; for (let i = 1; i < n; i++) E.push([i - 1, i]); const st = elimGraph(n, E, graphOrder(n, E, 'minfill', 1)); return [n, Math.log2(Math.max(...st.map(t => t.size)))]; });
+  const v = frame(cv, [0, 68], [0, 12.6], { l: 50, b: 34 });
+  axes(v, 'variables n', 'largest table', { sx: 16, sy: 2, fy: y => nf(2 ** y) });
+  clip(v);
+  [[chain, css('--cA')], [grid, css('--cC')]].forEach(([pts, col]) => {
+    const c = v.ctx; c.save(); c.strokeStyle = col; c.lineWidth = 2.4; c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(v.X(x), v.Y(y)) : c.moveTo(v.X(x), v.Y(y))); c.stroke(); c.restore();
+    pts.forEach(([x, y]) => dot(v, x, y, col, 4));
+  });
+  v.ctx.restore();
+  const c = v.ctx; c.font = '11px ' + css('--f-mono'); c.fillStyle = css('--cC'); c.textAlign = 'right'; c.textBaseline = 'bottom';
+  const g8 = grid[grid.length - 1]; c.fillText('8 × 8 grid: ' + nf(2 ** g8[1]), v.X(g8[0]) - 6, v.Y(g8[1]) - 4);
+  c.fillStyle = css('--cA'); c.textBaseline = 'top'; c.fillText('chain: 4', v.X(64) - 6, v.Y(2) + 6);
+}
+{
+  const gb = $('#or-g'), ob = $('#or-o');
+  gb.innerHTML = Object.entries(GRAPHS).map(([k, g]) => `<button type="button" data-v="${k}" aria-pressed="${k === OR.g}">${g.lab}</button>`).join('');
+  ob.innerHTML = Object.entries(ORDERS).map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${k === OR.o}">${l}</button>`).join('');
+  $$('button', gb).forEach(b => b.addEventListener('click', () => { setPressed(gb, b.dataset.v); OR.g = b.dataset.v; OR.s = 0; orCompute(); orDraw(); }));
+  $$('button', ob).forEach(b => b.addEventListener('click', () => { setPressed(ob, b.dataset.v); OR.o = b.dataset.v; OR.s = 0; orCompute(); orDraw(); }));
+  $('#or-s').addEventListener('input', e => { OR.s = +e.target.value; orDraw(); });
+  $('#or-seed').addEventListener('input', e => { OR.seed = +e.target.value; $('#or-seed-o').textContent = OR.seed; orCompute(); orDraw(); });
+  orCompute(); fig($('#or-cv'), orDraw); fig($('#or-cv2'), orChart);
+}
+
+/* ================= 6. 3-SAT as a Bayesian network ================= */
+const SAT = { n: 6, m: 12, seed: 7 };
+function satMake() {
+  const r = mulberry32(SAT.seed * 7919 + SAT.n * 31 + SAT.m), cl = [];
+  for (let j = 0; j < SAT.m; j++) { const vs = []; while (vs.length < 3) { const v = Math.floor(r() * SAT.n); if (!vs.includes(v)) vs.push(v); } vs.sort((a, b) => a - b); cl.push(vs.map(v => ({ v, neg: r() < 0.5 }))); }
+  const n = SAT.n, m = SAT.m, names = [], card = [], parents = [], cpt = [];
+  for (let i = 0; i < n; i++) { names.push('x' + (i + 1)); card.push(2); parents.push([]); cpt.push(Float64Array.from([0.5, 0.5])); }
+  cl.forEach((c3, j) => {
+    names.push('C' + (j + 1)); card.push(2); parents.push(c3.map(l => l.v));
+    const t = []; for (let k = 0; k < 8; k++) { const vals = [(k >> 2) & 1, (k >> 1) & 1, k & 1]; const sat = c3.some((l, q) => (vals[q] === 0) !== l.neg); t.push(sat ? 1 : 0, sat ? 0 : 1); }
+    cpt.push(Float64Array.from(t));
+  });
+  for (let j = 0; j < m; j++) {
+    names.push('A' + (j + 1)); card.push(2);
+    if (!j) { parents.push([n]); cpt.push(Float64Array.from([1, 0, 0, 1])); }
+    else { parents.push([n + m + j - 1, n + j]); cpt.push(Float64Array.from([1, 0, 0, 1, 0, 1, 0, 1])); }
+  }
+  SAT.cl = cl; SAT.net = { names, card, parents, cpt };
+  const q = n + 2 * m - 1, res = veRun(SAT.net, q, {}, 'minfill', true, 1, 4e6);
+  let count = 0; for (let a = 0; a < 2 ** n; a++) { if (cl.every(c3 => c3.some(l => (((a >> l.v) & 1) === 1) !== l.neg))) count++; }
+  SAT.res = res; SAT.count = count;
+}
+function satDraw() {
+  const { n, m, cl } = SAT, cv = $('#sat-cv'), { c, W, H } = canvas2d(cv);
+  const xs = (k, N) => 18 + (k + 0.5) * (W - 36) / N, yV = H * 0.13, yC = H * 0.5, yA = H * 0.84;
+  cl.forEach((c3, j) => c3.forEach(l => { c.save(); c.strokeStyle = l.neg ? css('--qda') : css('--cA'); c.globalAlpha = 0.55; c.lineWidth = 1.2; if (l.neg) c.setLineDash([4, 3]); c.beginPath(); c.moveTo(xs(l.v, n), yV); c.lineTo(xs(j, m), yC); c.stroke(); c.restore(); }));
+  for (let j = 0; j < m; j++) { c.save(); c.strokeStyle = css('--muted'); c.lineWidth = 1.2; c.globalAlpha = 0.7; c.beginPath(); c.moveTo(xs(j, m), yC); c.lineTo(xs(j, m), yA); if (j) { c.moveTo(xs(j - 1, m), yA); c.lineTo(xs(j, m), yA); } c.stroke(); c.restore(); }
+  const rr = clamp((W - 36) / m / 2.6, 3, 9), rv = clamp((W - 36) / n / 3, 6, 13);
+  const node = (x, y, r, col, fill, txt) => { c.beginPath(); c.arc(x, y, r, 0, 7); c.fillStyle = fill; c.fill(); c.strokeStyle = col; c.lineWidth = 1.6; c.stroke(); if (txt && r >= 8) { c.fillStyle = css('--ink'); c.font = '600 ' + (r >= 11 ? 10 : 8.5) + 'px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, x, y + 0.5); } };
+  for (let i = 0; i < n; i++) node(xs(i, n), yV, rv, css('--cB'), css('--surface'), 'x' + (i + 1));
+  for (let j = 0; j < m; j++) node(xs(j, m), yC, rr, css('--lda'), css('--surface'), rr >= 8 ? 'C' + (j + 1) : '');
+  for (let j = 0; j < m; j++) node(xs(j, m), yA, j === m - 1 ? Math.max(rr, 8) : rr * 0.8, css('--muted'), j === m - 1 ? css('--cC') : css('--surface'), '');
+  c.font = '11px ' + css('--f-mono'); c.textBaseline = 'middle';
+  c.fillStyle = css('--cC'); c.textAlign = 'right'; c.fillText('S', xs(m - 1, m) - Math.max(rr, 8) - 4, yA - 12);
+}
+function satAll() {
+  satMake(); satDraw();
+  const { n, m, res, count, cl } = SAT, p = res.p[0], k = Math.round(p * 2 ** n);
+  $('#sat-n-o').textContent = n; $('#sat-m-o').textContent = m + '  (m/n = ' + (m / n).toFixed(2) + ')';
+  $('#sat-f').innerHTML = '&phi; = ' + cl.map(c3 => '(' + c3.map(l => (l.neg ? '&not;' : '') + 'x<sub>' + (l.v + 1) + '</sub>').join(' &or; ') + ')').join(' &and; ');
+  $('#sat-p').innerHTML = tip(fv(p, 4), `variable elimination, min-fill order\nquery S, no evidence\nlargest table ${nf(res.big)} entries`);
+  $('#sat-k').innerHTML = tip(`${count} / ${2 ** n}`, `tried all 2^${n} = ${2 ** n} assignments\nVE: P(S) × 2^${n} = ${fv(p * 2 ** n, 6)}\n${k === count ? 'they agree' : 'MISMATCH'}`);
+  $('#sat-big').innerHTML = tip(nf(res.big), `entries in the largest product table\nall steps: ${nf(res.cost)} entries`);
+  $('#sat-nodes').innerHTML = tip(String(n + 2 * m), `${n} variables + ${m} clauses + ${m} AND nodes`);
+  $('#run-sat').innerHTML = `<b>Running example</b> P(S = true) = ${tip(String(count), 'satisfying assignments, by brute force')} / 2<sup>${n}</sup> = ${count} / ${2 ** n} = ${tip(fv(count / 2 ** n, 4), 'exact fraction')}; variable elimination gives ${tip(fv(p, 6), 'from the network, min-fill order')}.`;
+  $('#sat-say').innerHTML = (count ? `Satisfiable: ${count} of the ${2 ** n} assignments ${count === 1 ? "makes" : "make"} every clause true, so P(S = true) = ${fv(p, 4)} &gt; 0.` : `Unsatisfiable: no assignment makes every clause true, so P(S = true) = 0. Proving that needed the whole sum.`) + ` With m/n = ${(m / n).toFixed(1)}, ${m / n < 3.5 ? 'random formulas are usually satisfiable, often many times over.' : m / n < 5 ? 'you are near the threshold around 4.3, where random formulas are hardest to decide.' : 'random formulas are usually unsatisfiable.'} The largest VE table here has ${nf(res.big)} entries; for formulas with hundreds of variables it would be astronomical, as it must be unless P = NP.`;
+}
+{
+  $('#sat-n').addEventListener('input', e => { SAT.n = +e.target.value; satAll(); });
+  $('#sat-m').addEventListener('input', e => { SAT.m = +e.target.value; satAll(); });
+  $('#sat-new').addEventListener('click', () => { SAT.seed++; satAll(); });
+  satMake(); satAll(); fig($('#sat-cv'), satDraw);
+}
+
+/* ================= 7. deep models: exact posterior vs mean field ================= */
+const DP = { b1: 1, b2: 1, w: -4 };
+const sigm = x => 1 / (1 + Math.exp(-x));
+const Hb = q => (q > 0 && q < 1 ? -(q * Math.log(q) + (1 - q) * Math.log(1 - q)) : 0);
+function dpCompute() {
+  const { b1, b2, w } = DP, en = [[0, b2], [b1, b1 + b2 + w]];   /* en[h1][h2] */
+  const mx = Math.max(0, b1, b2, b1 + b2 + w), z = [0, 1].reduce((s, a) => s + [0, 1].reduce((t, b) => t + Math.exp(en[a][b] - mx), 0), 0), lz = mx + Math.log(z);
+  const P = [0, 1].map(a => [0, 1].map(b => Math.exp(en[a][b] - lz)));
+  let q1 = 0.5, q2 = 0.5, it = 0;
+  for (; it < 1000; it++) { const o1 = q1, o2 = q2; q1 = sigm(b1 + w * q2); q2 = sigm(b2 + w * q1); if (Math.abs(q1 - o1) < 1e-12 && Math.abs(q2 - o2) < 1e-12) { it++; break; } }
+  const L = b1 * q1 + b2 * q2 + w * q1 * q2 + Hb(q1) + Hb(q2);
+  const Q = [0, 1].map(a => [0, 1].map(b => (a ? q1 : 1 - q1) * (b ? q2 : 1 - q2)));
+  return { P, Q, lz, L, kl: Math.max(0, lz - L), q1, q2, it: 2 * it };
+}
+function dpGrid(cv, M, lab) {
+  const { c, W, H } = canvas2d(cv), pad = 30, s = Math.min(W - pad - 8, H - pad - 8) / 2, x0 = pad + (W - pad - 8 - 2 * s) / 2, y0 = 6;
+  for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
+    const x = x0 + b * s, y = y0 + a * s, p = M[a][b];
+    c.fillStyle = css('--surface'); c.fillRect(x + 2, y + 2, s - 4, s - 4);
+    c.save(); c.globalAlpha = 0.08 + 0.85 * p; c.fillStyle = css('--cC'); c.fillRect(x + 2, y + 2, s - 4, s - 4); c.restore();
+    c.strokeStyle = css('--line'); c.strokeRect(x + 2, y + 2, s - 4, s - 4);
+    c.fillStyle = p > 0.55 ? css('--surface') : css('--ink'); c.font = '600 ' + clamp(s / 5.5, 11, 18) + 'px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(p.toFixed(3), x + s / 2, y + s / 2);
+  }
+  c.fillStyle = css('--muted'); c.font = '11px ' + css('--f-mono'); c.textAlign = 'center'; c.textBaseline = 'top';
+  c.fillText('h₂ = 0', x0 + s / 2, y0 + 2 * s + 4); c.fillText('h₂ = 1', x0 + 1.5 * s, y0 + 2 * s + 4);
+  c.save(); c.translate(12, y0 + s / 2); c.rotate(-Math.PI / 2); c.textBaseline = 'middle'; c.fillText('h₁ = 0', 0, 0); c.restore();
+  c.save(); c.translate(12, y0 + 1.5 * s); c.rotate(-Math.PI / 2); c.textBaseline = 'middle'; c.fillText('h₁ = 1', 0, 0); c.restore();
+}
+function dpDraw() {
+  const r = dpCompute();
+  dpGrid($('#dp-ex'), r.P); dpGrid($('#dp-mf'), r.Q);
+  ['b1', 'b2', 'w'].forEach(k => { $('#dp-' + k).value = DP[k]; $('#dp-' + k + '-o').textContent = DP[k].toFixed(1); });
+  $('#dp-lz').innerHTML = tip(r.lz.toFixed(4), `log of the sum over the 4 states:\nexp(0) + exp(b2) + exp(b1) + exp(b1+b2+w)\n= 1 + ${fv(Math.exp(DP.b2))} + ${fv(Math.exp(DP.b1))} + ${fv(Math.exp(DP.b1 + DP.b2 + DP.w))}`);
+  $('#dp-L').innerHTML = tip(r.L.toFixed(4), `E_q[log p(v,h)] + H(q)\n= b1 q1 + b2 q2 + w q1 q2 + H(q1) + H(q2)\nq1 = ${r.q1.toFixed(4)}, q2 = ${r.q2.toFixed(4)}`);
+  $('#dp-kl').innerHTML = tip(r.kl.toFixed(4), `log p(v) − ELBO\n= ${r.lz.toFixed(4)} − ${r.L.toFixed(4)}`);
+  $('#dp-it').innerHTML = tip(String(r.it), 'single-factor updates until both\nq1 and q2 changed by less than 1e-12\n(starting from q1 = q2 = 0.5)');
+  const E = DP.b1 * r.q1 + DP.b2 * r.q2 + DP.w * r.q1 * r.q2, H = Hb(r.q1) + Hb(r.q2);
+  $('#run-dp').innerHTML = `<b>Running example</b> With b<sub>1</sub> = ${DP.b1.toFixed(1)}, b<sub>2</sub> = ${DP.b2.toFixed(1)}, w = ${DP.w.toFixed(1)}: &#8466;(q) = ${tip(E.toFixed(4), 'E_q[log p(v,h)] = b1 q1 + b2 q2 + w q1 q2')} + ${tip(H.toFixed(4), 'H(q) = H(q1) + H(q2)')} = ${r.L.toFixed(4)}, and log p(v) = ${r.L.toFixed(4)} + ${tip(r.kl.toFixed(4), 'KL(q || p), the gap')} = ${tip(r.lz.toFixed(4), 'exact, from the four-term sum')}.`;
+  let err = 0, at = [0, 0]; for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) { const d = Math.abs(r.P[a][b] - r.Q[a][b]); if (d > err) { err = d; at = [a, b]; } }
+  let say;
+  if (Math.abs(DP.w) < 0.05) say = `With no interaction the true posterior already factorises, p(h | v) = p(h<sub>1</sub> | v) p(h<sub>2</sub> | v), so mean-field finds it exactly: the KL gap is ${r.kl.toFixed(4)}. This is the restricted Boltzmann machine&rsquo;s trick, applied to every hidden unit at once.`;
+  else if (DP.w < 0) say = `Negative w: the two causes compete. The exact posterior puts ${pct(r.P[0][1] + r.P[1][0])} on &ldquo;exactly one is on&rdquo;; the factorised q puts ${pct(r.Q[0][1] + r.Q[1][0])} there. ${r.kl > 0.05 ? `The biggest miss is state (${at[0]}, ${at[1]}): ${r.P[at[0]][at[1]].toFixed(3)} exact versus ${r.Q[at[0]][at[1]].toFixed(3)}. ` : ''}KL gap ${r.kl.toFixed(4)} nats.`;
+  else say = `Positive w: the two units like to agree, so the exact posterior favours (0, 0) and (1, 1) together, ${pct(r.P[0][0] + r.P[1][1])} of the mass; q gives them ${pct(r.Q[0][0] + r.Q[1][1])}. A product of independent marginals cannot express &ldquo;both or neither&rdquo;; KL gap ${r.kl.toFixed(4)} nats.`;
+  say += ` Here the exact sum has 4 terms. With k hidden units it has 2<sup>k</sup>: for k = 300, about 10<sup>90</sup>, while mean-field still needs only k numbers.`;
+  $('#dp-say').innerHTML = say;
+}
+{
+  ['b1', 'b2', 'w'].forEach(k => $('#dp-' + k).addEventListener('input', e => { DP[k] = +e.target.value; dpDraw(); }));
+  $('#dp-ea').addEventListener('click', () => { Object.assign(DP, { b1: 1, b2: 1, w: -4 }); dpDraw(); });
+  $('#dp-rbm').addEventListener('click', () => { DP.w = 0; dpDraw(); });
+  fig($('#dp-ex'), dpDraw);
+}
+
+/* ================= PROJECT: ALARM ================= */
+const ROOTS = [], LEAVES = [];
+for (let i = 0; i < AN; i++) { if (!AL.parents[i].length) ROOTS.push(i); if (!AL.parents.some(ps => ps.includes(i))) LEAVES.push(i); }
+const aid = n => AL.names.indexOf(n), ast = (n, s) => AL.states[aid(n)].indexOf(s);
+const PRESETS = [
+  ['No readings', {}],
+  ['BP, CVP, PCWP low', { BP: 'LOW', CVP: 'LOW', PCWP: 'LOW' }],
+  ['MINVOL and PRESS zero', { MINVOL: 'ZERO', PRESS: 'ZERO' }],
+  ['MINVOL low, PRESS zero', { MINVOL: 'LOW', PRESS: 'ZERO' }],
+  ['PAP and HRBP high', { PAP: 'HIGH', HRBP: 'HIGH' }],
+];
+const PJ = { ev: {}, pre: 1, post: null, prior: null };
+function pjEvFromPreset(k) { const e = {}; Object.entries(PRESETS[k][1]).forEach(([n, s]) => { e[aid(n)] = ast(n, s); }); return e; }
+function pjCompute() {
+  if (!PJ.prior) PJ.prior = ROOTS.map(q => veRun(ANET, q, {}, 'minfill', true, 1).p);
+  const t0 = performance.now();
+  PJ.post = ROOTS.map(q => veRun(ANET, q, PJ.ev, 'minfill', true, 1));
+  PJ.ms = performance.now() - t0;
+}
+function pjDraw() {
+  const cv = $('#pj-cv'), { c, W, H } = canvas2d(cv), narrow = W < 520;
+  const top = 6, rowH = (H - top - 6) / ROOTS.length, labW = narrow ? 0 : 190, x0 = labW + 8, x1 = W - (narrow ? 88 : 110);
+  let best = -1, bd = 0;
+  ROOTS.forEach((q, r) => {
+    const y = top + r * rowH, pr = PJ.prior[r][0], po = PJ.post[r].p[0], d = Math.abs(po - pr);
+    if (d > bd) { bd = d; best = r; }
+    const lab = AL.names[q] + ' = ' + AL.states[q][0];
+    c.font = (narrow ? '10.5px ' : '11.5px ') + css('--f-mono'); c.fillStyle = css('--ink'); c.textBaseline = 'middle';
+    const barY = narrow ? y + rowH * 0.62 : y + rowH / 2, bh = narrow ? rowH * 0.3 : rowH * 0.46;
+    if (narrow) { c.textAlign = 'left'; c.fillText(lab, 4, y + rowH * 0.27); } else { c.textAlign = 'right'; c.fillText(lab, labW, barY); }
+    c.fillStyle = css('--soft'); rrect(c, x0, barY - bh / 2, x1 - x0, bh, 3); c.fill();
+    c.fillStyle = d > 0.05 ? css('--cC') : css('--lda'); c.globalAlpha = d > 0.05 ? 0.95 : 0.6; rrect(c, x0, barY - bh / 2, Math.max(2, (x1 - x0) * po), bh, 3); c.fill(); c.globalAlpha = 1;
+    const tx = x0 + (x1 - x0) * pr; c.strokeStyle = css('--ink'); c.lineWidth = 2; c.beginPath(); c.moveTo(tx, barY - bh / 2 - 3); c.lineTo(tx, barY + bh / 2 + 3); c.stroke();
+    c.fillStyle = d > 0.05 ? css('--cC') : css('--muted'); c.textAlign = 'left'; c.font = (d > 0.05 ? '600 ' : '') + (narrow ? '10.5px ' : '11.5px ') + css('--f-mono');
+    c.fillText(pct(po), x1 + 8, barY);
+  });
+  PJ.best = best;
+  const nE = Object.keys(PJ.ev).length;
+  $('#pj-pe').innerHTML = tip(nE ? fv(PJ.post[0].z, 4) : '1', nE ? `the normalising constant of any query:\nsum of P(q, readings) over q's states\n= ${fv(PJ.post[0].z, 6)}` : 'no readings: P(nothing) = 1');
+  $('#pj-t').innerHTML = tip(PJ.ms < 1 ? PJ.ms.toFixed(2) + ' ms' : PJ.ms.toFixed(1) + ' ms', `12 separate VE runs, min-fill order,\nirrelevant variables dropped first\nlargest table in any of them: ${nf(Math.max(...PJ.post.map(r => r.big)))} entries`);
+  if (!nE) $('#pj-say').innerHTML = 'With no readings every bar sits on its prior tick. Pick a preset or set a reading.';
+  else {
+    const q = ROOTS[best], pr = PJ.prior[best][0], po = PJ.post[best].p[0];
+    const anc = ancestorsOf(ANET, Object.keys(PJ.ev).map(Number)), nIndep = ROOTS.filter(r2 => !anc.has(r2)).length;
+    const moved = ROOTS.map((q2, r) => [Math.abs(PJ.post[r].p[0] - PJ.prior[r][0]), r]).filter(x => x[0] > 0.05).length;
+    $('#pj-say').innerHTML = `The readings move <b>${AL.names[q]} = ${AL.states[q][0]}</b> most: ${tip(pct(pr), 'prior, P(' + AL.names[q] + ' = ' + AL.states[q][0] + ')')} &rarr; ${tip(pct(po), 'posterior by VE; largest table ' + PJ.post[best].big + ' entries')}. ${moved > 1 ? `${moved} roots move by more than 5 points (purple).` : moved === 1 ? 'No other root moves by more than 5 points.' : ''} ${nIndep ? `${nIndep} root${nIndep === 1 ? ' is' : 's are'} not an ancestor of any reading, so the readings say nothing about ${nIndep === 1 ? 'it' : 'them'} and ${nIndep === 1 ? 'it keeps its' : 'they keep their'} prior exactly.` : ''}`;
+  }
+  rcRun();
+}
+function pjBuild() {
+  $('#pj-pre').innerHTML = PRESETS.map(([l], k) => `<button type="button" data-v="${k}" aria-pressed="${k === PJ.pre}">${l}</button>`).join('');
+  $$('#pj-pre button').forEach(b => b.addEventListener('click', () => { PJ.pre = +b.dataset.v; setPressed($('#pj-pre'), PJ.pre); PJ.ev = pjEvFromPreset(PJ.pre); pjSync(); pjCompute(); pjDraw(); }));
+  $('#pj-ev').innerHTML = LEAVES.map(i => `<label><span>${AL.names[i]}</span><select data-i="${i}"><option value="-1">&ndash;</option>${AL.states[i].map((s, k) => `<option value="${k}">${s}</option>`).join('')}</select></label>`).join('');
+  $$('#pj-ev select').forEach(sel => sel.addEventListener('change', () => { const i = +sel.dataset.i, v = +sel.value; if (v < 0) delete PJ.ev[i]; else PJ.ev[i] = v; PJ.pre = -1; setPressed($('#pj-pre'), -1); pjCompute(); pjDraw(); }));
+  $('#rc-q').innerHTML = ROOTS.map(q => `<option value="${q}">${AL.names[q]}</option>`).join('');
+  $('#rc-q').value = aid('LVFAILURE');
+}
+function pjSync() { $$('#pj-ev select').forEach(sel => { const i = +sel.dataset.i; sel.value = i in PJ.ev ? PJ.ev[i] : -1; }); }
+const RACE = [['minfill', 'Min-fill'], ['mindeg', 'Min-degree'], ['minweight', 'Min-weight'], ['file', 'File order'], ['random', 'Random'], ['maxdeg', 'Max-degree first'], ['reverse', 'Reverse file order']];
+const CAP = 4e6;
+let rcTimer = 0;
+function rcRun() { clearTimeout(rcTimer); rcTimer = setTimeout(rcDo, 60); }
+function rcDo() {
+  const q = +$('#rc-q').value, prune = $('#rc-prune').checked, seed = +$('#rc-seed').value, ev = PJ.ev;
+  const rows = RACE.map(([k, lab]) => {
+    const pl = vePlan(ANET, q, ev, k, prune, seed);
+    if (pl.big > CAP) return { k, lab, pl, ok: false };
+    const reps = clamp(Math.round(4e5 / Math.max(pl.cost, 1)), 1, 400);
+    let res = null; const t0 = performance.now(); for (let r = 0; r < reps; r++) res = veRun(ANET, q, ev, k, prune, seed);
+    return { k, lab, pl, ok: true, ms: (performance.now() - t0) / reps, reps, p: res.p[0] };
+  });
+  const runOk = rows.filter(r => r.ok), fastest = Math.min(...runOk.map(r => r.ms)), slow = runOk.reduce((a, r) => r.ms > a.ms ? r : a, runOk[0]);
+  let h = `<thead><tr><th>Order</th><th class="r">Largest table</th><th class="r">Entries computed</th><th class="r">Time per query</th><th class="r">P(${AL.names[q]} = ${AL.states[q][0]} | e)</th></tr></thead><tbody>`;
+  rows.forEach(r => {
+    const lab = r.k === 'random' ? `Random (seed ${seed})` : r.lab;
+    const first = r.pl.order.slice(0, 6).map(i => AL.names[i]).join(', ');
+    h += `<tr class="${r.ok ? '' : 'skip'}"><td>${lab}</td><td class="r num">${tip(bigH(r.pl.big), `${nf(r.pl.big)} entries = ${mem(r.pl.big)}\norder starts: ${first}${r.pl.order.length > 6 ? ', …' : ''}\n(${r.pl.order.length} variables eliminated)`)}</td><td class="r num">${tip(bigH(r.pl.cost), 'sum of the sizes of all ' + r.pl.order.length + ' product tables')}</td>`;
+    h += r.ok ? `<td class="r num">${tip(r.ms < 0.1 ? (r.ms * 1000).toFixed(0) + ' µs' : r.ms.toFixed(r.ms < 10 ? 2 : 0) + ' ms', `average over ${r.reps} run${r.reps === 1 ? '' : 's'} in this browser\n${(r.ms / fastest).toFixed(1)} × the fastest`)}</td><td class="r num">${tip(r.p.toFixed(6), 'exact posterior from this order')}</td></tr>` : `<td class="r note">not run</td><td class="r note">would need ${mem(r.pl.big)}</td></tr>`;
+  });
+  $('#rc-tab').innerHTML = h + '</tbody>';
+  const S = veSetup(ANET, q, ev, prune); let comb = 1; S.elim.forEach(i => comb *= ANET.card[i]);
+  const mf = rows[0], skipped = rows.filter(r => !r.ok);
+  const agree = runOk.every(r => Math.abs(r.p - mf.p) < 1e-9);
+  $('#rc-say').innerHTML = `${S.elim.length} hidden variables, spanning ${tip(bigH(comb), 'product of their numbers of states:\nthe number of terms enumeration would add up')} combinations. Min-fill never builds a table bigger than ${nf(mf.pl.big)} entries. ${slow && slow !== mf ? `The slowest order that was run, ${slow.k === 'random' ? 'random seed ' + seed : slow.lab.toLowerCase()}, took ${(slow.ms / fastest).toFixed(0)} times as long as the fastest. ` : ''}${skipped.length ? skipped.map((r, i) => i ? r.lab.toLowerCase() : r.lab).join(' and ') + ` would need a single table of ${skipped.map(r => mem(r.pl.big)).join(' and ')}${skipped.length > 1 ? ' respectively' : ''}. ` : ''}${agree ? 'Every order that ran gives the same posterior to the last digit shown: the order changes the cost, never the answer.' : ''}`;
+}
+{
+  pjBuild(); PJ.ev = pjEvFromPreset(PJ.pre); pjSync();
+  ['#rc-q', '#rc-prune'].forEach(s => $(s).addEventListener('change', rcRun));
+  $('#rc-seed').addEventListener('input', e => { $('#rc-seed-o').textContent = e.target.value; rcRun(); });
+  $('#rc-go').addEventListener('click', rcDo);
+  let started = false;
+  const start = () => { if (started) return; started = true; pjCompute(); fig($('#pj-cv'), pjDraw); pjDraw(); };
+  if ('IntersectionObserver' in window) { const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { start(); io.disconnect(); } }, { rootMargin: '300px' }); io.observe($('#project')); } else start();
+}
+
+/* ---------- progress bar, nav, J/K ---------- */
+{
+  const pr = document.createElement('div'); pr.id = 'progress'; document.body.appendChild(pr);
+  const upd = () => { const m = document.documentElement.scrollHeight - innerHeight; pr.style.width = (m > 0 ? Math.min(100, scrollY / m * 100) : 0) + '%'; };
+  addEventListener('scroll', upd, { passive: true }); addEventListener('resize', upd, { passive: true }); upd();
+}
+const secs = $$('section.chap'), links = $$('#navlinks a');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(ents => { ents.forEach(en => { if (en.isIntersecting) { links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); const on = links.find(a => a.classList.contains('on')); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }); }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => io.observe(s));
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase(); if (k !== 'j' && k !== 'k') return;
+  const all = [$('#top'), ...secs], y = window.scrollY + 70;
+  let i = all.findIndex(s => s.offsetTop > y) - 1; if (i < -1) i = all.length - 1; if (i < 0) i = 0;
+  const target = k === 'j' ? all[Math.min(all.length - 1, i + 1)] : all[Math.max(0, (all[i].offsetTop >= y - 80 ? i - 1 : i))];
+  target.scrollIntoView();
+});
+
+redrawAll();
+})();
+</script>
+<!-- LXJS -->
+<script>
+/* lecture index: highlight the pill of the section in view */
+(() => {
+  const pills = [...document.querySelectorAll('.lx a')];
+  if (!pills.length || !('IntersectionObserver' in window)) return;
+  const byId = new Map(pills.map(a => [a.getAttribute('href').slice(1), a]));
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { pills.forEach(p => p.classList.toggle('on', p === byId.get(e.target.id))); } });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  byId.forEach((_, id) => { const s = document.getElementById(id); if (s) io.observe(s); });
+})();
+</script>
+<!-- /LXJS -->
+</body>
+</html>
